@@ -1,0 +1,1974 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <meta name="design_doc_mode" content="canvas" />
+  <style>
+    body { margin: 0; background: #0f0e0c; font-family: 'Public Sans', sans-serif; -webkit-font-smoothing: antialiased; }
+    * { box-sizing: border-box; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(120,110,90,0.4); border-radius: 4px; }
+    a { color: inherit; text-decoration: none; }
+  </style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;background:#0f0e0c;color:#EFE9DC;">
+
+  <!-- ============ SIDEBAR NAV ============ -->
+  <div style="width:250px;flex:none;background:#17140F;border-right:1px solid #2b261c;padding:20px 14px;position:sticky;top:0;height:100vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;gap:10px;padding:4px 8px 18px;">
+      <div style="width:32px;height:32px;border-radius:9px;background:#E0AA48;display:flex;align-items:center;justify-content:center;flex:none;">
+        <div style="width:12px;height:12px;background:#1A1408;transform:rotate(45deg);"></div>
+      </div>
+      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;letter-spacing:-0.2px;">JamQuote</div>
+    </div>
+
+    <div style="display:flex;gap:6px;padding:0 8px 16px;">
+      <button style="flex:1;padding:8px 0;border-radius:7px;border:1px solid #3A3427;background:{{ ui.themeBtnBgLight }};color:{{ ui.themeBtnFgLight }};font-size:12px;font-weight:600;cursor:pointer;" onclick="{{ setTheme_light }}">Light</button>
+      <button style="flex:1;padding:8px 0;border-radius:7px;border:1px solid #3A3427;background:{{ ui.themeBtnBgDark }};color:{{ ui.themeBtnFgDark }};font-size:12px;font-weight:600;cursor:pointer;" onclick="{{ setTheme_dark }}">Dark</button>
+    </div>
+
+    <sc-for list="{{ navSections }}" as="sec" hint-placeholder-count="6">
+      <div style="margin-bottom:14px;">
+        <div style="font-size:10.5px;font-weight:700;letter-spacing:0.08em;color:#8A8375;text-transform:uppercase;padding:6px 10px 4px;">{{ sec.label }}</div>
+        <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="3">
+          <button onclick="{{ it.go }}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:8px 10px;border-radius:7px;border:none;background:{{ it.bg }};color:{{ it.fg }};font-size:13px;font-weight:{{ it.weight }};cursor:pointer;margin-bottom:1px;">
+            <span style="width:6px;height:6px;border-radius:2px;background:{{ it.dot }};flex:none;"></span>
+            {{ it.label }}
+          </button>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+
+  <!-- ============ STAGE ============ -->
+  <div style="flex:1;padding:36px 40px;overflow-y:auto;background:{{ c.stageBg }};">
+    <div style="max-width:1300px;margin:0 auto;">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:22px;">
+        <div>
+          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.stageText }};">{{ currentTitle }}</div>
+          <div style="font-size:13px;color:{{ c.stageMuted }};margin-top:2px;">{{ currentSub }}</div>
+        </div>
+        <sc-if value="{{ showDeviceToggle }}">
+          <div style="display:flex;gap:6px;background:{{ c.stageChipBg }};padding:4px;border-radius:9px;">
+            <button onclick="{{ setDevice_phone }}" style="padding:7px 14px;border-radius:6px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;background:{{ ui.devPhoneBg }};color:{{ ui.devPhoneFg }};">📱 Mobile</button>
+            <button onclick="{{ setDevice_web }}" style="padding:7px 14px;border-radius:6px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;background:{{ ui.devWebBg }};color:{{ ui.devWebFg }};">🖥 Web</button>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- ===== STYLE GUIDE ===== -->
+      <sc-if value="{{ isStyleGuide }}">
+        <div style="display:flex;flex-direction:column;gap:28px;">
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:16px;">Palette</div>
+            <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px;">
+              <div><div style="height:64px;border-radius:9px;background:{{ c.bg }};border:1px solid {{ c.border }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">bg {{ c.bg }}</div></div>
+              <div><div style="height:64px;border-radius:9px;background:{{ c.surface }};border:1px solid {{ c.border }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">surface</div></div>
+              <div><div style="height:64px;border-radius:9px;background:{{ c.accent }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">accent {{ c.accent }}</div></div>
+              <div><div style="height:64px;border-radius:9px;background:{{ c.good }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">good {{ c.good }}</div></div>
+              <div><div style="height:64px;border-radius:9px;background:{{ c.warn }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">warn {{ c.warn }}</div></div>
+              <div><div style="height:64px;border-radius:9px;background:{{ c.crit }};"></div><div style="font-size:11px;margin-top:6px;color:{{ c.textMuted }};">critical {{ c.crit }}</div></div>
+            </div>
+            <div style="margin-top:14px;font-size:12.5px;line-height:1.6;color:{{ c.textMuted }};max-width:760px;">Warm sand/charcoal neutrals read like site paperwork and poured concrete &mdash; calm in bright sun. One confident accent, a deep worksite gold, is reserved for primary actions and money-positive moments (Invoiced). Good/warning/critical stay separate from the brand accent so status is never ambiguous.</div>
+          </div>
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:18px;">Type &mdash; Archivo (headings &amp; numerals) / Public Sans (UI &amp; body)</div>
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:38px;color:{{ c.text }};letter-spacing:-0.5px;">$1,250,000.00</div>
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:26px;color:{{ c.text }};margin-top:10px;">Quote QT-0142</div>
+            <div style="font-family:'Public Sans',sans-serif;font-weight:600;font-size:17px;color:{{ c.text }};margin-top:10px;">Section heading &mdash; Materials</div>
+            <div style="font-family:'Public Sans',sans-serif;font-weight:400;font-size:14.5px;color:{{ c.textMuted }};margin-top:8px;max-width:600px;">Body text: cement, 42.5kg bag &mdash; delivered to site, price locked at time of quote. Rebar 3/8&Prime; x 20ft priced per length.</div>
+          </div>
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:18px;">Buttons</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+              <button style="padding:14px 24px;border-radius:10px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Save Quote</button>
+              <button style="padding:14px 24px;border-radius:10px;border:1.5px solid {{ c.accent }};background:transparent;color:{{ c.accent }};font-weight:700;font-size:15px;cursor:pointer;">Preview PDF</button>
+              <button style="padding:14px 24px;border-radius:10px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:15px;cursor:pointer;">Cancel</button>
+              <button style="padding:14px 24px;border-radius:10px;border:none;background:{{ c.crit }};color:#fff;font-weight:700;font-size:15px;cursor:pointer;">Delete Quote</button>
+              <button disabled style="padding:14px 24px;border-radius:10px;border:none;background:{{ c.border }};color:{{ c.textMuted }};font-weight:700;font-size:15px;">Disabled</button>
+            </div>
+          </div>
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:18px;">Inputs</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;max-width:900px;">
+              <div>
+                <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Client name</div>
+                <div style="padding:13px 14px;border-radius:9px;border:1.5px solid {{ c.border }};background:{{ c.bg }};color:{{ c.text }};font-size:15px;">Devon Facey</div>
+              </div>
+              <div>
+                <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Rate (JMD)</div>
+                <div style="padding:13px 14px;border-radius:9px;border:1.5px solid {{ c.accent }};background:{{ c.bg }};color:{{ c.text }};font-size:15px;box-shadow:0 0 0 3px {{ c.accentSoft }};">4,500.00</div>
+              </div>
+              <div>
+                <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">TRN</div>
+                <div style="padding:13px 14px;border-radius:9px;border:1.5px solid {{ c.crit }};background:{{ c.bg }};color:{{ c.text }};font-size:15px;">123-45</div>
+                <div style="font-size:11.5px;color:{{ c.crit }};margin-top:5px;">TRN must be 9 digits</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:18px;">Status pills</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.neutralPillSoft }};color:{{ c.neutralPill }};font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.neutralPill }};"></span>Draft</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.infoSoft }};color:{{ c.info }};font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.info }};"></span>Sent</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.info }};color:#fff;font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>Viewed</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.goodSoft }};color:{{ c.good }};font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.good }};"></span>Accepted</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.critSoft }};color:{{ c.crit }};font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.crit }};"></span>Declined</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.neutralPillSoft }};color:{{ c.neutralPill }};font-size:12.5px;font-weight:700;text-decoration:line-through;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.neutralPill }};"></span>Expired</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.accent }};color:{{ c.onAccent }};font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:{{ c.onAccent }};"></span>Invoiced</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.good }};color:#fff;font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>Paid</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:100px;background:{{ c.crit }};color:#fff;font-size:12.5px;font-weight:700;"><span style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>Overdue</span>
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:{{ c.textMuted }};">Soft fill = pending/informational &middot; solid fill = resolved or needs attention &middot; gold = billing milestone.</div>
+          </div>
+
+          <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:14px;padding:28px;">
+            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};margin-bottom:18px;">Line-item card</div>
+            <div style="display:flex;align-items:center;gap:14px;padding:16px;border:1.5px solid {{ c.border }};border-radius:12px;background:{{ c.bg }};max-width:640px;">
+              <div style="width:8px;align-self:stretch;border-radius:4px;background:{{ c.info }};"></div>
+              <div style="flex:1;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                  <span style="font-size:10.5px;font-weight:800;letter-spacing:0.04em;color:{{ c.info }};background:{{ c.infoSoft }};padding:2px 7px;border-radius:5px;">MATERIAL</span>
+                  <span style="font-size:11px;color:{{ c.textMuted }};">Standard GCT</span>
+                </div>
+                <div style="font-weight:700;font-size:15.5px;color:{{ c.text }};">Cement, 42.5kg bag</div>
+                <div style="font-size:12.5px;color:{{ c.textMuted }};margin-top:2px;">40 bags &times; $1,150.00</div>
+              </div>
+              <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};">$46,000.00</div>
+            </div>
+          </div>
+
+        </div>
+      </sc-if>
+
+      <!-- ===== PHONE FRAME SCREENS ===== -->
+      <sc-if value="{{ isPhoneScreen }}">
+        <div style="display:flex;justify-content:center;padding:10px 0;">
+          <div style="width:406px;background:#0b0b0c;border-radius:46px;padding:12px;box-shadow:0 30px 60px rgba(0,0,0,0.5);">
+            <div style="width:100%;height:830px;background:{{ c.bg }};border-radius:36px;overflow:hidden;display:flex;flex-direction:column;position:relative;">
+
+              <!-- status bar -->
+              <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:16px 24px 6px;">
+                <div style="font-size:14px;font-weight:700;color:{{ c.text }};font-family:'Archivo',sans-serif;">9:41</div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <sc-if value="{{ isOffline }}">
+                    <span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:{{ c.warn }};background:{{ c.warnSoft }};padding:3px 8px;border-radius:100px;">OFFLINE &middot; cached prices</span>
+                  </sc-if>
+                  <div style="width:22px;height:11px;border:1.5px solid {{ c.text }};border-radius:3px;position:relative;padding:1.5px;">
+                    <div style="width:75%;height:100%;background:{{ c.text }};border-radius:1px;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- content -->
+              <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;">
+
+                <!-- SPLASH -->
+                <sc-if value="{{ isSplash }}">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;background:{{ c.text }};">
+                    <div style="width:76px;height:76px;border-radius:20px;background:{{ c.accent }};display:flex;align-items:center;justify-content:center;">
+                      <div style="width:28px;height:28px;background:{{ c.onAccent }};transform:rotate(45deg);"></div>
+                    </div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:900;font-size:28px;color:{{ c.bg }};">JamQuote</div>
+                    <div style="font-size:13px;color:{{ c.textMuted }};letter-spacing:0.02em;">Quote it. Price it. Get paid.</div>
+                    <button onclick="{{ go_onboarding }}" style="margin-top:20px;padding:14px 30px;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:14.5px;cursor:pointer;">Continue</button>
+                  </div>
+                </sc-if>
+
+                <!-- ONBOARDING -->
+                <sc-if value="{{ isOnboarding }}">
+                  <div style="flex:1;display:flex;flex-direction:column;padding:32px 26px;">
+                    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:18px;">
+                      <div style="width:120px;height:120px;border-radius:26px;background:{{ ob.iconBg }};display:flex;align-items:center;justify-content:center;">
+                        <div style="{{ ob.iconShape }}"></div>
+                      </div>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.text }};">{{ ob.title }}</div>
+                      <div style="font-size:14.5px;color:{{ c.textMuted }};line-height:1.5;max-width:280px;">{{ ob.body }}</div>
+                    </div>
+                    <div style="display:flex;justify-content:center;gap:7px;margin-bottom:22px;">
+                      <div style="width:{{ ob.dot0w }};height:7px;border-radius:4px;background:{{ ob.dot0c }};"></div>
+                      <div style="width:{{ ob.dot1w }};height:7px;border-radius:4px;background:{{ ob.dot1c }};"></div>
+                      <div style="width:{{ ob.dot2w }};height:7px;border-radius:4px;background:{{ ob.dot2c }};"></div>
+                    </div>
+                    <div style="display:flex;gap:10px;">
+                      <button onclick="{{ go_auth }}" style="flex:none;padding:14px 18px;border-radius:100px;border:none;background:transparent;color:{{ c.textMuted }};font-weight:600;font-size:14px;cursor:pointer;">Skip</button>
+                      <button onclick="{{ ob.next }}" style="flex:1;padding:14px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">{{ ob.nextLabel }}</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- AUTH -->
+                <sc-if value="{{ isAuth }}">
+                  <div style="flex:1;display:flex;flex-direction:column;padding:40px 26px 26px;">
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:24px;color:{{ c.text }};margin-bottom:6px;">{{ auth.heading }}</div>
+                    <div style="font-size:14px;color:{{ c.textMuted }};margin-bottom:24px;">{{ auth.sub }}</div>
+                    <div style="display:flex;background:{{ c.surfaceAlt }};border-radius:10px;padding:4px;margin-bottom:22px;">
+                      <button onclick="{{ auth.toSignup }}" style="flex:1;padding:10px 0;border-radius:8px;border:none;font-weight:700;font-size:13.5px;cursor:pointer;background:{{ auth.signupBg }};color:{{ auth.signupFg }};">Sign up</button>
+                      <button onclick="{{ auth.toLogin }}" style="flex:1;padding:10px 0;border-radius:8px;border:none;font-weight:700;font-size:13.5px;cursor:pointer;background:{{ auth.loginBg }};color:{{ auth.loginFg }};">Log in</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:14px;">
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Mobile number</div>
+                        <div style="padding:15px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">876 &bull; 555 &bull; 0142</div>
+                      </div>
+                      <sc-if value="{{ auth.isSignup }}">
+                        <div>
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Full name</div>
+                          <div style="padding:15px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">Owen Blackwood</div>
+                        </div>
+                      </sc-if>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Password</div>
+                        <div style="padding:15px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</div>
+                      </div>
+                    </div>
+                    <div style="flex:1;"></div>
+                    <button onclick="{{ go_bizprofile }}" style="padding:16px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15.5px;cursor:pointer;">{{ auth.ctaLabel }}</button>
+                    <div style="text-align:center;font-size:12px;color:{{ c.textMuted }};margin-top:14px;">By continuing you agree to JamQuote's Terms &amp; Privacy Policy</div>
+                  </div>
+                </sc-if>
+
+                <!-- BUSINESS PROFILE ★ -->
+                <sc-if value="{{ isBizProfile }}">
+                  <div style="flex:1;display:flex;flex-direction:column;padding:26px 24px 26px;">
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:21px;color:{{ c.text }};margin-bottom:4px;">Set up your business</div>
+                    <div style="font-size:13.5px;color:{{ c.textMuted }};margin-bottom:22px;">This appears on every quote &amp; invoice.</div>
+
+                    <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;">
+                      <div style="width:64px;height:64px;border-radius:14px;background:{{ c.surfaceAlt }};border:1.5px dashed {{ c.border }};display:flex;align-items:center;justify-content:center;flex:none;">
+                        <div style="width:22px;height:22px;border-radius:5px;border:2px solid {{ c.textMuted }};"></div>
+                      </div>
+                      <div>
+                        <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">Upload logo</div>
+                        <div style="font-size:12px;color:{{ c.textMuted }};">PNG or JPG, square works best</div>
+                      </div>
+                    </div>
+
+                    <div style="display:flex;flex-direction:column;gap:14px;">
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Business name</div>
+                        <div style="padding:14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">Blackwood Construction &amp; Masonry</div>
+                      </div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Trade type</div>
+                          <div style="padding:14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;display:flex;justify-content:space-between;">General/Masonry <span style="color:{{ c.textMuted }};">&#9662;</span></div>
+                        </div>
+                        <div>
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Parish</div>
+                          <div style="padding:14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;display:flex;justify-content:space-between;">St. Catherine <span style="color:{{ c.textMuted }};">&#9662;</span></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">TRN</div>
+                        <div style="padding:14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;font-family:'Archivo',sans-serif;letter-spacing:0.03em;">102-458-963</div>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 4px;">
+                        <div>
+                          <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">Default GCT treatment</div>
+                          <div style="font-size:12px;color:{{ c.textMuted }};">Applied to new line items &mdash; override any time</div>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:8px;">
+                        <button style="flex:1;padding:11px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13px;cursor:pointer;">Standard 15%</button>
+                        <button style="flex:1;padding:11px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:13px;cursor:pointer;">Zero-rated</button>
+                        <button style="flex:1;padding:11px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:13px;cursor:pointer;">Exempt</button>
+                      </div>
+                    </div>
+                    <div style="flex:1;"></div>
+                    <button onclick="{{ go_dashboard }}" style="padding:16px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15.5px;cursor:pointer;margin-top:20px;">Finish setup</button>
+                  </div>
+                </sc-if>
+
+                <!-- DASHBOARD ★ -->
+                <sc-if value="{{ isDashboard }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:10px 22px 16px;display:flex;align-items:center;justify-content:space-between;">
+                      <div>
+                        <div style="font-size:12.5px;color:{{ c.textMuted }};">Good morning</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;color:{{ c.text }};">Owen Blackwood</div>
+                      </div>
+                      <div style="width:40px;height:40px;border-radius:50%;background:{{ c.accentSoft }};display:flex;align-items:center;justify-content:center;font-weight:800;color:{{ c.accent }};font-size:14px;">OB</div>
+                    </div>
+
+                    <div style="padding:0 22px 14px;">
+                      <button onclick="{{ go_regfeed }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:11px;background:{{ c.warnSoft }};border:none;cursor:pointer;">
+                        <span style="width:8px;height:8px;border-radius:50%;background:{{ c.warn }};flex:none;"></span>
+                        <span style="flex:1;font-size:12.5px;font-weight:600;color:{{ c.text }};">GCT threshold update takes effect Aug 1 &mdash; review pricing</span>
+                        <span style="color:{{ c.warn }};font-weight:700;">&rsaquo;</span>
+                      </button>
+                    </div>
+
+                    <div style="padding:0 22px 18px;display:flex;gap:10px;">
+                      <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                        <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Pipeline value</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};margin-top:4px;">$2,840,500</div>
+                      </div>
+                      <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                        <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Win rate (90d)</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.good }};margin-top:4px;">62%</div>
+                      </div>
+                      <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                        <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Overdue inv.</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.crit }};margin-top:4px;">$96,000</div>
+                      </div>
+                    </div>
+
+                    <div style="padding:0 22px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                        <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">Follow-ups due</div>
+                        <div style="font-size:12px;color:{{ c.accent }};font-weight:700;">2</div>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px;">
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Devon Facey &mdash; Fence &amp; gate</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Sent 6 days ago &middot; no reply</div>
+                          </div>
+                          <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:100px;background:{{ c.infoSoft }};color:{{ c.info }};font-size:11px;font-weight:700;">Sent</span>
+                        </button>
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Marva Grant &mdash; Kitchen tiling</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Viewed yesterday &middot; follow up</div>
+                          </div>
+                          <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:100px;background:{{ c.info }};color:#fff;font-size:11px;font-weight:700;">Viewed</span>
+                        </button>
+                      </div>
+
+                      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                        <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">Recent quotes</div>
+                        <button onclick="{{ go_quoteslist }}" style="font-size:12px;color:{{ c.accent }};font-weight:700;background:none;border:none;cursor:pointer;">See all</button>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">QT-0142 &middot; Basil Reid</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Retaining wall, Spanish Town</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$318,600</div>
+                            <span style="display:inline-flex;margin-top:4px;padding:3px 9px;border-radius:100px;background:{{ c.goodSoft }};color:{{ c.good }};font-size:10.5px;font-weight:700;">Accepted</span>
+                          </div>
+                        </button>
+                        <button style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">QT-0141 &middot; Paulette Wright</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Bathroom remodel, Portmore</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$742,000</div>
+                            <span style="display:inline-flex;margin-top:4px;padding:3px 9px;border-radius:100px;background:{{ c.neutralPillSoft }};color:{{ c.neutralPill }};font-size:10.5px;font-weight:700;">Draft</span>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                    <div style="flex:1;"></div>
+                  </div>
+                </sc-if>
+
+                <!-- QUOTES LIST -->
+                <sc-if value="{{ isQuotesList }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:10px 22px 12px;display:flex;gap:8px;overflow-x:auto;">
+                      <sc-for list="{{ quoteFilters }}" as="f" hint-placeholder-count="5">
+                        <button onclick="{{ f.go }}" style="flex:none;padding:8px 14px;border-radius:100px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:4px 22px 90px;display:flex;flex-direction:column;gap:9px;">
+                      <sc-for list="{{ quoteRows }}" as="q" hint-placeholder-count="6">
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:10px;padding:13px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ q.num }} &middot; {{ q.client }}</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">{{ q.job }}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">{{ q.amount }}</div>
+                            <span style="display:inline-flex;margin-top:4px;padding:3px 9px;border-radius:100px;background:{{ q.pillBg }};color:{{ q.pillFg }};font-size:10.5px;font-weight:700;">{{ q.status }}</span>
+                          </div>
+                        </button>
+                      </sc-for>
+                    </div>
+                    <button onclick="{{ go_quoteeditor }}" style="position:absolute;right:22px;bottom:96px;width:56px;height:56px;border-radius:50%;background:{{ c.accent }};color:{{ c.onAccent }};border:none;font-size:26px;font-weight:700;box-shadow:0 8px 18px rgba(0,0,0,0.25);cursor:pointer;">+</button>
+                  </div>
+                </sc-if>
+
+                <!-- CLIENTS LIST -->
+                <sc-if value="{{ isClientsList }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:10px 22px 14px;">
+                      <div style="padding:12px 14px;border-radius:10px;background:{{ c.surfaceAlt }};color:{{ c.textMuted }};font-size:13.5px;">Search clients&hellip;</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:0 22px 90px;display:flex;flex-direction:column;gap:9px;">
+                      <sc-for list="{{ clientRows }}" as="cl" hint-placeholder-count="6">
+                        <button onclick="{{ go_clientdetail }}" style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="width:40px;height:40px;border-radius:50%;background:{{ c.accentSoft }};color:{{ c.accent }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:none;">{{ cl.initials }}</div>
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ cl.name }}</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">{{ cl.parish }} &middot; {{ cl.phone }}</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:13px;color:{{ c.text }};">{{ cl.total }}</div>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- JOBS LIST -->
+                <sc-if value="{{ isJobsList }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="flex:1;overflow-y:auto;padding:14px 22px 90px;display:flex;flex-direction:column;gap:10px;">
+                      <sc-for list="{{ jobRows }}" as="j" hint-placeholder-count="5">
+                        <button onclick="{{ go_jobdetail }}" style="display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                            <div>
+                              <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">{{ j.name }}</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">{{ j.address }}</div>
+                            </div>
+                            <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ j.pillBg }};color:{{ j.pillFg }};font-size:10.5px;font-weight:700;flex:none;">{{ j.stage }}</span>
+                          </div>
+                          <div style="height:6px;border-radius:4px;background:{{ c.surfaceAlt }};overflow:hidden;">
+                            <div style="height:100%;width:{{ j.pct }};background:{{ c.accent }};border-radius:4px;"></div>
+                          </div>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- QUOTE EDITOR ★ -->
+                <sc-if value="{{ isQuoteEditor }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;justify-content:space-between;">
+                      <div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">QT-0142</span>
+                          <span style="display:inline-flex;padding:3px 9px;border-radius:100px;background:{{ c.neutralPillSoft }};color:{{ c.neutralPill }};font-size:10.5px;font-weight:700;">Draft</span>
+                        </div>
+                        <div style="font-size:12.5px;color:{{ c.textMuted }};margin-top:2px;">Basil Reid &middot; Spanish Town, St. Catherine</div>
+                      </div>
+                      <div style="width:30px;height:30px;border-radius:8px;background:{{ c.surfaceAlt }};display:flex;align-items:center;justify-content:center;color:{{ c.textMuted }};font-weight:800;">&middot;&middot;&middot;</div>
+                    </div>
+
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 12px;display:flex;flex-direction:column;gap:18px;">
+
+                      <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                          <div style="font-weight:800;font-size:12px;letter-spacing:0.04em;color:{{ c.info }};text-transform:uppercase;">Materials</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:{{ c.textMuted }};">$96,000.00</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                          <div style="display:flex;align-items:center;gap:12px;padding:13px;border:1px solid {{ c.border }};border-radius:11px;background:{{ c.surface }};">
+                            <div style="width:6px;align-self:stretch;border-radius:3px;background:{{ c.info }};"></div>
+                            <div style="flex:1;">
+                              <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Cement, 42.5kg bag</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">40 bags &times; $1,150.00</div>
+                            </div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">$46,000.00</div>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:12px;padding:13px;border:1px solid {{ c.border }};border-radius:11px;background:{{ c.surface }};">
+                            <div style="width:6px;align-self:stretch;border-radius:3px;background:{{ c.info }};"></div>
+                            <div style="flex:1;">
+                              <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Rebar 3/8&Prime; x 20ft</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">60 lengths &times; $650.00</div>
+                            </div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">$39,000.00</div>
+                          </div>
+                          <div style="display:flex;align-items:center;gap:12px;padding:13px;border:1px solid {{ c.border }};border-radius:11px;background:{{ c.surface }};">
+                            <div style="width:6px;align-self:stretch;border-radius:3px;background:{{ c.info }};"></div>
+                            <div style="flex:1;">
+                              <div style="font-weight:700;font-size:14px;color:{{ c.text }};">River sand, per load</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">2 loads &times; $5,500.00</div>
+                            </div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">$11,000.00</div>
+                          </div>
+                        </div>
+                        <button onclick="{{ go_addmaterial }}" style="margin-top:8px;width:100%;padding:11px 0;border-radius:9px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.info }};font-weight:700;font-size:13px;cursor:pointer;">+ Add material</button>
+                      </div>
+
+                      <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                          <div style="font-weight:800;font-size:12px;letter-spacing:0.04em;color:{{ c.warn }};text-transform:uppercase;">Labour</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:{{ c.textMuted }};">$54,000.00</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                          <div style="display:flex;align-items:center;gap:12px;padding:13px;border:1px solid {{ c.border }};border-radius:11px;background:{{ c.surface }};">
+                            <div style="width:6px;align-self:stretch;border-radius:3px;background:{{ c.warn }};"></div>
+                            <div style="flex:1;">
+                              <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Mason &middot; 2 workers</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">6 days &times; $4,500.00/day</div>
+                            </div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">$54,000.00</div>
+                          </div>
+                        </div>
+                        <button onclick="{{ go_addlabour }}" style="margin-top:8px;width:100%;padding:11px 0;border-radius:9px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.warn }};font-weight:700;font-size:13px;cursor:pointer;">+ Add labour</button>
+                      </div>
+
+                      <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                          <div style="font-weight:800;font-size:12px;letter-spacing:0.04em;color:{{ c.good }};text-transform:uppercase;">Equipment & rental</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:700;font-size:13px;color:{{ c.textMuted }};">$18,000.00</div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:8px;">
+                          <div style="display:flex;align-items:center;gap:12px;padding:13px;border:1px solid {{ c.border }};border-radius:11px;background:{{ c.surface }};">
+                            <div style="width:6px;align-self:stretch;border-radius:3px;background:{{ c.good }};"></div>
+                            <div style="flex:1;">
+                              <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Concrete mixer rental</div>
+                              <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">3 days &times; $6,000.00/day</div>
+                            </div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">$18,000.00</div>
+                          </div>
+                        </div>
+                        <button onclick="{{ go_addequipment }}" style="margin-top:8px;width:100%;padding:11px 0;border-radius:9px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.good }};font-weight:700;font-size:13px;cursor:pointer;">+ Add equipment/rental</button>
+                      </div>
+
+                    </div>
+
+                    <div style="flex:none;padding:12px 22px 16px;border-top:1px solid {{ c.border }};background:{{ c.surface }};display:flex;flex-direction:column;gap:10px;">
+                      <button onclick="{{ go_scanmaterial }}" style="width:100%;padding:10px 0;border-radius:9px;border:1px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:12.5px;cursor:pointer;">Scan material to add a line</button>
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:12px;color:{{ c.textMuted }};">Subtotal</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">$168,000.00</div>
+                      </div>
+                      <button onclick="{{ go_totals }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Review Totals & Terms</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- ADD MATERIAL ★ -->
+                <sc-if value="{{ isAddMaterial }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteeditor }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Add material</div>
+                    </div>
+                    <div style="padding:0 22px 12px;">
+                      <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.accent }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;box-shadow:0 0 0 3px {{ c.accentSoft }};">cement, 42.5kg</div>
+                    </div>
+                    <div style="padding:0 22px;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+                      <div style="font-size:11.5px;font-weight:700;color:{{ c.textMuted }};letter-spacing:0.04em;text-transform:uppercase;margin-bottom:2px;">Supplier prices</div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:2px solid {{ c.accent }};background:{{ c.accentSoft }};">
+                        <div style="flex:1;">
+                          <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Kirk's Hardware &mdash; Spanish Town</div>
+                          <div style="font-size:11.5px;color:{{ c.good }};margin-top:3px;font-weight:600;">&#9679; Updated 2 hours ago</div>
+                        </div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">$1,150.00</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;">
+                          <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Tile Warehouse &mdash; Portmore</div>
+                          <div style="font-size:11.5px;color:{{ c.warn }};margin-top:3px;font-weight:600;">&#9679; Cached &middot; offline since Jul 6</div>
+                        </div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">$1,175.00</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;">
+                          <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Graham's Building Supplies &mdash; May Pen</div>
+                          <div style="font-size:11.5px;color:{{ c.good }};margin-top:3px;font-weight:600;">&#9679; Updated yesterday</div>
+                        </div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">$1,140.00</div>
+                      </div>
+                    </div>
+
+                    <div style="flex:none;padding:16px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};display:flex;flex-direction:column;gap:12px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};">Quantity</div>
+                        <div style="display:flex;align-items:center;gap:12px;">
+                          <button style="width:34px;height:34px;border-radius:8px;border:1px solid {{ c.border }};background:{{ c.surfaceAlt }};font-weight:700;font-size:16px;cursor:pointer;">&minus;</button>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};min-width:26px;text-align:center;">40</div>
+                          <button style="width:34px;height:34px;border-radius:8px;border:1px solid {{ c.border }};background:{{ c.surfaceAlt }};font-weight:700;font-size:16px;cursor:pointer;">+</button>
+                          <div style="font-size:13px;color:{{ c.textMuted }};">bags</div>
+                        </div>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};">Rate (manual override available)</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">$1,150.00 &#9998;</div>
+                      </div>
+                      <div style="display:flex;gap:8px;">
+                        <button style="flex:1;padding:9px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:12.5px;cursor:pointer;">Standard GCT</button>
+                        <button style="flex:1;padding:9px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:12.5px;cursor:pointer;">Zero-rated</button>
+                        <button style="flex:1;padding:9px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:12.5px;cursor:pointer;">Exempt</button>
+                      </div>
+                      <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px;border-top:1px solid {{ c.border }};">
+                        <div style="font-size:13px;color:{{ c.textMuted }};font-weight:600;">Line total</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;color:{{ c.text }};">$46,000.00</div>
+                      </div>
+                      <button onclick="{{ go_quoteeditor }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Add to quote</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SCAN MATERIAL ★ -->
+                <sc-if value="{{ isScanMaterial }}">
+                  <div style="flex:1;display:flex;flex-direction:column;background:#0c0c0c;">
+                    <div style="padding:14px 22px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteeditor }}" style="background:none;border:none;font-size:20px;color:#fff;cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:#fff;">Scan material</div>
+                    </div>
+                    <div style="flex:1;position:relative;display:flex;align-items:center;justify-content:center;">
+                      <div style="width:250px;height:250px;position:relative;">
+                        <div style="position:absolute;top:0;left:0;width:40px;height:40px;border-top:3px solid {{ c.accent }};border-left:3px solid {{ c.accent }};border-radius:8px 0 0 0;"></div>
+                        <div style="position:absolute;top:0;right:0;width:40px;height:40px;border-top:3px solid {{ c.accent }};border-right:3px solid {{ c.accent }};border-radius:0 8px 0 0;"></div>
+                        <div style="position:absolute;bottom:0;left:0;width:40px;height:40px;border-bottom:3px solid {{ c.accent }};border-left:3px solid {{ c.accent }};border-radius:0 0 0 8px;"></div>
+                        <div style="position:absolute;bottom:0;right:0;width:40px;height:40px;border-bottom:3px solid {{ c.accent }};border-right:3px solid {{ c.accent }};border-radius:0 0 8px 0;"></div>
+                      </div>
+                      <div style="position:absolute;bottom:36px;left:0;right:0;text-align:center;color:#cfc9bd;font-size:13.5px;">Point at a barcode or price tag</div>
+                    </div>
+                    <div style="flex:none;background:{{ c.surface }};border-radius:20px 20px 0 0;padding:20px 22px 26px;">
+                      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+                        <div style="width:46px;height:46px;border-radius:10px;background:{{ c.goodSoft }};display:flex;align-items:center;justify-content:center;color:{{ c.good }};font-weight:800;">&#10003;</div>
+                        <div style="flex:1;">
+                          <div style="font-weight:700;font-size:14.5px;color:{{ c.text }};">Rebar 3/8&Prime; x 20ft</div>
+                          <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Matched Kirk's Hardware &middot; 96% confidence</div>
+                        </div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">$650.00</div>
+                      </div>
+                      <div style="display:flex;gap:10px;">
+                        <button style="flex:1;padding:13px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13.5px;cursor:pointer;">Edit details</button>
+                        <button onclick="{{ go_quoteeditor }}" style="flex:1;padding:13px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13.5px;cursor:pointer;">Add to quote</button>
+                      </div>
+                      <button onclick="{{ go_addmaterial }}" style="width:100%;margin-top:10px;padding:8px 0;border:none;background:none;color:{{ c.textMuted }};font-size:12px;font-weight:600;cursor:pointer;">Can't find a match? Enter manually</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- ADD LABOUR ★ -->
+                <sc-if value="{{ isAddLabour }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteeditor }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Add labour</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px;">
+                      <div style="font-size:11.5px;font-weight:700;color:{{ c.textMuted }};letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px;">Rate book</div>
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:2px solid {{ c.accent }};background:{{ c.accentSoft }};">
+                          <div style="flex:1;font-weight:700;font-size:14px;color:{{ c.text }};">Mason</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$4,500.00/day</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;font-weight:700;font-size:14px;color:{{ c.text }};">Helper / labourer</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$2,800.00/day</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;font-weight:700;font-size:14px;color:{{ c.text }};">Electrician</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$6,500.00/day</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;font-weight:700;font-size:14px;color:{{ c.text }};">Plumber</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$6,000.00/day</div>
+                        </div>
+                      </div>
+
+                      <div style="font-size:11.5px;font-weight:700;color:{{ c.textMuted }};letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px;">Rate cadence</div>
+                      <div style="display:flex;gap:8px;margin-bottom:18px;">
+                        <sc-for list="{{ cadences }}" as="cd" hint-placeholder-count="5">
+                          <button onclick="{{ cd.go }}" style="flex:1;padding:10px 0;border-radius:9px;border:none;font-size:11.5px;font-weight:700;cursor:pointer;background:{{ cd.bg }};color:{{ cd.fg }};">{{ cd.label }}</button>
+                        </sc-for>
+                      </div>
+
+                      <div style="display:flex;gap:12px;margin-bottom:14px;">
+                        <div style="flex:1;">
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Workers</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">2</div>
+                        </div>
+                        <div style="flex:1;">
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">{{ cadenceQtyLabel }}</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">6</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style="flex:none;padding:16px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};display:flex;flex-direction:column;gap:10px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:13px;color:{{ c.textMuted }};font-weight:600;">Line total</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;color:{{ c.text }};">$54,000.00</div>
+                      </div>
+                      <button onclick="{{ go_quoteeditor }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Add to quote</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- ADD EQUIPMENT/RENTAL -->
+                <sc-if value="{{ isAddEquipment }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteeditor }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Add equipment / rental</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px;">
+                      <div style="font-size:11.5px;font-weight:700;color:{{ c.textMuted }};letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px;">Equipment catalog</div>
+                      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:2px solid {{ c.accent }};background:{{ c.accentSoft }};">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Concrete mixer</div>
+                            <div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Cross Country Rentals &middot; Spanish Town</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$6,000.00/day</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">Scaffolding, per bay</div>
+                            <div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Jamaica Scaffold Co.</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$1,800.00/week</div>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">5kVA generator</div>
+                            <div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Cross Country Rentals</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$4,500.00/day</div>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:12px;">
+                        <div style="flex:1;">
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Days</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">3</div>
+                        </div>
+                        <div style="flex:1;">
+                          <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Deposit required</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:15px;">$5,000.00</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style="flex:none;padding:16px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};display:flex;flex-direction:column;gap:10px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:13px;color:{{ c.textMuted }};font-weight:600;">Line total</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:19px;color:{{ c.text }};">$18,000.00</div>
+                      </div>
+                      <button onclick="{{ go_quoteeditor }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Add to quote</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- TOTALS & TERMS ★ -->
+                <sc-if value="{{ isTotals }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteeditor }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Totals & terms</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:8px 22px;display:flex;flex-direction:column;gap:18px;">
+
+                      <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px;">
+                        <div style="display:flex;justify-content:space-between;color:{{ c.textMuted }};"><span>Materials</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.text }};">$96,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;color:{{ c.textMuted }};"><span>Labour</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.text }};">$54,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;color:{{ c.textMuted }};"><span>Equipment & rental</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.text }};">$18,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid {{ c.border }};font-weight:700;color:{{ c.text }};"><span>Subtotal</span><span style="font-family:'Archivo',sans-serif;">$168,000.00</span></div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:12.5px;font-weight:700;color:{{ c.text }};margin-bottom:8px;">GCT treatment</div>
+                        <div style="display:flex;gap:8px;margin-bottom:10px;">
+                          <sc-for list="{{ gctOptions }}" as="g" hint-placeholder-count="3">
+                            <button onclick="{{ g.go }}" style="flex:1;padding:10px 0;border-radius:9px;border:none;font-size:12px;font-weight:700;cursor:pointer;background:{{ g.bg }};color:{{ g.fg }};">{{ g.label }}</button>
+                          </sc-for>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:13.5px;color:{{ c.textMuted }};"><span>GCT {{ gctRateLabel }}</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.text }};">{{ gctAmount }}</span></div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:12.5px;font-weight:700;color:{{ c.text }};margin-bottom:8px;">Discount</div>
+                        <div style="display:flex;gap:10px;">
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;flex:1;">5%</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.textMuted }};font-size:14.5px;flex:1;">&minus; $8,400.00</div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:12.5px;font-weight:700;color:{{ c.text }};margin-bottom:8px;">Deposit required</div>
+                        <div style="display:flex;gap:10px;">
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;flex:1;">40%</div>
+                          <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.textMuted }};font-size:14.5px;flex:1;">$77,443.20</div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:12.5px;font-weight:700;color:{{ c.text }};margin-bottom:8px;">Validity window</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;">Valid for 14 days &middot; expires Jul 23, 2026</div>
+                      </div>
+
+                      <div>
+                        <div style="font-size:12.5px;font-weight:700;color:{{ c.text }};margin-bottom:8px;">Terms & notes</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.textMuted }};font-size:13.5px;line-height:1.5;">Price includes delivery to site. 40% deposit due to schedule start date. Balance due on completion.</div>
+                      </div>
+                    </div>
+
+                    <div style="flex:none;padding:14px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};display:flex;flex-direction:column;gap:10px;">
+                      <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <div style="font-size:13.5px;color:{{ c.textMuted }};font-weight:600;">Total due</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.text }};">{{ grandTotal }}</div>
+                      </div>
+                      <button onclick="{{ go_pdfpreview }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Preview PDF</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- QUOTE PDF PREVIEW ★ -->
+                <sc-if value="{{ isPdfPreview }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;justify-content:space-between;">
+                      <button onclick="{{ go_totals }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;color:{{ c.text }};">Quote preview</div>
+                      <div style="font-size:13px;color:{{ c.accent }};font-weight:700;">Edit</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:8px 20px 20px;background:{{ c.surfaceAlt }};">
+                      <div style="background:#fff;border-radius:6px;padding:22px 20px;box-shadow:0 6px 20px rgba(0,0,0,0.12);color:#26221C;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+                          <div>
+                            <div style="width:34px;height:34px;border-radius:8px;background:{{ c.accent }};margin-bottom:8px;"></div>
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;">Blackwood Construction & Masonry</div>
+                            <div style="font-size:10.5px;color:#6B6357;margin-top:2px;">TRN 102-458-963 &middot; St. Catherine</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:15px;">QUOTE</div>
+                            <div style="font-size:10.5px;color:#6B6357;">QT-0142</div>
+                            <div style="font-size:10.5px;color:#6B6357;">Jul 9, 2026</div>
+                          </div>
+                        </div>
+                        <div style="font-size:10.5px;color:#6B6357;margin-bottom:2px;">BILL TO</div>
+                        <div style="font-weight:700;font-size:12.5px;margin-bottom:10px;">Basil Reid &middot; Lot 14 Bloxburgh Dr, Spanish Town, St. Catherine</div>
+
+                        <div style="border-top:1.5px solid #26221C;margin-top:8px;">
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:10px;font-weight:700;color:#6B6357;border-bottom:1px solid #DDD5C4;">
+                            <span>DESCRIPTION</span><span>AMOUNT</span>
+                          </div>
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;"><span>Cement, 42.5kg bag (40)</span><span>$46,000.00</span></div>
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;"><span>Rebar 3/8&Prime; x 20ft (60)</span><span>$39,000.00</span></div>
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;"><span>River sand, per load (2)</span><span>$11,000.00</span></div>
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;"><span>Mason, 2 workers (6 days)</span><span>$54,000.00</span></div>
+                          <div style="display:flex;justify-content:space-between;padding:6px 0;font-size:11px;"><span>Concrete mixer rental (3 days)</span><span>$18,000.00</span></div>
+                        </div>
+                        <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;font-size:11px;">
+                          <div style="display:flex;justify-content:space-between;color:#6B6357;"><span>Subtotal</span><span>$168,000.00</span></div>
+                          <div style="display:flex;justify-content:space-between;color:#6B6357;"><span>Discount (5%)</span><span>&minus;$8,400.00</span></div>
+                          <div style="display:flex;justify-content:space-between;color:#6B6357;"><span>GCT (15%)</span><span>$23,940.00</span></div>
+                          <div style="display:flex;justify-content:space-between;font-weight:800;font-size:14px;padding-top:6px;border-top:1.5px solid #26221C;"><span>Total due</span><span>{{ grandTotal }}</span></div>
+                        </div>
+                        <div style="margin-top:14px;font-size:9.5px;color:#8A8375;line-height:1.5;">Valid until Jul 23, 2026. 40% deposit due to schedule start date. Balance due on completion.</div>
+                      </div>
+                    </div>
+                    <div style="flex:none;padding:14px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};">
+                      <button onclick="{{ go_send }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Send to client</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SEND ★ -->
+                <sc-if value="{{ isSend }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_pdfpreview }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Send quote</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:8px 22px;display:flex;flex-direction:column;gap:16px;">
+                      <div style="display:flex;gap:10px;">
+                        <button onclick="{{ toChannel_wa }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;border-radius:12px;border:2px solid {{ channelWaBorder }};background:{{ channelWaBg }};cursor:pointer;">
+                          <div style="width:36px;height:36px;border-radius:50%;background:{{ c.good }};"></div>
+                          <div style="font-weight:700;font-size:13px;color:{{ c.text }};">WhatsApp</div>
+                        </button>
+                        <button onclick="{{ toChannel_email }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;border-radius:12px;border:2px solid {{ channelEmailBorder }};background:{{ channelEmailBg }};cursor:pointer;">
+                          <div style="width:36px;height:36px;border-radius:8px;background:{{ c.info }};"></div>
+                          <div style="font-weight:700;font-size:13px;color:{{ c.text }};">Email</div>
+                        </button>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">To</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;">{{ sendTo }}</div>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Message</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:13.5px;line-height:1.6;min-height:120px;">Good day Mr. Reid, please find attached your quote QT-0142 for the retaining wall from Blackwood Construction & Masonry, total $183,540.80. Valid until Jul 23. Reply here with any questions &mdash; Owen.</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;background:{{ c.surfaceAlt }};">
+                        <div style="width:34px;height:44px;background:{{ c.crit }};border-radius:3px;flex:none;"></div>
+                        <div style="font-size:12.5px;color:{{ c.textMuted }};">QT-0142-Basil-Reid.pdf &middot; 118 KB attached</div>
+                      </div>
+                    </div>
+                    <div style="flex:none;padding:14px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};">
+                      <button onclick="{{ go_statustracker }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">{{ sendCta }}</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- STATUS TRACKER -->
+                <sc-if value="{{ isStatusTracker }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 6px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_quoteslist }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">QT-0142 &middot; Basil Reid</div>
+                        <div style="font-size:12px;color:{{ c.textMuted }};">$183,540.80 &middot; Retaining wall</div>
+                      </div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:20px 26px;">
+                      <div style="display:flex;gap:14px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                          <div style="width:28px;height:28px;border-radius:50%;background:{{ c.good }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">&#10003;</div>
+                          <div style="width:2px;flex:1;background:{{ c.good }};min-height:38px;"></div>
+                        </div>
+                        <div style="padding-bottom:22px;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Sent</div><div style="font-size:12px;color:{{ c.textMuted }};">Jul 9, 2026 &middot; 9:14am via WhatsApp</div></div>
+                      </div>
+                      <div style="display:flex;gap:14px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                          <div style="width:28px;height:28px;border-radius:50%;background:{{ c.good }};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">&#10003;</div>
+                          <div style="width:2px;flex:1;background:{{ c.good }};min-height:38px;"></div>
+                        </div>
+                        <div style="padding-bottom:22px;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Viewed</div><div style="font-size:12px;color:{{ c.textMuted }};">Jul 9, 2026 &middot; 11:52am</div></div>
+                      </div>
+                      <div style="display:flex;gap:14px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;">
+                          <div style="width:28px;height:28px;border-radius:50%;background:{{ c.accentSoft }};color:{{ c.accent }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;">&#8226;</div>
+                        </div>
+                        <div><div style="font-weight:700;font-size:14px;color:{{ c.textMuted }};">Awaiting response</div><div style="font-size:12px;color:{{ c.textMuted }};">Follow up suggested after 5 days</div></div>
+                      </div>
+                      <div style="display:flex;gap:10px;margin-top:26px;">
+                        <button style="flex:1;padding:13px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13px;cursor:pointer;">Call client</button>
+                        <button style="flex:1;padding:13px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13px;cursor:pointer;">Resend via WhatsApp</button>
+                      </div>
+                      <button onclick="{{ go_revisionhistory }}" style="width:100%;margin-top:14px;padding:11px 0;border:none;background:none;color:{{ c.info }};font-weight:600;font-size:12.5px;cursor:pointer;">View revision history</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- REVISION HISTORY -->
+                <sc-if value="{{ isRevisionHistory }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_statustracker }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Revision history</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:8px 22px;display:flex;flex-direction:column;gap:10px;">
+                      <div style="padding:14px;border-radius:12px;border:2px solid {{ c.accent }};background:{{ c.accentSoft }};">
+                        <div style="display:flex;justify-content:space-between;"><span style="font-weight:800;font-size:13.5px;color:{{ c.text }};">v3 &middot; Current</span><span style="font-family:'Archivo',sans-serif;font-weight:800;color:{{ c.text }};">$183,540.80</span></div>
+                        <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:4px;">Jul 9, 2026 &middot; Added river sand, applied 5% discount</div>
+                      </div>
+                      <div style="padding:14px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="display:flex;justify-content:space-between;"><span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">v2</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.textMuted }};">$193,540.80</span></div>
+                        <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:4px;">Jul 7, 2026 &middot; Increased rebar quantity to 60 lengths</div>
+                      </div>
+                      <div style="padding:14px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="display:flex;justify-content:space-between;"><span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">v1</span><span style="font-family:'Archivo',sans-serif;font-weight:700;color:{{ c.textMuted }};">$171,200.00</span></div>
+                        <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:4px;">Jul 5, 2026 &middot; Initial draft created</div>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- CLIENT DETAIL -->
+                <sc-if value="{{ isClientDetail }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_clientslist }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Client</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px;">
+                      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
+                        <div style="width:56px;height:56px;border-radius:50%;background:{{ c.accentSoft }};color:{{ c.accent }};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;">BR</div>
+                        <div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};">Basil Reid</div>
+                          <div style="font-size:12.5px;color:{{ c.textMuted }};margin-top:2px;">Lot 14 Bloxburgh Dr, Spanish Town, St. Catherine</div>
+                        </div>
+                      </div>
+                      <div style="display:flex;gap:10px;margin-bottom:20px;">
+                        <button style="flex:1;padding:12px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13px;cursor:pointer;">Call</button>
+                        <button style="flex:1;padding:12px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13px;cursor:pointer;">WhatsApp</button>
+                        <button onclick="{{ go_quoteeditor }}" style="flex:1;padding:12px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13px;cursor:pointer;">New quote</button>
+                      </div>
+                      <div style="display:flex;gap:10px;margin-bottom:20px;">
+                        <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:11px;padding:12px;">
+                          <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Lifetime value</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};margin-top:3px;">$318,600</div>
+                        </div>
+                        <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:11px;padding:12px;">
+                          <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Quotes</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};margin-top:3px;">3</div>
+                        </div>
+                      </div>
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:10px;">Quotes</div>
+                      <div style="display:flex;flex-direction:column;gap:8px;">
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">QT-0142 &middot; Retaining wall</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Sent Jul 9</div></div>
+                          <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.infoSoft }};color:{{ c.info }};font-size:10.5px;font-weight:700;">Sent</span>
+                        </button>
+                        <button style="display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">QT-0098 &middot; Driveway repair</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Paid Mar 2026</div></div>
+                          <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.good }};color:#fff;font-size:10.5px;font-weight:700;">Paid</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- JOB DETAIL -->
+                <sc-if value="{{ isJobDetail }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_jobslist }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Job detail</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Reid residence &mdash; retaining wall</div>
+                      <div style="font-size:12.5px;color:{{ c.textMuted }};margin-top:2px;margin-bottom:16px;">Lot 14 Bloxburgh Dr, Spanish Town, St. Catherine</div>
+
+                      <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+                        <sc-for list="{{ jobStages }}" as="st" hint-placeholder-count="4">
+                          <div style="flex:1;text-align:center;font-size:10px;font-weight:700;color:{{ st.color }};">{{ st.label }}</div>
+                        </sc-for>
+                      </div>
+                      <div style="display:flex;gap:4px;margin-bottom:20px;">
+                        <sc-for list="{{ jobStages }}" as="st" hint-placeholder-count="4">
+                          <div style="flex:1;height:6px;border-radius:4px;background:{{ st.bar }};"></div>
+                        </sc-for>
+                      </div>
+
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:10px;">Linked quote</div>
+                      <button onclick="{{ go_quoteeditor }}" style="width:100%;display:flex;align-items:center;gap:10px;padding:12px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;margin-bottom:20px;">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">QT-0142</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">$183,540.80</div></div>
+                        <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.goodSoft }};color:{{ c.good }};font-size:10.5px;font-weight:700;">Accepted</span>
+                      </button>
+
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:10px;">Site photos</div>
+                      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+                        <div style="aspect-ratio:1;border-radius:9px;background:repeating-linear-gradient(45deg,{{ c.surfaceAlt }},{{ c.surfaceAlt }} 6px,{{ c.border }} 6px,{{ c.border }} 12px);"></div>
+                        <div style="aspect-ratio:1;border-radius:9px;background:repeating-linear-gradient(45deg,{{ c.surfaceAlt }},{{ c.surfaceAlt }} 6px,{{ c.border }} 6px,{{ c.border }} 12px);"></div>
+                        <div style="aspect-ratio:1;border-radius:9px;border:1.5px dashed {{ c.border }};display:flex;align-items:center;justify-content:center;color:{{ c.textMuted }};font-size:22px;">+</div>
+                      </div>
+
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:8px;">Notes</div>
+                      <div style="padding:12px;border-radius:10px;background:{{ c.surfaceAlt }};color:{{ c.textMuted }};font-size:13px;line-height:1.5;">Client wants block wall finished before rain season. Site access via rear gate only.</div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- INVOICES LIST -->
+                <sc-if value="{{ isInvoicesList }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:10px 22px 12px;display:flex;gap:8px;overflow-x:auto;">
+                      <sc-for list="{{ invoiceFilters }}" as="f" hint-placeholder-count="4">
+                        <button onclick="{{ f.go }}" style="flex:none;padding:8px 14px;border-radius:100px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;background:{{ f.bg }};color:{{ f.fg }};">{{ f.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:4px 22px 20px;display:flex;flex-direction:column;gap:9px;">
+                      <sc-for list="{{ invoiceRows }}" as="inv" hint-placeholder-count="5">
+                        <button onclick="{{ go_invoicedetail }}" style="display:flex;align-items:center;gap:10px;padding:13px;border-radius:12px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ inv.num }} &middot; {{ inv.client }}</div>
+                            <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">{{ inv.due }}</div>
+                          </div>
+                          <div style="text-align:right;">
+                            <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">{{ inv.amount }}</div>
+                            <span style="display:inline-flex;margin-top:4px;padding:3px 9px;border-radius:100px;background:{{ inv.pillBg }};color:{{ inv.pillFg }};font-size:10.5px;font-weight:700;">{{ inv.status }}</span>
+                          </div>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- INVOICE DETAIL -->
+                <sc-if value="{{ isInvoiceDetail }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;justify-content:space-between;">
+                      <div style="display:flex;align-items:center;gap:10px;">
+                        <button onclick="{{ go_invoiceslist }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                        <div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};">INV-0098</div>
+                          <div style="font-size:12px;color:{{ c.textMuted }};">Basil Reid</div>
+                        </div>
+                      </div>
+                      <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.crit }};color:#fff;font-size:10.5px;font-weight:700;">Overdue</span>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px;">
+                      <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:16px;margin-bottom:16px;">
+                        <div style="display:flex;justify-content:space-between;font-size:13px;color:{{ c.textMuted }};margin-bottom:6px;"><span>Amount due</span><span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.crit }};">$183,540.80</span></div>
+                        <div style="display:flex;justify-content:space-between;font-size:12px;color:{{ c.textMuted }};"><span>Due date</span><span>Jun 30, 2026 (9 days overdue)</span></div>
+                      </div>
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:8px;">Line items</div>
+                      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:{{ c.textMuted }};margin-bottom:18px;">
+                        <div style="display:flex;justify-content:space-between;"><span>Materials</span><span style="color:{{ c.text }};font-weight:700;">$96,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Labour</span><span style="color:{{ c.text }};font-weight:700;">$54,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Equipment & rental</span><span style="color:{{ c.text }};font-weight:700;">$18,000.00</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>GCT (15%)</span><span style="color:{{ c.text }};font-weight:700;">$23,940.00</span></div>
+                        <div style="display:flex;justify-content:space-between;"><span>Discount (5%)</span><span style="color:{{ c.text }};font-weight:700;">&minus;$8,400.00</span></div>
+                      </div>
+                      <div style="font-weight:700;font-size:14px;color:{{ c.text }};margin-bottom:8px;">Payment history</div>
+                      <div style="padding:12px;border-radius:10px;background:{{ c.surfaceAlt }};color:{{ c.textMuted }};font-size:12.5px;">No payments recorded yet.</div>
+                    </div>
+                    <div style="flex:none;padding:14px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};">
+                      <button onclick="{{ go_recordpayment }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Record payment</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- RECORD PAYMENT -->
+                <sc-if value="{{ isRecordPayment }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_invoicedetail }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Record payment</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:8px 22px;display:flex;flex-direction:column;gap:16px;">
+                      <div style="display:flex;gap:8px;">
+                        <button onclick="{{ toPayFull }}" style="flex:1;padding:11px 0;border-radius:9px;border:none;font-weight:700;font-size:13px;cursor:pointer;background:{{ payFullBg }};color:{{ payFullFg }};">Full payment</button>
+                        <button onclick="{{ toPayPartial }}" style="flex:1;padding:11px 0;border-radius:9px;border:none;font-weight:700;font-size:13px;cursor:pointer;background:{{ payPartialBg }};color:{{ payPartialFg }};">Partial</button>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Amount received</div>
+                        <div style="padding:14px;border-radius:10px;border:1.5px solid {{ c.accent }};background:{{ c.surface }};color:{{ c.text }};font-size:17px;font-family:'Archivo',sans-serif;font-weight:800;box-shadow:0 0 0 3px {{ c.accentSoft }};">{{ payAmount }}</div>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Payment method</div>
+                        <div style="display:flex;gap:8px;">
+                          <button style="flex:1;padding:11px 0;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:12px;cursor:pointer;">Cash</button>
+                          <button style="flex:1;padding:11px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:12px;cursor:pointer;">Bank transfer</button>
+                          <button style="flex:1;padding:11px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:600;font-size:12px;cursor:pointer;">Lynk</button>
+                        </div>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Date received</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.text }};font-size:14.5px;">Jul 9, 2026</div>
+                      </div>
+                      <div>
+                        <div style="font-size:12.5px;font-weight:600;color:{{ c.textMuted }};margin-bottom:6px;">Reference note</div>
+                        <div style="padding:13px 14px;border-radius:10px;border:1.5px solid {{ c.border }};background:{{ c.surface }};color:{{ c.textMuted }};font-size:13.5px;">Cash handed to Owen on site</div>
+                      </div>
+                    </div>
+                    <div style="flex:none;padding:14px 22px 18px;border-top:1px solid {{ c.border }};background:{{ c.surface }};">
+                      <button onclick="{{ go_invoicedetail }}" style="width:100%;padding:15px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:15px;cursor:pointer;">Save payment</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- LABOUR RATE BOOK -->
+                <sc-if value="{{ isLabourRateBook }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Labour rate book</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:8px;">
+                      <sc-for list="{{ rateBookRows }}" as="r" hint-placeholder-count="6">
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ r.name }}</div>
+                            <div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Default cadence: {{ r.cadence }}</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">{{ r.rate }}</div>
+                        </div>
+                      </sc-for>
+                      <button style="margin-top:6px;width:100%;padding:12px 0;border-radius:9px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13px;cursor:pointer;">+ Add labour type</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- MATERIAL FAVOURITES -->
+                <sc-if value="{{ isMaterialFav }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Material favourites</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:8px;">
+                      <sc-for list="{{ materialFavRows }}" as="m" hint-placeholder-count="6">
+                        <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ m.name }}</div>
+                            <div style="font-size:11px;color:{{ m.freshColor }};margin-top:2px;font-weight:600;">&#9679; {{ m.fresh }}</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">{{ m.rate }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- EQUIPMENT CATALOG -->
+                <sc-if value="{{ isEquipCatalog }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Equipment / rental catalog</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:8px;">
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Concrete mixer</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Cross Country Rentals &middot; Spanish Town</div></div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$6,000.00/day</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Scaffolding, per bay</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Jamaica Scaffold Co.</div></div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$1,800.00/week</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">5kVA generator</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Cross Country Rentals</div></div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$4,500.00/day</div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Bobcat / mini excavator</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Island Heavy Equipment</div></div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14px;color:{{ c.text }};">$15,000.00/day</div>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SUPPLIER DIRECTORY -->
+                <sc-if value="{{ isSupplierDir }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Supplier directory</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:8px;">
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Kirk's Hardware</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Spanish Town, St. Catherine</div></div>
+                        <span style="font-size:11px;font-weight:700;color:{{ c.good }};">&#9679; Live prices</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Tile Warehouse</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Portmore, St. Catherine</div></div>
+                        <span style="font-size:11px;font-weight:700;color:{{ c.warn }};">&#9679; Cached 3 days</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Graham's Building Supplies</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">May Pen, Clarendon</div></div>
+                        <span style="font-size:11px;font-weight:700;color:{{ c.good }};">&#9679; Live prices</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">TGP Hardware</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Kingston</div></div>
+                        <span style="font-size:11px;font-weight:700;color:{{ c.crit }};">&#9679; Stale &middot; 12 days</span>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- REGULATORY FEED -->
+                <sc-if value="{{ isRegFeed }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Regulatory updates</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:8px;">
+                      <button onclick="{{ go_regdetail }}" style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1.5px solid {{ c.warn }};background:{{ c.warnSoft }};cursor:pointer;text-align:left;">
+                        <span style="width:8px;height:8px;border-radius:50%;background:{{ c.warn }};flex:none;"></span>
+                        <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">GCT threshold change for small contractors</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Effective Aug 1, 2026 &middot; Action needed</div></div>
+                      </button>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <span style="width:8px;height:8px;border-radius:50%;background:{{ c.neutralPill }};flex:none;"></span>
+                        <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">NHT contribution rate unchanged for 2026/27</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Published Jun 30, 2026</div></div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:13px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <span style="width:8px;height:8px;border-radius:50%;background:{{ c.neutralPill }};flex:none;"></span>
+                        <div style="flex:1;"><div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">New TRN verification requirement for invoices over $500,000</div><div style="font-size:11px;color:{{ c.textMuted }};margin-top:2px;">Effective Sep 1, 2026</div></div>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- REGULATORY DETAIL -->
+                <sc-if value="{{ isRegDetail }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_regfeed }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};">Update detail</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;">
+                      <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.warnSoft }};color:{{ c.warn }};font-size:11px;font-weight:700;margin-bottom:10px;">Action needed</span>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};margin-bottom:6px;">GCT threshold change for small contractors</div>
+                      <div style="font-size:12px;color:{{ c.textMuted }};margin-bottom:16px;">Effective Aug 1, 2026</div>
+                      <div style="font-weight:700;font-size:13px;color:{{ c.text }};margin-bottom:6px;">What changed</div>
+                      <div style="font-size:13.5px;color:{{ c.textMuted }};line-height:1.6;margin-bottom:16px;">The annual revenue threshold requiring GCT registration drops from $10M to $7.5M. Contractors newly above this line must register and begin charging standard-rate GCT on applicable line items.</div>
+                      <div style="font-weight:700;font-size:13px;color:{{ c.text }};margin-bottom:6px;">Action needed</div>
+                      <div style="font-size:13.5px;color:{{ c.textMuted }};line-height:1.6;margin-bottom:18px;">Review your trailing 12-month revenue in Reports. If you're above $7.5M, update your default GCT treatment in Business Profile before Aug 1.</div>
+                      <button onclick="{{ go_settingsprofile }}" style="width:100%;padding:14px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:14px;cursor:pointer;">Review GCT settings</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- REPORTS DASHBOARD -->
+                <sc-if value="{{ isReports }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Reports</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;">
+                      <div style="display:flex;gap:10px;margin-bottom:14px;">
+                        <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                          <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Win rate (90d)</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:20px;color:{{ c.good }};margin-top:4px;">62%</div>
+                        </div>
+                        <div style="flex:1;background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                          <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;">Pipeline value</div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:20px;color:{{ c.text }};margin-top:4px;">$2.84M</div>
+                        </div>
+                      </div>
+                      <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;margin-bottom:14px;">
+                        <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;margin-bottom:10px;">Revenue by month</div>
+                        <div style="display:flex;align-items:flex-end;gap:8px;height:90px;">
+                          <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="6">
+                            <div style="flex:1;height:{{ b.h }};background:{{ c.accent }};border-radius:4px 4px 0 0;"></div>
+                          </sc-for>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:6px;">
+                          <sc-for list="{{ revenueBars }}" as="b" hint-placeholder-count="6">
+                            <div style="flex:1;text-align:center;font-size:9.5px;color:{{ c.textMuted }};">{{ b.label }}</div>
+                          </sc-for>
+                        </div>
+                      </div>
+                      <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:14px;">
+                        <div style="font-size:11px;color:{{ c.textMuted }};font-weight:600;margin-bottom:4px;">Trailing 12mo revenue</div>
+                        <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};">$8,120,000.00</div>
+                        <div style="font-size:11px;color:{{ c.warn }};margin-top:4px;font-weight:600;">Above new $7.5M GCT threshold &mdash; review settings</div>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SETTINGS: PROFILE & BRANDING -->
+                <sc-if value="{{ isSettingsProfile }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;">
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:17px;color:{{ c.text }};">Settings</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;">
+                      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+                        <div style="width:52px;height:52px;border-radius:12px;background:{{ c.accent }};flex:none;"></div>
+                        <div><div style="font-weight:800;font-size:15px;color:{{ c.text }};">Blackwood Construction & Masonry</div><div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">TRN 102-458-963</div></div>
+                      </div>
+                      <div style="display:flex;flex-direction:column;gap:2px;">
+                        <button style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Business profile & branding <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_settingsconnections }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">WhatsApp & email connections <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_settingssubscription }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Subscription <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_labourratebook }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Labour rate book <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_materialfav }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Material favourites <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_equipcatalog }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Equipment / rental catalog <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_supplierdir }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Supplier directory <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_reports }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;border-bottom:1px solid {{ c.border }};background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Reports <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                        <button onclick="{{ go_regfeed }}" style="display:flex;align-items:center;justify-content:space-between;padding:15px 4px;border:none;background:none;text-align:left;cursor:pointer;color:{{ c.text }};font-size:14px;font-weight:600;">Regulatory updates <span style="color:{{ c.textMuted }};">&rsaquo;</span></button>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SETTINGS: CONNECTIONS -->
+                <sc-if value="{{ isSettingsConnections }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_settingsprofile }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};">Connections</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;display:flex;flex-direction:column;gap:10px;">
+                      <div style="display:flex;align-items:center;gap:12px;padding:14px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="width:38px;height:38px;border-radius:9px;background:{{ c.good }};flex:none;"></div>
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">WhatsApp Business</div><div style="font-size:11.5px;color:{{ c.good }};margin-top:2px;font-weight:600;">Connected &middot; 876 555 0142</div></div>
+                        <button style="padding:8px 14px;border-radius:8px;border:1px solid {{ c.border }};background:transparent;color:{{ c.text }};font-size:12px;font-weight:700;cursor:pointer;">Manage</button>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:12px;padding:14px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="width:38px;height:38px;border-radius:9px;background:{{ c.info }};flex:none;"></div>
+                        <div style="flex:1;"><div style="font-weight:700;font-size:14px;color:{{ c.text }};">Email</div><div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">Not connected</div></div>
+                        <button style="padding:8px 14px;border-radius:8px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-size:12px;font-weight:700;cursor:pointer;">Connect</button>
+                      </div>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <!-- SETTINGS: SUBSCRIPTION -->
+                <sc-if value="{{ isSettingsSubscription }}">
+                  <div style="flex:1;display:flex;flex-direction:column;">
+                    <div style="padding:12px 22px 10px;display:flex;align-items:center;gap:10px;">
+                      <button onclick="{{ go_settingsprofile }}" style="background:none;border:none;font-size:20px;color:{{ c.text }};cursor:pointer;">&larr;</button>
+                      <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:16px;color:{{ c.text }};">Subscription</div>
+                    </div>
+                    <div style="flex:1;overflow-y:auto;padding:6px 22px 20px;">
+                      <div style="border:2px solid {{ c.accent }};background:{{ c.accentSoft }};border-radius:14px;padding:18px;margin-bottom:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;"><span style="font-weight:800;font-size:16px;color:{{ c.text }};">Pro plan</span><span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};">$1,800/mo</span></div>
+                        <div style="font-size:12px;color:{{ c.textMuted }};margin-top:4px;">Renews Aug 4, 2026 &middot; Unlimited quotes, WhatsApp sending, supplier price sync</div>
+                      </div>
+                      <button style="width:100%;padding:13px 0;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:13.5px;cursor:pointer;">Manage billing</button>
+                    </div>
+                  </div>
+                </sc-if>
+
+              </div>
+
+              <!-- bottom tab bar -->
+              <sc-if value="{{ isTabScreen }}">
+                <div style="flex:none;display:flex;border-top:1px solid {{ c.border }};background:{{ c.surface }};padding:8px 6px 14px;">
+                  <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+                    <button onclick="{{ t.go }}" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;cursor:pointer;padding:6px 0;">
+                      <span style="width:20px;height:20px;border-radius:{{ t.shape }};background:{{ t.color }};"></span>
+                      <span style="font-size:10.5px;font-weight:700;color:{{ t.color }};">{{ t.label }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+      <!-- ============ WEB LAYOUTS ============ -->
+      <sc-if value="{{ isWebScreen }}">
+        <div style="width:1180px;border-radius:14px;overflow:hidden;box-shadow:0 30px 60px rgba(0,0,0,0.45);border:1px solid #000;">
+          <div style="height:38px;background:#2a2a2a;display:flex;align-items:center;gap:8px;padding:0 14px;">
+            <span style="width:11px;height:11px;border-radius:50%;background:#ff5f57;"></span>
+            <span style="width:11px;height:11px;border-radius:50%;background:#febc2e;"></span>
+            <span style="width:11px;height:11px;border-radius:50%;background:#28c840;"></span>
+          </div>
+          <div style="display:flex;height:720px;background:{{ c.bg }};">
+
+            <!-- app sidebar -->
+            <div style="width:210px;flex:none;background:{{ c.surface }};border-right:1px solid {{ c.border }};padding:18px 12px;display:flex;flex-direction:column;">
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 8px 20px;">
+                <div style="width:26px;height:26px;border-radius:7px;background:{{ c.accent }};display:flex;align-items:center;justify-content:center;"><div style="width:10px;height:10px;background:{{ c.onAccent }};transform:rotate(45deg);"></div></div>
+                <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">JamQuote</div>
+              </div>
+              <sc-for list="{{ webNav }}" as="wn" hint-placeholder-count="6">
+                <button onclick="{{ wn.go }}" style="display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:8px;border:none;background:{{ wn.bg }};color:{{ wn.fg }};font-size:13px;font-weight:{{ wn.weight }};text-align:left;cursor:pointer;margin-bottom:1px;">
+                  <span style="width:7px;height:7px;border-radius:2px;background:{{ wn.dot }};flex:none;"></span>{{ wn.label }}
+                </button>
+              </sc-for>
+            </div>
+
+            <!-- WEB DASHBOARD -->
+            <sc-if value="{{ isDashboard }}">
+              <div style="flex:1;overflow-y:auto;padding:26px 34px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+                  <div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:20px;color:{{ c.text }};">Good morning, Owen</div>
+                    <div style="font-size:13px;color:{{ c.textMuted }};margin-top:2px;">Blackwood Construction & Masonry</div>
+                  </div>
+                  <button onclick="{{ go_quoteeditor }}" style="padding:12px 20px;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13.5px;cursor:pointer;">+ New quote</button>
+                </div>
+
+                <button onclick="{{ go_regfeed }}" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;padding:13px 16px;border-radius:11px;background:{{ c.warnSoft }};border:none;cursor:pointer;margin-bottom:18px;">
+                  <span style="width:8px;height:8px;border-radius:50%;background:{{ c.warn }};flex:none;"></span>
+                  <span style="flex:1;font-size:13px;font-weight:600;color:{{ c.text }};">GCT threshold update takes effect Aug 1, 2026 &mdash; review your default pricing before then</span>
+                  <span style="color:{{ c.warn }};font-weight:700;">Review &rsaquo;</span>
+                </button>
+
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;">
+                  <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:16px;">
+                    <div style="font-size:11.5px;color:{{ c.textMuted }};font-weight:600;">Pipeline value</div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.text }};margin-top:5px;">$2,840,500</div>
+                  </div>
+                  <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:16px;">
+                    <div style="font-size:11.5px;color:{{ c.textMuted }};font-weight:600;">Win rate (90d)</div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.good }};margin-top:5px;">62%</div>
+                  </div>
+                  <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:16px;">
+                    <div style="font-size:11.5px;color:{{ c.textMuted }};font-weight:600;">Overdue invoices</div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.crit }};margin-top:5px;">$96,000</div>
+                  </div>
+                  <div style="background:{{ c.surface }};border:1px solid {{ c.border }};border-radius:12px;padding:16px;">
+                    <div style="font-size:11.5px;color:{{ c.textMuted }};font-weight:600;">Quotes this month</div>
+                    <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:22px;color:{{ c.text }};margin-top:5px;">14</div>
+                  </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                      <div style="font-weight:700;font-size:15px;color:{{ c.text }};">Recent quotes</div>
+                      <button onclick="{{ go_quoteslist }}" style="font-size:12.5px;color:{{ c.accent }};font-weight:700;background:none;border:none;cursor:pointer;">See all</button>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      <sc-for list="{{ quoteRows }}" as="q" hint-placeholder-count="5">
+                        <button onclick="{{ go_quoteeditor }}" style="display:flex;align-items:center;gap:14px;padding:14px 16px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};cursor:pointer;text-align:left;">
+                          <div style="flex:1;">
+                            <div style="font-weight:700;font-size:14px;color:{{ c.text }};">{{ q.num }} &middot; {{ q.client }}</div>
+                            <div style="font-size:12px;color:{{ c.textMuted }};margin-top:2px;">{{ q.job }}</div>
+                          </div>
+                          <div style="font-family:'Archivo',sans-serif;font-weight:800;font-size:14.5px;color:{{ c.text }};">{{ q.amount }}</div>
+                          <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ q.pillBg }};color:{{ q.pillFg }};font-size:10.5px;font-weight:700;min-width:64px;justify-content:center;">{{ q.status }}</span>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-weight:700;font-size:15px;color:{{ c.text }};margin-bottom:10px;">Follow-ups due</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;">
+                      <div style="padding:13px 14px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="font-weight:700;font-size:13px;color:{{ c.text }};">Devon Facey &mdash; Fence & gate</div>
+                        <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:3px;">Sent 6 days ago &middot; no reply</div>
+                      </div>
+                      <div style="padding:13px 14px;border-radius:11px;border:1px solid {{ c.border }};background:{{ c.surface }};">
+                        <div style="font-weight:700;font-size:13px;color:{{ c.text }};">Marva Grant &mdash; Kitchen tiling</div>
+                        <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:3px;">Viewed yesterday &middot; follow up</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- WEB QUOTE EDITOR -->
+            <sc-if value="{{ isQuoteEditor }}">
+              <div style="flex:1;display:flex;flex-direction:column;">
+                <div style="padding:18px 28px;border-bottom:1px solid {{ c.border }};display:flex;align-items:center;justify-content:space-between;">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-family:'Archivo',sans-serif;font-weight:800;font-size:18px;color:{{ c.text }};">QT-0142</span>
+                    <span style="display:inline-flex;padding:4px 10px;border-radius:100px;background:{{ c.neutralPillSoft }};color:{{ c.neutralPill }};font-size:11px;font-weight:700;">Draft</span>
+                    <span style="font-size:13px;color:{{ c.textMuted }};">Basil Reid &middot; Spanish Town, St. Catherine</span>
+                  </div>
+                  <div style="display:flex;gap:10px;">
+                    <button style="padding:10px 16px;border-radius:9px;border:1.5px solid {{ c.border }};background:transparent;color:{{ c.text }};font-weight:700;font-size:12.5px;cursor:pointer;">Save</button>
+                    <button onclick="{{ go_pdfpreview }}" style="padding:10px 16px;border-radius:9px;border:1.5px solid {{ c.accent }};background:transparent;color:{{ c.accent }};font-weight:700;font-size:12.5px;cursor:pointer;">Preview PDF</button>
+                    <button onclick="{{ go_send }}" style="padding:10px 16px;border-radius:9px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:12.5px;cursor:pointer;">Send to client</button>
+                  </div>
+                </div>
+
+                <div style="flex:1;display:flex;overflow:hidden;">
+                  <div style="flex:1;overflow-y:auto;padding:22px 26px;">
+                    <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;padding:0 14px 8px;font-size:11px;font-weight:700;color:{{ c.textMuted }};text-transform:uppercase;letter-spacing:0.03em;">
+                      <span>Description</span><span>Qty</span><span>Rate</span><span>GCT</span><span style="text-align:right;">Amount</span>
+                    </div>
+
+                    <div style="font-weight:800;font-size:11.5px;letter-spacing:0.04em;color:{{ c.info }};text-transform:uppercase;margin:10px 0 6px 14px;">Materials</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                      <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.surface }};">
+                        <span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Cement, 42.5kg bag</span><span style="font-size:13px;color:{{ c.textMuted }};">40</span><span style="font-size:13px;color:{{ c.textMuted }};">$1,150.00</span><span style="font-size:12px;color:{{ c.textMuted }};">Standard</span><span style="text-align:right;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:{{ c.text }};">$46,000.00</span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.surface }};">
+                        <span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Rebar 3/8&Prime; x 20ft</span><span style="font-size:13px;color:{{ c.textMuted }};">60</span><span style="font-size:13px;color:{{ c.textMuted }};">$650.00</span><span style="font-size:12px;color:{{ c.textMuted }};">Standard</span><span style="text-align:right;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:{{ c.text }};">$39,000.00</span>
+                      </div>
+                      <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.surface }};">
+                        <span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">River sand, per load</span><span style="font-size:13px;color:{{ c.textMuted }};">2</span><span style="font-size:13px;color:{{ c.textMuted }};">$5,500.00</span><span style="font-size:12px;color:{{ c.textMuted }};">Standard</span><span style="text-align:right;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:{{ c.text }};">$11,000.00</span>
+                      </div>
+                    </div>
+                    <button onclick="{{ go_addmaterial }}" style="margin:8px 0 18px 14px;padding:9px 16px;border-radius:8px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.info }};font-weight:700;font-size:12.5px;cursor:pointer;">+ Add material</button>
+
+                    <div style="font-weight:800;font-size:11.5px;letter-spacing:0.04em;color:{{ c.warn }};text-transform:uppercase;margin:0 0 6px 14px;">Labour</div>
+                    <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.surface }};">
+                      <span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Mason &middot; 2 workers</span><span style="font-size:13px;color:{{ c.textMuted }};">6 days</span><span style="font-size:13px;color:{{ c.textMuted }};">$4,500.00</span><span style="font-size:12px;color:{{ c.textMuted }};">Standard</span><span style="text-align:right;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:{{ c.text }};">$54,000.00</span>
+                    </div>
+                    <button onclick="{{ go_addlabour }}" style="margin:8px 0 18px 14px;padding:9px 16px;border-radius:8px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.warn }};font-weight:700;font-size:12.5px;cursor:pointer;">+ Add labour</button>
+
+                    <div style="font-weight:800;font-size:11.5px;letter-spacing:0.04em;color:{{ c.good }};text-transform:uppercase;margin:0 0 6px 14px;">Equipment & rental</div>
+                    <div style="display:grid;grid-template-columns:3fr 0.6fr 0.9fr 0.9fr 1fr;gap:10px;align-items:center;padding:12px 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.surface }};">
+                      <span style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Concrete mixer rental</span><span style="font-size:13px;color:{{ c.textMuted }};">3 days</span><span style="font-size:13px;color:{{ c.textMuted }};">$6,000.00</span><span style="font-size:12px;color:{{ c.textMuted }};">Standard</span><span style="text-align:right;font-family:'Archivo',sans-serif;font-weight:800;font-size:13.5px;color:{{ c.text }};">$18,000.00</span>
+                    </div>
+                    <button onclick="{{ go_addequipment }}" style="margin:8px 0 0 14px;padding:9px 16px;border-radius:8px;border:1.5px dashed {{ c.border }};background:transparent;color:{{ c.good }};font-weight:700;font-size:12.5px;cursor:pointer;">+ Add equipment/rental</button>
+                  </div>
+
+                  <div style="width:300px;flex:none;border-left:1px solid {{ c.border }};padding:22px 20px;background:{{ c.surface }};overflow-y:auto;">
+                    <div style="font-weight:700;font-size:13px;color:{{ c.text }};margin-bottom:10px;">Client</div>
+                    <div style="padding:12px;border-radius:10px;border:1px solid {{ c.border }};margin-bottom:20px;">
+                      <div style="font-weight:700;font-size:13.5px;color:{{ c.text }};">Basil Reid</div>
+                      <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:3px;">Lot 14 Bloxburgh Dr, Spanish Town, St. Catherine</div>
+                      <div style="font-size:11.5px;color:{{ c.textMuted }};margin-top:2px;">876 402 8811</div>
+                    </div>
+                    <div style="font-weight:700;font-size:13px;color:{{ c.text }};margin-bottom:10px;">Summary</div>
+                    <div style="display:flex;flex-direction:column;gap:7px;font-size:12.5px;color:{{ c.textMuted }};margin-bottom:14px;">
+                      <div style="display:flex;justify-content:space-between;"><span>Materials</span><span style="color:{{ c.text }};font-weight:700;">$96,000.00</span></div>
+                      <div style="display:flex;justify-content:space-between;"><span>Labour</span><span style="color:{{ c.text }};font-weight:700;">$54,000.00</span></div>
+                      <div style="display:flex;justify-content:space-between;"><span>Equipment</span><span style="color:{{ c.text }};font-weight:700;">$18,000.00</span></div>
+                      <div style="display:flex;justify-content:space-between;padding-top:8px;border-top:1px solid {{ c.border }};font-weight:700;color:{{ c.text }};"><span>Subtotal</span><span style="font-family:'Archivo',sans-serif;">$168,000.00</span></div>
+                    </div>
+                    <button onclick="{{ go_totals }}" style="width:100%;padding:13px 0;border-radius:100px;border:none;background:{{ c.accent }};color:{{ c.onAccent }};font-weight:700;font-size:13.5px;cursor:pointer;">Review Totals & Terms</button>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+          </div>
+        </div>
+      </sc-if>
+      <!-- SCREENS_END -->
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { screen: 'style-guide', theme: 'light', device: 'phone', obStep: 0, authMode: 'signup', quoteFilter: 'All', labourCadence: 'Daily', gctTreatment: 'Standard', sendChannel: 'whatsapp', invoiceFilter: 'All', payMode: 'full' };
+
+  pillColors(c, kind) {
+    return {
+      neutral: { bg:c.neutralPillSoft, fg:c.neutralPill },
+      'neutral-strike': { bg:c.neutralPillSoft, fg:c.neutralPill },
+      info: { bg:c.infoSoft, fg:c.info },
+      infoSolid: { bg:c.info, fg:'#fff' },
+      good: { bg:c.goodSoft, fg:c.good },
+      goodSolid: { bg:c.good, fg:'#fff' },
+      crit: { bg:c.critSoft, fg:c.crit },
+      critSolid: { bg:c.crit, fg:'#fff' },
+      accent: { bg:c.accent, fg:c.onAccent },
+    }[kind] || { bg:c.neutralPillSoft, fg:c.neutralPill };
+  }
+
+  go(screen) { this.setState({ screen, obStep: 0 }); }
+
+  themeTokens(theme) {
+    return theme === 'dark' ? {
+      bg:'#17140F', surface:'#221E17', surfaceAlt:'#2B261C', border:'#3A3427',
+      text:'#EFE9DC', textMuted:'#A69C89',
+      accent:'#E0AA48', accentSoft:'#3A2E15', onAccent:'#1A1408',
+      good:'#57B378', goodSoft:'#1E3226',
+      warn:'#E8843F', warnSoft:'#3A2716',
+      crit:'#E2695A', critSoft:'#3A1E1B',
+      info:'#6FA9CC', infoSoft:'#1E2E38',
+      neutralPill:'#A69C89', neutralPillSoft:'#2E2A20',
+      stageBg:'#0f0e0c', stageText:'#EFE9DC', stageMuted:'#A69C89', stageChipBg:'#221E17'
+    } : {
+      bg:'#F6F3EC', surface:'#FFFFFF', surfaceAlt:'#EFEAE0', border:'#DDD5C4',
+      text:'#26221C', textMuted:'#6B6357',
+      accent:'#9C6E1B', accentSoft:'#F1E4C6', onAccent:'#FFFFFF',
+      good:'#2E7D46', goodSoft:'#DEEFE1',
+      warn:'#C2570F', warnSoft:'#FBE6D7',
+      crit:'#B23A2E', critSoft:'#F7DEDB',
+      info:'#2C5F82', infoSoft:'#DCEAF1',
+      neutralPill:'#8A8375', neutralPillSoft:'#E7E2D6',
+      stageBg:'#0f0e0c', stageText:'#EFE9DC', stageMuted:'#A69C89', stageChipBg:'#221E17'
+    };
+  }
+
+  titles() {
+    return {
+      'style-guide': ['Style Guide', 'Palette, type, components & status system'],
+      'splash': ['Splash', 'First launch, brand moment'],
+      'onboarding': ['Onboarding', '3-slide value carousel, skippable'],
+      'auth': ['Sign up / Log in', 'Phone-number first, toggle tabs'],
+      'business-profile': ['Business Profile Setup ★', 'Logo, TRN, trade type, default GCT'],
+      'dashboard': ['Dashboard ★', 'Stats, follow-ups, recent quotes, regulatory alert'],
+      'quotes-list': ['Quotes List', 'Filterable by status'],
+      'clients-list': ['Clients List', 'Search & browse clients'],
+      'jobs-list': ['Jobs List', 'Site pipeline at a glance'],
+      'quote-editor': ['Quote Editor ★', 'Sectioned line items by category'],
+      'add-material': ['Add Material ★', 'Supplier price lookup with manual override'],
+      'scan-material': ['Scan Material ★', 'Camera/barcode to matched price'],
+      'add-labour': ['Add Labour ★', 'Rate-book pick + cadence selector'],
+      'add-equipment': ['Add Equipment/Rental', 'Catalog pick + rental cadence'],
+      'totals-terms': ['Totals & Terms ★', 'GCT, discount, deposit, validity'],
+      'quote-pdf': ['Quote PDF Preview ★', 'Branded, TRN on every document'],
+      'send-screen': ['Send ★', 'WhatsApp vs email, editable message'],
+      'status-tracker': ['Status Tracker', 'Sent → Viewed → Accepted timeline'],
+      'revision-history': ['Revision History', 'Version diffs at a glance'],
+      'client-detail': ['Client Detail', 'Contact, history, lifetime value'],
+      'job-detail': ['Job Detail', 'Pipeline stage, linked quote, site photos'],
+      'invoices-list': ['Invoices List', 'Filter by payment status'],
+      'invoice-detail': ['Invoice Detail', 'Amount due, line items, payment history'],
+      'record-payment': ['Record Payment', 'Full or partial \u2014 cash, bank, Lynk'],
+      'labour-rate-book': ['Labour Rate Book', 'Default rates by trade'],
+      'material-favourites': ['Material Favourites', 'Quick-pick priced materials'],
+      'equipment-catalog': ['Equipment/Rental Catalog', 'Rental houses & day rates'],
+      'supplier-directory': ['Supplier Directory', 'Price-freshness at a glance'],
+      'regulatory-feed': ['Updates Feed', 'GCT, NHT, TRN & compliance changes'],
+      'regulatory-detail': ['Update Detail', 'What changed, effective date, action needed'],
+      'reports-dashboard': ['Reports Dashboard', 'Win rate, pipeline value, revenue'],
+      'settings-profile': ['Business Profile & Branding', 'Settings index'],
+      'settings-connections': ['WhatsApp / Email', 'Sending channel connections'],
+      'settings-subscription': ['Subscription', 'Plan & billing'],
+    };
+  }
+
+  invoiceData() {
+    return [
+      { num:'INV-0098', client:'Basil Reid', amount:'$183,540.80', due:'Overdue 9 days', status:'Overdue', kind:'critSolid' },
+      { num:'INV-0097', client:'Errol Campbell', amount:'$255,000.00', due:'Due Jul 18', status:'Invoiced', kind:'accent' },
+      { num:'INV-0096', client:'Marva Grant', amount:'$421,900.00', due:'Paid Jul 2', status:'Paid', kind:'goodSolid' },
+      { num:'INV-0095', client:'Paulette Wright', amount:'$742,000.00', due:'Due Jul 24', status:'Invoiced', kind:'accent' },
+      { num:'INV-0094', client:'Trevor Dixon', amount:'$94,500.00', due:'Paid Jun 28', status:'Paid', kind:'goodSolid' },
+    ];
+  }
+
+  quoteData() {
+    return [
+      { num:'QT-0142', client:'Basil Reid', job:'Retaining wall, Spanish Town', amount:'$318,600.00', status:'Accepted', kind:'good' },
+      { num:'QT-0141', client:'Paulette Wright', job:'Bathroom remodel, Portmore', amount:'$742,000.00', status:'Draft', kind:'neutral' },
+      { num:'QT-0140', client:'Devon Facey', job:'Fence & gate, St. Catherine', amount:'$186,400.00', status:'Sent', kind:'info' },
+      { num:'QT-0139', client:'Marva Grant', job:'Kitchen tiling, Kingston 6', amount:'$421,900.00', status:'Viewed', kind:'infoSolid' },
+      { num:'QT-0138', client:'Errol Campbell', job:'Carport extension, Mandeville', amount:'$255,000.00', status:'Invoiced', kind:'accent' },
+      { num:'QT-0137', client:'Shauna Bailey', job:'Perimeter block wall, Old Harbour', amount:'$598,300.00', status:'Declined', kind:'crit' },
+      { num:'QT-0136', client:'Trevor Dixon', job:'Roof repair, Linstead', amount:'$94,500.00', status:'Expired', kind:'neutral-strike' },
+    ];
+  }
+
+  onboardingSlides(c) {
+    return [
+      { title: 'Quote fast, on site', body: 'Build an itemized estimate in minutes, right from the truck \u2014 no signal required.', iconBg: c.accentSoft, iconShape: `width:46px;height:56px;background:${c.accent};border-radius:6px;` },
+      { title: 'Real supplier prices', body: 'Price materials against real Jamaican suppliers, cached automatically for when you\u2019re offline.', iconBg: c.accentSoft, iconShape: `width:50px;height:50px;background:${c.accent};transform:rotate(45deg);border-radius:6px;` },
+      { title: 'Get paid faster', body: 'Send branded PDF quotes over WhatsApp or email and track sent \u2192 viewed \u2192 accepted.', iconBg: c.accentSoft, iconShape: `width:52px;height:52px;background:${c.accent};border-radius:50%;` },
+    ];
+  }
+
+  renderVals() {
+    const s = this.state;
+    const c = this.themeTokens(s.theme);
+    const titles = this.titles();
+    const [currentTitle, currentSub] = titles[s.screen] || ['JamQuote', ''];
+
+    const mk = (id, label) => ({
+      label, go: () => this.go(id),
+      bg: s.screen === id ? c.accentSoft : 'transparent',
+      fg: s.screen === id ? c.accent : c.text,
+      weight: s.screen === id ? 700 : 500,
+      dot: s.screen === id ? c.accent : 'transparent'
+    });
+
+    const navSections = [
+      { label: 'Foundations', items: [ mk('style-guide','Style Guide') ] },
+      { label: 'Onboarding', items: [
+        mk('splash','Splash'), mk('onboarding','Onboarding'), mk('auth','Sign up / Log in'), mk('business-profile','Business Profile ★')
+      ]},
+      { label: 'Home', items: [
+        mk('dashboard','Dashboard ★'), mk('quotes-list','Quotes List'), mk('clients-list','Clients List'), mk('jobs-list','Jobs List')
+      ]},
+      { label: 'Quote builder', items: [
+        mk('quote-editor','Quote Editor ★'), mk('add-material','Add Material ★'), mk('scan-material','Scan Material ★'),
+        mk('add-labour','Add Labour ★'), mk('add-equipment','Add Equipment/Rental'), mk('totals-terms','Totals & Terms ★'),
+        mk('quote-pdf','Quote PDF Preview ★'), mk('send-screen','Send ★'), mk('status-tracker','Status Tracker'), mk('revision-history','Revision History')
+      ]},
+      { label: 'Clients & jobs', items: [ mk('client-detail','Client Detail'), mk('job-detail','Job Detail') ]},
+      { label: 'Invoicing', items: [ mk('invoices-list','Invoices List'), mk('invoice-detail','Invoice Detail'), mk('record-payment','Record Payment') ]},
+      { label: 'Catalogs', items: [ mk('labour-rate-book','Labour Rate Book'), mk('material-favourites','Material Favourites'), mk('equipment-catalog','Equipment/Rental Catalog'), mk('supplier-directory','Supplier Directory') ]},
+      { label: 'Regulatory', items: [ mk('regulatory-feed','Updates Feed'), mk('regulatory-detail','Update Detail') ]},
+      { label: 'Reports', items: [ mk('reports-dashboard','Reports Dashboard') ]},
+      { label: 'Settings', items: [ mk('settings-profile','Business Profile & Branding'), mk('settings-connections','WhatsApp / Email'), mk('settings-subscription','Subscription') ]},
+    ];
+
+    const showDeviceToggle = s.screen === 'dashboard' || s.screen === 'quote-editor';
+    const phoneScreens = ['splash','onboarding','auth','business-profile','dashboard','quotes-list','clients-list','jobs-list','quote-editor','add-material','scan-material','add-labour','add-equipment','totals-terms','quote-pdf','send-screen','status-tracker','revision-history','client-detail','job-detail','invoices-list','invoice-detail','record-payment','labour-rate-book','material-favourites','equipment-catalog','supplier-directory','regulatory-feed','regulatory-detail','reports-dashboard','settings-profile','settings-connections','settings-subscription'];
+    const isPhoneScreen = phoneScreens.includes(s.screen) && (s.device === 'phone' || !showDeviceToggle);
+    const isOffline = s.screen === 'dashboard' || s.screen === 'quote-editor' || s.screen === 'add-material';
+
+    const slides = this.onboardingSlides(c);
+    const slide = slides[s.obStep] || slides[0];
+    const dotStyle = (i) => ({ w: s.obStep===i? '20px':'7px', col: s.obStep===i? c.accent : c.border });
+    const d0 = dotStyle(0), d1 = dotStyle(1), d2 = dotStyle(2);
+    const ob = {
+      title: slide.title, body: slide.body, iconBg: slide.iconBg, iconShape: slide.iconShape,
+      dot0w: d0.w, dot0c: d0.col, dot1w: d1.w, dot1c: d1.col, dot2w: d2.w, dot2c: d2.col,
+      nextLabel: s.obStep < 2 ? 'Next' : 'Get started',
+      next: () => s.obStep < 2 ? this.setState({obStep: s.obStep+1}) : this.go('auth'),
+    };
+
+    const filterNames = ['All','Draft','Sent','Viewed','Accepted','Declined','Invoiced'];
+    const quoteFilters = filterNames.map(name => ({
+      label: name,
+      go: () => this.setState({quoteFilter: name}),
+      bg: s.quoteFilter === name ? c.accent : c.surfaceAlt,
+      fg: s.quoteFilter === name ? c.onAccent : c.text,
+    }));
+    const allQuotes = this.quoteData();
+    const quoteRows = allQuotes.filter(q => s.quoteFilter === 'All' || q.status === s.quoteFilter).map(q => {
+      const p = this.pillColors(c, q.kind);
+      return { ...q, pillBg: p.bg, pillFg: p.fg };
+    });
+
+    const clientRows = [
+      { initials:'BR', name:'Basil Reid', parish:'St. Catherine', phone:'876 402 8811', total:'$318,600' },
+      { initials:'PW', name:'Paulette Wright', parish:'St. Catherine', phone:'876 771 2290', total:'$742,000' },
+      { initials:'DF', name:'Devon Facey', parish:'St. Andrew', phone:'876 555 0142', total:'$186,400' },
+      { initials:'MG', name:'Marva Grant', parish:'Kingston', phone:'876 833 4471', total:'$421,900' },
+      { initials:'EC', name:'Errol Campbell', parish:'Manchester', phone:'876 924 1187', total:'$255,000' },
+      { initials:'SB', name:'Shauna Bailey', parish:'St. Catherine', phone:'876 662 9034', total:'$598,300' },
+    ];
+
+    const jobData = [
+      { name:'Reid residence \u2014 retaining wall', address:'Lot 14 Bloxburgh Dr, Spanish Town', stage:'In progress', pct:'62%', kind:'info' },
+      { name:'Wright residence \u2014 bathroom', address:'22 Passage Fort Dr, Portmore', stage:'Quoted', pct:'20%', kind:'neutral' },
+      { name:'Facey property \u2014 fence & gate', address:'8 Angels, St. Catherine', stage:'Awaiting approval', pct:'40%', kind:'info' },
+      { name:'Grant residence \u2014 kitchen', address:'14 Hope Rd, Kingston 6', stage:'Complete', pct:'100%', kind:'good' },
+      { name:'Campbell carport', address:'Mandeville, Manchester', stage:'Invoiced', pct:'90%', kind:'accent' },
+    ];
+    const jobRows = jobData.map(j => {
+      const p = this.pillColors(c, j.kind === 'accent' ? 'accent' : j.kind);
+      return { ...j, pillBg: p.bg, pillFg: p.fg };
+    });
+
+    const isWebScreen = showDeviceToggle && s.device === 'web';
+    const webNavDefs = [
+      ['dashboard','Dashboard'], ['quotes-list','Quotes'], ['clients-list','Clients'], ['jobs-list','Jobs'],
+      ['invoices-list','Invoices'], ['reports-dashboard','Reports'], ['settings-profile','Settings'],
+    ];
+    const webNav = webNavDefs.map(([id,label]) => ({
+      label, go: () => this.go(id),
+      bg: s.screen === id ? c.accentSoft : 'transparent', fg: s.screen === id ? c.accent : c.text,
+      weight: s.screen === id ? 700 : 500, dot: s.screen === id ? c.accent : 'transparent'
+    }));
+
+    const isTabScreen = ['dashboard','quotes-list','clients-list','jobs-list'].includes(s.screen);
+    const tabDefs = [
+      { id:'dashboard', label:'Home', shape:'50%' },
+      { id:'quotes-list', label:'Quotes', shape:'5px' },
+      { id:'clients-list', label:'Clients', shape:'50%' },
+      { id:'jobs-list', label:'Jobs', shape:'5px' },
+      { id:'settings-profile', label:'More', shape:'50%' },
+    ];
+    const tabs = tabDefs.map(t => ({ label: t.label, shape: t.shape, go: () => this.go(t.id), color: s.screen === t.id ? c.accent : c.textMuted }));
+
+    const cadenceDefs = ['Hourly','Daily','Weekly','Monthly','Per job'];
+    const cadences = cadenceDefs.map(name => ({ label: name, go: () => this.setState({labourCadence:name}), bg: s.labourCadence===name? c.accent : c.surfaceAlt, fg: s.labourCadence===name? c.onAccent : c.text }));
+    const cadenceQtyLabel = { Hourly:'Hours', Daily:'Days', Weekly:'Weeks', Monthly:'Months', 'Per job':'Jobs' }[s.labourCadence];
+
+    const gctDefs = ['Standard','Zero-rated','Exempt'];
+    const gctOptions = gctDefs.map(name => ({ label: name, go: () => this.setState({gctTreatment:name}), bg: s.gctTreatment===name? c.accent : c.surfaceAlt, fg: s.gctTreatment===name? c.onAccent : c.text }));
+    const gctRateLabel = s.gctTreatment === 'Standard' ? '(15%)' : s.gctTreatment === 'Zero-rated' ? '(0%)' : '(exempt)';
+    const gctAmount = s.gctTreatment === 'Standard' ? '$23,940.00' : '$0.00';
+    const grandTotal = s.gctTreatment === 'Standard' ? '$183,540.00' : '$159,600.00';
+
+    const jobStageDefs = ['Quoted','Approved','In progress','Complete'];
+    const jobStages = jobStageDefs.map((label,i) => ({ label, color: i<=2? c.text : c.textMuted, bar: i<=2? c.accent : c.border }));
+
+    const invFilterNames = ['All','Invoiced','Paid','Overdue'];
+    const invoiceFilters = invFilterNames.map(name => ({ label:name, go: () => this.setState({invoiceFilter:name}), bg: s.invoiceFilter===name? c.accent : c.surfaceAlt, fg: s.invoiceFilter===name? c.onAccent : c.text }));
+    const allInvoices = this.invoiceData();
+    const invoiceRows = allInvoices.filter(inv => s.invoiceFilter==='All' || inv.status===s.invoiceFilter).map(inv => {
+      const p = this.pillColors(c, inv.kind);
+      return { ...inv, pillBg: p.bg, pillFg: p.fg };
+    });
+
+    const rateBookRows = [
+      { name:'Mason', cadence:'Daily', rate:'$4,500.00/day' },
+      { name:'Helper / labourer', cadence:'Daily', rate:'$2,800.00/day' },
+      { name:'Electrician', cadence:'Daily', rate:'$6,500.00/day' },
+      { name:'Plumber', cadence:'Daily', rate:'$6,000.00/day' },
+      { name:'Painter', cadence:'Daily', rate:'$4,000.00/day' },
+      { name:'Carpenter', cadence:'Daily', rate:'$5,200.00/day' },
+    ];
+    const materialFavDefs = [
+      { name:'Cement, 42.5kg bag', fresh:'Updated 2 hours ago', rate:'$1,150.00', k:'good' },
+      { name:'Rebar 3/8\u2033 x 20ft', fresh:'Updated yesterday', rate:'$650.00', k:'good' },
+      { name:'River sand, per load', fresh:'Updated 3 days ago', rate:'$5,500.00', k:'good' },
+      { name:'Plywood 3/4\u2033 sheet', fresh:'Cached \u00b7 offline since Jul 6', rate:'$3,200.00', k:'warn' },
+      { name:'Ceramic floor tile, per sq ft', fresh:'Stale \u00b7 12 days', rate:'$285.00', k:'crit' },
+    ];
+    const materialFavRows = materialFavDefs.map(m => ({ ...m, freshColor: m.k==='good'?c.good:m.k==='warn'?c.warn:c.crit }));
+
+    const revenueBars = [
+      { label:'Feb', h:'40%' }, { label:'Mar', h:'55%' }, { label:'Apr', h:'48%' },
+      { label:'May', h:'70%' }, { label:'Jun', h:'62%' }, { label:'Jul', h:'85%' },
+    ];
+
+    const isPayFull = s.payMode === 'full';
+    const payAmount = isPayFull ? '$183,540.80' : '$90,000.00';
+
+    const isWa = s.sendChannel === 'whatsapp';
+    const sendTo = isWa ? '876 402 8811 (WhatsApp)' : 'basil.reid@gmail.com';
+    const sendCta = isWa ? 'Send via WhatsApp' : 'Send via Email';
+
+    const isSignup = s.authMode === 'signup';
+    const auth = {
+      isSignup,
+      heading: isSignup ? 'Create your account' : 'Welcome back',
+      sub: isSignup ? 'Takes about 2 minutes.' : 'Log in to your business.',
+      toSignup: () => this.setState({authMode:'signup'}), toLogin: () => this.setState({authMode:'login'}),
+      signupBg: isSignup? c.surface : 'transparent', signupFg: isSignup? c.text : c.textMuted,
+      loginBg: !isSignup? c.surface : 'transparent', loginFg: !isSignup? c.text : c.textMuted,
+      ctaLabel: isSignup ? 'Create account' : 'Log in',
+    };
+
+    return {
+      c, ui: {
+        themeBtnBgLight: s.theme==='light'? c.accent : 'transparent', themeBtnFgLight: s.theme==='light'? c.onAccent : '#A69C89',
+        themeBtnBgDark: s.theme==='dark'? c.accent : 'transparent', themeBtnFgDark: s.theme==='dark'? c.onAccent : '#A69C89',
+        devPhoneBg: s.device==='phone'? c.accent : 'transparent', devPhoneFg: s.device==='phone'? c.onAccent : c.stageText,
+        devWebBg: s.device==='web'? c.accent : 'transparent', devWebFg: s.device==='web'? c.onAccent : c.stageText,
+      },
+      setTheme_light: () => this.setState({theme:'light'}),
+      setTheme_dark: () => this.setState({theme:'dark'}),
+      setDevice_phone: () => this.setState({device:'phone'}),
+      setDevice_web: () => this.setState({device:'web'}),
+      navSections,
+      showDeviceToggle,
+      currentTitle, currentSub,
+      isStyleGuide: s.screen === 'style-guide',
+      isPhoneScreen, isOffline,
+      isSplash: s.screen === 'splash',
+      isOnboarding: s.screen === 'onboarding',
+      isAuth: s.screen === 'auth',
+      isBizProfile: s.screen === 'business-profile',
+      ob, auth,
+      go_onboarding: () => this.go('onboarding'),
+      go_auth: () => this.go('auth'),
+      go_bizprofile: () => this.go('business-profile'),
+      go_dashboard: () => this.go('dashboard'),
+      isDashboard: s.screen === 'dashboard',
+      isQuotesList: s.screen === 'quotes-list',
+      isClientsList: s.screen === 'clients-list',
+      isJobsList: s.screen === 'jobs-list',
+      isTabScreen, tabs,
+      quoteFilters, quoteRows, clientRows, jobRows,
+      go_regfeed: () => this.go('regulatory-feed'),
+      go_quoteeditor: () => this.go('quote-editor'),
+      go_quoteslist: () => this.go('quotes-list'),
+      go_clientdetail: () => this.go('client-detail'),
+      go_jobdetail: () => this.go('job-detail'),
+      isQuoteEditor: s.screen === 'quote-editor',
+      isAddMaterial: s.screen === 'add-material',
+      isScanMaterial: s.screen === 'scan-material',
+      isAddLabour: s.screen === 'add-labour',
+      isAddEquipment: s.screen === 'add-equipment',
+      isTotals: s.screen === 'totals-terms',
+      isPdfPreview: s.screen === 'quote-pdf',
+      isSend: s.screen === 'send-screen',
+      isStatusTracker: s.screen === 'status-tracker',
+      isRevisionHistory: s.screen === 'revision-history',
+      cadences, cadenceQtyLabel, gctOptions, gctRateLabel, gctAmount, grandTotal,
+      toChannel_wa: () => this.setState({sendChannel:'whatsapp'}),
+      toChannel_email: () => this.setState({sendChannel:'email'}),
+      channelWaBorder: isWa ? c.accent : c.border, channelWaBg: isWa ? c.accentSoft : c.surface,
+      channelEmailBorder: !isWa ? c.accent : c.border, channelEmailBg: !isWa ? c.accentSoft : c.surface,
+      sendTo, sendCta,
+      go_addmaterial: () => this.go('add-material'),
+      go_scanmaterial: () => this.go('scan-material'),
+      go_addlabour: () => this.go('add-labour'),
+      go_addequipment: () => this.go('add-equipment'),
+      go_totals: () => this.go('totals-terms'),
+      go_pdfpreview: () => this.go('quote-pdf'),
+      go_send: () => this.go('send-screen'),
+      go_statustracker: () => this.go('status-tracker'),
+      go_revisionhistory: () => this.go('revision-history'),
+      isClientDetail: s.screen === 'client-detail',
+      isJobDetail: s.screen === 'job-detail',
+      isInvoicesList: s.screen === 'invoices-list',
+      isInvoiceDetail: s.screen === 'invoice-detail',
+      isRecordPayment: s.screen === 'record-payment',
+      jobStages, invoiceFilters, invoiceRows,
+      go_clientslist: () => this.go('clients-list'),
+      go_jobslist: () => this.go('jobs-list'),
+      go_invoicedetail: () => this.go('invoice-detail'),
+      go_invoiceslist: () => this.go('invoices-list'),
+      go_recordpayment: () => this.go('record-payment'),
+      toPayFull: () => this.setState({payMode:'full'}), toPayPartial: () => this.setState({payMode:'partial'}),
+      payFullBg: isPayFull? c.accent : c.surfaceAlt, payFullFg: isPayFull? c.onAccent : c.text,
+      payPartialBg: !isPayFull? c.accent : c.surfaceAlt, payPartialFg: !isPayFull? c.onAccent : c.text,
+      payAmount,
+      isLabourRateBook: s.screen === 'labour-rate-book',
+      isMaterialFav: s.screen === 'material-favourites',
+      isEquipCatalog: s.screen === 'equipment-catalog',
+      isSupplierDir: s.screen === 'supplier-directory',
+      isRegFeed: s.screen === 'regulatory-feed',
+      isRegDetail: s.screen === 'regulatory-detail',
+      isReports: s.screen === 'reports-dashboard',
+      isSettingsProfile: s.screen === 'settings-profile',
+      isSettingsConnections: s.screen === 'settings-connections',
+      isSettingsSubscription: s.screen === 'settings-subscription',
+      rateBookRows, materialFavRows, revenueBars,
+      go_regdetail: () => this.go('regulatory-detail'),
+      go_settingsprofile: () => this.go('settings-profile'),
+      go_settingsconnections: () => this.go('settings-connections'),
+      go_settingssubscription: () => this.go('settings-subscription'),
+      go_labourratebook: () => this.go('labour-rate-book'),
+      go_materialfav: () => this.go('material-favourites'),
+      go_equipcatalog: () => this.go('equipment-catalog'),
+      go_supplierdir: () => this.go('supplier-directory'),
+      go_reports: () => this.go('reports-dashboard'),
+      isWebScreen, webNav,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

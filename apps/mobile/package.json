@@ -1,0 +1,26 @@
+{
+  "name": "@jamquote/mobile",
+  "version": "0.1.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@jamquote/core": "*",
+    "@jamquote/ui": "*",
+    "expo": "~57.0.4",
+    "expo-status-bar": "~57.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "private": true
+}

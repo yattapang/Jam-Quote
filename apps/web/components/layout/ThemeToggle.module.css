@@ -1,0 +1,25 @@
+.toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--jq-surface-alt);
+  border: 1px solid var(--jq-border);
+  border-radius: var(--jq-radius-md);
+}
+
+.option,
+.active {
+  border: none;
+  border-radius: calc(var(--jq-radius-md) - 3px);
+  padding: 5px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  color: var(--jq-text-muted);
+}
+
+.active {
+  background: var(--jq-accent);
+  color: var(--jq-on-accent);
+}

@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp.*
+.yarn/*
+
+# Builds
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Expo
+.expo/
+web-build/
+*.apk
+*.aab
+*.ipa
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/migrations/dev/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local (personal) settings
+**/.claude/settings.local.json
+.claude/
+
+# Design source (kept out of app build, retained locally)
+extracted/.thumbnail

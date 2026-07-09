@@ -1,0 +1,11 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+  background: var(--jq-bg);
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+}

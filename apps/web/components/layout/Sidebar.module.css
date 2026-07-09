@@ -1,0 +1,95 @@
+.sidebar {
+  width: 220px;
+  flex: none;
+  background: var(--jq-surface);
+  border-right: 1px solid var(--jq-border);
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 20px;
+}
+
+.brandMark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--jq-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.brandMarkInner {
+  width: 10px;
+  height: 10px;
+  background: var(--jq-on-accent);
+  transform: rotate(45deg);
+}
+
+.brandName {
+  font-family: var(--font-archivo), var(--jq-font-display);
+  font-weight: 800;
+  font-size: 14.5px;
+  color: var(--jq-text);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  color: var(--jq-text);
+  background: transparent;
+}
+
+.navItemActive {
+  composes: navItem;
+  background: var(--jq-accent-soft);
+  color: var(--jq-accent);
+  font-weight: 700;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: transparent;
+  flex: none;
+}
+
+.dotActive {
+  composes: dot;
+  background: var(--jq-accent);
+}
+
+.footer {
+  border-top: 1px solid var(--jq-border);
+  padding-top: 14px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

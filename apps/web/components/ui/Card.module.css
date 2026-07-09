@@ -1,0 +1,22 @@
+.card {
+  background: var(--jq-surface);
+  border: 1px solid var(--jq-border);
+  border-radius: var(--jq-radius-lg);
+  padding: 16px;
+}
+
+.padSm {
+  padding: 12px;
+}
+.padLg {
+  padding: 22px;
+}
+
+.interactive {
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s ease, transform 0.12s ease;
+}
+.interactive:hover {
+  border-color: var(--jq-accent);
+}

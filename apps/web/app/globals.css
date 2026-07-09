@@ -1,0 +1,70 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--jq-bg);
+  color: var(--jq-text);
+  font-family: var(--font-public-sans), var(--jq-font-body);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-archivo), var(--jq-font-display);
+  font-weight: 800;
+  margin: 0;
+  color: var(--jq-text);
+}
+
+.jq-numeral {
+  font-family: var(--font-archivo), var(--jq-font-display);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: var(--jq-font-body);
+}
+
+input,
+select,
+textarea {
+  font-family: var(--jq-font-body);
+}
+
+::selection {
+  background: var(--jq-accent-soft);
+  color: var(--jq-text);
+}
+
+/* thin, theme-aware scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--jq-border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--jq-border);
+  border-radius: 8px;
+}
