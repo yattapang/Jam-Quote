@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo-google-fonts/archivo": "^0.4.2",
+    "@expo-google-fonts/public-sans": "^0.4.2",
     "@expo/metro-runtime": "~57.0.3",
     "@jamquote/core": "*",
     "@jamquote/ui": "*",

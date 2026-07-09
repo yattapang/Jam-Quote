@@ -1,10 +1,10 @@
 import { computeTotals, type QuoteTotals } from "@jamquote/core";
 import React, { createContext, useContext, useMemo, useState } from "react";
 import {
-  DraftLineItem,
   initialQuoteLines,
   QUOTE_DISCOUNT_PCT,
   QUOTE_GCT_RATE_PCT,
+  type DraftLineItem,
 } from "./mockData";
 
 interface QuoteDraftContextValue {
