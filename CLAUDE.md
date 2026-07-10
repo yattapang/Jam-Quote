@@ -118,17 +118,24 @@ hash recipe against current WiPay JM docs before going live.
 
 - **ESM `.js` import specifiers.** `apps/api` and `packages/core` are ESM;
   relative imports use explicit `.js` extensions even for `.ts` source
-  (`import { computeTotals } from "@jamquote/core"`, `"./money.js"`). Match this
-  or module resolution breaks.
-- **Feature modules aren't all wired yet.** Several `apps/api` feature modules
-  exist on disk but [app.module.ts](apps/api/src/app.module.ts) still lists them
-  as TODOs rather than importing them. When finishing an endpoint, check it's
-  actually registered in `AppModule` (and its module wired) before assuming a
-  route is live.
-- **Web/mobile currently render mock data.** `apps/web/lib/mock-data.ts` and
+  (`import { computeTotals } from "@jamquote/core"`, `"./money.js"`). Vitest and
+  Metro resolve these to `.ts` automatically; webpack does not, so the web
+  build's [next.config.mjs](apps/web/next.config.mjs) sets `extensionAlias`.
+  Match the `.js` convention or module resolution breaks.
+- **`AppModule` is the wiring source of truth.** The
+  business/clients/jobs/quotes/catalogs/payments modules are registered in
+  [app.module.ts](apps/api/src/app.module.ts); still TODO there: auth, pricing,
+  invoicing, documents, messaging, reports. A controller in a module that isn't
+  imported here is not routable — check before assuming a route is live.
+- **Web/mobile render mock data.** `apps/web/lib/mock-data.ts` and
   `apps/mobile/src/state/mockData.ts` back the screens; the web
   [api-client.ts](apps/web/lib/api-client.ts) is the single chokepoint for
   swapping mock → real API. Wire screens through it, not raw `fetch`.
+- **Mixed React versions.** Root hoists React 19 (Expo/mobile needs it); the web
+  app runs React 18 nested in `apps/web/node_modules`. `next dev` is the web
+  preview path — a production `next build` currently trips over the React split
+  during error-page prerender. Web lint uses a self-contained eslint config (not
+  `next lint`) because `eslint-config-next` can't resolve the nested `next`.
 - **Expo v57 changed things.** Before writing mobile code, read the versioned
   docs at https://docs.expo.dev/versions/v57.0.0/ (per `apps/mobile/AGENTS.md`).
 - **Enums live in two places on purpose.** `packages/core` enums and the Prisma
