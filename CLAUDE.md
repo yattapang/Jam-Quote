@@ -131,11 +131,15 @@ hash recipe against current WiPay JM docs before going live.
   `apps/mobile/src/state/mockData.ts` back the screens; the web
   [api-client.ts](apps/web/lib/api-client.ts) is the single chokepoint for
   swapping mock → real API. Wire screens through it, not raw `fetch`.
-- **Mixed React versions.** Root hoists React 19 (Expo/mobile needs it); the web
-  app runs React 18 nested in `apps/web/node_modules`. `next dev` is the web
-  preview path — a production `next build` currently trips over the React split
-  during error-page prerender. Web lint uses a self-contained eslint config (not
-  `next lint`) because `eslint-config-next` can't resolve the nested `next`.
+- **Mixed React versions.** The web app is React 18 (Next 14); Expo/mobile needs
+  React 19. Root `package.json` **pins `react`/`react-dom` 18.3.1** so Node
+  resolves React 18 for the web build (styled-jsx included, which fixes
+  `next build`); mobile's React 19.2.3 is nested in `apps/mobile/node_modules`
+  and Metro resolves the app-local copy first. Don't "simplify" by removing the
+  root React pin or bumping it to 19 — that re-breaks `next build`. The
+  `react-native` peer warning (wants React 19 at root) is expected and inert.
+  Web lint uses a self-contained eslint config (not `next lint`) because
+  `eslint-config-next` can't resolve the nested `next`.
 - **Expo v57 changed things.** Before writing mobile code, read the versioned
   docs at https://docs.expo.dev/versions/v57.0.0/ (per `apps/mobile/AGENTS.md`).
 - **Enums live in two places on purpose.** `packages/core` enums and the Prisma
