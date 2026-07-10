@@ -62,7 +62,10 @@ export class PaymentsService {
     const amountCents = Math.round(parseFloat(payload.total ?? "0") * 100);
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.payment.updateMany({
+      // Only a still-"pending" CARD payment gets transitioned. On a replayed
+      // callback the row is already "completed", so `count` is 0 — that gates
+      // the balance update below and keeps the webhook idempotent.
+      const { count } = await tx.payment.updateMany({
         where: { invoiceId: invoice.id, status: "pending", method: "CARD" },
         data: {
           status: succeeded ? "completed" : "failed",
@@ -70,6 +73,15 @@ export class PaymentsService {
           providerRaw: payload,
         },
       });
+
+      // No pending payment was transitioned (duplicate/replayed callback, or
+      // one already reconciled) — never re-apply the amount to the invoice.
+      if (count === 0) {
+        this.logger.warn(
+          `WiPay callback for invoice ${orderId} matched no pending payment; skipping balance update`,
+        );
+        return;
+      }
 
       if (succeeded) {
         const paidCents = invoice.paidCents + amountCents;
