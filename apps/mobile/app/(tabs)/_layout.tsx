@@ -1,6 +1,6 @@
 import { Tabs } from "expo-router";
 import React from "react";
-import { View } from "react-native";
+import { View, type ColorValue } from "react-native";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -15,7 +15,7 @@ const TAB_SHAPES: Record<string, "circle" | "square"> = {
   more: "circle",
 };
 
-function TabDot({ routeName, color }: { routeName: string; color: string }) {
+function TabDot({ routeName, color }: { routeName: string; color: ColorValue }) {
   const shape = TAB_SHAPES[routeName] ?? "circle";
   return (
     <View

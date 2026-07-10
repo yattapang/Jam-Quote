@@ -3,7 +3,6 @@
   "compilerOptions": {
     "strict": true,
     "jsx": "react-native",
-    "baseUrl": ".",
     "paths": {
       "@jamquote/core": ["../../packages/core/src/index.ts"],
       "@jamquote/core/*": ["../../packages/core/src/*"],
