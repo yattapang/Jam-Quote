@@ -1,13 +1,10 @@
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
-import { clients, quotes } from "@/lib/mock-data";
+import MoneyText from "@/components/ui/MoneyText";
+import { clients, clientQuoteCount, clientTotalCents } from "@/lib/mock-data";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Clients · JamQuote" };
-
-function quoteCount(clientId: string): number {
-  return quotes.filter((q) => q.clientId === clientId).length;
-}
 
 export default function ClientsPage() {
   return (
@@ -26,7 +23,7 @@ export default function ClientsPage() {
       <Card>
         <div className={shared.list}>
           {clients.map((c) => {
-            const count = quoteCount(c.id);
+            const count = clientQuoteCount(c.id);
             return (
               <div key={c.id} className={shared.row}>
                 <div className={shared.rowWithAvatar}>
@@ -39,6 +36,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
                 <div className={shared.rowRight}>
+                  <MoneyText cents={clientTotalCents(c.id)} />
                   <span className={shared.rowSub}>
                     {count} {count === 1 ? "quote" : "quotes"}
                   </span>

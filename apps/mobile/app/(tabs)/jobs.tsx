@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { StatusPill } from "../../src/components";
+import { MoneyText, StatusPill } from "../../src/components";
 import { jobRows } from "../../src/state/mockData";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
@@ -36,9 +36,14 @@ export default function JobsListScreen() {
                 <Text style={{ fontFamily: resolveFontFamily("body", "700"), fontSize: 14.5, color: colors.text }}>
                   {item.name}
                 </Text>
-                <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>{item.address}</Text>
+                <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>
+                  {item.clientName} · {item.address}
+                </Text>
               </View>
-              <StatusPill label={item.stage} kind={item.kind} />
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <StatusPill label={item.stage} kind={item.kind} />
+                <MoneyText cents={item.valueCents} size={13} />
+              </View>
             </View>
             <View style={{ height: 6, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: "hidden" }}>
               <View style={{ height: "100%", width: `${item.pct}%`, backgroundColor: colors.accent, borderRadius: 4 }} />

@@ -59,7 +59,12 @@ export default function ClientsListScreen() {
                 {item.parish} · {item.phone}
               </Text>
             </View>
-            <MoneyText cents={item.totalCents} size={13} />
+            <View style={{ alignItems: "flex-end", gap: 2 }}>
+              <MoneyText cents={item.totalCents} size={13} />
+              <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                {item.quoteCount} {item.quoteCount === 1 ? "quote" : "quotes"}
+              </Text>
+            </View>
           </Pressable>
         )}
       />

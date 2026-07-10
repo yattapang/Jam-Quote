@@ -3,6 +3,7 @@ import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Card, MoneyText, StatusPill } from "../../src/components";
+import { dashboardStats, quoteListRows } from "../../src/state/mockData";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -57,10 +58,15 @@ export default function DashboardScreen() {
           <Text style={{ color: colors.warn, fontWeight: "700" }}>{"›"}</Text>
         </Pressable>
 
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <StatTile label="Pipeline value" cents={284050000} />
-          <StatTile label="Win rate (90d)" text="62%" color={colors.good} />
-          <StatTile label="Overdue inv." cents={9600000} color={colors.crit} />
+        <View style={{ gap: 10 }}>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <StatTile label="Pipeline value" cents={dashboardStats.pipelineValueCents} />
+            <StatTile label="Win rate (90d)" text={`${dashboardStats.winRatePct90d}%`} color={colors.good} />
+          </View>
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <StatTile label="Overdue inv." cents={dashboardStats.overdueInvoicesCents} color={colors.crit} />
+            <StatTile label="Quotes this month" text={`${dashboardStats.quotesThisMonth}`} />
+          </View>
         </View>
 
         <View>
@@ -118,34 +124,35 @@ export default function DashboardScreen() {
         <View>
           <SectionHeader title="Recent quotes" trailing="See all" onTrailingPress={() => router.push("/quotes")} />
           <View style={{ gap: space.sm }}>
-            <Pressable
-              onPress={() => router.push("/quote-editor")}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                padding: 12,
-                borderRadius: 11,
-                borderWidth: 1,
-                borderColor: colors.border,
-                backgroundColor: colors.surface,
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: resolveFontFamily("body", "700"), fontSize: 13.5, color: colors.text }}>
-                  QT-0142 · Basil Reid
-                </Text>
-                <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>
-                  Retaining wall, Spanish Town
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <MoneyText cents={31860000} size={14} />
-                <View style={{ marginTop: 4 }}>
-                  <StatusPill label="Accepted" kind="good" />
+            {quoteListRows.slice(0, 3).map((q) => (
+              <Pressable
+                key={q.num}
+                onPress={() => router.push("/quote-editor")}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 11,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: resolveFontFamily("body", "700"), fontSize: 13.5, color: colors.text }}>
+                    {q.num} · {q.client}
+                  </Text>
+                  <Text style={{ fontSize: 11.5, color: colors.textMuted, marginTop: 2 }}>{q.job}</Text>
                 </View>
-              </View>
-            </Pressable>
+                <View style={{ alignItems: "flex-end" }}>
+                  <MoneyText cents={q.amountCents} size={14} />
+                  <View style={{ marginTop: 4 }}>
+                    <StatusPill label={q.status} kind={q.kind} />
+                  </View>
+                </View>
+              </Pressable>
+            ))}
           </View>
         </View>
       </ScrollView>
