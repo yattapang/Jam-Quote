@@ -27,8 +27,9 @@ export default function JobsPage() {
               <div className={shared.rowMain}>
                 <span className={shared.rowTitle}>{job.name}</span>
                 <span className={shared.rowSub}>
-                  {job.clientName} · {job.stage}
+                  {job.clientName} · {job.addressLine}
                 </span>
+                <span className={shared.rowSub}>{job.stage}</span>
               </div>
               <div className={shared.rowRight}>
                 <MoneyText cents={job.valueCents} />

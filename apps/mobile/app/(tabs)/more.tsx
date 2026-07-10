@@ -10,17 +10,18 @@ interface MenuItem {
   label: string;
   sub: string;
   route?: "/invoice-detail";
+  phase?: string; // when the full screen lands, for the placeholder
 }
 
 const MENU_ITEMS: MenuItem[] = [
-  { label: "Invoices", sub: "5 invoices · 1 overdue", route: "/invoice-detail" },
-  { label: "Labour rate book", sub: `${rateBookRows.length} labour types` },
-  { label: "Material favourites", sub: "Quick-add pricing" },
-  { label: "Equipment / rental catalog", sub: "4 suppliers" },
-  { label: "Supplier directory", sub: "Live + cached prices" },
-  { label: "Regulatory feed", sub: "GCT threshold update · Aug 1" },
-  { label: "Reports", sub: "Revenue, win rate" },
-  { label: "Business profile & settings", sub: "TRN, parish, connections" },
+  { label: "Invoices", sub: "3 invoices · 1 overdue", route: "/invoice-detail" },
+  { label: "Labour rate book", sub: `${rateBookRows.length} labour types`, phase: "Phase 2" },
+  { label: "Material favourites", sub: "Quick-add pricing", phase: "Phase 2" },
+  { label: "Equipment / rental catalog", sub: "4 suppliers", phase: "Phase 2" },
+  { label: "Supplier directory", sub: "Live + cached prices", phase: "Phase 2" },
+  { label: "Regulatory feed", sub: "GCT threshold update · Aug 1", phase: "Phase 3" },
+  { label: "Reports", sub: "Revenue, win rate", phase: "Phase 2" },
+  { label: "Business profile & settings", sub: "TRN, parish, connections", phase: "Phase 1" },
 ];
 
 /** More tab — settings-style menu, plus the light/dark theme override used
@@ -108,7 +109,11 @@ export default function MoreScreen() {
           {MENU_ITEMS.map((item) => (
             <Pressable
               key={item.label}
-              onPress={() => item.route && router.push(item.route)}
+              onPress={() =>
+                item.route
+                  ? router.push(item.route)
+                  : router.push({ pathname: "/feature-preview", params: { title: item.label, phase: item.phase ?? "a later phase" } })
+              }
               style={{
                 flexDirection: "row",
                 alignItems: "center",

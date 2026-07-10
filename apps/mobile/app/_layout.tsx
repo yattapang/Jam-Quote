@@ -22,6 +22,7 @@ function RootStack() {
         <Stack.Screen name="quote-editor" options={{ presentation: "card" }} />
         <Stack.Screen name="add-material" options={{ presentation: "modal" }} />
         <Stack.Screen name="invoice-detail" options={{ presentation: "card" }} />
+        <Stack.Screen name="feature-preview" options={{ presentation: "card" }} />
       </Stack>
     </View>
   );
