@@ -65,8 +65,14 @@ enum PaymentMethod {
   CARD
   CASH
   BANK_TRANSFER
-  LYNK
+  MOBILE_MONEY // specific wallet (Lynk, GK One, …) in Payment.providerCode
   OTHER
+}
+
+enum EntityType {
+  SOLE_TRADER
+  PARTNERSHIP
+  LIMITED_COMPANY
 }
 
 enum UserRole {
@@ -86,12 +92,18 @@ enum MessageChannel {
 model Business {
   id             String  @id @default(uuid())
   name           String
-  trn            String? // 9 digits, validated in app layer
+  // Jurisdiction rule-pack selector. countryCode/currency default to Jamaica;
+  // tax rate, taxpayer-id format, regions & payment rails resolve from the
+  // rule-pack in @jamquote/core (getJurisdiction). Do not hardcode elsewhere.
+  countryCode    String  @default("JM") // ISO 3166-1 alpha-2
+  currency       String  @default("JMD") // ISO 4217
+  entityType     EntityType @default(SOLE_TRADER)
+  trn            String? // taxpayer id (TRN in JM), validated per jurisdiction
   logoUrl        String?
   addressLine    String?
-  parish         String?
+  parish         String? // administrative region (label per jurisdiction)
   tradeType      String?
-  defaultGctRate Decimal @default(15.0) @db.Decimal(5, 2)
+  defaultGctRate Decimal @default(15.0) @db.Decimal(5, 2) // resolved tax rate; default from rule-pack
   quotePrefix    String  @default("QT-")
   invoicePrefix  String  @default("INV-")
   nextQuoteSeq   Int     @default(1)
@@ -99,6 +111,7 @@ model Business {
   jmdPerUsd      Decimal? @db.Decimal(10, 4) // optional USD reference rate
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  deletedAt      DateTime? // soft-delete for offline sync
 
   users         User[]
   clients       Client[]
@@ -141,6 +154,7 @@ model Client {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime? // soft-delete for offline sync
 
   jobs     Job[]
   quotes   Quote[]
@@ -162,6 +176,7 @@ model Job {
   progressPct Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  deletedAt   DateTime? // soft-delete for offline sync
 
   quotes      Quote[]
   attachments Attachment[]
@@ -196,6 +211,7 @@ model Quote {
   totalCents    Int         @default(0)
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+  deletedAt     DateTime? // soft-delete for offline sync
 
   sections  QuoteSection[]
   lineItems QuoteLineItem[]
@@ -213,6 +229,7 @@ model QuoteSection {
   quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   title   String
   sort    Int    @default(0)
+  deletedAt DateTime? // soft-delete for offline sync
 
   lineItems QuoteLineItem[]
 }
@@ -235,6 +252,7 @@ model QuoteLineItem {
   markupPct      Decimal?     @db.Decimal(6, 2)
   overrideNote   String?
   sort           Int          @default(0)
+  deletedAt      DateTime? // soft-delete for offline sync
 
   @@index([quoteId])
 }
@@ -249,6 +267,7 @@ model Supplier {
   parish    String?
   isPartner Boolean  @default(false)
   createdAt DateTime @default(now())
+  deletedAt DateTime? // soft-delete for offline sync
 
   priceEntries MaterialPriceEntry[]
   lineItems    QuoteLineItem[]
@@ -279,6 +298,7 @@ model LabourRate {
   skillTier  String? // helper / journeyman / master
   rateCents  Int
   rateUnit   RateUnit @default(DAY)
+  deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
 }
@@ -291,6 +311,7 @@ model MaterialFavourite {
   unit       String?
   priceCents Int
   supplierId String?
+  deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
 }
@@ -305,6 +326,7 @@ model EquipmentItem {
   vendorPhone String?
   rateCents  Int
   rateUnit   RateUnit @default(DAY)
+  deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
 }
@@ -327,6 +349,7 @@ model Invoice {
   dueDate       DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime? // soft-delete for offline sync
 
   payments Payment[]
 
@@ -340,12 +363,16 @@ model Payment {
   invoice      Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amountCents  Int
   method       PaymentMethod
+  // Jurisdiction-specific wallet when method = MOBILE_MONEY (e.g. "LYNK",
+  // "GK_ONE"); valid set comes from the jurisdiction rule-pack in core.
+  providerCode String?
   // WiPay linkage
   providerRef  String? // WiPay transaction id
   providerRaw  Json? // raw webhook payload for audit
   status       String        @default("recorded") // recorded | pending | completed | failed
   paidAt       DateTime      @default(now())
   createdAt    DateTime      @default(now())
+  deletedAt    DateTime? // soft-delete for offline sync
 
   @@index([invoiceId])
 }

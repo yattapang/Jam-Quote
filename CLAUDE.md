@@ -87,6 +87,21 @@ applies **only** to the post-discount share of `STANDARD` lines. TRN (9-digit
 taxpayer number) prints on every quote & invoice. Clients/jobs use the 14
 Jamaican parishes (`PARISHES` in core).
 
+### Jurisdiction rule-pack seam (multi-country readiness)
+
+Everything that varies by country — currency, the consumption-tax label/rate,
+the taxpayer-ID format, administrative regions, payment rails, and payroll
+statutory contributions — resolves through `getJurisdiction(countryCode)` in
+[jurisdiction.ts](packages/core/src/jurisdiction/jurisdiction.ts), **not**
+hardcoded. Today it's a static table with **Jamaica only** (`JM`); the future
+versioned, human-verified rule-pack engine slots in behind the same interface.
+`Business` carries `countryCode`/`currency`/`entityType` (JM/JMD/SOLE_TRADER
+defaults). **Rule:** never hardcode a jurisdiction value (a tax rate, `"$"`,
+`"Parish"`, `"GCT"`, `"TRN"`, a wallet like Lynk/GK One) below this seam — read
+it from the profile. Money display goes through `formatMoney(cents, currency)`
+(`formatJmd` is a thin JMD wrapper). Sync-relevant tables carry `deletedAt`
+(soft-delete) for the future offline-first sync layer.
+
 ### QuoteLineItem is the load-bearing entity
 
 Every line — material, labour, equipment, rental, subcontractor — shares one

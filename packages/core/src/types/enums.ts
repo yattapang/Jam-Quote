@@ -62,10 +62,20 @@ export const PaymentMethod = {
   CARD: "CARD", // WiPay debit/credit
   CASH: "CASH",
   BANK_TRANSFER: "BANK_TRANSFER",
-  LYNK: "LYNK",
+  // Jurisdiction-specific wallet (Lynk, GK One, …) is recorded in
+  // Payment.providerCode; the valid set comes from the jurisdiction rule-pack.
+  MOBILE_MONEY: "MOBILE_MONEY",
   OTHER: "OTHER",
 } as const;
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
+
+/** Business entity type — drives jurisdiction rule-pack selection. */
+export const EntityType = {
+  SOLE_TRADER: "SOLE_TRADER",
+  PARTNERSHIP: "PARTNERSHIP",
+  LIMITED_COMPANY: "LIMITED_COMPANY",
+} as const;
+export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 
 /** The 14 parishes of Jamaica. */
 export const PARISHES = [

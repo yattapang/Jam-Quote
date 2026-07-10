@@ -34,6 +34,22 @@ jamquote/
 - **TRN:** Taxpayer Registration Number, 9 digits, printed on every quote & invoice.
 - **Parishes:** clients/jobs use Jamaican parishes.
 
+### 3.1 Jurisdiction rule-pack seam (Caribbean expansion)
+
+Jamaica is the first jurisdiction, not the only one. Every country-specific value —
+currency, consumption-tax label/rate (JM `GCT` 15%; elsewhere `VAT` at 12.5–17.5%),
+taxpayer-ID format, administrative regions, in-country payment rails (Lynk, GK One),
+and payroll statutory contributions (NIS/NHT/Education Tax/HEART) — is resolved
+through `getJurisdiction(countryCode)` in `packages/core`, keyed off
+`Business.countryCode`/`currency`/`entityType`. **Nothing below this seam hardcodes a
+jurisdiction value.** Today the table holds Jamaica only; the Phase 0 versioned,
+human-verified, TAJ/Gazette-sourced rule-pack engine (with a regulatory-monitoring
+feed) replaces the static table behind the identical interface — that verified-per-
+country depth is the credibility differentiator versus a generic multi-country
+template. Rates carry `verified`/`asOf`/`source` provenance. Money display is
+currency-parameterised (`formatMoney`); sync-relevant tables carry `deletedAt` for the
+offline-first layer.
+
 ## 4. The load-bearing entity: QuoteLineItem
 
 Every line, regardless of type, shares one shape:

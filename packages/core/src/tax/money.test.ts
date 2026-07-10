@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   applyPct,
+  CURRENCIES,
   formatJmd,
+  formatMoney,
+  getCurrency,
   jmdToUsdReference,
   lineExtension,
   roundCents,
@@ -55,6 +58,34 @@ describe("formatJmd", () => {
   it("handles negatives and the no-symbol option", () => {
     expect(formatJmd(-5_000)).toBe("-$50.00");
     expect(formatJmd(1_234, false)).toBe("12.34");
+  });
+});
+
+describe("formatMoney", () => {
+  it("formats with the currency's own symbol", () => {
+    expect(formatMoney(125_000_000, CURRENCIES.JMD)).toBe("$1,250,000.00");
+    expect(formatMoney(125_000_000, CURRENCIES.TTD)).toBe("TT$1,250,000.00");
+    expect(formatMoney(5_000, CURRENCIES.BBD)).toBe("Bds$50.00");
+  });
+
+  it("honours the no-symbol option and negatives", () => {
+    expect(formatMoney(1_234, CURRENCIES.TTD, false)).toBe("12.34");
+    expect(formatMoney(-5_000, CURRENCIES.JMD)).toBe("-$50.00");
+  });
+
+  it("formatJmd stays identical to the JMD path", () => {
+    expect(formatJmd(1_234)).toBe(formatMoney(1_234, CURRENCIES.JMD));
+  });
+});
+
+describe("getCurrency", () => {
+  it("resolves a known ISO code", () => {
+    expect(getCurrency("JMD").symbol).toBe("$");
+    expect(getCurrency("TTD").code).toBe("TTD");
+  });
+
+  it("throws on an unknown code", () => {
+    expect(() => getCurrency("ZZZ")).toThrow();
   });
 });
 

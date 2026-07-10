@@ -3,3 +3,4 @@ export * from "./types/enums.js";
 export * from "./types/validators.js";
 export * from "./tax/money.js";
 export * from "./quote/totals.js";
+export * from "./jurisdiction/jurisdiction.js";
