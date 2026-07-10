@@ -4,12 +4,25 @@
     "strict": true,
     "jsx": "react-native",
     "paths": {
-      "@jamquote/core": ["../../packages/core/src/index.ts"],
-      "@jamquote/core/*": ["../../packages/core/src/*"],
-      "@jamquote/ui": ["../../packages/ui/src/index.ts"],
-      "@/*": ["./src/*"]
+      "@jamquote/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@jamquote/core/*": [
+        "../../packages/core/src/*"
+      ],
+      "@jamquote/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["**/*.ts", "**/*.tsx", "expo-env.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
