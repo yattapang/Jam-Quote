@@ -12,7 +12,7 @@ services:
     plan: free
     region: oregon
     branch: main
-    buildCommand: npm ci && npm run -w @jamquote/api prisma:generate && npx turbo run build --filter=@jamquote/api
+    buildCommand: npm ci --include=dev && npm run -w @jamquote/api prisma:generate && npx turbo run build --filter=@jamquote/api
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
