@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MoneyText } from "../../src/components";
-import { clientRows } from "../../src/state/mockData";
+import { clientRows, type ClientRow } from "../../src/state/mockData";
+import { fetchClientRows } from "../../src/state/apiClient";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -11,6 +12,10 @@ import { resolveFontFamily } from "../../src/theme/fontFamily";
 export default function ClientsListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
+  const [rows, setRows] = useState<ClientRow[]>(clientRows);
+  useEffect(() => {
+    fetchClientRows().then(setRows).catch(() => {});
+  }, []);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
@@ -20,7 +25,7 @@ export default function ClientsListScreen() {
         </View>
       </View>
       <FlatList
-        data={clientRows}
+        data={rows}
         keyExtractor={(item) => item.name}
         contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.xl, gap: space.sm }}
         renderItem={({ item }) => (

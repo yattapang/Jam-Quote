@@ -55,7 +55,7 @@ export const initialQuoteLines: DraftLineItem[] = QT_0142.lines.map((l) => ({ ..
 export const QUOTE_DISCOUNT_PCT = QT_0142.discountPct;
 export const QUOTE_GCT_RATE_PCT = QT_0142.gctRatePct;
 
-const STATUS_PILL: Record<QuoteStatus, { label: string; kind: StatusKind }> = {
+export const STATUS_PILL: Record<QuoteStatus, { label: string; kind: StatusKind }> = {
   [QuoteStatus.DRAFT]: { label: "Draft", kind: "neutral" },
   [QuoteStatus.SENT]: { label: "Sent", kind: "info" },
   [QuoteStatus.VIEWED]: { label: "Viewed", kind: "infoSolid" },

@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, MoneyText, StatusPill } from "../../src/components";
 import { quoteFilterNames, quoteListRows, type QuoteListRow } from "../../src/state/mockData";
+import { fetchQuoteRows } from "../../src/state/apiClient";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -13,10 +14,16 @@ export default function QuotesListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
   const [filter, setFilter] = useState<(typeof quoteFilterNames)[number]>("All");
+  // Render fixtures instantly, then replace with live API data (falls back to
+  // the same fixtures if the API is unreachable).
+  const [allRows, setAllRows] = useState<QuoteListRow[]>(quoteListRows);
+  useEffect(() => {
+    fetchQuoteRows().then(setAllRows).catch(() => {});
+  }, []);
 
   const rows = useMemo(
-    () => (filter === "All" ? quoteListRows : quoteListRows.filter((q) => q.status === filter)),
-    [filter],
+    () => (filter === "All" ? allRows : allRows.filter((q) => q.status === filter)),
+    [filter, allRows],
   );
 
   return (
