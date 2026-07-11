@@ -1,17 +1,6 @@
-import styles from "./admin.module.css";
+export const metadata = { title: "JamQuote Staff Console · internal" };
 
-export const metadata = { title: "JamQuote Admin · internal" };
-
+// The staff console renders its own full-screen chrome; no shared layout.
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className={styles.shell}>
-      <header className={styles.topbar}>
-        <div className={styles.brand}>
-          JamQuote <span className={styles.badge}>ADMIN</span>
-        </div>
-        <span className={styles.env}>Internal platform console · staff only</span>
-      </header>
-      <main className={styles.main}>{children}</main>
-    </div>
-  );
+  return <>{children}</>;
 }

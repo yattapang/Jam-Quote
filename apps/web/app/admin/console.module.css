@@ -1,0 +1,105 @@
+/* Self-contained staff-console theme (independent of the contractor --jq-* theme).
+   Palette matches JamQuote's design tokens. Ported from the design's data-theme. */
+
+.root {
+  font-family: var(--font-public-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.root[data-theme="light"] {
+  --bg: #f6f3ec;
+  --surface: #ffffff;
+  --surface-alt: #efeae0;
+  --border: #ddd5c4;
+  --text: #26221c;
+  --muted: #6b6357;
+  --accent: #9c6e1b;
+  --good: #2e7d46;
+  --warn: #c2570f;
+  --critical: #b23a2e;
+  --info: #2c5f82;
+  --shadow: 0 1px 2px rgba(38, 34, 28, 0.05), 0 8px 24px -12px rgba(38, 34, 28, 0.14);
+}
+
+.root[data-theme="dark"] {
+  --bg: #17140f;
+  --surface: #221e17;
+  --surface-alt: #2b261c;
+  --border: #3a3427;
+  --text: #efe9dc;
+  --muted: #a69c89;
+  --accent: #e0aa48;
+  --good: #57b378;
+  --warn: #e8843f;
+  --critical: #e2695a;
+  --info: #6fa9cc;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 30px -14px rgba(0, 0, 0, 0.6);
+}
+
+.dispArchivo {
+  font-family: var(--font-archivo), system-ui, sans-serif;
+}
+
+.scr::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.scr::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 20px;
+  border: 3px solid var(--bg);
+}
+
+.link {
+  color: var(--info);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+
+.navBtn:hover {
+  background: var(--surface-alt);
+}
+.rowHover:hover {
+  background: var(--surface-alt);
+}
+.iconBtn:hover {
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}
+
+@keyframes admin-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes admin-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes admin-slidein {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.fadein {
+  animation: admin-fadein 0.3s ease;
+}
+.slidein {
+  animation: admin-slidein 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
