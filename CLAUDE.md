@@ -121,6 +121,16 @@ Every request is scoped to a `businessId`. Today that comes from an
 this is an explicit placeholder until JWT auth lands. Every service query
 filters by `businessId`; keep that pattern when adding endpoints.
 
+### Running the API needs `@jamquote/core` built
+
+`@jamquote/core`'s runtime entry is compiled `dist/` (its `.js` import
+specifiers only resolve under a bundler; the API runs on plain Node). So before
+`npm run -w @jamquote/api dev` (or the deploy build, or running api/mobile tests
+directly) run `npm run -w @jamquote/core build` once — `turbo run build`/`test`
+do this automatically via `^build`. Typecheck and `next dev` use the TS source
+(via `types`/tsconfig paths) and don't need the build. `apps/api/.env` holds
+`DATABASE_URL` (a free Neon Postgres works); `db:seed` runs `prisma db seed`.
+
 ### Payments — WiPay, not Stripe
 
 Card payments use **WiPay hosted checkout** so raw card data never touches our
