@@ -11,14 +11,16 @@ import {
   RATE_UNIT_LABEL,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
-import { findQuote, findClient, businessProfile } from "@/lib/mock-data";
+import { businessProfile } from "@/lib/mock-data";
+import { getQuote, getClients } from "@/lib/api-client";
 import shared from "../../shared.module.css";
 
-export default function QuoteDetailPage({ params }: { params: { id: string } }) {
-  const quote = findQuote(params.id);
+export default async function QuoteDetailPage({ params }: { params: { id: string } }) {
+  const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const client = findClient(quote.clientId);
+  const clients = await getClients();
+  const client = clients.find((c) => c.id === quote.clientId);
   const totals = getQuoteTotals(quote);
   const pill = quoteStatusPill(quote.status);
   const groups = groupLinesByCategory(quote);

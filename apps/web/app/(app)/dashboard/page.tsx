@@ -3,22 +3,16 @@ import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
-import { getQuoteTotals } from "@/lib/quote-totals";
-import {
-  businessProfile,
-  dashboardStats,
-  followUps,
-  quotes,
-  regulatoryAlerts,
-  findClient,
-} from "@/lib/mock-data";
+import { businessProfile, dashboardStats, followUps, regulatoryAlerts } from "@/lib/mock-data";
+import { getQuotes, getClients } from "@/lib/api-client";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Dashboard · JamQuote" };
 
-const recentQuotes = quotes.slice(0, 5);
-
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const [allQuotes, clients] = await Promise.all([getQuotes(), getClients()]);
+  const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const recentQuotes = allQuotes.slice(0, 5);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -74,8 +68,6 @@ export default function DashboardPage() {
           <Card>
             <div className={shared.list}>
               {recentQuotes.map((q) => {
-                const client = findClient(q.clientId);
-                const totals = getQuoteTotals(q);
                 const pill = quoteStatusPill(q.status);
                 return (
                   <div key={q.id} className={shared.row}>
@@ -85,11 +77,11 @@ export default function DashboardPage() {
                         <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                       </span>
                       <span className={shared.rowSub}>
-                        {client?.name ?? "Unknown client"} · {q.jobLabel}
+                        {clientNames[q.clientId] ?? "Unknown client"} · {q.jobLabel}
                       </span>
                     </div>
                     <div className={shared.rowRight}>
-                      <MoneyText cents={totals.totalCents} />
+                      <MoneyText cents={q.totalCents ?? 0} />
                       <span className={shared.rowSub}>{q.createdLabel}</span>
                     </div>
                   </div>

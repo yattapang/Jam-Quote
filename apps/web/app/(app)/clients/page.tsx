@@ -1,12 +1,22 @@
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import MoneyText from "@/components/ui/MoneyText";
-import { clients, clientQuoteCount, clientTotalCents } from "@/lib/mock-data";
+import { getClients, getQuotes } from "@/lib/api-client";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Clients · JamQuote" };
 
-export default function ClientsPage() {
+export default async function ClientsPage() {
+  const [clients, quotes] = await Promise.all([getClients(), getQuotes()]);
+
+  const statsFor = (clientId: string) => {
+    const theirs = quotes.filter((q) => q.clientId === clientId);
+    return {
+      count: theirs.length,
+      total: theirs.reduce((sum, q) => sum + (q.totalCents ?? 0), 0),
+    };
+  };
+
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -23,7 +33,7 @@ export default function ClientsPage() {
       <Card>
         <div className={shared.list}>
           {clients.map((c) => {
-            const count = clientQuoteCount(c.id);
+            const { count, total } = statsFor(c.id);
             return (
               <div key={c.id} className={shared.row}>
                 <div className={shared.rowWithAvatar}>
@@ -36,7 +46,7 @@ export default function ClientsPage() {
                   </div>
                 </div>
                 <div className={shared.rowRight}>
-                  <MoneyText cents={clientTotalCents(c.id)} />
+                  <MoneyText cents={total} />
                   <span className={shared.rowSub}>
                     {count} {count === 1 ? "quote" : "quotes"}
                   </span>

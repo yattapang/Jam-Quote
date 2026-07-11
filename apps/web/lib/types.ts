@@ -22,6 +22,9 @@ export interface Quote {
   depositCents: number;
   createdLabel: string;
   validUntilLabel: string;
+  /** Denormalized total from the API (computed via computeTotals). Set on list
+   * rows where `lines` may be omitted; detail rows carry both. */
+  totalCents?: number;
 }
 
 export interface Client {

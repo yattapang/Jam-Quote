@@ -1,12 +1,13 @@
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import MoneyText from "@/components/ui/MoneyText";
-import { jobs } from "@/lib/mock-data";
+import { getJobs } from "@/lib/api-client";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Jobs · JamQuote" };
 
-export default function JobsPage() {
+export default async function JobsPage() {
+  const jobs = await getJobs();
   return (
     <div className={shared.page}>
       <header className={shared.header}>
