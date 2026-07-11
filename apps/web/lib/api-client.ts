@@ -283,6 +283,67 @@ export async function createQuote(input: NewQuoteInput): Promise<{ id: string }>
   return apiClient.post<{ id: string }>("/quotes", input);
 }
 
+// --- Admin (platform-level, staff console) ----------------------------------
+
+export interface AdminOverview {
+  businesses: number;
+  activeSubscriptions: number;
+  suppliersTracked: number;
+  jurisdictionsLive: number;
+}
+export interface AdminTenant {
+  id: string;
+  name: string;
+  parish: string | null;
+  plan: string;
+  trn: string | null;
+  status: string;
+  createdAt: string;
+  quoteCount: number;
+}
+export interface AdminSupplier {
+  id: string;
+  name: string;
+  parish: string | null;
+  isPartner: boolean;
+  skuCount: number;
+  lastFetch: string | null;
+}
+export interface AdminReg {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  effectiveDate: string | null;
+  sourceUrl: string | null;
+  actionNeeded: string | null;
+}
+export interface AdminData {
+  overview: AdminOverview | null;
+  tenants: AdminTenant[];
+  suppliers: AdminSupplier[];
+  regulatory: AdminReg[];
+}
+
+/** Fetch everything the staff console shows, from the platform admin API. On
+ * failure returns empty/null so the console falls back to its design sample. */
+export async function getAdminData(): Promise<AdminData> {
+  const safe = async <T>(path: string, empty: T): Promise<T> => {
+    try {
+      return await request<T>(path);
+    } catch {
+      return empty;
+    }
+  };
+  const [overview, tenants, suppliers, regulatory] = await Promise.all([
+    safe<AdminOverview | null>("/admin/overview", null),
+    safe<AdminTenant[]>("/admin/tenants", []),
+    safe<AdminSupplier[]>("/admin/suppliers", []),
+    safe<AdminReg[]>("/admin/regulatory", []),
+  ]);
+  return { overview, tenants, suppliers, regulatory };
+}
+
 export interface CardPaymentResponse {
   checkoutUrl: string;
   reference: string;

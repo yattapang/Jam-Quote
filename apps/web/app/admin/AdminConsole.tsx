@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { getJurisdiction } from "@jamquote/core";
+import type { AdminData } from "@/lib/api-client";
 import styles from "./console.module.css";
 
 type Screen = "overview" | "tenants" | "suppliers" | "regulatory" | "rulepack";
@@ -21,9 +22,32 @@ const th: CSSProperties = { textAlign: "left", padding: "11px 16px", fontSize: 1
 const td: CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(--border)" };
 const planTone: Record<string, string> = { Free: "muted", Starter: "info", Core: "accent", Pro: "good" };
 
+function relTime(iso: string | null): string {
+  if (!iso) return "—";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "—";
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return `${Math.max(1, m)}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+function freshnessOf(iso: string | null): { key: "fresh" | "cached" | "stale"; label: string } {
+  if (!iso) return { key: "stale", label: "No data" };
+  const h = (Date.now() - new Date(iso).getTime()) / 3600000;
+  if (h < 6) return { key: "fresh", label: `Fresh · ${relTime(iso)}` };
+  if (h < 30) return { key: "cached", label: `Cached · ${relTime(iso)}` };
+  return { key: "stale", label: `Stale · ${relTime(iso)}` };
+}
+
+type TenantRow = [string, string, string, string, string, string, number | string, number, number];
+type SupplierRow = [string, string, boolean, string, string, string, number];
+type RegRow = [string, string, string, string, string];
+
 const jm = getJurisdiction("JM");
 
-export default function AdminConsole() {
+export default function AdminConsole({ data }: { data: AdminData }) {
+  const ov = data.overview;
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [screen, setScreen] = useState<Screen>("overview");
   const [tenantId, setTenantId] = useState<number | null>(null);
@@ -33,7 +57,7 @@ export default function AdminConsole() {
 
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
-    tenants: ["Tenants", "1,284 contractor businesses across 14 parishes"],
+    tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
     suppliers: ["Supplier price index", "Live material pricing feeds & scrape health"],
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
@@ -49,11 +73,11 @@ export default function AdminConsole() {
 
   // --- data ---
   const stats = [
-    { label: "Total businesses", value: "1,284", delta: "+42", sub: "this month", tone: "good" },
-    { label: "Active subscriptions", value: "892", delta: "+18", sub: "net new", tone: "good" },
+    { label: "Total businesses", value: ov ? ov.businesses.toLocaleString() : "1,284", delta: "+42", sub: "this month", tone: "good" },
+    { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "892", delta: "+18", sub: "net new", tone: "good" },
     { label: "MRR", value: money(2418540), delta: "+4.7%", sub: "MoM", tone: "good" },
-    { label: "Suppliers tracked", value: "37", delta: "2 stale", sub: "feeds", tone: "warn" },
-    { label: "Jurisdictions live", value: "3", delta: "JM · TT · GY", sub: "", tone: "info" },
+    { label: "Suppliers tracked", value: ov ? String(ov.suppliersTracked) : "37", delta: "feeds", sub: "tracked", tone: "warn" },
+    { label: "Jurisdictions live", value: ov ? String(ov.jurisdictionsLive) : "3", delta: jm.countryCode, sub: "", tone: "info" },
   ];
   const rv: [string, number][] = [["J", 1.28], ["F", 1.35], ["M", 1.42], ["A", 1.55], ["M", 1.63], ["J", 1.74], ["J", 1.88], ["A", 1.97], ["S", 2.08], ["O", 2.19], ["N", 2.31], ["D", 2.42]];
   const signups = [
@@ -69,7 +93,7 @@ export default function AdminConsole() {
     { tone: "good", text: "Payments reconciled — 892 active subscriptions matched", time: "2h ago" },
     { tone: "info", text: published ? "Rule-pack JM v2025.4 published to production" : "Rule-pack JM v2025.3 live in production", time: "today 09:14" },
   ];
-  const tenantsRaw: [string, string, string, string, string, string, number | string, number, number][] = [
+  const tenantsMock: TenantRow[] = [
     ["Blue Mountain Builders", "St. Andrew", "Core", "128-540-991", "active", "4m ago", 3820000, 214, 18],
     ["Portmore Concrete Co.", "St. Catherine", "Pro", "094-118-330", "active", "22m ago", 9140500, 486, 41],
     ["Reef & Rock Masonry", "St. James", "Starter", "551-902-114", "trial", "1h ago", 612000, 38, 6],
@@ -81,12 +105,15 @@ export default function AdminConsole() {
     ["Ocho Rios Renovations", "St. Ann", "Pro", "118-663-490", "active", "6h ago", 6420000, 357, 29],
     ["Old Harbour Plumbing", "St. Catherine", "Free", "902-556-103", "churned", "34d ago", "—", 24, 3],
   ];
+  const tenantsRaw: TenantRow[] = data.tenants.length
+    ? data.tenants.map((t): TenantRow => [t.name, t.parish ?? "—", t.plan, t.trn ?? "—", t.status, relTime(t.createdAt), "—", t.quoteCount, t.quoteCount])
+    : tenantsMock;
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
   const tenantFilters = [["All", "1,284", true], ["Active", cnt("active")], ["Trial", cnt("trial")], ["Past due", cnt("past_due")], ["Churned", cnt("churned")]];
 
-  const suppliersRaw: [string, string, boolean, string, string, string, number][] = [
+  const suppliersMock: SupplierRow[] = [
     ["ARC Systems", "Steel & Rebar", true, "stale", "Stale · 26h", "HTTP 200 · 0 new · retry queued", 412],
     ["Caribbean Cement", "Cement", true, "fresh", "Fresh · 1h ago", "HTTP 200 · 24 updated", 96],
     ["Tank-Weld Metals", "Steel & Roofing", true, "fresh", "Fresh · 40m ago", "HTTP 200 · 61 updated", 540],
@@ -96,27 +123,49 @@ export default function AdminConsole() {
     ["Bathrooms & More", "Fixtures", false, "cached", "Cached · 14h ago", "HTTP 200 · 0 new", 187],
     ["Kingston Timber", "Lumber", false, "stale", "Stale · 2d ago", "Timeout · 3 fails", 158],
   ];
+  const suppliersRaw: SupplierRow[] = data.suppliers.length
+    ? data.suppliers.map((s): SupplierRow => {
+        const f = freshnessOf(s.lastFetch);
+        return [s.name, s.parish ?? "—", s.isPartner, f.key, f.label, s.lastFetch ? relTime(s.lastFetch) : "—", s.skuCount];
+      })
+    : suppliersMock;
   const freshTone: Record<string, string> = { fresh: "good", cached: "warn", stale: "critical" };
-  const supplierStats = [
-    { label: "Feeds tracked", value: "37", color: "var(--text)" },
-    { label: "Fresh (< 6h)", value: "29", color: "var(--good)" },
-    { label: "Cached", value: "6", color: "var(--warn)" },
-    { label: "Stale", value: "2", color: "var(--critical)" },
-  ];
+  const supplierStats = data.suppliers.length
+    ? [
+        { label: "Feeds tracked", value: String(suppliersRaw.length), color: "var(--text)" },
+        { label: "Fresh (< 6h)", value: String(suppliersRaw.filter((s) => s[3] === "fresh").length), color: "var(--good)" },
+        { label: "Cached", value: String(suppliersRaw.filter((s) => s[3] === "cached").length), color: "var(--warn)" },
+        { label: "Stale", value: String(suppliersRaw.filter((s) => s[3] === "stale").length), color: "var(--critical)" },
+      ]
+    : [
+        { label: "Feeds tracked", value: "37", color: "var(--text)" },
+        { label: "Fresh (< 6h)", value: "29", color: "var(--good)" },
+        { label: "Cached", value: "6", color: "var(--warn)" },
+        { label: "Stale", value: "2", color: "var(--critical)" },
+      ];
 
   const regMap: Record<string, [string, string]> = { needs: ["Needs review", "warn"], monitoring: ["Monitoring", "info"], applied: ["Applied", "good"] };
-  const regChanges: [string, string, string, string, string][] = [
+  const regMock: RegRow[] = [
     ["Tourism-sector GCT sub-rate (10%)", "TAJ", "2025-04-01", "2025-03-28", "needs"],
     ["Minimum wage revision — Gazette No. 42", "Jamaica Gazette", "2025-06-01", "2025-03-25", "needs"],
     ["NHT contribution ceiling adjustment", "NHT", "2025-05-15", "2025-03-20", "monitoring"],
     ["HEART Trust levy clarification", "HEART/NSTA", "2025-03-01", "2025-02-14", "monitoring"],
     ["Education Tax rate confirmation", "TAJ", "2025-01-01", "2024-12-10", "applied"],
   ];
-  const regStats = [
-    { value: "2", label: "Needs review", tone: "warn" },
-    { value: "2", label: "Monitoring", tone: "info" },
-    { value: "31", label: "Applied (YTD)", tone: "good" },
-  ];
+  const regChanges: RegRow[] = data.regulatory.length
+    ? data.regulatory.map((r): RegRow => [r.title, r.category, r.effectiveDate ? r.effectiveDate.slice(0, 10) : "—", r.actionNeeded ? "action needed" : "—", r.actionNeeded ? "needs" : "monitoring"])
+    : regMock;
+  const regStats = data.regulatory.length
+    ? [
+        { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
+        { value: String(regChanges.filter((r) => r[4] === "monitoring").length), label: "Monitoring", tone: "info" },
+        { value: String(regChanges.filter((r) => r[4] === "applied").length), label: "Applied (YTD)", tone: "good" },
+      ]
+    : [
+        { value: "2", label: "Needs review", tone: "warn" },
+        { value: "2", label: "Monitoring", tone: "info" },
+        { value: "31", label: "Applied (YTD)", tone: "good" },
+      ];
 
   // rule-pack — wired to the REAL @jamquote/core jurisdiction rule-pack
   const verified = pill("accent", { padding: "3px 10px" });
@@ -156,7 +205,7 @@ export default function AdminConsole() {
           <button className={styles.navBtn} onClick={() => setScreen("tenants")} style={navBtn("tenants")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
             <span>Tenants</span>
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>1,284</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{ov ? ov.businesses.toLocaleString() : "1,284"}</span>
           </button>
           <button className={styles.navBtn} onClick={() => setScreen("suppliers")} style={navBtn("suppliers")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 9l1-5h16l1 5" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></svg>
@@ -303,12 +352,12 @@ export default function AdminConsole() {
                   </tr></thead>
                   <tbody>
                     {tenantsRaw.map((t, i) => {
-                      const [sl, st] = statusMap[t[4]]!;
+                      const [sl, st] = statusMap[t[4]] ?? ["Active", "good"];
                       return (
                         <tr key={i} className={styles.rowHover} onClick={() => setTenantId(i)} style={{ cursor: "pointer", transition: "background .12s" }}>
                           <td style={td}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
                           <td style={{ ...td, color: "var(--muted)" }}>{t[1]}</td>
-                          <td style={td}><span style={pill(planTone[t[2]]!)}>{t[2]}</span></td>
+                          <td style={td}><span style={pill(planTone[t[2]] ?? "muted")}>{t[2]}</span></td>
                           <td style={{ ...td, ...archivo, fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{t[3]}</td>
                           <td style={td}><span style={pill(st)}>{sl}</span></td>
                           <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
@@ -335,7 +384,7 @@ export default function AdminConsole() {
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th}>SUPPLIER</th><th style={th}>CATEGORY</th><th style={{ ...th, textAlign: "right" }}>SKUS</th><th style={th}>PRICE FRESHNESS</th><th style={th}>LAST FETCH</th>
+                    <th style={th}>SUPPLIER</th><th style={th}>PARISH</th><th style={{ ...th, textAlign: "right" }}>SKUS</th><th style={th}>PRICE FRESHNESS</th><th style={th}>LAST FETCH</th>
                   </tr></thead>
                   <tbody>
                     {suppliersRaw.map((s, i) => {
@@ -532,12 +581,12 @@ export default function AdminConsole() {
 function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, string, string, number | string, number, number]; onClose: () => void }) {
   const [name, parish, plan, trn, status, , mrr, q, qm] = raw;
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
-  const [sl, st] = statusMap[status]!;
+  const [sl, st] = statusMap[status] ?? ["Active", "good"];
   const init = name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const limit = plan === "Pro" ? 9999 : plan === "Core" ? 250 : plan === "Starter" ? 60 : 15;
   const seats = plan === "Pro" ? 12 : plan === "Core" ? 6 : plan === "Starter" ? 3 : 1;
   const usedSeats = Math.max(1, Math.round(seats * 0.7));
-  const mrrPlan = ({ Free: 0, Starter: 4900, Core: 12900, Pro: 34900 } as Record<string, number>)[plan]!;
+  const mrrPlan = ({ Free: 0, Starter: 4900, Core: 12900, Pro: 34900 } as Record<string, number>)[plan] ?? 0;
   const metrics = [
     { label: "Quotes created", value: String(q) },
     { label: "This month", value: String(qm) },
@@ -560,7 +609,7 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, lineHeight: 1.15 }}>{name}</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{parish} · TRN {trn}</div>
-            <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[plan]!)}>{plan}</span><span style={pill(st)}>{sl}</span></div>
+            <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[plan] ?? "muted")}>{plan}</span><span style={pill(st)}>{sl}</span></div>
           </div>
           <button className={styles.iconBtn} onClick={onClose} style={{ width: 30, height: 30, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>

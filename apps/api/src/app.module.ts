@@ -9,6 +9,7 @@ import { JobsModule } from "./jobs/jobs.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
+import { AdminModule } from "./admin/admin.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
@@ -27,6 +28,7 @@ import { PaymentsModule } from "./payments/payments.module.js";
     QuotesModule,
     CatalogsModule,
     PaymentsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })
