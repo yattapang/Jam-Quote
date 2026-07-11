@@ -1,11 +1,10 @@
-\
 # Render Blueprint for the JamQuote API.
 # https://render.com/docs/blueprint-spec
 #
 # Usage: in the Render dashboard, "New +" -> "Blueprint", point it at this
 # repo. Render reads this file and provisions the service below. DATABASE_URL
 # is sync:false (set it manually in the dashboard from your Neon connection
-# string) — never commit a real connection string.
+# string) -- never commit a real connection string.
 services:
   - type: web
     name: jamquote-api
