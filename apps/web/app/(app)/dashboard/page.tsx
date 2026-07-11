@@ -24,7 +24,7 @@ export default async function DashboardPage() {
           </span>
         </div>
         <div className={shared.headerActions}>
-          <Button href="/quotes" variant="primary">
+          <Button href="/quotes/new" variant="primary">
             New quote
           </Button>
         </div>

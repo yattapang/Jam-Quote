@@ -241,6 +241,48 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
   }
 }
 
+// --- Create (write path) ----------------------------------------------------
+
+export interface NewClientInput {
+  name: string;
+  phone?: string;
+  parish?: string;
+  addressLine?: string;
+}
+export async function createClient(input: NewClientInput): Promise<Client> {
+  return mapClient(await apiClient.post<ApiClientRow>("/clients", input));
+}
+
+export interface NewJobInput {
+  name: string;
+  clientId?: string;
+  addressLine?: string;
+  parish?: string;
+}
+export async function createJob(input: NewJobInput): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>("/jobs", input);
+}
+
+export interface NewQuoteLineInput {
+  category: QuoteLineItemInput["category"];
+  description: string;
+  quantity: number;
+  rateUnit: QuoteLineItemInput["rateUnit"];
+  unitPriceCents: number;
+  gctTreatment: QuoteLineItemInput["gctTreatment"];
+}
+export interface NewQuoteInput {
+  clientId?: string;
+  jobId?: string;
+  gctRatePct: number;
+  discountPct: number;
+  depositCents: number;
+  lineItems: NewQuoteLineInput[];
+}
+export async function createQuote(input: NewQuoteInput): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>("/quotes", input);
+}
+
 export interface CardPaymentResponse {
   checkoutUrl: string;
   reference: string;

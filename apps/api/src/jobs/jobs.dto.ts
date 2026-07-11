@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PARISHES } from "@jamquote/core";
 
 export const createJobSchema = z.object({
-  clientId: z.string().uuid().optional(),
+  clientId: z.string().min(1).optional(),
   name: z.string().min(1),
   addressLine: z.string().optional(),
   parish: z.enum(PARISHES).optional(),

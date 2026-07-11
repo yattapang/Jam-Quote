@@ -1,7 +1,7 @@
 import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
 import MoneyText from "@/components/ui/MoneyText";
 import { getClients, getQuotes } from "@/lib/api-client";
+import AddClientButton from "./AddClientButton";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Clients · JamQuote" };
@@ -26,7 +26,7 @@ export default async function ClientsPage() {
           <span className={shared.subtitle}>{clients.length} clients across your parishes</span>
         </div>
         <div className={shared.headerActions}>
-          <Button variant="primary">Add client</Button>
+          <AddClientButton />
         </div>
       </header>
 

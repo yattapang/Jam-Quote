@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  createClient,
+  createJob,
+  createQuote,
   getClients,
   getJobs,
   getQuote,
@@ -8,6 +11,7 @@ import {
   mapClient,
   mapQuote,
 } from "./api-client";
+import { GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
 
 // --- fetch mock ------------------------------------------------------------
 
@@ -169,6 +173,52 @@ describe("getQuote", () => {
     const q = await getQuote("qt-0142");
     expect(q?.num).toBe("QT-0142");
     expect(q?.lines.length).toBeGreaterThan(0);
+  });
+});
+
+describe("create (write path)", () => {
+  it("createClient POSTs with the business header and maps the result", async () => {
+    const spy = stubFetch({ "/clients": { id: "new-1", name: "Jane Doe", phone: "876 000 0000", parish: "Kingston", addressLine: "1 Main St" } });
+    const c = await createClient({ name: "Jane Doe", phone: "876 000 0000" });
+    expect(c.name).toBe("Jane Doe");
+    expect(c.initials).toBe("JD");
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toMatchObject({ name: "Jane Doe" });
+  });
+
+  it("createJob POSTs the job body", async () => {
+    const spy = stubFetch({ "/jobs": { id: "job-new" } });
+    const r = await createJob({ name: "New wall", clientId: "cl-basil-reid" });
+    expect(r.id).toBe("job-new");
+    expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
+      name: "New wall",
+      clientId: "cl-basil-reid",
+    });
+  });
+
+  it("createQuote POSTs the line items", async () => {
+    const spy = stubFetch({ "/quotes": { id: "qt-new" } });
+    const r = await createQuote({
+      clientId: "cl-basil-reid",
+      gctRatePct: 15,
+      discountPct: 0,
+      depositCents: 0,
+      lineItems: [
+        {
+          category: LineCategory.MATERIAL,
+          description: "Cement",
+          quantity: 10,
+          rateUnit: RateUnit.UNIT,
+          unitPriceCents: 115_000,
+          gctTreatment: GctTreatment.STANDARD,
+        },
+      ],
+    });
+    expect(r.id).toBe("qt-new");
+    const body = JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
+    expect(body.lineItems[0].unitPriceCents).toBe(115_000);
   });
 });
 

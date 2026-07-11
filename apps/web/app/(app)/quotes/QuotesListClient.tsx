@@ -29,7 +29,9 @@ export default function QuotesListClient({
           <span className={shared.subtitle}>{quotes.length} quotes in your book</span>
         </div>
         <div className={shared.headerActions}>
-          <Button variant="primary">New quote</Button>
+          <Button href="/quotes/new" variant="primary">
+            New quote
+          </Button>
         </div>
       </header>
 

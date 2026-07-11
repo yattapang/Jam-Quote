@@ -1,13 +1,13 @@
 import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
 import MoneyText from "@/components/ui/MoneyText";
-import { getJobs } from "@/lib/api-client";
+import { getJobs, getClients } from "@/lib/api-client";
+import AddJobButton from "./AddJobButton";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Jobs · JamQuote" };
 
 export default async function JobsPage() {
-  const jobs = await getJobs();
+  const [jobs, clients] = await Promise.all([getJobs(), getClients()]);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -17,7 +17,7 @@ export default async function JobsPage() {
           <span className={shared.subtitle}>{jobs.length} active jobs</span>
         </div>
         <div className={shared.headerActions}>
-          <Button variant="primary">New job</Button>
+          <AddJobButton clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
         </div>
       </header>
 
