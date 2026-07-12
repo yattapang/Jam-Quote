@@ -6,6 +6,7 @@ import {
   deleteClient,
   deleteJob,
   deleteQuote,
+  getBusiness,
   getClient,
   getClients,
   getJob,
@@ -13,10 +14,12 @@ import {
   getQuote,
   getQuotes,
   initialsOf,
+  mapBusiness,
   mapClient,
   mapQuote,
   reviseQuote,
   setQuoteStatus,
+  updateBusiness,
   updateClient,
   updateJob,
   updateQuote,
@@ -99,10 +102,25 @@ const apiQuote = {
   sections: [],
 };
 
-// The API row shapes (ApiQuote/ApiClientRow) aren't exported; reference the
-// mapper's own parameter type so the literals type-check against it.
+const apiBusiness = {
+  id: "seed-business-blackwood",
+  name: "Blackwood Construction & Masonry",
+  countryCode: "JM",
+  currency: "JMD",
+  trn: "102-458-963",
+  addressLine: "12 Barbican Road, Kingston 8",
+  parish: "St. Catherine",
+  tradeType: "General contractor & masonry",
+  // Prisma Decimal serializes as a numeric string over JSON.
+  defaultGctRate: "15.00",
+};
+
+// The API row shapes (ApiQuote/ApiClientRow/ApiBusiness) aren't exported;
+// reference the mapper's own parameter type so the literals type-check
+// against it.
 type MapQuoteArg = Parameters<typeof mapQuote>[0];
 type MapClientArg = Parameters<typeof mapClient>[0];
+type MapBusinessArg = Parameters<typeof mapBusiness>[0];
 
 describe("pure mappers", () => {
   it("initialsOf builds up to two uppercase initials", () => {
@@ -134,6 +152,20 @@ describe("pure mappers", () => {
     expect(q.discountPct).toBe(5);
     expect(q.lines).toHaveLength(1);
     expect(q.lines[0]?.unitPriceCents).toBe(115_000);
+  });
+
+  it("mapBusiness maps the persistence shape and converts the Decimal GCT rate to a percentage number", () => {
+    expect(mapBusiness(apiBusiness as MapBusinessArg)).toEqual({
+      id: "seed-business-blackwood",
+      name: "Blackwood Construction & Masonry",
+      trn: "102-458-963",
+      parish: "St. Catherine",
+      tradeType: "General contractor & masonry",
+      addressLine: "12 Barbican Road, Kingston 8",
+      defaultGctRatePct: 15,
+      countryCode: "JM",
+      currency: "JMD",
+    });
   });
 
   it("mapQuote preserves section titles and flattens section lines into `lines`", () => {
@@ -198,6 +230,22 @@ describe("getClient", () => {
     stubFetch(null);
     const c = await getClient("cl-basil-reid");
     expect(c?.name).toBe("Basil Reid");
+  });
+});
+
+describe("getBusiness", () => {
+  it("fetches /business/current and maps it", async () => {
+    stubFetch({ "/business/current": apiBusiness });
+    const b = await getBusiness();
+    expect(b.name).toBe("Blackwood Construction & Masonry");
+    expect(b.defaultGctRatePct).toBe(15);
+  });
+
+  it("falls back to the fixture business when the API is unreachable", async () => {
+    stubFetch(null);
+    const b = await getBusiness();
+    expect(b.id).toBe("seed-business-blackwood");
+    expect(b.defaultGctRatePct).toBeGreaterThan(0);
   });
 });
 
@@ -352,6 +400,17 @@ describe("update (write path)", () => {
     expect(init.method).toBe("PATCH");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
     expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
+  });
+
+  it("updateBusiness PATCHes the business body to /business/:id, renaming defaultGctRatePct to defaultGctRate", async () => {
+    const spy = stubFetch({ "/business/seed-business-blackwood": { id: "seed-business-blackwood" } });
+    const r = await updateBusiness("seed-business-blackwood", { name: "Blackwood & Sons", defaultGctRatePct: 12.5 });
+    expect(r.id).toBe("seed-business-blackwood");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/business/seed-business-blackwood");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Blackwood & Sons", defaultGctRate: 12.5 });
   });
 
   it("reviseQuote POSTs to /quotes/:id/revise with no body", async () => {

@@ -4,15 +4,15 @@ import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
-import { businessProfile, regulatoryAlerts } from "@/lib/mock-data";
-import { getQuotes, getClients } from "@/lib/api-client";
+import { regulatoryAlerts } from "@/lib/mock-data";
+import { getQuotes, getClients, getBusiness } from "@/lib/api-client";
 import { computeDashboardStats, QuoteStatus } from "@jamquote/core";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Dashboard · JamQuote" };
 
 export default async function DashboardPage() {
-  const [allQuotes, clients] = await Promise.all([getQuotes(), getClients()]);
+  const [allQuotes, clients, business] = await Promise.all([getQuotes(), getClients(), getBusiness()]);
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
   // Most recently created first, so a brand-new draft always surfaces here
   // regardless of its quote number (revisions can reuse an older number).
@@ -42,8 +42,10 @@ export default async function DashboardPage() {
     <div className={shared.page}>
       <header className={shared.header}>
         <div className={shared.headings}>
-          <span className={shared.eyebrow}>{businessProfile.name}</span>
-          <h1 className={shared.title}>Good day, {businessProfile.ownerFirstName}</h1>
+          <span className={shared.eyebrow}>{business.name}</span>
+          {/* The Business model has no owner name (that's on User, not wired
+              here) — a generic greeting rather than fabricating one. */}
+          <h1 className={shared.title}>Good day</h1>
           <span className={shared.subtitle}>
             Here&apos;s where your estimating stands today.
           </span>

@@ -10,8 +10,7 @@ import {
   RATE_UNIT_LABEL,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
-import { businessProfile } from "@/lib/mock-data";
-import { getQuote, getClients } from "@/lib/api-client";
+import { getQuote, getClients, getBusiness } from "@/lib/api-client";
 import QuoteActions from "./QuoteActions";
 import shared from "../../shared.module.css";
 
@@ -19,7 +18,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const clients = await getClients();
+  const [clients, business] = await Promise.all([getClients(), getBusiness()]);
   const client = clients.find((c) => c.id === quote.clientId);
   const totals = getQuoteTotals(quote);
   const pill = quoteStatusPill(quote.status);
@@ -118,7 +117,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             <div className={shared.list}>
               <div className={shared.totalRowMuted}>
                 <span>TRN</span>
-                <span>{businessProfile.trn}</span>
+                <span>{business.trn || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>{quote.createdLabel}</span>

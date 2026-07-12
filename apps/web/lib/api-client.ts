@@ -5,13 +5,14 @@
  * persistence shape to the view types; if the API is unreachable it falls back
  * to the shared @jamquote/core fixtures (same data) so the preview never breaks.
  */
-import type { Client, Quote } from "./types";
+import type { Business, Client, Quote } from "./types";
 import type { QuoteLineItemInput, QuoteStatus } from "@jamquote/core";
 import { getQuoteTotals } from "./quote-totals";
 import {
   clients as fixtureClients,
   quotes as fixtureQuotes,
   jobs as fixtureJobs,
+  fixtureBusiness,
   findJobDetail,
   type JobSummary,
   type JobDetail,
@@ -117,6 +118,18 @@ interface ApiLineItem {
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   markupPct?: number | string | null;
 }
+interface ApiBusiness {
+  id: string;
+  name: string;
+  countryCode?: string;
+  currency?: string;
+  trn?: string | null;
+  addressLine?: string | null;
+  parish?: string | null;
+  tradeType?: string | null;
+  // Prisma Decimal comes over JSON as a numeric string, e.g. "15.00".
+  defaultGctRate: number | string;
+}
 interface ApiQuote {
   id: string;
   clientId?: string | null;
@@ -210,6 +223,24 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
   };
 }
 
+export function mapBusiness(b: ApiBusiness): Business {
+  return {
+    id: b.id,
+    name: b.name,
+    trn: b.trn ?? "",
+    parish: (b.parish ?? "") as Business["parish"],
+    tradeType: b.tradeType ?? "",
+    addressLine: b.addressLine ?? "",
+    // Business.defaultGctRate is a Decimal already stored as a PERCENTAGE
+    // (e.g. 15 means 15%, validated 0-100 by updateBusinessSchema and used
+    // directly as gctRatePct in quotes.service) — so this is a plain
+    // Number() cast, no *100/÷100 conversion.
+    defaultGctRatePct: Number(b.defaultGctRate),
+    countryCode: b.countryCode ?? "JM",
+    currency: b.currency ?? "JMD",
+  };
+}
+
 // --- Typed data functions (live API, fixture fallback) ----------------------
 
 export async function getClients(): Promise<Client[]> {
@@ -227,6 +258,17 @@ export async function getClient(id: string): Promise<Client | undefined> {
   } catch {
     console.warn(`[api-client] getClient(${id}): API unreachable, using fixtures`);
     return fixtureClients.find((c) => c.id === id);
+  }
+}
+
+/** GET /api/business/current — the caller's own business (resolved from the
+ * x-business-id header; see BusinessController.current). */
+export async function getBusiness(): Promise<Business> {
+  try {
+    return mapBusiness(await request<ApiBusiness>("/business/current"));
+  } catch {
+    console.warn("[api-client] getBusiness: API unreachable, using fixture");
+    return fixtureBusiness;
   }
 }
 
@@ -375,6 +417,24 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
 export type UpdateJobInput = Partial<NewJobInput>;
 export async function updateJob(id: string, input: UpdateJobInput): Promise<{ id: string }> {
   return apiClient.patch<{ id: string }>(`/jobs/${id}`, input);
+}
+
+/** PATCH /api/business/:id — editable fields mirror updateBusinessSchema
+ * (business.dto.ts). `defaultGctRatePct` is renamed to the API's
+ * `defaultGctRate` on the way out — both are the same percentage unit (see
+ * mapBusiness), so no numeric conversion, just a field-name translation. */
+export interface UpdateBusinessInput {
+  name?: string;
+  trn?: string;
+  addressLine?: string;
+  parish?: string;
+  tradeType?: string;
+  defaultGctRatePct?: number;
+}
+export async function updateBusiness(id: string, input: UpdateBusinessInput): Promise<{ id: string }> {
+  const { defaultGctRatePct, ...rest } = input;
+  const body = defaultGctRatePct === undefined ? rest : { ...rest, defaultGctRate: defaultGctRatePct };
+  return apiClient.patch<{ id: string }>(`/business/${id}`, body);
 }
 
 /** PATCH /api/quotes/:id — same shape as create; providing lineItems replaces all lines. */

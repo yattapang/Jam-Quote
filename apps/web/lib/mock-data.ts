@@ -16,8 +16,14 @@ import {
   InvoiceStatus,
   PaymentMethod,
 } from "@jamquote/core";
-import type { BusinessProfile, Client, Invoice, Quote, RegulatoryAlert } from "./types";
+import type { Business, BusinessProfile, Client, Invoice, Quote, RegulatoryAlert } from "./types";
 
+// businessProfile backs UI that has no real persistence yet — WhatsApp/email
+// connection status (Phase 2: WhatsApp Business Cloud API) and the
+// subscription plan (Phase 3: billing) per CLAUDE.md's build phasing. The
+// identity fields here (name/trn/parish/…) also seed `fixtureBusiness` below,
+// used only as api-client's offline fallback — the settings/dashboard/quote
+// pages read the live business via getBusiness(), not this object directly.
 export const businessProfile: BusinessProfile = {
   name: "Blackwood Construction & Masonry",
   ownerFirstName: "Owen",
@@ -35,6 +41,21 @@ export const businessProfile: BusinessProfile = {
     renewsLabel: "Renews Aug 4, 2026",
     features: "Unlimited quotes, WhatsApp sending, supplier price sync",
   },
+};
+
+/** api-client's getBusiness() fallback when the API is unreachable — same
+ * shape/id convention as the seeded business (`seed-business-blackwood`),
+ * mirroring how fixtureClients/fixtureQuotes back the other getX() fallbacks. */
+export const fixtureBusiness: Business = {
+  id: "seed-business-blackwood",
+  name: businessProfile.name,
+  trn: businessProfile.trn,
+  parish: businessProfile.parish,
+  tradeType: businessProfile.tradeType,
+  addressLine: "12 Barbican Road, Kingston 8",
+  defaultGctRatePct: businessProfile.defaultGctRatePct,
+  countryCode: "JM",
+  currency: "JMD",
 };
 
 // --- Derived from shared fixtures (single source of truth) -----------------

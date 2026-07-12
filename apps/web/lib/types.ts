@@ -94,3 +94,24 @@ export interface BusinessProfile {
     features: string;
   };
 }
+
+/** The real, API-backed business profile (mirrors the Prisma `Business`
+ * model's editable identity fields — see business.dto's updateBusinessSchema).
+ * Distinct from `BusinessProfile` above, which still backs the
+ * not-yet-persisted WhatsApp/email-connection and subscription-plan fixture
+ * data shown on the settings page. */
+export interface Business {
+  id: string;
+  name: string;
+  trn: string;
+  parish: Parish;
+  tradeType: string;
+  addressLine: string;
+  /** Business.defaultGctRate is a Decimal already stored as a PERCENTAGE
+   * (e.g. 15 means 15%) — not a 0–1 fraction. See schema.prisma's comment on
+   * `Business.defaultGctRate` and quotes.service's `Number(business.defaultGctRate)`
+   * used directly as `gctRatePct`. */
+  defaultGctRatePct: number;
+  countryCode: string;
+  currency: string;
+}
