@@ -13,7 +13,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
-import { createQuote } from "@/lib/api-client";
+import { createQuote, updateQuote } from "@/lib/api-client";
 import shared from "../../shared.module.css";
 
 const GCT_RATE = 15; // business default; centrally overridable later
@@ -50,20 +50,58 @@ function newLine(): DraftLine {
 }
 
 const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
+const fromCents = (cents: number) => (cents / 100).toString();
+
+export interface InitialQuoteLine {
+  category: LineCategory;
+  description: string;
+  quantity: number;
+  rateUnit: RateUnit;
+  unitPriceCents: number;
+  gctTreatment: GctTreatment;
+}
+export interface InitialQuote {
+  clientId?: string;
+  jobId?: string;
+  discountPct: number;
+  depositCents: number;
+  lines: InitialQuoteLine[];
+}
+
+function linesFromInitial(initial?: InitialQuote): DraftLine[] {
+  if (!initial || initial.lines.length === 0) return [newLine()];
+  return initial.lines.map((l) => ({
+    key: `l${++counter}`,
+    category: l.category,
+    description: l.description,
+    quantity: String(l.quantity),
+    rateUnit: l.rateUnit,
+    unitPriceDollars: fromCents(l.unitPriceCents),
+    gctTreatment: l.gctTreatment,
+  }));
+}
 
 export default function QuoteBuilder({
   clients,
   jobs,
+  mode = "create",
+  quoteId,
+  initial,
 }: {
   clients: { id: string; name: string }[];
   jobs: { id: string; name: string }[];
+  mode?: "create" | "edit";
+  quoteId?: string;
+  initial?: InitialQuote;
 }) {
   const router = useRouter();
-  const [clientId, setClientId] = useState("");
-  const [jobId, setJobId] = useState("");
-  const [discountPct, setDiscountPct] = useState("0");
-  const [depositDollars, setDepositDollars] = useState("0");
-  const [lines, setLines] = useState<DraftLine[]>([newLine()]);
+  const isEdit = mode === "edit" && !!quoteId;
+  const backHref = isEdit ? `/quotes/${quoteId}` : "/quotes";
+  const [clientId, setClientId] = useState(initial?.clientId ?? "");
+  const [jobId, setJobId] = useState(initial?.jobId ?? "");
+  const [discountPct, setDiscountPct] = useState(String(initial?.discountPct ?? 0));
+  const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
+  const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -90,25 +128,26 @@ export default function QuoteBuilder({
     if (valid.length === 0) return setError("Add at least one line item with a description and quantity.");
     setSaving(true);
     setError("");
+    const payload = {
+      clientId: clientId || undefined,
+      jobId: jobId || undefined,
+      gctRatePct: GCT_RATE,
+      discountPct: Number(discountPct) || 0,
+      depositCents: toCents(depositDollars),
+      lineItems: valid.map((l) => ({
+        category: l.category,
+        description: l.description.trim(),
+        quantity: Number(l.quantity),
+        rateUnit: l.rateUnit,
+        unitPriceCents: toCents(l.unitPriceDollars),
+        gctTreatment: l.gctTreatment,
+      })),
+    };
     try {
-      const { id } = await createQuote({
-        clientId: clientId || undefined,
-        jobId: jobId || undefined,
-        gctRatePct: GCT_RATE,
-        discountPct: Number(discountPct) || 0,
-        depositCents: toCents(depositDollars),
-        lineItems: valid.map((l) => ({
-          category: l.category,
-          description: l.description.trim(),
-          quantity: Number(l.quantity),
-          rateUnit: l.rateUnit,
-          unitPriceCents: toCents(l.unitPriceDollars),
-          gctTreatment: l.gctTreatment,
-        })),
-      });
+      const { id } = isEdit ? await updateQuote(quoteId!, payload) : await createQuote(payload);
       router.push(`/quotes/${id}`);
     } catch {
-      setError("Couldn't save the quote — is the API running?");
+      setError(isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?");
       setSaving(false);
     }
   }
@@ -120,11 +159,11 @@ export default function QuoteBuilder({
       <header className={shared.header}>
         <div className={shared.headings}>
           <span className={shared.eyebrow}>
-            <a href="/quotes" style={{ color: "inherit" }}>
-              ← Quotes
+            <a href={backHref} style={{ color: "inherit" }}>
+              ← {isEdit ? "Quote" : "Quotes"}
             </a>
           </span>
-          <h1 className={shared.title}>New quote</h1>
+          <h1 className={shared.title}>{isEdit ? "Edit quote" : "New quote"}</h1>
           <span className={shared.subtitle}>Build an itemized estimate — GCT at {GCT_RATE}% on standard lines.</span>
         </div>
       </header>
@@ -239,11 +278,11 @@ export default function QuoteBuilder({
 
       {error && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{error}</div>}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        <Button href="/quotes" variant="ghost">
+        <Button href={backHref} variant="ghost">
           Cancel
         </Button>
         <Button variant="primary" onClick={save}>
-          {saving ? "Saving…" : "Save quote"}
+          {saving ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
         </Button>
       </div>
     </div>

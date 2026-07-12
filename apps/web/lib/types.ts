@@ -14,6 +14,7 @@ export interface Quote {
   id: string;
   num: string;
   clientId: string;
+  jobId?: string;
   jobLabel: string;
   status: QuoteStatus;
   lines: QuoteLine[];

@@ -13,8 +13,11 @@ import {
   initialsOf,
   mapClient,
   mapQuote,
+  reviseQuote,
+  setQuoteStatus,
+  updateQuote,
 } from "./api-client";
-import { GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
+import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // --- fetch mock ------------------------------------------------------------
 
@@ -222,6 +225,54 @@ describe("create (write path)", () => {
     expect(r.id).toBe("qt-new");
     const body = JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
     expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+});
+
+describe("update (write path)", () => {
+  it("updateQuote PATCHes the quote body to /quotes/:id", async () => {
+    const spy = stubFetch({ "/quotes/qt-0142": { id: "qt-0142" } });
+    const r = await updateQuote("qt-0142", {
+      clientId: "cl-basil-reid",
+      gctRatePct: 15,
+      discountPct: 0,
+      depositCents: 0,
+      lineItems: [
+        {
+          category: LineCategory.MATERIAL,
+          description: "Cement",
+          quantity: 10,
+          rateUnit: RateUnit.UNIT,
+          unitPriceCents: 115_000,
+          gctTreatment: GctTreatment.STANDARD,
+        },
+      ],
+    });
+    expect(r.id).toBe("qt-0142");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/quotes/qt-0142");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    const body = JSON.parse(init.body as string);
+    expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+
+  it("reviseQuote POSTs to /quotes/:id/revise with no body", async () => {
+    const spy = stubFetch({ "/quotes/qt-0142/revise": { id: "qt-0143" } });
+    const r = await reviseQuote("qt-0142");
+    expect(r.id).toBe("qt-0143");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/quotes/qt-0142/revise");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
+
+  it("setQuoteStatus POSTs { status } to /quotes/:id/status", async () => {
+    const spy = stubFetch({ "/quotes/qt-0142/status": { id: "qt-0142" } });
+    await setQuoteStatus("qt-0142", QuoteStatus.SENT);
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/quotes/qt-0142/status");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ status: "SENT" });
   });
 });
 

@@ -157,6 +157,7 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     id: q.id,
     num: q.number,
     clientId: q.clientId ?? "",
+    jobId: q.jobId ?? undefined,
     jobLabel,
     status: q.status,
     lines,
@@ -283,6 +284,24 @@ export interface NewQuoteInput {
 }
 export async function createQuote(input: NewQuoteInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/quotes", input);
+}
+
+// --- Update (write path) -----------------------------------------------------
+
+/** PATCH /api/quotes/:id — same shape as create; providing lineItems replaces all lines. */
+export type UpdateQuoteInput = NewQuoteInput;
+export async function updateQuote(id: string, input: UpdateQuoteInput): Promise<{ id: string }> {
+  return apiClient.patch<{ id: string }>(`/quotes/${id}`, input);
+}
+
+/** POST /api/quotes/:id/revise — creates a new DRAFT version (bumped `version`, same `number`). */
+export async function reviseQuote(id: string): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>(`/quotes/${id}/revise`);
+}
+
+/** POST /api/quotes/:id/status — validated status transition (see ALLOWED_TRANSITIONS). */
+export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<void> {
+  await apiClient.post<unknown>(`/quotes/${id}/status`, { status });
 }
 
 // --- Delete (write path) -----------------------------------------------------

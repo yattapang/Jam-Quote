@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
@@ -13,6 +12,7 @@ import {
 } from "@/lib/quote-totals";
 import { businessProfile } from "@/lib/mock-data";
 import { getQuote, getClients } from "@/lib/api-client";
+import QuoteActions from "./QuoteActions";
 import shared from "../../shared.module.css";
 
 export default async function QuoteDetailPage({ params }: { params: { id: string } }) {
@@ -49,12 +49,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </span>
         </div>
         <div className={shared.headerActions}>
-          <Button variant="outlineAccent" size="sm">
-            Revise
-          </Button>
-          <Button variant="primary" size="sm">
-            Send
-          </Button>
+          <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>
 
