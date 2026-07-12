@@ -130,7 +130,7 @@ interface ApiQuote {
   validUntil?: string | null;
   createdAt: string;
   lineItems?: ApiLineItem[];
-  sections?: { lineItems: ApiLineItem[] }[];
+  sections?: { title: string; lineItems: ApiLineItem[] }[];
 }
 
 // --- Pure mappers (exported for testing) ------------------------------------
@@ -178,12 +178,16 @@ function mapLine(l: ApiLineItem): Quote["lines"][number] {
   };
 }
 
-/** Map an API quote to the view Quote. `lines` is populated only for detail. */
+/** Map an API quote to the view Quote. `lines`/`sections` are populated only for detail. */
 export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
   const lines = [
     ...(q.lineItems ?? []),
     ...(q.sections ?? []).flatMap((s) => s.lineItems),
   ].map(mapLine);
+  const sections = (q.sections ?? []).map((s) => ({
+    title: s.title,
+    lines: s.lineItems.map(mapLine),
+  }));
   return {
     id: q.id,
     num: q.number,
@@ -192,12 +196,14 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     jobLabel,
     status: q.status,
     lines,
+    sections,
     gctRatePct: Number(q.gctRate),
     discountPct: Number(q.discountPct),
     depositCents: q.depositCents,
     totalCents: q.totalCents, // denormalized; API computed it via computeTotals
     createdAt: q.createdAt,
     createdLabel: dateLabel(q.createdAt, "Created "),
+    validUntil: q.validUntil ?? undefined,
     validUntilLabel: q.validUntil ? dateLabel(q.validUntil, "Valid until ") : "",
   };
 }
@@ -322,7 +328,12 @@ export interface NewQuoteInput {
   gctRatePct: number;
   discountPct: number;
   depositCents: number;
+  /** ISO date the quote stops being valid; the API auto-expires SENT/VIEWED
+   * quotes past this date (see quote-expiry.service.ts). */
+  validUntil?: string;
   lineItems: NewQuoteLineInput[];
+  /** Named groupings of line items rendered under their own heading. */
+  sections?: { title: string; lineItems: NewQuoteLineInput[] }[];
 }
 export async function createQuote(input: NewQuoteInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/quotes", input);

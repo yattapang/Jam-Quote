@@ -133,6 +133,37 @@ describe("pure mappers", () => {
     expect(q.lines).toHaveLength(1);
     expect(q.lines[0]?.unitPriceCents).toBe(115_000);
   });
+
+  it("mapQuote preserves section titles and flattens section lines into `lines`", () => {
+    const sectioned = {
+      ...apiQuote,
+      lineItems: [],
+      sections: [
+        {
+          title: "Transportation",
+          lineItems: [
+            {
+              id: "l2",
+              category: "OTHER",
+              description: "Delivery truck",
+              quantity: "1",
+              rateUnit: "JOB",
+              unitPriceCents: 8_000,
+              priceSource: "MANUAL",
+              gctTreatment: "STANDARD",
+              markupPct: null,
+            },
+          ],
+        },
+      ],
+    };
+    const q = mapQuote(sectioned as MapQuoteArg, "");
+    expect(q.sections).toEqual([
+      { title: "Transportation", lines: expect.arrayContaining([expect.objectContaining({ id: "l2" })]) },
+    ]);
+    expect(q.lines).toHaveLength(1);
+    expect(q.lines[0]?.id).toBe("l2");
+  });
 });
 
 describe("getClients", () => {

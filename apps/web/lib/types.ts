@@ -24,6 +24,14 @@ export interface Quote {
   createdAt: string; // ISO — raw creation date, for date math (dashboard stats, sorting)
   createdLabel: string;
   validUntilLabel: string;
+  /** Raw ISO validity deadline (undated quotes omit it). Used by the quote
+   * builder to derive its "valid for N days" field when editing. */
+  validUntil?: string;
+  /** Section groupings, title preserved — populated only for detail rows
+   * (list rows may omit `lines`/`sections` entirely). `lines` above already
+   * includes every section's lines flattened in for totals/category display;
+   * this is additional grouping data for round-tripping the quote builder. */
+  sections?: { title: string; lines: QuoteLine[] }[];
   /** Denormalized total from the API (computed via computeTotals). Set on list
    * rows where `lines` may be omitted; detail rows carry both. */
   totalCents?: number;

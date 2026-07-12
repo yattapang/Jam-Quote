@@ -19,13 +19,30 @@ export default async function EditQuotePage({ params }: { params: { id: string }
         jobId: quote.jobId,
         discountPct: quote.discountPct,
         depositCents: quote.depositCents,
-        lines: quote.lines.map((l) => ({
-          category: l.category,
-          description: l.description,
-          quantity: l.quantity,
-          rateUnit: l.rateUnit,
-          unitPriceCents: l.unitPriceCents,
-          gctTreatment: l.gctTreatment,
+        validUntil: quote.validUntil,
+        createdAt: quote.createdAt,
+        // Ungrouped lines only — sectioned lines are carried separately below
+        // so editing a sectioned quote reconstructs its section titles.
+        lines: quote.lines
+          .filter((l) => !quote.sections?.some((s) => s.lines.some((sl) => sl.id === l.id)))
+          .map((l) => ({
+            category: l.category,
+            description: l.description,
+            quantity: l.quantity,
+            rateUnit: l.rateUnit,
+            unitPriceCents: l.unitPriceCents,
+            gctTreatment: l.gctTreatment,
+          })),
+        sections: quote.sections?.map((s) => ({
+          title: s.title,
+          lines: s.lines.map((l) => ({
+            category: l.category,
+            description: l.description,
+            quantity: l.quantity,
+            rateUnit: l.rateUnit,
+            unitPriceCents: l.unitPriceCents,
+            gctTreatment: l.gctTreatment,
+          })),
         })),
       }}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
