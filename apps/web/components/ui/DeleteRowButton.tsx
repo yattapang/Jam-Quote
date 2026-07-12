@@ -4,22 +4,39 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "./Button";
 import Modal, { modalStyles } from "./Modal";
+import { deleteClient, deleteJob, deleteQuote } from "@/lib/api-client";
 import styles from "./DeleteRowButton.module.css";
+
+const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
+  client: deleteClient,
+  job: deleteJob,
+  quote: deleteQuote,
+};
+
+export type DeleteKind = "client" | "job" | "quote";
 
 /**
  * Small, unobtrusive per-row delete affordance. Always confirms via a Modal
- * before calling `onDelete`, then `router.refresh()`s the list. Stops event
- * propagation on its own trigger so it's safe to drop into rows that are
- * themselves clickable (e.g. a row wrapped in a navigation handler).
+ * before deleting the entity, then either navigates to `redirectTo` or
+ * `router.refresh()`es the current list. Props are all serializable (kind +
+ * id), so this is safe to render directly from a Server Component — passing a
+ * function like `onDelete` across the server/client boundary is not allowed.
+ * Stops event propagation on its own trigger so it's safe to drop into rows
+ * that are themselves clickable (e.g. a row wrapped in a navigation handler).
  */
 export default function DeleteRowButton({
+  kind,
+  id,
   label = "Delete",
   confirmMessage,
-  onDelete,
+  redirectTo,
 }: {
+  kind: DeleteKind;
+  id: string;
   label?: string;
   confirmMessage: string;
-  onDelete: () => Promise<void>;
+  /** Where to go after deleting. Omit to refresh the current route in place. */
+  redirectTo?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -30,9 +47,10 @@ export default function DeleteRowButton({
     setSaving(true);
     setError("");
     try {
-      await onDelete();
+      await DELETERS[kind](id);
       setOpen(false);
-      router.refresh();
+      if (redirectTo) router.push(redirectTo);
+      else router.refresh();
     } catch {
       setError("Couldn't delete — is the API running?");
     } finally {

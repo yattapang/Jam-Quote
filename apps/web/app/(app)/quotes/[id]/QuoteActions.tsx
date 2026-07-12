@@ -6,7 +6,7 @@ import { QuoteStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { deleteQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
+import { reviseQuote, setQuoteStatus } from "@/lib/api-client";
 
 /**
  * Header actions for the quote detail page. DRAFT quotes can be edited, sent
@@ -60,11 +60,10 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
           Send
         </Button>
         <DeleteRowButton
+          kind="quote"
+          id={id}
           confirmMessage="Delete this quote? This can't be undone."
-          onDelete={async () => {
-            await deleteQuote(id);
-            router.push("/quotes");
-          }}
+          redirectTo="/quotes"
         />
         {sendOpen && (
           <Modal title="Send quote?" onClose={() => (sending ? undefined : setSendOpen(false))}>

@@ -7,7 +7,6 @@ import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { deleteQuote } from "@/lib/api-client";
 import { quoteStatusPill, QUOTE_STATUS_FILTERS } from "@/lib/status";
 import type { Quote } from "@/lib/types";
 import type { QuoteStatus } from "@jamquote/core";
@@ -82,8 +81,9 @@ export default function QuotesListClient({
                   <MoneyText cents={q.totalCents ?? 0} />
                   <span className={shared.rowSub}>{q.createdLabel}</span>
                   <DeleteRowButton
+                    kind="quote"
+                    id={q.id}
                     confirmMessage={`Delete quote ${q.num}? This can't be undone.`}
-                    onDelete={() => deleteQuote(q.id)}
                   />
                 </div>
               </div>
