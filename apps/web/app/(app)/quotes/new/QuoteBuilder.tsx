@@ -13,24 +13,58 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
+import { CATEGORY_LABEL } from "@/lib/quote-totals";
 import { createQuote, updateQuote } from "@/lib/api-client";
 import shared from "../../shared.module.css";
 
 const GCT_RATE = 15; // business default; centrally overridable later
 const DEFAULT_VALID_DAYS = 30;
 const DAY_MS = 86_400_000;
+const ADD_HEADING_VALUE = "__add_heading__";
 
-const categoryOptions = Object.values(LineCategory).map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() }));
 const rateUnitOptions = Object.values(RateUnit).map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() }));
 const gctOptions = [
   { value: GctTreatment.STANDARD, label: "Standard" },
   { value: GctTreatment.ZERO_RATED, label: "Zero-rated" },
   { value: GctTreatment.EXEMPT, label: "Exempt" },
 ];
+// Built-in category options for the Heading dropdown, labelled the same way
+// they'll appear as a section title on the finalized quote (CATEGORY_LABEL).
+const categoryHeadingOptions = Object.values(LineCategory).map((c) => ({
+  value: `cat:${c}`,
+  label: CATEGORY_LABEL[c],
+}));
+
+/**
+ * A line's heading is either one of the built-in categories or a custom
+ * title the user typed in. Built-in headings map straight to `LineCategory`
+ * for the API; custom headings still need a valid category, so they're sent
+ * as OTHER — grouping on the finalized quote is by heading/section, not by
+ * category.
+ */
+export type Heading = { kind: "category"; category: LineCategory } | { kind: "custom"; title: string };
+
+function headingToValue(h: Heading): string {
+  return h.kind === "category" ? `cat:${h.category}` : `custom:${h.title}`;
+}
+function valueToHeading(value: string): Heading {
+  return value.startsWith("custom:")
+    ? { kind: "custom", title: value.slice("custom:".length) }
+    : { kind: "category", category: value.slice("cat:".length) as LineCategory };
+}
+function headingTitle(h: Heading): string {
+  return h.kind === "category" ? CATEGORY_LABEL[h.category] : h.title;
+}
+/** Finds the built-in category whose CATEGORY_LABEL matches a section title
+ * exactly (e.g. a quote saved with the "Materials" heading) — used to
+ * reconstruct a built-in heading from an existing quote's section title. */
+function categoryForLabel(label: string): LineCategory | undefined {
+  return (Object.entries(CATEGORY_LABEL) as [LineCategory, string][]).find(([, l]) => l === label)?.[0];
+}
 
 interface DraftLine {
   key: string;
-  category: LineCategory;
+  heading: Heading;
   description: string;
   quantity: string;
   rateUnit: RateUnit;
@@ -38,17 +72,11 @@ interface DraftLine {
   gctTreatment: GctTreatment;
 }
 
-interface DraftSection {
-  key: string;
-  title: string;
-  lines: DraftLine[];
-}
-
 let counter = 0;
 function newLine(): DraftLine {
   return {
     key: `l${++counter}`,
-    category: LineCategory.MATERIAL,
+    heading: { kind: "category", category: LineCategory.MATERIAL },
     description: "",
     quantity: "1",
     rateUnit: RateUnit.UNIT,
@@ -57,16 +85,12 @@ function newLine(): DraftLine {
   };
 }
 
-function newSection(): DraftSection {
-  return { key: `s${++counter}`, title: "", lines: [newLine()] };
-}
-
 const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
 const fromCents = (cents: number) => (cents / 100).toString();
 
 function toLineInput(l: DraftLine) {
   return {
-    category: l.category,
+    category: l.heading.kind === "category" ? l.heading.category : LineCategory.OTHER,
     description: l.description.trim(),
     quantity: Number(l.quantity),
     rateUnit: l.rateUnit,
@@ -99,10 +123,10 @@ export interface InitialQuote {
   createdAt?: string;
 }
 
-function draftLineFromInitial(l: InitialQuoteLine): DraftLine {
+function draftLineFromInitial(l: InitialQuoteLine, heading: Heading): DraftLine {
   return {
     key: `l${++counter}`,
-    category: l.category,
+    heading,
     description: l.description,
     quantity: String(l.quantity),
     rateUnit: l.rateUnit,
@@ -111,18 +135,39 @@ function draftLineFromInitial(l: InitialQuoteLine): DraftLine {
   };
 }
 
-function linesFromInitial(initial?: InitialQuote): DraftLine[] {
-  if (!initial || initial.lines.length === 0) return [newLine()];
-  return initial.lines.map(draftLineFromInitial);
+/** A section title round-trips as a built-in heading when it matches a
+ * CATEGORY_LABEL exactly (a quote saved with only built-in headings);
+ * anything else is a custom heading. */
+function headingFromSectionTitle(title: string): Heading {
+  const category = categoryForLabel(title);
+  return category ? { kind: "category", category } : { kind: "custom", title };
 }
 
-function sectionsFromInitial(initial?: InitialQuote): DraftSection[] {
-  if (!initial?.sections) return [];
-  return initial.sections.map((s) => ({
-    key: `s${++counter}`,
-    title: s.title,
-    lines: s.lines.map(draftLineFromInitial),
-  }));
+/**
+ * Reconstructs the flat, ordered line list from an existing quote: each
+ * section's lines first (in the section order the API returned, i.e.
+ * first-appearance order), then any legacy ungrouped lines (pre-dating
+ * per-line headings) with their heading set from their own category.
+ */
+function linesFromInitial(initial?: InitialQuote): DraftLine[] {
+  const fromSections = (initial?.sections ?? []).flatMap((s) => {
+    const heading = headingFromSectionTitle(s.title);
+    return s.lines.map((l) => draftLineFromInitial(l, heading));
+  });
+  const fromUngrouped = (initial?.lines ?? []).map((l) =>
+    draftLineFromInitial(l, { kind: "category", category: l.category }),
+  );
+  const all = [...fromSections, ...fromUngrouped];
+  return all.length > 0 ? all : [newLine()];
+}
+
+/** Seeds the custom-heading list (for the dropdown) from any non-category
+ * section titles on the existing quote, in first-appearance order. */
+function customHeadingsFromInitial(initial?: InitialQuote): string[] {
+  const titles = (initial?.sections ?? [])
+    .map((s) => s.title)
+    .filter((title) => !categoryForLabel(title));
+  return Array.from(new Set(titles));
 }
 
 /**
@@ -142,16 +187,31 @@ function initialValidDays(initial?: InitialQuote): number {
 
 const cell: React.CSSProperties = { minWidth: 0 };
 
-/** The editor row markup for one line item — shared by the ungrouped "Line
- * items" block and every section, so the fields never drift apart. */
+/** The editor row markup for one line item. Each line's Heading cell is
+ * either the built-in/custom-heading Select, or — while the user is naming
+ * a brand-new heading for that line — an inline text input. */
 function LineRows({
   lines,
+  headingOptions,
+  addingHeadingKey,
+  newHeadingText,
   onPatch,
   onRemove,
+  onHeadingChange,
+  onNewHeadingTextChange,
+  onCommitNewHeading,
+  onCancelNewHeading,
 }: {
   lines: DraftLine[];
+  headingOptions: { value: string; label: string }[];
+  addingHeadingKey: string | null;
+  newHeadingText: string;
   onPatch: (key: string, p: Partial<DraftLine>) => void;
   onRemove: (key: string) => void;
+  onHeadingChange: (key: string, value: string) => void;
+  onNewHeadingTextChange: (value: string) => void;
+  onCommitNewHeading: (key: string) => void;
+  onCancelNewHeading: () => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -160,7 +220,7 @@ function LineRows({
           key={l.key}
           style={{
             display: "grid",
-            gridTemplateColumns: "130px 1fr 70px 90px 110px 110px 32px",
+            gridTemplateColumns: "160px 1fr 70px 90px 110px 110px 32px",
             gap: 8,
             alignItems: "end",
             paddingBottom: 12,
@@ -168,7 +228,30 @@ function LineRows({
           }}
         >
           <div style={cell}>
-            <Select options={categoryOptions} value={l.category} onChange={(e) => onPatch(l.key, { category: e.target.value as LineCategory })} />
+            {addingHeadingKey === l.key ? (
+              <Input
+                autoFocus
+                placeholder="New heading name"
+                value={newHeadingText}
+                onChange={(e) => onNewHeadingTextChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    onCommitNewHeading(l.key);
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCancelNewHeading();
+                  }
+                }}
+                onBlur={() => onCommitNewHeading(l.key)}
+              />
+            ) : (
+              <Select
+                options={headingOptions}
+                value={headingToValue(l.heading)}
+                onChange={(e) => onHeadingChange(l.key, e.target.value)}
+              />
+            )}
           </div>
           <div style={cell}>
             <Input placeholder="Description" value={l.description} onChange={(e) => onPatch(l.key, { description: e.target.value })} />
@@ -220,19 +303,25 @@ export default function QuoteBuilder({
   const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
   const [validDays, setValidDays] = useState(String(initialValidDays(initial)));
   const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
-  const [sections, setSections] = useState<DraftSection[]>(() => sectionsFromInitial(initial));
+  const [customHeadings, setCustomHeadings] = useState<string[]>(() => customHeadingsFromInitial(initial));
+  const [addingHeadingKey, setAddingHeadingKey] = useState<string | null>(null);
+  const [newHeadingText, setNewHeadingText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const allDraftLines = useMemo(
-    () => [...lines, ...sections.flatMap((s) => s.lines)],
-    [lines, sections],
+  const headingOptions = useMemo(
+    () => [
+      ...categoryHeadingOptions,
+      ...customHeadings.map((title) => ({ value: `custom:${title}`, label: title })),
+      { value: ADD_HEADING_VALUE, label: "+ Add heading…" },
+    ],
+    [customHeadings],
   );
 
   const totals = useMemo(
     () =>
       computeTotals({
-        lines: allDraftLines.map((l) => ({
+        lines: lines.map((l) => ({
           quantity: Number(l.quantity) || 0,
           unitPriceCents: toCents(l.unitPriceDollars),
           gctTreatment: l.gctTreatment,
@@ -241,7 +330,7 @@ export default function QuoteBuilder({
         discountPct: Number(discountPct) || 0,
         depositCents: toCents(depositDollars),
       }),
-    [allDraftLines, discountPct, depositDollars],
+    [lines, discountPct, depositDollars],
   );
 
   const patch = (key: string, p: Partial<DraftLine>) =>
@@ -249,43 +338,57 @@ export default function QuoteBuilder({
   const removeLine = (key: string) =>
     setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== key) : ls));
 
-  const addSection = () => setSections((ss) => [...ss, newSection()]);
-  const removeSection = (key: string) => setSections((ss) => ss.filter((s) => s.key !== key));
-  const patchSectionTitle = (key: string, title: string) =>
-    setSections((ss) => ss.map((s) => (s.key === key ? { ...s, title } : s)));
-  const addSectionLine = (key: string) =>
-    setSections((ss) => ss.map((s) => (s.key === key ? { ...s, lines: [...s.lines, newLine()] } : s)));
-  const patchSectionLine = (sectionKey: string, lineKey: string, p: Partial<DraftLine>) =>
-    setSections((ss) =>
-      ss.map((s) =>
-        s.key === sectionKey
-          ? { ...s, lines: s.lines.map((l) => (l.key === lineKey ? { ...l, ...p } : l)) }
-          : s,
-      ),
-    );
-  const removeSectionLine = (sectionKey: string, lineKey: string) =>
-    setSections((ss) =>
-      ss.map((s) =>
-        s.key === sectionKey && s.lines.length > 1
-          ? { ...s, lines: s.lines.filter((l) => l.key !== lineKey) }
-          : s,
-      ),
-    );
+  const onHeadingChange = (key: string, value: string) => {
+    if (value === ADD_HEADING_VALUE) {
+      setAddingHeadingKey(key);
+      setNewHeadingText("");
+      return;
+    }
+    patch(key, { heading: valueToHeading(value) });
+  };
+  /** Confirms the inline "new heading" input (Enter, or blur to also cover
+   * clicking away): adds the title to the quote's custom-heading list (once)
+   * and selects it on the line that triggered "+ Add heading…". An empty
+   * name is treated as a no-op cancel. */
+  const commitNewHeading = (key: string) => {
+    const title = newHeadingText.trim();
+    setAddingHeadingKey(null);
+    setNewHeadingText("");
+    if (!title) return;
+    setCustomHeadings((hs) => (hs.includes(title) ? hs : [...hs, title]));
+    patch(key, { heading: { kind: "custom", title } });
+  };
+  const cancelNewHeading = () => {
+    setAddingHeadingKey(null);
+    setNewHeadingText("");
+  };
 
   async function save() {
     const validLines = lines.filter((l) => l.description.trim() && Number(l.quantity) > 0);
-    const validSections = sections
-      .map((s) => ({
-        title: s.title.trim(),
-        lines: s.lines.filter((l) => l.description.trim() && Number(l.quantity) > 0),
-      }))
-      .filter((s) => s.title && s.lines.length > 0);
-
-    const lineCount = validLines.length + validSections.reduce((n, s) => n + s.lines.length, 0);
-    if (lineCount === 0) return setError("Add at least one line item with a description and quantity.");
+    if (validLines.length === 0) return setError("Add at least one line item with a description and quantity.");
 
     setSaving(true);
     setError("");
+
+    // Every heading becomes a section, ordered by the heading's
+    // first-appearance position across the (ordered) line list.
+    const order: string[] = [];
+    const byHeading = new Map<string, { title: string; lines: DraftLine[] }>();
+    for (const l of validLines) {
+      const key = headingToValue(l.heading);
+      let group = byHeading.get(key);
+      if (!group) {
+        group = { title: headingTitle(l.heading), lines: [] };
+        byHeading.set(key, group);
+        order.push(key);
+      }
+      group.lines.push(l);
+    }
+    const sections = order.map((key, sort) => {
+      const group = byHeading.get(key)!;
+      return { title: group.title, sort, lineItems: group.lines.map(toLineInput) };
+    });
+
     const days = Number(validDays) || DEFAULT_VALID_DAYS;
     const payload = {
       clientId: clientId || undefined,
@@ -294,8 +397,8 @@ export default function QuoteBuilder({
       discountPct: Number(discountPct) || 0,
       depositCents: toCents(depositDollars),
       validUntil: new Date(Date.now() + days * DAY_MS).toISOString(),
-      lineItems: validLines.map(toLineInput),
-      sections: validSections.map((s) => ({ title: s.title, lineItems: s.lines.map(toLineInput) })),
+      lineItems: [],
+      sections,
     };
     try {
       const { id } = isEdit ? await updateQuote(quoteId!, payload) : await createQuote(payload);
@@ -347,46 +450,19 @@ export default function QuoteBuilder({
           </Button>
         </div>
         <Card>
-          <LineRows lines={lines} onPatch={patch} onRemove={removeLine} />
+          <LineRows
+            lines={lines}
+            headingOptions={headingOptions}
+            addingHeadingKey={addingHeadingKey}
+            newHeadingText={newHeadingText}
+            onPatch={patch}
+            onRemove={removeLine}
+            onHeadingChange={onHeadingChange}
+            onNewHeadingTextChange={setNewHeadingText}
+            onCommitNewHeading={commitNewHeading}
+            onCancelNewHeading={cancelNewHeading}
+          />
         </Card>
-      </section>
-
-      <section className={shared.section}>
-        <div className={shared.sectionHead}>
-          <h2 className={shared.sectionTitle}>Sections</h2>
-          <Button variant="outlineAccent" size="sm" onClick={addSection}>
-            + Add section
-          </Button>
-        </div>
-        {sections.map((s) => (
-          <Card key={s.key}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "end" }}>
-                <div style={{ flex: 1 }}>
-                  <Input
-                    label="Section title"
-                    placeholder="e.g. Transportation, Miscellaneous"
-                    value={s.title}
-                    onChange={(e) => patchSectionTitle(s.key, e.target.value)}
-                  />
-                </div>
-                <Button variant="danger" size="sm" onClick={() => removeSection(s.key)}>
-                  Remove section
-                </Button>
-              </div>
-              <LineRows
-                lines={s.lines}
-                onPatch={(lineKey, p) => patchSectionLine(s.key, lineKey, p)}
-                onRemove={(lineKey) => removeSectionLine(s.key, lineKey)}
-              />
-              <div>
-                <Button variant="outlineAccent" size="sm" onClick={() => addSectionLine(s.key)}>
-                  + Add line
-                </Button>
-              </div>
-            </div>
-          </Card>
-        ))}
       </section>
 
       <div className={shared.grid2}>

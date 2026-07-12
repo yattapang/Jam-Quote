@@ -24,13 +24,17 @@ export function categorySubtotalCents(quote: Quote, totals: QuoteTotals, categor
   }, 0);
 }
 
-export function groupLinesByCategory(quote: Quote) {
+function groupByCategory(lines: Array<Quote["lines"][number]>) {
   const groups: Array<{ category: LineCategory; lines: Array<Quote["lines"][number]> }> = [];
   for (const cat of Object.values(LineCategory)) {
-    const lines = quote.lines.filter((l) => l.category === cat);
-    if (lines.length > 0) groups.push({ category: cat, lines });
+    const catLines = lines.filter((l) => l.category === cat);
+    if (catLines.length > 0) groups.push({ category: cat, lines: catLines });
   }
   return groups;
+}
+
+export function groupLinesByCategory(quote: Quote) {
+  return groupByCategory(quote.lines);
 }
 
 export const CATEGORY_LABEL: Record<LineCategory, string> = {
@@ -41,6 +45,33 @@ export const CATEGORY_LABEL: Record<LineCategory, string> = {
   [LineCategory.SUBCONTRACTOR]: "Subcontractors",
   [LineCategory.OTHER]: "Other",
 };
+
+export interface HeadingGroup {
+  title: string;
+  lines: Array<Quote["lines"][number]>;
+}
+
+/**
+ * Groups a quote's lines under their heading, ordered the way the user
+ * introduced them: first the quote's named `sections` — already sort-ordered
+ * by the API to first-appearance order (see quotes.service.ts) — each
+ * keeping its custom or built-in-category title as-is.
+ *
+ * Legacy fallback: quotes created before per-line headings existed may still
+ * carry lines outside any section. Those are grouped by built-in category
+ * (canonical category order) and appended after the named sections, so old
+ * quotes keep rendering instead of losing their line items.
+ */
+export function groupLinesByHeading(quote: Quote): HeadingGroup[] {
+  const sections = (quote.sections ?? []).filter((s) => s.lines.length > 0);
+  const sectionedIds = new Set(sections.flatMap((s) => s.lines.map((l) => l.id)));
+  const ungrouped = quote.lines.filter((l) => !sectionedIds.has(l.id));
+  const legacyGroups = groupByCategory(ungrouped).map((g) => ({
+    title: CATEGORY_LABEL[g.category],
+    lines: g.lines,
+  }));
+  return [...sections.map((s) => ({ title: s.title, lines: s.lines })), ...legacyGroups];
+}
 
 export const CATEGORY_ACCENT: Record<LineCategory, string> = {
   [LineCategory.MATERIAL]: "var(--jq-info)",

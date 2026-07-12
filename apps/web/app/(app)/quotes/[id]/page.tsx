@@ -5,8 +5,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
 import {
   getQuoteTotals,
-  groupLinesByCategory,
-  CATEGORY_LABEL,
+  groupLinesByHeading,
   RATE_UNIT_LABEL,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
@@ -22,7 +21,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const client = clients.find((c) => c.id === quote.clientId);
   const totals = getQuoteTotals(quote);
   const pill = quoteStatusPill(quote.status);
-  const groups = groupLinesByCategory(quote);
+  const groups = groupLinesByHeading(quote);
 
   // Map each line to its computed after-markup amount (index-aligned with core).
   const amountByLineId = new Map<string, number>();
@@ -55,10 +54,10 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
       <div className={shared.grid2}>
         <section className={shared.section}>
           <Card>
-            {groups.map((g) => (
-              <div key={g.category} className={shared.lineGroup}>
+            {groups.map((g, i) => (
+              <div key={`${g.title}-${i}`} className={shared.lineGroup}>
                 <div className={shared.groupHead}>
-                  <span className={shared.groupName}>{CATEGORY_LABEL[g.category]}</span>
+                  <span className={shared.groupName}>{g.title}</span>
                 </div>
                 {g.lines.map((line) => (
                   <div key={line.id} className={shared.lineRow}>

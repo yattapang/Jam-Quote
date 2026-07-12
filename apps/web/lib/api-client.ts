@@ -398,8 +398,10 @@ export interface NewQuoteInput {
    * quotes past this date (see quote-expiry.service.ts). */
   validUntil?: string;
   lineItems: NewQuoteLineInput[];
-  /** Named groupings of line items rendered under their own heading. */
-  sections?: { title: string; lineItems: NewQuoteLineInput[] }[];
+  /** Named groupings of line items rendered under their own heading. `sort`
+   * is the section's position — the quote builder sets it to the heading's
+   * first-appearance order across the line list. */
+  sections?: { title: string; sort?: number; lineItems: NewQuoteLineInput[] }[];
 }
 export async function createQuote(input: NewQuoteInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/quotes", input);

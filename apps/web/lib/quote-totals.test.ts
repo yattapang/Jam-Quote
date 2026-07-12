@@ -10,6 +10,7 @@ import {
   categorySubtotalCents,
   getQuoteTotals,
   groupLinesByCategory,
+  groupLinesByHeading,
 } from "./quote-totals";
 import type { Quote } from "./types";
 
@@ -75,5 +76,41 @@ describe("groupLinesByCategory", () => {
       LineCategory.LABOUR,
     ]);
     expect(groups[0]?.lines).toHaveLength(1);
+  });
+});
+
+describe("groupLinesByHeading", () => {
+  it("orders named sections as given (first-appearance order), custom titles included", () => {
+    const sectioned: Quote = {
+      ...quote,
+      lines: [
+        { ...quote.lines[1]!, id: "l2" }, // LABOUR, appears first
+        { ...quote.lines[0]!, id: "l1" }, // MATERIAL, appears second
+      ],
+      sections: [
+        { title: "Demolition", lines: [{ ...quote.lines[1]!, id: "l2" }] },
+        { title: "Materials", lines: [{ ...quote.lines[0]!, id: "l1" }] },
+      ],
+    };
+    const groups = groupLinesByHeading(sectioned);
+    expect(groups.map((g) => g.title)).toEqual(["Demolition", "Materials"]);
+    expect(groups[0]?.lines.map((l) => l.id)).toEqual(["l2"]);
+    expect(groups[1]?.lines.map((l) => l.id)).toEqual(["l1"]);
+  });
+
+  it("falls back to canonical category groups for lines outside any section, appended after named sections", () => {
+    const mixed: Quote = {
+      ...quote,
+      sections: [{ title: "Transportation", lines: [quote.lines[1]!] }], // l2 (LABOUR) sectioned
+      // l1 (MATERIAL) stays ungrouped — a legacy, pre-sections line.
+    };
+    const groups = groupLinesByHeading(mixed);
+    expect(groups.map((g) => g.title)).toEqual(["Transportation", "Materials"]);
+    expect(groups[1]?.lines.map((l) => l.id)).toEqual(["l1"]);
+  });
+
+  it("with no sections at all, behaves like groupLinesByCategory", () => {
+    const groups = groupLinesByHeading(quote);
+    expect(groups.map((g) => g.title)).toEqual(["Materials", "Labour"]);
   });
 });
