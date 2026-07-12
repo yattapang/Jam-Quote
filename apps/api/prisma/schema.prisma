@@ -145,7 +145,8 @@ model Client {
   id          String   @id @default(uuid())
   businessId  String
   business    Business @relation(fields: [businessId], references: [id])
-  name        String
+  firstName   String
+  lastName    String   @default("")
   phone       String?
   whatsapp    String?
   email       String?

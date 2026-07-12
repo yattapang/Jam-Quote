@@ -6,19 +6,22 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { createClient } from "@/lib/api-client";
+import { updateClient } from "@/lib/api-client";
 import { PARISHES } from "@jamquote/core";
+import type { Client } from "@/lib/types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 
-export default function AddClientButton() {
+/** Header action on the client detail page — mirrors AddClientButton but
+ * pre-fills from the existing client and PATCHes instead of POSTing. */
+export default function EditClientButton({ client }: { client: Client }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [parish, setParish] = useState("");
-  const [address, setAddress] = useState("");
+  const [firstName, setFirstName] = useState(client.firstName);
+  const [lastName, setLastName] = useState(client.lastName);
+  const [phone, setPhone] = useState(client.phone);
+  const [parish, setParish] = useState<string>(client.parish);
+  const [address, setAddress] = useState(client.address);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -28,7 +31,7 @@ export default function AddClientButton() {
     setSaving(true);
     setError("");
     try {
-      await createClient({
+      await updateClient(client.id, {
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         phone: phone.trim() || undefined,
@@ -36,11 +39,6 @@ export default function AddClientButton() {
         addressLine: address.trim() || undefined,
       });
       setOpen(false);
-      setFirstName("");
-      setLastName("");
-      setPhone("");
-      setParish("");
-      setAddress("");
       router.refresh();
     } catch {
       setError("Couldn't save — is the API running?");
@@ -51,11 +49,11 @@ export default function AddClientButton() {
 
   return (
     <>
-      <Button variant="primary" onClick={() => setOpen(true)}>
-        Add client
+      <Button variant="outlineAccent" size="sm" onClick={() => setOpen(true)}>
+        Edit
       </Button>
       {open && (
-        <Modal title="Add client" onClose={() => (saving ? null : setOpen(false))}>
+        <Modal title="Edit client" onClose={() => (saving ? null : setOpen(false))}>
           <form className={modalStyles.form} onSubmit={submit}>
             <div className={modalStyles.row2}>
               <Input label="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus />
@@ -72,7 +70,7 @@ export default function AddClientButton() {
                 Cancel
               </Button>
               <Button variant="primary" type="submit">
-                {saving ? "Saving…" : "Save client"}
+                {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
           </form>

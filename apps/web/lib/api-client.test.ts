@@ -6,6 +6,7 @@ import {
   deleteClient,
   deleteJob,
   deleteQuote,
+  getClient,
   getClients,
   getJobs,
   getQuote,
@@ -15,6 +16,7 @@ import {
   mapQuote,
   reviseQuote,
   setQuoteStatus,
+  updateClient,
   updateQuote,
 } from "./api-client";
 import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
@@ -49,6 +51,8 @@ afterEach(() => {
 
 const apiClientRow = {
   id: "cl-basil-reid",
+  firstName: "Basil",
+  lastName: "Reid",
   name: "Basil Reid",
   phone: "876 402 8811",
   parish: "St. Catherine",
@@ -108,6 +112,8 @@ describe("pure mappers", () => {
   it("mapClient maps persistence shape to the view Client", () => {
     expect(mapClient(apiClientRow as MapClientArg)).toEqual({
       id: "cl-basil-reid",
+      firstName: "Basil",
+      lastName: "Reid",
       name: "Basil Reid",
       initials: "BR",
       parish: "St. Catherine",
@@ -143,6 +149,22 @@ describe("getClients", () => {
     const clients = await getClients();
     expect(clients.length).toBeGreaterThan(0);
     expect(clients.some((c) => c.name === "Basil Reid")).toBe(true);
+  });
+});
+
+describe("getClient", () => {
+  it("fetches a single client and maps it", async () => {
+    stubFetch({ "/clients/cl-basil-reid": apiClientRow });
+    const c = await getClient("cl-basil-reid");
+    expect(c?.name).toBe("Basil Reid");
+    expect(c?.firstName).toBe("Basil");
+    expect(c?.lastName).toBe("Reid");
+  });
+
+  it("falls back to a fixture client when the API is unreachable", async () => {
+    stubFetch(null);
+    const c = await getClient("cl-basil-reid");
+    expect(c?.name).toBe("Basil Reid");
   });
 });
 
@@ -185,14 +207,14 @@ describe("getQuote", () => {
 
 describe("create (write path)", () => {
   it("createClient POSTs with the business header and maps the result", async () => {
-    const spy = stubFetch({ "/clients": { id: "new-1", name: "Jane Doe", phone: "876 000 0000", parish: "Kingston", addressLine: "1 Main St" } });
-    const c = await createClient({ name: "Jane Doe", phone: "876 000 0000" });
+    const spy = stubFetch({ "/clients": { id: "new-1", firstName: "Jane", lastName: "Doe", phone: "876 000 0000", parish: "Kingston", addressLine: "1 Main St" } });
+    const c = await createClient({ firstName: "Jane", lastName: "Doe", phone: "876 000 0000" });
     expect(c.name).toBe("Jane Doe");
     expect(c.initials).toBe("JD");
     const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
-    expect(JSON.parse(init.body as string)).toMatchObject({ name: "Jane Doe" });
+    expect(JSON.parse(init.body as string)).toMatchObject({ firstName: "Jane", lastName: "Doe" });
   });
 
   it("createJob POSTs the job body", async () => {
@@ -255,6 +277,19 @@ describe("update (write path)", () => {
     expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
     const body = JSON.parse(init.body as string);
     expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+
+  it("updateClient PATCHes the client body to /clients/:id and maps the result", async () => {
+    const spy = stubFetch({
+      "/clients/cl-basil-reid": { id: "cl-basil-reid", firstName: "Basil", lastName: "Reid-Campbell", phone: "876 402 8811", parish: "St. Catherine", addressLine: "Lot 14 Bloxburgh Dr, Spanish Town" },
+    });
+    const c = await updateClient("cl-basil-reid", { lastName: "Reid-Campbell" });
+    expect(c.name).toBe("Basil Reid-Campbell");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/clients/cl-basil-reid");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toEqual({ lastName: "Reid-Campbell" });
   });
 
   it("reviseQuote POSTs to /quotes/:id/revise with no body", async () => {

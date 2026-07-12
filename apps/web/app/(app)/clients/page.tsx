@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
@@ -40,7 +41,13 @@ export default async function ClientsPage() {
                 <div className={shared.rowWithAvatar}>
                   <span className={shared.avatar}>{c.initials}</span>
                   <div className={shared.rowMain}>
-                    <span className={shared.rowTitle}>{c.name}</span>
+                    <Link
+                      href={`/clients/${c.id}`}
+                      className={shared.rowTitle}
+                      style={{ textDecoration: "none", color: "inherit" }}
+                    >
+                      {c.name}
+                    </Link>
                     <span className={shared.rowSub}>
                       {c.parish} · {c.phone}
                     </span>

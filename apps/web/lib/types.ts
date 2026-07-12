@@ -31,6 +31,9 @@ export interface Quote {
 
 export interface Client {
   id: string;
+  firstName: string;
+  lastName: string;
+  /** Computed `firstName + " " + lastName` — kept for existing display usages. */
   name: string;
   initials: string;
   parish: Parish;

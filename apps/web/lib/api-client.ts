@@ -86,7 +86,11 @@ export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
 
 interface ApiClientRow {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  // API also echoes a computed `name` (apps/mobile still reads it); mapClient
+  // derives its own `name` from firstName/lastName rather than trusting this.
+  name?: string;
   phone?: string | null;
   parish?: string | null;
   addressLine?: string | null;
@@ -147,10 +151,13 @@ function dateLabel(iso: string, prefix = ""): string {
 }
 
 export function mapClient(c: ApiClientRow): Client {
+  const name = `${c.firstName} ${c.lastName}`.trim();
   return {
     id: c.id,
-    name: c.name,
-    initials: initialsOf(c.name),
+    firstName: c.firstName,
+    lastName: c.lastName,
+    name,
+    initials: initialsOf(name),
     parish: (c.parish ?? "") as Client["parish"],
     phone: c.phone ?? "",
     address: c.addressLine ?? "",
@@ -203,6 +210,15 @@ export async function getClients(): Promise<Client[]> {
   } catch {
     console.warn("[api-client] getClients: API unreachable, using fixtures");
     return fixtureClients;
+  }
+}
+
+export async function getClient(id: string): Promise<Client | undefined> {
+  try {
+    return mapClient(await request<ApiClientRow>(`/clients/${id}`));
+  } catch {
+    console.warn(`[api-client] getClient(${id}): API unreachable, using fixtures`);
+    return fixtureClients.find((c) => c.id === id);
   }
 }
 
@@ -272,7 +288,8 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
 // --- Create (write path) ----------------------------------------------------
 
 export interface NewClientInput {
-  name: string;
+  firstName: string;
+  lastName?: string;
   phone?: string;
   parish?: string;
   addressLine?: string;
@@ -312,6 +329,12 @@ export async function createQuote(input: NewQuoteInput): Promise<{ id: string }>
 }
 
 // --- Update (write path) -----------------------------------------------------
+
+/** PATCH /api/clients/:id — same shape as create, all fields optional. */
+export type UpdateClientInput = Partial<NewClientInput>;
+export async function updateClient(id: string, input: UpdateClientInput): Promise<Client> {
+  return mapClient(await apiClient.patch<ApiClientRow>(`/clients/${id}`, input));
+}
 
 /** PATCH /api/quotes/:id — same shape as create; providing lineItems replaces all lines. */
 export type UpdateQuoteInput = NewQuoteInput;

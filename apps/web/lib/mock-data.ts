@@ -39,14 +39,28 @@ export const businessProfile: BusinessProfile = {
 
 // --- Derived from shared fixtures (single source of truth) -----------------
 
-export const clients: Client[] = demoClients.map((c) => ({
-  id: c.id,
-  name: c.name,
-  initials: c.initials,
-  parish: c.parish as Client["parish"],
-  phone: c.phone,
-  address: c.addressLine,
-}));
+// demoClients (the shared @jamquote/core fixture) still carries a single
+// `name` field; split it the same way the API's legacy-name normalizer does
+// (first token -> firstName, remainder -> lastName) so the view Client type
+// can carry both without diverging from the fixture.
+function splitName(fullName: string): { firstName: string; lastName: string } {
+  const [firstName, ...rest] = fullName.trim().split(/\s+/);
+  return { firstName: firstName ?? "", lastName: rest.join(" ") };
+}
+
+export const clients: Client[] = demoClients.map((c) => {
+  const { firstName, lastName } = splitName(c.name);
+  return {
+    id: c.id,
+    firstName,
+    lastName,
+    name: c.name,
+    initials: c.initials,
+    parish: c.parish as Client["parish"],
+    phone: c.phone,
+    address: c.addressLine,
+  };
+});
 
 export function findClient(id: string): Client | undefined {
   return clients.find((c) => c.id === id);

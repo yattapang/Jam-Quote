@@ -60,11 +60,16 @@ async function main(): Promise<void> {
   await prisma.client.deleteMany({ where: { businessId: business.id } });
 
   for (const c of demoClients) {
+    // demoClients (shared @jamquote/core fixture) still carries a single
+    // `name` — split it the same way the API's legacy-name normalizer does
+    // (first token -> firstName, remainder -> lastName).
+    const [firstName, ...rest] = c.name.trim().split(/\s+/);
     await prisma.client.create({
       data: {
         id: c.id,
         businessId: business.id,
-        name: c.name,
+        firstName: firstName ?? "",
+        lastName: rest.join(" "),
         phone: c.phone,
         parish: c.parish,
         addressLine: c.addressLine,

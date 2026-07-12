@@ -1,8 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
-import type { Client } from "@prisma/client";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
-import { ClientsService } from "./clients.service.js";
+import { ClientsService, type ClientWithName } from "./clients.service.js";
 import {
   createClientSchema,
   updateClientSchema,
@@ -18,17 +17,17 @@ export class ClientsController {
   create(
     @BusinessId() businessId: string,
     @Body(new ZodValidationPipe(createClientSchema)) body: CreateClientInput,
-  ): Promise<Client> {
+  ): Promise<ClientWithName> {
     return this.clients.create(businessId, body);
   }
 
   @Get()
-  findAll(@BusinessId() businessId: string): Promise<Client[]> {
+  findAll(@BusinessId() businessId: string): Promise<ClientWithName[]> {
     return this.clients.findAll(businessId);
   }
 
   @Get(":id")
-  findOne(@BusinessId() businessId: string, @Param("id") id: string): Promise<Client> {
+  findOne(@BusinessId() businessId: string, @Param("id") id: string): Promise<ClientWithName> {
     return this.clients.findOne(businessId, id);
   }
 
@@ -37,7 +36,7 @@ export class ClientsController {
     @BusinessId() businessId: string,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateClientSchema)) body: UpdateClientInput,
-  ): Promise<Client> {
+  ): Promise<ClientWithName> {
     return this.clients.update(businessId, id, body);
   }
 

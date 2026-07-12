@@ -24,7 +24,9 @@ export class PaymentsService {
     const { paymentUrl, providerRef } = await this.wipay.createPaymentRequest({
       orderId: invoice.number,
       amountCents: balance,
-      customerName: invoice.client?.name,
+      customerName: invoice.client
+        ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim()
+        : undefined,
       customerEmail: invoice.client?.email ?? undefined,
       customerPhone: invoice.client?.phone ?? undefined,
     });
