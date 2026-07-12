@@ -132,6 +132,34 @@ export const jobs: JobSummary[] = demoJobs.map((j) => {
   };
 });
 
+export interface JobDetail {
+  id: string;
+  name: string;
+  clientId: string;
+  clientName: string;
+  addressLine: string;
+  parish: string;
+  stage: string;
+  progressPct: number;
+}
+
+/** Single-job detail fixture — same fields as `jobs`, plus `clientId` for the
+ * edit form's client select (list rows don't need it). */
+export function findJobDetail(id: string): JobDetail | undefined {
+  const j = findDemoJob(id);
+  if (!j) return undefined;
+  return {
+    id: j.id,
+    name: j.name,
+    clientId: j.clientId,
+    clientName: findDemoClient(j.clientId)?.name ?? "Unknown",
+    addressLine: j.addressLine,
+    parish: j.parish,
+    stage: j.stage,
+    progressPct: j.progressPct,
+  };
+}
+
 // --- Invoices / regulatory / dashboard (not quote-derived) -----------------
 
 export const invoices: Invoice[] = [

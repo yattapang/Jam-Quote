@@ -12,7 +12,9 @@ import {
   clients as fixtureClients,
   quotes as fixtureQuotes,
   jobs as fixtureJobs,
+  findJobDetail,
   type JobSummary,
+  type JobDetail,
 } from "./mock-data";
 
 // Server components fetch server-side; default to the dev API. Override with
@@ -256,6 +258,28 @@ export async function getJobs(): Promise<JobSummary[]> {
   }
 }
 
+export async function getJob(id: string): Promise<JobDetail | undefined> {
+  try {
+    const [job, clients] = await Promise.all([
+      request<ApiJob>(`/jobs/${id}`),
+      request<ApiClientRow[]>("/clients"),
+    ]);
+    return {
+      id: job.id,
+      name: job.name,
+      clientId: job.clientId ?? "",
+      clientName: clients.find((c) => c.id === job.clientId)?.name ?? "Unknown",
+      addressLine: job.addressLine ?? "",
+      parish: job.parish ?? "",
+      stage: job.stage,
+      progressPct: job.progressPct,
+    };
+  } catch {
+    console.warn(`[api-client] getJob(${id}): API unreachable, using fixtures`);
+    return findJobDetail(id);
+  }
+}
+
 export async function getQuotes(): Promise<Quote[]> {
   try {
     const [quotes, jobs] = await Promise.all([
@@ -345,6 +369,12 @@ export async function createQuote(input: NewQuoteInput): Promise<{ id: string }>
 export type UpdateClientInput = Partial<NewClientInput>;
 export async function updateClient(id: string, input: UpdateClientInput): Promise<Client> {
   return mapClient(await apiClient.patch<ApiClientRow>(`/clients/${id}`, input));
+}
+
+/** PATCH /api/jobs/:id — same shape as create, all fields optional. */
+export type UpdateJobInput = Partial<NewJobInput>;
+export async function updateJob(id: string, input: UpdateJobInput): Promise<{ id: string }> {
+  return apiClient.patch<{ id: string }>(`/jobs/${id}`, input);
 }
 
 /** PATCH /api/quotes/:id — same shape as create; providing lineItems replaces all lines. */

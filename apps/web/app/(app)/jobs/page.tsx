@@ -1,3 +1,4 @@
+import Link from "next/link";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
@@ -27,7 +28,13 @@ export default async function JobsPage() {
           {jobs.map((job) => (
             <div key={job.id} className={shared.row}>
               <div className={shared.rowMain}>
-                <span className={shared.rowTitle}>{job.name}</span>
+                <Link
+                  href={`/jobs/${job.id}`}
+                  className={shared.rowTitle}
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  {job.name}
+                </Link>
                 <span className={shared.rowSub}>
                   {job.clientName} · {job.addressLine}
                 </span>

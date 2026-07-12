@@ -8,6 +8,7 @@ import {
   deleteQuote,
   getClient,
   getClients,
+  getJob,
   getJobs,
   getQuote,
   getQuotes,
@@ -17,6 +18,7 @@ import {
   reviseQuote,
   setQuoteStatus,
   updateClient,
+  updateJob,
   updateQuote,
 } from "./api-client";
 import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
@@ -199,6 +201,24 @@ describe("getClient", () => {
   });
 });
 
+describe("getJob", () => {
+  it("fetches a single job and joins the client name", async () => {
+    stubFetch({ "/jobs/job-0142": apiJob, "/clients": [apiClientRow] });
+    const j = await getJob("job-0142");
+    expect(j?.name).toBe("Retaining wall, Spanish Town");
+    expect(j?.clientId).toBe("cl-basil-reid");
+    expect(j?.clientName).toBe("Basil Reid");
+    expect(j?.parish).toBe("St. Catherine");
+  });
+
+  it("falls back to a fixture job when the API is unreachable", async () => {
+    stubFetch(null);
+    const j = await getJob("job-0142");
+    expect(j?.name).toBe("Retaining wall, Spanish Town");
+    expect(j?.clientName).toBe("Basil Reid");
+  });
+});
+
 describe("getQuotes", () => {
   it("maps quotes, attaches jobLabel, and sorts newest-first", async () => {
     stubFetch({
@@ -321,6 +341,17 @@ describe("update (write path)", () => {
     expect(init.method).toBe("PATCH");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
     expect(JSON.parse(init.body as string)).toEqual({ lastName: "Reid-Campbell" });
+  });
+
+  it("updateJob PATCHes the job body to /jobs/:id", async () => {
+    const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
+    const r = await updateJob("job-0142", { name: "Retaining wall, phase 2" });
+    expect(r.id).toBe("job-0142");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/jobs/job-0142");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
   });
 
   it("reviseQuote POSTs to /quotes/:id/revise with no body", async () => {
