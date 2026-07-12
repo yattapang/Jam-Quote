@@ -11,6 +11,8 @@ import {
 } from "@/lib/quote-totals";
 import { getQuote, getClients, getBusiness } from "@/lib/api-client";
 import QuoteActions from "./QuoteActions";
+import WhatsAppButton from "./WhatsAppButton";
+import buttonStyles from "@/components/ui/Button.module.css";
 import shared from "../../shared.module.css";
 
 export default async function QuoteDetailPage({ params }: { params: { id: string } }) {
@@ -47,6 +49,19 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           </span>
         </div>
         <div className={shared.headerActions}>
+          <a
+            href={`/quotes/${quote.id}/pdf`}
+            className={`${buttonStyles.base} ${buttonStyles.secondary} ${buttonStyles.sm}`}
+          >
+            Download PDF
+          </a>
+          <WhatsAppButton
+            quoteId={quote.id}
+            quoteNum={quote.num}
+            clientName={client?.name}
+            clientPhone={client?.phone}
+            totalCents={totals.totalCents}
+          />
           <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>
