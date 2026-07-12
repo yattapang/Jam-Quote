@@ -91,6 +91,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                 <span>Phone</span>
                 <span>{client.phone || "—"}</span>
               </div>
+              <div className={shared.totalRowMuted}>
+                <span>Email</span>
+                <span>{client.email || "—"}</span>
+              </div>
               <div className={shared.totalRowGrand}>
                 <span>Total quoted</span>
                 <MoneyText cents={totalCents} tone="accent" />

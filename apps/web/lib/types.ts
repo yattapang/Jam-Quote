@@ -47,6 +47,8 @@ export interface Client {
   parish: Parish;
   phone: string;
   address: string;
+  /** Optional — present once the client has an email on file. Powers "Send by email". */
+  email?: string;
 }
 
 export interface Payment {

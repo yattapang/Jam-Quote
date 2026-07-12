@@ -277,7 +277,13 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>TRN {business.trn || "—"}</Text>
           {quote.validUntilLabel ? (
-            <Text style={styles.footerText}>Prices {quote.validUntilLabel.toLowerCase()}</Text>
+            // Lowercase only the leading word ("Valid" -> "valid") to read as a
+            // sentence continuation — a blanket .toLowerCase() would also
+            // lowercase the month abbreviation ("Aug" -> "aug"), which should
+            // match the header's casing.
+            <Text style={styles.footerText}>
+              Prices {quote.validUntilLabel.charAt(0).toLowerCase() + quote.validUntilLabel.slice(1)}
+            </Text>
           ) : null}
         </View>
       </Page>

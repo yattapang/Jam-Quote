@@ -12,6 +12,7 @@ import {
 import { getQuote, getClients, getBusiness } from "@/lib/api-client";
 import QuoteActions from "./QuoteActions";
 import WhatsAppButton from "./WhatsAppButton";
+import EmailQuoteButton from "./EmailQuoteButton";
 import buttonStyles from "@/components/ui/Button.module.css";
 import shared from "../../shared.module.css";
 
@@ -62,6 +63,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             clientPhone={client?.phone}
             totalCents={totals.totalCents}
           />
+          <EmailQuoteButton quoteId={quote.id} clientEmail={client?.email} />
           <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>

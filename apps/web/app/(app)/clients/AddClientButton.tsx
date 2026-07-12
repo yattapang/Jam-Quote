@@ -17,6 +17,7 @@ export default function AddClientButton() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [parish, setParish] = useState("");
   const [address, setAddress] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,6 +33,7 @@ export default function AddClientButton() {
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
         parish: parish || undefined,
         addressLine: address.trim() || undefined,
       });
@@ -39,6 +41,7 @@ export default function AddClientButton() {
       setFirstName("");
       setLastName("");
       setPhone("");
+      setEmail("");
       setParish("");
       setAddress("");
       router.refresh();
@@ -63,8 +66,9 @@ export default function AddClientButton() {
             </div>
             <div className={modalStyles.row2}>
               <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="876 …" />
-              <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
+              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" />
             </div>
+            <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
             <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
             {error && <span className={modalStyles.error}>{error}</span>}
             <div className={modalStyles.actions}>

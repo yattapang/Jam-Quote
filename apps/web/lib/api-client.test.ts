@@ -60,6 +60,7 @@ const apiClientRow = {
   lastName: "Reid",
   name: "Basil Reid",
   phone: "876 402 8811",
+  email: "basil.reid@example.com",
   parish: "St. Catherine",
   addressLine: "Lot 14 Bloxburgh Dr, Spanish Town",
 };
@@ -139,7 +140,14 @@ describe("pure mappers", () => {
       parish: "St. Catherine",
       phone: "876 402 8811",
       address: "Lot 14 Bloxburgh Dr, Spanish Town",
+      email: "basil.reid@example.com",
     });
+  });
+
+  it("mapClient surfaces email when present and falls back to undefined when absent", () => {
+    expect(mapClient(apiClientRow as MapClientArg).email).toBe("basil.reid@example.com");
+    const { email: _omit, ...withoutEmail } = apiClientRow;
+    expect(mapClient(withoutEmail as MapClientArg).email).toBeUndefined();
   });
 
   it("mapQuote carries the denormalized total and maps lines", () => {

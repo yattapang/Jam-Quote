@@ -20,6 +20,7 @@ export default function EditClientButton({ client }: { client: Client }) {
   const [firstName, setFirstName] = useState(client.firstName);
   const [lastName, setLastName] = useState(client.lastName);
   const [phone, setPhone] = useState(client.phone);
+  const [email, setEmail] = useState(client.email ?? "");
   const [parish, setParish] = useState<string>(client.parish);
   const [address, setAddress] = useState(client.address);
   const [saving, setSaving] = useState(false);
@@ -35,6 +36,7 @@ export default function EditClientButton({ client }: { client: Client }) {
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
         phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
         parish: parish || undefined,
         addressLine: address.trim() || undefined,
       });
@@ -61,8 +63,9 @@ export default function EditClientButton({ client }: { client: Client }) {
             </div>
             <div className={modalStyles.row2}>
               <Input label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="876 …" />
-              <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
+              <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="client@example.com" />
             </div>
+            <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
             <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
             {error && <span className={modalStyles.error}>{error}</span>}
             <div className={modalStyles.actions}>

@@ -95,6 +95,7 @@ interface ApiClientRow {
   // derives its own `name` from firstName/lastName rather than trusting this.
   name?: string;
   phone?: string | null;
+  email?: string | null;
   parish?: string | null;
   addressLine?: string | null;
 }
@@ -176,6 +177,7 @@ export function mapClient(c: ApiClientRow): Client {
     parish: (c.parish ?? "") as Client["parish"],
     phone: c.phone ?? "",
     address: c.addressLine ?? "",
+    email: c.email ?? undefined,
   };
 }
 
@@ -363,6 +365,7 @@ export interface NewClientInput {
   firstName: string;
   lastName?: string;
   phone?: string;
+  email?: string;
   parish?: string;
   addressLine?: string;
 }
