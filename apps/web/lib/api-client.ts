@@ -58,6 +58,30 @@ export const apiClient = {
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
+/**
+ * Cheap liveness probe for the API. Returns false (instead of throwing) when
+ * the API is unreachable or too slow to answer within `timeoutMs`, so the UI
+ * can warn that the screens are showing bundled demo data rather than live
+ * data. This is deliberately short-timeout: on the free tier a cold API can
+ * take ~40s to wake, during which the page's own fetches fall back to fixtures
+ * anyway, so a fast "not reachable" answer matches what actually rendered.
+ */
+export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API_BASE_URL}/health`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // --- API (persistence) shapes we read ---------------------------------------
 
 interface ApiClientRow {

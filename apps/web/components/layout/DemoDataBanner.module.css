@@ -1,0 +1,21 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border-radius: 11px;
+  background: var(--jq-accent-soft);
+  border: 1px solid var(--jq-accent);
+  color: var(--jq-text);
+  font-family: var(--jq-font-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.icon {
+  flex: 0 0 auto;
+  color: var(--jq-accent);
+  font-size: 15px;
+}
