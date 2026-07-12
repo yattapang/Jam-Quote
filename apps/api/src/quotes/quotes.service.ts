@@ -242,21 +242,46 @@ export class QuotesService {
   }
 
   /**
-   * Create a new revision of a quote: same number, version + 1, linked via
-   * parentQuoteId, starting fresh as DRAFT with a copy of the line items.
+   * Create a new revision of a quote, linked via parentQuoteId, starting
+   * fresh as DRAFT with a copy of the line items.
+   *
+   * - If the original is ACCEPTED or INVOICED, the deal is closed and its
+   *   number is locked: the revision gets a brand-new number at version 1.
+   * - Otherwise (SENT/VIEWED/DECLINED/EXPIRED/...), the revision keeps the
+   *   original's number but takes the next free version for that number, so
+   *   revising an already-revised quote doesn't collide on
+   *   @@unique([businessId, number, version]).
    */
   async revise(businessId: string, id: string): Promise<QuoteWithLines> {
     const original = await this.findOne(businessId, id);
+    const isClosed =
+      original.status === QuoteStatus.ACCEPTED || original.status === QuoteStatus.INVOICED;
+
+    // Reserve the new number (when needed) before opening the transaction
+    // below: reserveQuoteNumber runs its own $transaction, and nesting a
+    // second interactive transaction inside this one isn't safe.
+    const number = isClosed
+      ? await this.businessService.reserveQuoteNumber(businessId)
+      : original.number;
 
     const newQuoteId = await this.prisma.$transaction(async (tx) => {
+      let version = 1;
+      if (!isClosed) {
+        const latest = await tx.quote.aggregate({
+          where: { businessId, number },
+          _max: { version: true },
+        });
+        version = (latest._max.version ?? original.version) + 1;
+      }
+
       const created = await tx.quote.create({
         data: {
           businessId,
           clientId: original.clientId,
           jobId: original.jobId,
-          number: original.number,
+          number,
           status: QuoteStatus.DRAFT,
-          version: original.version + 1,
+          version,
           parentQuoteId: original.id,
           gctRate: original.gctRate,
           discountPct: original.discountPct,

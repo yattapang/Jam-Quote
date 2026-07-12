@@ -126,6 +126,16 @@ async function main(): Promise<void> {
     });
   }
 
+  // Demo quotes run QT-0136..QT-0142 — advance the counter past them so newly
+  // created quotes continue at QT-0143 instead of colliding back at QT-0001.
+  const maxSeededSeq = Math.max(
+    ...demoQuotes.map((q) => Number.parseInt(q.number.slice(business.quotePrefix.length), 10)),
+  );
+  await prisma.business.update({
+    where: { id: business.id },
+    data: { nextQuoteSeq: maxSeededSeq + 1 },
+  });
+
   const supplier = await prisma.supplier.upsert({
     where: { id: "seed-supplier-hardware-lumber" },
     update: {},

@@ -92,6 +92,146 @@ describe("QuotesService.updateStatus", () => {
   });
 });
 
+describe("QuotesService.revise", () => {
+  function serviceForRevise(original: {
+    status: QuoteStatus;
+    number: string;
+    version: number;
+  }) {
+    const originalQuote = {
+      id: "q1",
+      businessId: "b1",
+      clientId: "cl1",
+      jobId: "job1",
+      status: original.status,
+      number: original.number,
+      version: original.version,
+      gctRate: 15,
+      discountPct: 0,
+      depositCents: 0,
+      validUntil: null,
+      terms: null,
+      subtotalCents: 1000,
+      gctCents: 150,
+      totalCents: 1150,
+      lineItems: [],
+      sections: [],
+    };
+    const revisedQuote = { ...originalQuote, id: "q2" };
+
+    const tx = {
+      quote: {
+        create: vi.fn().mockResolvedValue({ id: "q2" }),
+        aggregate: vi.fn(),
+      },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: { create: vi.fn() },
+    };
+    const businessService = {
+      reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0200"),
+    };
+    const prisma = {
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce(originalQuote)
+          .mockResolvedValueOnce(revisedQuote),
+      },
+    };
+    const svc = new QuotesService(prisma as any, businessService as any);
+    return { svc, tx, businessService, prisma };
+  }
+
+  it("reserves a brand-new number and resets to version 1 for an ACCEPTED quote", async () => {
+    const { svc, tx, businessService } = serviceForRevise({
+      status: QuoteStatus.ACCEPTED,
+      number: "QT-0100",
+      version: 1,
+    });
+
+    await svc.revise("b1", "q1");
+
+    expect(businessService.reserveQuoteNumber).toHaveBeenCalledWith("b1");
+    expect(tx.quote.aggregate).not.toHaveBeenCalled();
+    expect(tx.quote.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          number: "QT-0200",
+          version: 1,
+          parentQuoteId: "q1",
+        }),
+      }),
+    );
+  });
+
+  it("reserves a brand-new number and resets to version 1 for an INVOICED quote", async () => {
+    const { svc, tx, businessService } = serviceForRevise({
+      status: QuoteStatus.INVOICED,
+      number: "QT-0100",
+      version: 1,
+    });
+
+    await svc.revise("b1", "q1");
+
+    expect(businessService.reserveQuoteNumber).toHaveBeenCalledWith("b1");
+    expect(tx.quote.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ number: "QT-0200", version: 1, parentQuoteId: "q1" }),
+      }),
+    );
+  });
+
+  it("keeps the number and takes the next free version for a SENT quote", async () => {
+    const { svc, tx, businessService } = serviceForRevise({
+      status: QuoteStatus.SENT,
+      number: "QT-0100",
+      version: 1,
+    });
+    tx.quote.aggregate.mockResolvedValue({ _max: { version: 1 } });
+
+    await svc.revise("b1", "q1");
+
+    expect(businessService.reserveQuoteNumber).not.toHaveBeenCalled();
+    expect(tx.quote.aggregate).toHaveBeenCalledWith({
+      where: { businessId: "b1", number: "QT-0100" },
+      _max: { version: true },
+    });
+    expect(tx.quote.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          number: "QT-0100",
+          version: 2,
+          parentQuoteId: "q1",
+        }),
+      }),
+    );
+  });
+
+  it("does not collide when a v2 revision already exists (produces v3)", async () => {
+    const { svc, tx } = serviceForRevise({
+      status: QuoteStatus.SENT,
+      number: "QT-0100",
+      version: 2,
+    });
+    // The already-revised quote's own `version` is 2, but the max version
+    // among all quotes sharing that number is what must drive the next one.
+    tx.quote.aggregate.mockResolvedValue({ _max: { version: 2 } });
+
+    await svc.revise("b1", "q1");
+
+    expect(tx.quote.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          number: "QT-0100",
+          version: 3,
+          parentQuoteId: "q1",
+        }),
+      }),
+    );
+  });
+});
+
 describe("QuotesService.remove", () => {
   function serviceForQuote(status: QuoteStatus) {
     const prisma = {

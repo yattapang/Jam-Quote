@@ -14,7 +14,11 @@ export const metadata = { title: "Dashboard · JamQuote" };
 export default async function DashboardPage() {
   const [allQuotes, clients] = await Promise.all([getQuotes(), getClients()]);
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
-  const recentQuotes = allQuotes.slice(0, 5);
+  // Most recently created first, so a brand-new draft always surfaces here
+  // regardless of its quote number (revisions can reuse an older number).
+  const recentQuotes = [...allQuotes]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
 
   // Every stat card is derived from the same quotes list the page already
   // fetched — no hardcoded numbers. computeDashboardStats is the SSOT,
