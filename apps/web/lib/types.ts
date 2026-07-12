@@ -21,6 +21,7 @@ export interface Quote {
   gctRatePct: number;
   discountPct: number;
   depositCents: number;
+  createdAt: string; // ISO — raw creation date, for date math (dashboard stats, sorting)
   createdLabel: string;
   validUntilLabel: string;
   /** Denormalized total from the API (computed via computeTotals). Set on list

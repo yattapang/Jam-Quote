@@ -165,6 +165,7 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     discountPct: Number(q.discountPct),
     depositCents: q.depositCents,
     totalCents: q.totalCents, // denormalized; API computed it via computeTotals
+    createdAt: q.createdAt,
     createdLabel: dateLabel(q.createdAt, "Created "),
     validUntilLabel: q.validUntil ? dateLabel(q.validUntil, "Valid until ") : "",
   };

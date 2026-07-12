@@ -81,6 +81,7 @@ export const quotes: Quote[] = demoQuotes.map((q) => ({
   gctRatePct: q.gctRatePct,
   discountPct: q.discountPct,
   depositCents: q.depositCents,
+  createdAt: q.createdAt,
   createdLabel: q.createdLabel,
   validUntilLabel: q.validUntilLabel,
 }));
@@ -136,14 +137,6 @@ export const regulatoryAlerts: RegulatoryAlert[] = [
   { id: "reg-trn-verification", title: "New TRN verification requirement for invoices over $500,000", detail: "Invoices billing more than $500,000 JMD must display a verified TRN match for both business and client starting this date.", effectiveLabel: "Effective Sep 1, 2026", severity: "info" },
 ];
 
-export const dashboardStats = {
-  pipelineValueCents: 284050000,
-  winRatePct90d: 62,
-  overdueInvoicesCents: 9600000,
-  quotesThisMonth: 14,
-};
-
-export const followUps = [
-  { id: "fu-1", clientName: "Devon Facey", jobLabel: "Fence & gate", note: "Sent 6 days ago · no reply" },
-  { id: "fu-2", clientName: "Marva Grant", jobLabel: "Kitchen tiling", note: "Viewed yesterday · follow up" },
-];
+// Dashboard stats and "needs follow-up" are no longer hardcoded here — the
+// dashboard page derives them from real quotes via
+// @jamquote/core's computeDashboardStats (see packages/core/src/dashboard/stats.ts).

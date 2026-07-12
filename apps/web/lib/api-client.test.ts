@@ -121,6 +121,7 @@ describe("pure mappers", () => {
     expect(q.num).toBe("QT-0142");
     expect(q.jobLabel).toBe("Retaining wall, Spanish Town");
     expect(q.totalCents).toBe(18_354_000);
+    expect(q.createdAt).toBe("2026-07-10T00:00:00.000Z");
     expect(q.gctRatePct).toBe(15);
     expect(q.discountPct).toBe(5);
     expect(q.lines).toHaveLength(1);

@@ -56,6 +56,7 @@ export interface DemoQuote {
   jobId: string;
   status: QuoteStatus;
   createdLabel: string;
+  createdAt: string; // ISO — raw creation date, `createdLabel` is the formatted display string
   validUntilLabel: string;
   gctRatePct: number;
   discountPct: number;
@@ -91,7 +92,7 @@ export const demoJobs: DemoJob[] = [
 export const demoQuotes: DemoQuote[] = [
   {
     id: "qt-0142", number: "QT-0142", clientId: "cl-basil-reid", jobId: "job-0142",
-    status: QuoteStatus.ACCEPTED, createdLabel: "Sent Jul 9", validUntilLabel: "Valid until Aug 8, 2026",
+    status: QuoteStatus.ACCEPTED, createdLabel: "Sent Jul 9", createdAt: "2026-07-09T09:00:00.000Z", validUntilLabel: "Valid until Aug 8, 2026",
     gctRatePct: 15, discountPct: 5, depositCents: 5_000_000,
     lines: [
       { id: "l1", category: M, description: "Cement, 42.5kg bag", quantity: 40, rateUnit: RateUnit.UNIT, unitPriceCents: 115_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD, supplierName: "Kirk's Hardware" },
@@ -103,7 +104,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0141", number: "QT-0141", clientId: "cl-paulette-wright", jobId: "job-0141",
-    status: QuoteStatus.DRAFT, createdLabel: "Draft · not sent", validUntilLabel: "Valid until Aug 20, 2026",
+    status: QuoteStatus.DRAFT, createdLabel: "Draft · not sent", createdAt: "2026-07-11T09:00:00.000Z", validUntilLabel: "Valid until Aug 20, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Porcelain floor tile, per box", quantity: 48, rateUnit: RateUnit.UNIT, unitPriceCents: 285_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },
@@ -112,7 +113,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0140", number: "QT-0140", clientId: "cl-devon-facey", jobId: "job-0140",
-    status: QuoteStatus.SENT, createdLabel: "Sent Jul 7", validUntilLabel: "Valid until Aug 6, 2026",
+    status: QuoteStatus.SENT, createdLabel: "Sent Jul 7", createdAt: "2026-07-07T09:00:00.000Z", validUntilLabel: "Valid until Aug 6, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Galvanized chain-link fencing, per roll", quantity: 6, rateUnit: RateUnit.UNIT, unitPriceCents: 1_800_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },
@@ -121,7 +122,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0139", number: "QT-0139", clientId: "cl-marva-grant", jobId: "job-0139",
-    status: QuoteStatus.VIEWED, createdLabel: "Sent Jul 5", validUntilLabel: "Valid until Aug 4, 2026",
+    status: QuoteStatus.VIEWED, createdLabel: "Sent Jul 5", createdAt: "2026-07-05T09:00:00.000Z", validUntilLabel: "Valid until Aug 4, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Ceramic floor tile, per box", quantity: 30, rateUnit: RateUnit.UNIT, unitPriceCents: 250_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },
@@ -131,7 +132,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0138", number: "QT-0138", clientId: "cl-errol-campbell", jobId: "job-0138",
-    status: QuoteStatus.INVOICED, createdLabel: "Sent Jun 30", validUntilLabel: "Valid until Jul 30, 2026",
+    status: QuoteStatus.INVOICED, createdLabel: "Sent Jun 30", createdAt: "2026-06-30T09:00:00.000Z", validUntilLabel: "Valid until Jul 30, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Lumber 2x4x14ft", quantity: 40, rateUnit: RateUnit.UNIT, unitPriceCents: 90_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },
@@ -141,7 +142,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0137", number: "QT-0137", clientId: "cl-shauna-bailey", jobId: "job-0137",
-    status: QuoteStatus.DECLINED, createdLabel: "Sent Jun 26", validUntilLabel: "Expired Jul 26, 2026",
+    status: QuoteStatus.DECLINED, createdLabel: "Sent Jun 26", createdAt: "2026-06-26T09:00:00.000Z", validUntilLabel: "Expired Jul 26, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Concrete block, 6in", quantity: 500, rateUnit: RateUnit.UNIT, unitPriceCents: 22_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },
@@ -150,7 +151,7 @@ export const demoQuotes: DemoQuote[] = [
   },
   {
     id: "qt-0136", number: "QT-0136", clientId: "cl-trevor-dixon", jobId: "job-0136",
-    status: QuoteStatus.EXPIRED, createdLabel: "Sent Jun 20", validUntilLabel: "Expired Jul 20, 2026",
+    status: QuoteStatus.EXPIRED, createdLabel: "Sent Jun 20", createdAt: "2026-06-20T09:00:00.000Z", validUntilLabel: "Expired Jul 20, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
       { id: "l1", category: M, description: "Zinc roofing sheet, 10ft", quantity: 10, rateUnit: RateUnit.UNIT, unitPriceCents: 130_000, priceSource: PriceSource.LOOKUP, gctTreatment: STD },

@@ -22,6 +22,7 @@ const quote: Quote = {
   gctRatePct: 15,
   discountPct: 0,
   depositCents: 0,
+  createdAt: "2026-01-01T00:00:00.000Z",
   createdLabel: "",
   validUntilLabel: "",
   lines: [
