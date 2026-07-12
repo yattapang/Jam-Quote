@@ -9,7 +9,9 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#F6F3EC",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.jamquote.app"
@@ -27,6 +29,12 @@
     "web": {
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0fb6584e-1e5d-400f-a158-26cb3d62e30f"
+      }
     }
   }
 }

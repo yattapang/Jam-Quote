@@ -11,6 +11,15 @@ const path = require("path");
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
 
+// @jamquote/core's package.json points its runtime entry at compiled dist/
+// (the plain-Node API needs that). But dist/ is gitignored and therefore
+// absent in the EAS cloud build, so Metro can't resolve @jamquote/core there
+// and every screen that imports it renders blank. Metro can bundle the TS
+// source directly (it already does for @jamquote/ui, which points main at
+// src/), so resolve @jamquote/core to its source entry and drop the dist
+// dependency for mobile entirely.
+const coreSrcEntry = path.resolve(workspaceRoot, "packages/core/src/index.ts");
+
 const config = getDefaultConfig(projectRoot);
 
 // Watch the whole monorepo so changes to packages/core and packages/ui
@@ -32,6 +41,10 @@ config.resolver.disableHierarchicalLookup = false;
 const { resolveRequest: defaultResolveRequest } = config.resolver;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Bundle @jamquote/core from TS source, not its (cloud-absent) dist/ build.
+  if (moduleName === "@jamquote/core") {
+    return { type: "sourceFile", filePath: coreSrcEntry };
+  }
   if (moduleName.startsWith(".") && moduleName.endsWith(".js")) {
     try {
       const resolver = defaultResolveRequest ?? context.resolveRequest;

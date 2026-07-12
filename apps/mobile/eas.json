@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://<your-render-service>.onrender.com/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://jamquote-api.onrender.com/api"
       }
     },
     "production": {
@@ -19,7 +19,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "https://<your-render-service>.onrender.com/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://jamquote-api.onrender.com/api"
       }
     }
   },
