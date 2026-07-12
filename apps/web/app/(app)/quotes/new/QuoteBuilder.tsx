@@ -14,7 +14,8 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import { CATEGORY_LABEL } from "@/lib/quote-totals";
-import { createQuote, updateQuote } from "@/lib/api-client";
+import { createQuote, updateQuote, createMaterialFavourite, updateMaterialFavourite } from "@/lib/api-client";
+import type { MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
 
 const GCT_RATE = 15; // business default; centrally overridable later
@@ -60,6 +61,13 @@ function headingTitle(h: Heading): string {
  * reconstruct a built-in heading from an existing quote's section title. */
 function categoryForLabel(label: string): LineCategory | undefined {
   return (Object.entries(CATEGORY_LABEL) as [LineCategory, string][]).find(([, l]) => l === label)?.[0];
+}
+
+/** Display label for a saved-materials picker option — name, unit (if any),
+ * and last known price so contractors can tell stale prices apart at a glance. */
+function favouriteLabel(f: MaterialFavourite): string {
+  const price = `$${f.priceDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return f.unit ? `${f.name} (${f.unit}) — ${price}` : `${f.name} — ${price}`;
 }
 
 interface DraftLine {
@@ -193,6 +201,8 @@ const cell: React.CSSProperties = { minWidth: 0 };
 function LineRows({
   lines,
   headingOptions,
+  favouriteOptions,
+  savingFavKey,
   addingHeadingKey,
   newHeadingText,
   onPatch,
@@ -201,9 +211,13 @@ function LineRows({
   onNewHeadingTextChange,
   onCommitNewHeading,
   onCancelNewHeading,
+  onPickFavourite,
+  onSaveFavourite,
 }: {
   lines: DraftLine[];
   headingOptions: { value: string; label: string }[];
+  favouriteOptions: { value: string; label: string }[];
+  savingFavKey: string | null;
   addingHeadingKey: string | null;
   newHeadingText: string;
   onPatch: (key: string, p: Partial<DraftLine>) => void;
@@ -212,6 +226,8 @@ function LineRows({
   onNewHeadingTextChange: (value: string) => void;
   onCommitNewHeading: (key: string) => void;
   onCancelNewHeading: () => void;
+  onPickFavourite: (key: string, favouriteId: string) => void;
+  onSaveFavourite: (key: string) => void;
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -220,13 +236,26 @@ function LineRows({
           key={l.key}
           style={{
             display: "grid",
-            gridTemplateColumns: "160px 1fr 70px 90px 110px 110px 32px",
+            gridTemplateColumns: "150px 150px 1fr 70px 90px 100px 100px 30px 32px",
             gap: 8,
             alignItems: "end",
             paddingBottom: 12,
             borderBottom: "1px solid var(--jq-border)",
           }}
         >
+          <div style={cell}>
+            <Select
+              options={[
+                { value: "", label: favouriteOptions.length ? "Saved materials…" : "No saved materials" },
+                ...favouriteOptions,
+              ]}
+              value=""
+              onChange={(e) => {
+                if (e.target.value) onPickFavourite(l.key, e.target.value);
+              }}
+              disabled={favouriteOptions.length === 0}
+            />
+          </div>
           <div style={cell}>
             {addingHeadingKey === l.key ? (
               <Input
@@ -269,6 +298,23 @@ function LineRows({
             <Select options={gctOptions} value={l.gctTreatment} onChange={(e) => onPatch(l.key, { gctTreatment: e.target.value as GctTreatment })} />
           </div>
           <button
+            type="button"
+            aria-label="Save as favourite material"
+            title="Save this line's description & price for reuse"
+            onClick={() => onSaveFavourite(l.key)}
+            disabled={savingFavKey === l.key || !l.description.trim() || toCents(l.unitPriceDollars) === 0}
+            style={{
+              height: 38,
+              border: "1px solid var(--jq-border)",
+              background: "var(--jq-surface)",
+              color: "var(--jq-accent)",
+              borderRadius: 8,
+              cursor: "pointer",
+            }}
+          >
+            {savingFavKey === l.key ? "…" : "★"}
+          </button>
+          <button
             aria-label="Remove line"
             onClick={() => onRemove(l.key)}
             style={{ height: 38, border: "1px solid var(--jq-border)", background: "var(--jq-surface)", color: "var(--jq-crit)", borderRadius: 8, cursor: "pointer" }}
@@ -284,12 +330,15 @@ function LineRows({
 export default function QuoteBuilder({
   clients,
   jobs,
+  favourites: initialFavourites = [],
   mode = "create",
   quoteId,
   initial,
 }: {
   clients: { id: string; name: string }[];
   jobs: { id: string; name: string }[];
+  /** Saved materials (name + last price) offered as a reuse picker per line. */
+  favourites?: MaterialFavourite[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
@@ -308,6 +357,66 @@ export default function QuoteBuilder({
   const [newHeadingText, setNewHeadingText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Local copy of the saved-materials list — kept in sync with the server on
+  // save so the picker (and last-price dedupe check) reflects new/updated
+  // favourites immediately, without a full page refresh.
+  const [favourites, setFavourites] = useState<MaterialFavourite[]>(initialFavourites);
+  const [savingFavKey, setSavingFavKey] = useState<string | null>(null);
+  const [favError, setFavError] = useState("");
+
+  const favouriteOptions = useMemo(
+    () => favourites.map((f) => ({ value: f.id, label: favouriteLabel(f) })),
+    [favourites],
+  );
+
+  /** Fills a line's description + unit price from a picked favourite. Only
+   * nudges the heading to Materials when the line is still on its untouched
+   * default heading — an already-customized heading is left alone. */
+  const pickFavourite = (key: string, favouriteId: string) => {
+    const fav = favourites.find((f) => f.id === favouriteId);
+    if (!fav) return;
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key) return l;
+        const isDefaultHeading = l.heading.kind === "category" && l.heading.category === LineCategory.MATERIAL;
+        return {
+          ...l,
+          description: fav.name,
+          unitPriceDollars: String(fav.priceDollars),
+          heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
+        };
+      }),
+    );
+  };
+
+  /** Saves a line as a reusable favourite: last-price behaviour — updates the
+   * existing favourite (matched case-insensitively, trimmed) if one exists,
+   * otherwise creates a new one. Skips silently if there's nothing meaningful
+   * to save (blank description or zero price). */
+  const saveFavourite = async (key: string) => {
+    const line = lines.find((l) => l.key === key);
+    if (!line) return;
+    const name = line.description.trim();
+    const priceCents = toCents(line.unitPriceDollars);
+    if (!name || priceCents === 0) return;
+
+    setSavingFavKey(key);
+    setFavError("");
+    try {
+      const existing = favourites.find((f) => f.name.trim().toLowerCase() === name.toLowerCase());
+      if (existing) {
+        const updated = await updateMaterialFavourite(existing.id, { priceCents });
+        setFavourites((favs) => favs.map((f) => (f.id === existing.id ? updated : f)));
+      } else {
+        const created = await createMaterialFavourite({ name, priceCents });
+        setFavourites((favs) => [...favs, created]);
+      }
+    } catch {
+      setFavError("Couldn't save the material — is the API running?");
+    } finally {
+      setSavingFavKey(null);
+    }
+  };
 
   const headingOptions = useMemo(
     () => [
@@ -453,6 +562,8 @@ export default function QuoteBuilder({
           <LineRows
             lines={lines}
             headingOptions={headingOptions}
+            favouriteOptions={favouriteOptions}
+            savingFavKey={savingFavKey}
             addingHeadingKey={addingHeadingKey}
             newHeadingText={newHeadingText}
             onPatch={patch}
@@ -461,8 +572,11 @@ export default function QuoteBuilder({
             onNewHeadingTextChange={setNewHeadingText}
             onCommitNewHeading={commitNewHeading}
             onCancelNewHeading={cancelNewHeading}
+            onPickFavourite={pickFavourite}
+            onSaveFavourite={saveFavourite}
           />
         </Card>
+        {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}
       </section>
 
       <div className={shared.grid2}>

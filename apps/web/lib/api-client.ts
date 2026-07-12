@@ -5,7 +5,7 @@
  * persistence shape to the view types; if the API is unreachable it falls back
  * to the shared @jamquote/core fixtures (same data) so the preview never breaks.
  */
-import type { Business, Client, Quote } from "./types";
+import type { Business, Client, MaterialFavourite, Quote } from "./types";
 import type { QuoteLineItemInput, QuoteStatus } from "@jamquote/core";
 import { getQuoteTotals } from "./quote-totals";
 import {
@@ -119,6 +119,13 @@ interface ApiLineItem {
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   markupPct?: number | string | null;
 }
+interface ApiMaterialFavourite {
+  id: string;
+  name: string;
+  unit?: string | null;
+  priceCents: number;
+  supplierId?: string | null;
+}
 interface ApiBusiness {
   id: string;
   name: string;
@@ -178,6 +185,17 @@ export function mapClient(c: ApiClientRow): Client {
     phone: c.phone ?? "",
     address: c.addressLine ?? "",
     email: c.email ?? undefined,
+  };
+}
+
+export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite {
+  return {
+    id: m.id,
+    name: m.name,
+    unit: m.unit ?? undefined,
+    priceCents: m.priceCents,
+    priceDollars: m.priceCents / 100,
+    supplierId: m.supplierId ?? undefined,
   };
 }
 
@@ -271,6 +289,20 @@ export async function getBusiness(): Promise<Business> {
   } catch {
     console.warn("[api-client] getBusiness: API unreachable, using fixture");
     return fixtureBusiness;
+  }
+}
+
+/** GET /api/catalogs/material-favourites — saved materials with their last
+ * price, for reuse in the quote builder. No fixture backs these (nothing to
+ * fall back to yet), so an unreachable API just returns an empty list. */
+export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
+  try {
+    return (await request<ApiMaterialFavourite[]>("/catalogs/material-favourites")).map(
+      mapMaterialFavourite,
+    );
+  } catch {
+    console.warn("[api-client] getMaterialFavourites: API unreachable, using empty list");
+    return [];
   }
 }
 
@@ -383,6 +415,20 @@ export async function createJob(input: NewJobInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/jobs", input);
 }
 
+export interface NewMaterialFavouriteInput {
+  name: string;
+  unit?: string;
+  priceCents: number;
+  supplierId?: string;
+}
+export async function createMaterialFavourite(
+  input: NewMaterialFavouriteInput,
+): Promise<MaterialFavourite> {
+  return mapMaterialFavourite(
+    await apiClient.post<ApiMaterialFavourite>("/catalogs/material-favourites", input),
+  );
+}
+
 export interface NewQuoteLineInput {
   category: QuoteLineItemInput["category"];
   description: string;
@@ -422,6 +468,17 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
 export type UpdateJobInput = Partial<NewJobInput>;
 export async function updateJob(id: string, input: UpdateJobInput): Promise<{ id: string }> {
   return apiClient.patch<{ id: string }>(`/jobs/${id}`, input);
+}
+
+/** PATCH /api/catalogs/material-favourites/:id — same shape as create, all fields optional. */
+export type UpdateMaterialFavouriteInput = Partial<NewMaterialFavouriteInput>;
+export async function updateMaterialFavourite(
+  id: string,
+  input: UpdateMaterialFavouriteInput,
+): Promise<MaterialFavourite> {
+  return mapMaterialFavourite(
+    await apiClient.patch<ApiMaterialFavourite>(`/catalogs/material-favourites/${id}`, input),
+  );
 }
 
 /** PATCH /api/business/:id — editable fields mirror updateBusinessSchema
@@ -470,6 +527,10 @@ export async function deleteJob(id: string): Promise<void> {
 
 export async function deleteQuote(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/quotes/${id}`);
+}
+
+export async function deleteMaterialFavourite(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/catalogs/material-favourites/${id}`);
 }
 
 // --- Admin (platform-level, staff console) ----------------------------------

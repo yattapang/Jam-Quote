@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getJobs } from "@/lib/api-client";
+import { getQuote, getClients, getJobs, getMaterialFavourites } from "@/lib/api-client";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -8,7 +8,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const [clients, jobs] = await Promise.all([getClients(), getJobs()]);
+  const [clients, jobs, favourites] = await Promise.all([getClients(), getJobs(), getMaterialFavourites()]);
 
   return (
     <QuoteBuilder
@@ -47,6 +47,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
       }}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       jobs={jobs.map((j) => ({ id: j.id, name: j.name }))}
+      favourites={favourites}
     />
   );
 }

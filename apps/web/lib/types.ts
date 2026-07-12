@@ -51,6 +51,18 @@ export interface Client {
   email?: string;
 }
 
+/** A saved material a contractor reuses across quotes, with its last known
+ * unit price (mirrors the Prisma `MaterialFavourite` model). */
+export interface MaterialFavourite {
+  id: string;
+  name: string;
+  unit?: string;
+  priceCents: number;
+  /** Convenience for display/inputs — priceCents / 100. */
+  priceDollars: number;
+  supplierId?: string;
+}
+
 export interface Payment {
   id: string;
   amountCents: number;

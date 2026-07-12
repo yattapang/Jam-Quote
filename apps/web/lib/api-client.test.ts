@@ -2,26 +2,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createClient,
   createJob,
+  createMaterialFavourite,
   createQuote,
   deleteClient,
   deleteJob,
+  deleteMaterialFavourite,
   deleteQuote,
   getBusiness,
   getClient,
   getClients,
   getJob,
   getJobs,
+  getMaterialFavourites,
   getQuote,
   getQuotes,
   initialsOf,
   mapBusiness,
   mapClient,
+  mapMaterialFavourite,
   mapQuote,
   reviseQuote,
   setQuoteStatus,
   updateBusiness,
   updateClient,
   updateJob,
+  updateMaterialFavourite,
   updateQuote,
 } from "./api-client";
 import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
@@ -116,12 +121,21 @@ const apiBusiness = {
   defaultGctRate: "15.00",
 };
 
+const apiMaterialFavourite = {
+  id: "mf-cement",
+  name: "Cement (grey, 94lb)",
+  unit: "bag",
+  priceCents: 115_000,
+  supplierId: null,
+};
+
 // The API row shapes (ApiQuote/ApiClientRow/ApiBusiness) aren't exported;
 // reference the mapper's own parameter type so the literals type-check
 // against it.
 type MapQuoteArg = Parameters<typeof mapQuote>[0];
 type MapClientArg = Parameters<typeof mapClient>[0];
 type MapBusinessArg = Parameters<typeof mapBusiness>[0];
+type MapMaterialFavouriteArg = Parameters<typeof mapMaterialFavourite>[0];
 
 describe("pure mappers", () => {
   it("initialsOf builds up to two uppercase initials", () => {
@@ -173,6 +187,17 @@ describe("pure mappers", () => {
       defaultGctRatePct: 15,
       countryCode: "JM",
       currency: "JMD",
+    });
+  });
+
+  it("mapMaterialFavourite maps persistence shape to the view type, deriving priceDollars", () => {
+    expect(mapMaterialFavourite(apiMaterialFavourite as MapMaterialFavouriteArg)).toEqual({
+      id: "mf-cement",
+      name: "Cement (grey, 94lb)",
+      unit: "bag",
+      priceCents: 115_000,
+      priceDollars: 1150,
+      supplierId: undefined,
     });
   });
 
@@ -334,6 +359,16 @@ describe("create (write path)", () => {
     });
   });
 
+  it("createMaterialFavourite POSTs the material body and maps the result", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": apiMaterialFavourite });
+    const m = await createMaterialFavourite({ name: "Cement (grey, 94lb)", unit: "bag", priceCents: 115_000 });
+    expect(m.priceDollars).toBe(1150);
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toMatchObject({ name: "Cement (grey, 94lb)", priceCents: 115_000 });
+  });
+
   it("createQuote POSTs the line items", async () => {
     const spy = stubFetch({ "/quotes": { id: "qt-new" } });
     const r = await createQuote({
@@ -421,6 +456,19 @@ describe("update (write path)", () => {
     expect(JSON.parse(init.body as string)).toEqual({ name: "Blackwood & Sons", defaultGctRate: 12.5 });
   });
 
+  it("updateMaterialFavourite PATCHes the material body to /catalogs/material-favourites/:id (last-price behaviour)", async () => {
+    const spy = stubFetch({
+      "/catalogs/material-favourites/mf-cement": { ...apiMaterialFavourite, priceCents: 120_000 },
+    });
+    const m = await updateMaterialFavourite("mf-cement", { priceCents: 120_000 });
+    expect(m.priceCents).toBe(120_000);
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/catalogs/material-favourites/mf-cement");
+    expect(init.method).toBe("PATCH");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect(JSON.parse(init.body as string)).toEqual({ priceCents: 120_000 });
+  });
+
   it("reviseQuote POSTs to /quotes/:id/revise with no body", async () => {
     const spy = stubFetch({ "/quotes/qt-0142/revise": { id: "qt-0143" } });
     const r = await reviseQuote("qt-0142");
@@ -476,6 +524,31 @@ describe("delete (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/quotes/qt-0142");
     expect(init.method).toBe("DELETE");
+  });
+
+  it("deleteMaterialFavourite sends DELETE to /catalogs/material-favourites/:id", async () => {
+    const spy = stubEmptyOk();
+    await deleteMaterialFavourite("mf-cement");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/catalogs/material-favourites/mf-cement");
+    expect(init.method).toBe("DELETE");
+  });
+});
+
+describe("getMaterialFavourites", () => {
+  it("fetches with the x-business-id header and maps rows", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    const favourites = await getMaterialFavourites();
+    expect(favourites).toHaveLength(1);
+    expect(favourites[0]?.priceDollars).toBe(1150);
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+  });
+
+  it("falls back to an empty list when the API is unreachable (no fixture backs these)", async () => {
+    stubFetch(null);
+    const favourites = await getMaterialFavourites();
+    expect(favourites).toEqual([]);
   });
 });
 
