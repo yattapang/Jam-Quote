@@ -10,10 +10,13 @@
 import Constants from "expo-constants";
 import { QuoteStatus } from "@jamquote/core";
 import {
+  STAGE_KIND,
   STATUS_PILL,
   clientRows as fixtureClientRows,
+  jobRows as fixtureJobRows,
   quoteListRows as fixtureQuoteRows,
   type ClientRow,
+  type JobRow,
   type QuoteListRow,
 } from "./mockData";
 
@@ -40,6 +43,14 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+async function del(path: string): Promise<void> {
+  const res = await fetch(`${apiBaseUrl()}${path}`, {
+    method: "DELETE",
+    headers: { "x-business-id": BUSINESS_ID },
+  });
+  if (!res.ok) throw new Error(`DELETE ${path} -> ${res.status}`);
+}
+
 interface ApiQuote {
   id: string;
   clientId?: string | null;
@@ -56,7 +67,11 @@ interface ApiClientRow {
 }
 interface ApiJob {
   id: string;
+  clientId?: string | null;
   name: string;
+  addressLine?: string | null;
+  stage: string;
+  progressPct: number;
 }
 
 export function initialsOf(name: string): string {
@@ -71,6 +86,7 @@ export function initialsOf(name: string): string {
 export function mapQuoteRow(q: ApiQuote, clientName: string, jobName: string): QuoteListRow {
   const pill = STATUS_PILL[q.status] ?? { label: q.status, kind: "neutral" as const };
   return {
+    id: q.id,
     num: q.number,
     client: clientName,
     job: jobName,
@@ -82,12 +98,26 @@ export function mapQuoteRow(q: ApiQuote, clientName: string, jobName: string): Q
 
 export function mapClientRow(c: ApiClientRow, totalCents: number, quoteCount: number): ClientRow {
   return {
+    id: c.id,
     initials: initialsOf(c.name),
     name: c.name,
     parish: c.parish ?? "",
     phone: c.phone ?? "",
     totalCents,
     quoteCount,
+  };
+}
+
+export function mapJobRow(j: ApiJob, clientName: string, valueCents: number): JobRow {
+  return {
+    id: j.id,
+    name: j.name,
+    clientName,
+    address: j.addressLine ?? "",
+    stage: j.stage,
+    pct: j.progressPct,
+    valueCents,
+    kind: STAGE_KIND[j.stage] ?? "neutral",
   };
 }
 
@@ -125,4 +155,37 @@ export async function fetchClientRows(): Promise<ClientRow[]> {
   } catch {
     return fixtureClientRows;
   }
+}
+
+export async function fetchJobRows(): Promise<JobRow[]> {
+  try {
+    const [jobs, clients, quotes] = await Promise.all([
+      get<ApiJob[]>("/jobs"),
+      get<ApiClientRow[]>("/clients"),
+      get<ApiQuote[]>("/quotes"),
+    ]);
+    const clientName = new Map(clients.map((c) => [c.id, c.name]));
+    return jobs.map((j) => {
+      const theirs = quotes.filter((q) => q.jobId === j.id);
+      return mapJobRow(
+        j,
+        clientName.get(j.clientId ?? "") ?? "Unknown",
+        theirs.reduce((sum, q) => sum + q.totalCents, 0),
+      );
+    });
+  } catch {
+    return fixtureJobRows;
+  }
+}
+
+export function deleteClient(id: string): Promise<void> {
+  return del(`/clients/${id}`);
+}
+
+export function deleteJob(id: string): Promise<void> {
+  return del(`/jobs/${id}`);
+}
+
+export function deleteQuote(id: string): Promise<void> {
+  return del(`/quotes/${id}`);
 }

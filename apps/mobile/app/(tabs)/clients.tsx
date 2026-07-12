@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MoneyText } from "../../src/components";
 import { clientRows, type ClientRow } from "../../src/state/mockData";
-import { fetchClientRows } from "../../src/state/apiClient";
+import { deleteClient, fetchClientRows } from "../../src/state/apiClient";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -17,6 +17,24 @@ export default function ClientsListScreen() {
     fetchClientRows().then(setRows).catch(() => {});
   }, []);
 
+  const handleDelete = (item: ClientRow) => {
+    Alert.alert(`Delete ${item.name}?`, "This permanently removes the client. This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteClient(item.id);
+            setRows((prev) => prev.filter((r) => r.id !== item.id));
+          } catch (err) {
+            Alert.alert("Couldn't delete client", err instanceof Error ? err.message : "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <View style={{ padding: space.lg, paddingBottom: space.sm }}>
@@ -26,11 +44,12 @@ export default function ClientsListScreen() {
       </View>
       <FlatList
         data={rows}
-        keyExtractor={(item) => item.name}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingHorizontal: space.lg, paddingBottom: space.xl, gap: space.sm }}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => router.push("/quote-editor")}
+            onLongPress={() => handleDelete(item)}
             style={{
               flexDirection: "row",
               alignItems: "center",

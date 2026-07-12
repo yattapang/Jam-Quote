@@ -1,6 +1,7 @@
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
-import { getClients, getQuotes } from "@/lib/api-client";
+import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import { deleteClient, getClients, getQuotes } from "@/lib/api-client";
 import AddClientButton from "./AddClientButton";
 import shared from "../shared.module.css";
 
@@ -50,6 +51,10 @@ export default async function ClientsPage() {
                   <span className={shared.rowSub}>
                     {count} {count === 1 ? "quote" : "quotes"}
                   </span>
+                  <DeleteRowButton
+                    confirmMessage={`Delete ${c.name}? This can't be undone.`}
+                    onDelete={() => deleteClient(c.id)}
+                  />
                 </div>
               </div>
             );

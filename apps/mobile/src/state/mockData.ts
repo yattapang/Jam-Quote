@@ -83,6 +83,7 @@ export const cementSupplierPrices: SupplierPriceResult[] = [
 ];
 
 export interface QuoteListRow {
+  id: string;
   num: string;
   client: string;
   job: string;
@@ -94,6 +95,7 @@ export interface QuoteListRow {
 export const quoteListRows: QuoteListRow[] = demoQuotes.map((q) => {
   const pill = STATUS_PILL[q.status];
   return {
+    id: q.id,
     num: q.number,
     client: findDemoClient(q.clientId)?.name ?? "Unknown",
     job: findDemoJob(q.jobId)?.name ?? "",
@@ -106,6 +108,7 @@ export const quoteListRows: QuoteListRow[] = demoQuotes.map((q) => {
 export const quoteFilterNames = ["All", "Draft", "Sent", "Viewed", "Accepted", "Declined", "Invoiced"] as const;
 
 export interface ClientRow {
+  id: string;
   initials: string;
   name: string;
   parish: string;
@@ -115,6 +118,7 @@ export interface ClientRow {
 }
 
 export const clientRows: ClientRow[] = demoClients.map((c) => ({
+  id: c.id,
   initials: c.initials,
   name: c.name,
   parish: c.parish,
@@ -123,7 +127,7 @@ export const clientRows: ClientRow[] = demoClients.map((c) => ({
   quoteCount: demoClientQuoteCount(c.id),
 }));
 
-const STAGE_KIND: Record<string, StatusKind> = {
+export const STAGE_KIND: Record<string, StatusKind> = {
   "In progress": "info",
   Quoted: "neutral",
   "Awaiting approval": "info",
@@ -132,6 +136,7 @@ const STAGE_KIND: Record<string, StatusKind> = {
 };
 
 export interface JobRow {
+  id: string;
   name: string;
   clientName: string;
   address: string;
@@ -144,6 +149,7 @@ export interface JobRow {
 export const jobRows: JobRow[] = demoJobs.map((j) => {
   const jobQuotes = demoQuotes.filter((q) => q.jobId === j.id);
   return {
+    id: j.id,
     name: j.name,
     clientName: findDemoClient(j.clientId)?.name ?? "Unknown",
     address: j.addressLine,

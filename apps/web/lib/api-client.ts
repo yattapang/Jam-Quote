@@ -44,7 +44,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     throw new ApiError(`Request to ${path} failed`, res.status);
   }
-  return (await res.json()) as T;
+  // DELETE (and any Promise<void> handler) comes back with a 200 and no body.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const apiClient = {
@@ -281,6 +283,20 @@ export interface NewQuoteInput {
 }
 export async function createQuote(input: NewQuoteInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/quotes", input);
+}
+
+// --- Delete (write path) -----------------------------------------------------
+
+export async function deleteClient(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/clients/${id}`);
+}
+
+export async function deleteJob(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/jobs/${id}`);
+}
+
+export async function deleteQuote(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/quotes/${id}`);
 }
 
 // --- Admin (platform-level, staff console) ----------------------------------

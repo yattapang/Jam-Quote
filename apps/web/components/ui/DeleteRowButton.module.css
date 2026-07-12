@@ -1,0 +1,19 @@
+.trigger {
+  border: none;
+  background: transparent;
+  color: var(--jq-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: var(--jq-font-body);
+}
+.trigger:hover:not(:disabled) {
+  background: var(--jq-surface-alt);
+  color: var(--jq-crit);
+}
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, MoneyText, StatusPill } from "../../src/components";
 import { quoteFilterNames, quoteListRows, type QuoteListRow } from "../../src/state/mockData";
-import { fetchQuoteRows } from "../../src/state/apiClient";
+import { deleteQuote, fetchQuoteRows } from "../../src/state/apiClient";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -26,6 +26,24 @@ export default function QuotesListScreen() {
     [filter, allRows],
   );
 
+  const handleDelete = (item: QuoteListRow) => {
+    Alert.alert(`Delete ${item.num}?`, "This permanently removes the quote. This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteQuote(item.id);
+            setAllRows((prev) => prev.filter((r) => r.id !== item.id));
+          } catch (err) {
+            Alert.alert("Couldn't delete quote", err instanceof Error ? err.message : "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <ScrollView
@@ -40,9 +58,11 @@ export default function QuotesListScreen() {
 
       <FlatList
         data={rows}
-        keyExtractor={(item) => item.num}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: space.lg, paddingTop: space.xs, gap: space.sm }}
-        renderItem={({ item }) => <QuoteRow row={item} onPress={() => router.push("/quote-editor")} />}
+        renderItem={({ item }) => (
+          <QuoteRow row={item} onPress={() => router.push("/quote-editor")} onLongPress={() => handleDelete(item)} />
+        )}
       />
 
       <Pressable
@@ -70,11 +90,20 @@ export default function QuotesListScreen() {
   );
 }
 
-function QuoteRow({ row, onPress }: { row: QuoteListRow; onPress: () => void }) {
+function QuoteRow({
+  row,
+  onPress,
+  onLongPress,
+}: {
+  row: QuoteListRow;
+  onPress: () => void;
+  onLongPress: () => void;
+}) {
   const { colors } = useTheme();
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       style={{
         flexDirection: "row",
         alignItems: "center",

@@ -3,6 +3,9 @@ import {
   createClient,
   createJob,
   createQuote,
+  deleteClient,
+  deleteJob,
+  deleteQuote,
   getClients,
   getJobs,
   getQuote,
@@ -25,9 +28,9 @@ function stubFetch(routes: Routes | null) {
     const prefixKey = Object.keys(routes).find((k) => path.startsWith(k));
     const body = exact ?? (prefixKey ? routes[prefixKey] : undefined);
     if (body === undefined) {
-      return { ok: false, status: 404, json: async () => ({}) } as unknown as Response;
+      return { ok: false, status: 404, text: async () => "" } as unknown as Response;
     }
-    return { ok: true, status: 200, json: async () => body } as unknown as Response;
+    return { ok: true, status: 200, text: async () => JSON.stringify(body) } as unknown as Response;
   });
   vi.stubGlobal("fetch", spy);
   return spy;
@@ -219,6 +222,44 @@ describe("create (write path)", () => {
     expect(r.id).toBe("qt-new");
     const body = JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
     expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+});
+
+describe("delete (write path)", () => {
+  // The API's delete handlers return Promise<void>, so the live response is a
+  // 200 with an empty body — assert request() tolerates that (no res.json()
+  // parse error) as well as the method/path/header.
+  function stubEmptyOk() {
+    const spy = vi.fn(async (_url: string | URL, _init?: RequestInit) => {
+      return { ok: true, status: 200, text: async () => "" } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", spy);
+    return spy;
+  }
+
+  it("deleteClient sends DELETE to /clients/:id with the business header", async () => {
+    const spy = stubEmptyOk();
+    await deleteClient("cl-basil-reid");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/clients/cl-basil-reid");
+    expect(init.method).toBe("DELETE");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+  });
+
+  it("deleteJob sends DELETE to /jobs/:id", async () => {
+    const spy = stubEmptyOk();
+    await deleteJob("job-0142");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/jobs/job-0142");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("deleteQuote sends DELETE to /quotes/:id", async () => {
+    const spy = stubEmptyOk();
+    await deleteQuote("qt-0142");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/quotes/qt-0142");
+    expect(init.method).toBe("DELETE");
   });
 });
 

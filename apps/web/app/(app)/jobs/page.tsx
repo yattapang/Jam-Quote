@@ -1,6 +1,7 @@
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
-import { getJobs, getClients } from "@/lib/api-client";
+import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import { deleteJob, getJobs, getClients } from "@/lib/api-client";
 import AddJobButton from "./AddJobButton";
 import shared from "../shared.module.css";
 
@@ -37,6 +38,10 @@ export default async function JobsPage() {
                 <span className={shared.rowSub}>
                   {job.quoteCount} {job.quoteCount === 1 ? "quote" : "quotes"}
                 </span>
+                <DeleteRowButton
+                  confirmMessage={`Delete ${job.name}? This can't be undone.`}
+                  onDelete={() => deleteJob(job.id)}
+                />
               </div>
             </div>
           ))}

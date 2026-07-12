@@ -28,7 +28,7 @@ const rateUnitQtyWord: Record<RateUnit, string> = {
 export default function QuoteEditorScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
-  const { lines, addLine, totals } = useQuoteDraft();
+  const { lines, addLine, removeLine, totals } = useQuoteDraft();
   const [showTotals, setShowTotals] = useState(false);
 
   const sections = useMemo(() => {
@@ -143,6 +143,9 @@ export default function QuoteEditorScreen() {
                     </Text>
                   </View>
                   <MoneyText cents={totals.lineTotals[index]?.afterMarkupCents ?? 0} size={14.5} />
+                  <Pressable onPress={() => removeLine(line.id)} hitSlop={10}>
+                    <Text style={{ fontSize: 17, fontWeight: "700", color: colors.crit }}>{"×"}</Text>
+                  </Pressable>
                 </View>
               ))}
             </View>

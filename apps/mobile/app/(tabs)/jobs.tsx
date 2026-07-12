@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
-import React from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MoneyText, StatusPill } from "../../src/components";
-import { jobRows } from "../../src/state/mockData";
+import { jobRows, type JobRow } from "../../src/state/mockData";
+import { deleteJob, fetchJobRows } from "../../src/state/apiClient";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -12,16 +13,39 @@ import { resolveFontFamily } from "../../src/theme/fontFamily";
 export default function JobsListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
+  const [rows, setRows] = useState<JobRow[]>(jobRows);
+  useEffect(() => {
+    fetchJobRows().then(setRows).catch(() => {});
+  }, []);
+
+  const handleDelete = (item: JobRow) => {
+    Alert.alert(`Delete ${item.name}?`, "This permanently removes the job. This can't be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteJob(item.id);
+            setRows((prev) => prev.filter((r) => r.id !== item.id));
+          } catch (err) {
+            Alert.alert("Couldn't delete job", err instanceof Error ? err.message : "Please try again.");
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
       <FlatList
-        data={jobRows}
-        keyExtractor={(item) => item.name}
+        data={rows}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={{ padding: space.lg, gap: space.sm }}
         renderItem={({ item }) => (
           <Pressable
             onPress={() => router.push("/quote-editor")}
+            onLongPress={() => handleDelete(item)}
             style={{
               gap: 8,
               padding: 14,

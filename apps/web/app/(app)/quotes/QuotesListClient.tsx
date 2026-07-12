@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
+import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import { deleteQuote } from "@/lib/api-client";
 import { quoteStatusPill, QUOTE_STATUS_FILTERS } from "@/lib/status";
 import type { Quote } from "@/lib/types";
 import type { QuoteStatus } from "@jamquote/core";
@@ -17,6 +20,7 @@ export default function QuotesListClient({
   quotes: Quote[];
   clientNames: Record<string, string>;
 }) {
+  const router = useRouter();
   const [filter, setFilter] = useState<QuoteStatus | "ALL">("ALL");
   const visible = filter === "ALL" ? quotes : quotes.filter((q) => q.status === filter);
 
@@ -52,8 +56,19 @@ export default function QuotesListClient({
           {visible.length === 0 && <div className={shared.empty}>No quotes with this status.</div>}
           {visible.map((q) => {
             const pill = quoteStatusPill(q.status);
+            const openQuote = () => router.push(`/quotes/${q.id}`);
             return (
-              <a key={q.id} href={`/quotes/${q.id}`} className={shared.row} style={{ textDecoration: "none" }}>
+              <div
+                key={q.id}
+                className={shared.row}
+                role="link"
+                tabIndex={0}
+                onClick={openQuote}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") openQuote();
+                }}
+                style={{ cursor: "pointer" }}
+              >
                 <div className={shared.rowMain}>
                   <span className={shared.rowTitle}>
                     {q.num}
@@ -66,8 +81,12 @@ export default function QuotesListClient({
                 <div className={shared.rowRight}>
                   <MoneyText cents={q.totalCents ?? 0} />
                   <span className={shared.rowSub}>{q.createdLabel}</span>
+                  <DeleteRowButton
+                    confirmMessage={`Delete quote ${q.num}? This can't be undone.`}
+                    onDelete={() => deleteQuote(q.id)}
+                  />
                 </div>
-              </a>
+              </div>
             );
           })}
         </div>
