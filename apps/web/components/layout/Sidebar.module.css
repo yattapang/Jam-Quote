@@ -143,22 +143,21 @@
   }
 
   /* Sidebar becomes an off-canvas drawer. */
+  /* Off-canvas drawer positioned with `left` (not transform): transform-based
+     sliding proved flaky across rendering engines, whereas animating `left` is
+     reliable. Compound selector on the open state guarantees the cascade. */
   .sidebar {
     position: fixed;
     top: 0;
-    left: 0;
+    left: -288px; /* width (264) + room for the shadow, fully hidden */
     height: 100vh;
     height: 100dvh;
     width: 264px;
     z-index: 60;
-    transform: translateX(-100%);
-    transition: transform 0.22s ease;
+    transition: left 0.24s ease;
   }
-  /* Compound selector + `none` (not translateX(0)): a plain single-class rule
-     lost the cascade, and animating transform to translateX(0) from -100% got
-     stuck in some engines — `none` reliably brings the drawer fully on-screen. */
   .sidebar.sidebarOpen {
-    transform: none;
+    left: 0;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
   }
 
