@@ -12,16 +12,23 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import Modal from "@/components/ui/Modal";
 import MoneyText from "@/components/ui/MoneyText";
 import { CATEGORY_LABEL } from "@/lib/quote-totals";
 import { createQuote, updateQuote, createMaterialFavourite, updateMaterialFavourite } from "@/lib/api-client";
+import ClientSelectField from "@/components/forms/ClientSelectField";
+import JobSelectField from "@/components/forms/JobSelectField";
+import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
+import type { ClientOption, JobOption } from "@/components/forms/types";
 import type { MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
+import styles from "./QuoteBuilder.module.css";
 
-const GCT_RATE = 15; // business default; centrally overridable later
+const DEFAULT_GCT_RATE = 15; // fallback only — real rate comes from the business's gctRatePct prop
 const DEFAULT_VALID_DAYS = 30;
 const DAY_MS = 86_400_000;
 const ADD_HEADING_VALUE = "__add_heading__";
+const ADD_MATERIAL_VALUE = "__add_material__";
 
 const rateUnitOptions = Object.values(RateUnit).map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() }));
 const gctOptions = [
@@ -193,11 +200,12 @@ function initialValidDays(initial?: InitialQuote): number {
   return days > 0 ? days : DEFAULT_VALID_DAYS;
 }
 
-const cell: React.CSSProperties = { minWidth: 0 };
-
 /** The editor row markup for one line item. Each line's Heading cell is
  * either the built-in/custom-heading Select, or — while the user is naming
- * a brand-new heading for that line — an inline text input. */
+ * a brand-new heading for that line — an inline text input. Desktop keeps
+ * the original fixed multi-column grid (QuoteBuilder.module.css `.lineRow`);
+ * at <=767px the same markup reflows into a stacked card with small field
+ * labels, so nothing overflows a phone viewport. */
 function LineRows({
   lines,
   headingOptions,
@@ -205,6 +213,8 @@ function LineRows({
   savingFavKey,
   addingHeadingKey,
   newHeadingText,
+  addingMaterialKey,
+  addingMaterialBusy,
   onPatch,
   onRemove,
   onHeadingChange,
@@ -213,6 +223,10 @@ function LineRows({
   onCancelNewHeading,
   onPickFavourite,
   onSaveFavourite,
+  onOpenAddMaterial,
+  onCancelAddMaterial,
+  onCreateMaterial,
+  onAddMaterialBusyChange,
 }: {
   lines: DraftLine[];
   headingOptions: { value: string; label: string }[];
@@ -220,6 +234,8 @@ function LineRows({
   savingFavKey: string | null;
   addingHeadingKey: string | null;
   newHeadingText: string;
+  addingMaterialKey: string | null;
+  addingMaterialBusy: boolean;
   onPatch: (key: string, p: Partial<DraftLine>) => void;
   onRemove: (key: string) => void;
   onHeadingChange: (key: string, value: string) => void;
@@ -228,35 +244,34 @@ function LineRows({
   onCancelNewHeading: () => void;
   onPickFavourite: (key: string, favouriteId: string) => void;
   onSaveFavourite: (key: string) => void;
+  onOpenAddMaterial: (key: string) => void;
+  onCancelAddMaterial: () => void;
+  onCreateMaterial: (key: string, values: MaterialFormValues) => Promise<void>;
+  onAddMaterialBusyChange: (busy: boolean) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className={styles.linesWrap}>
       {lines.map((l) => (
-        <div
-          key={l.key}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "150px 150px 1fr 70px 90px 100px 100px 30px 32px",
-            gap: 8,
-            alignItems: "end",
-            paddingBottom: 12,
-            borderBottom: "1px solid var(--jq-border)",
-          }}
-        >
-          <div style={cell}>
+        <div key={l.key} className={styles.lineRow}>
+          <div className={`${styles.fieldCell} ${styles.full}`}>
+            <span className={styles.mobileLabel}>Saved material</span>
             <Select
               options={[
                 { value: "", label: favouriteOptions.length ? "Saved materials…" : "No saved materials" },
                 ...favouriteOptions,
+                { value: ADD_MATERIAL_VALUE, label: "+ Add material…" },
               ]}
               value=""
               onChange={(e) => {
-                if (e.target.value) onPickFavourite(l.key, e.target.value);
+                const v = e.target.value;
+                if (!v) return;
+                if (v === ADD_MATERIAL_VALUE) onOpenAddMaterial(l.key);
+                else onPickFavourite(l.key, v);
               }}
-              disabled={favouriteOptions.length === 0}
             />
           </div>
-          <div style={cell}>
+          <div className={`${styles.fieldCell} ${styles.full}`}>
+            <span className={styles.mobileLabel}>Heading</span>
             {addingHeadingKey === l.key ? (
               <Input
                 autoFocus
@@ -282,45 +297,52 @@ function LineRows({
               />
             )}
           </div>
-          <div style={cell}>
+          <div className={`${styles.fieldCell} ${styles.full}`}>
+            <span className={styles.mobileLabel}>Description</span>
             <Input placeholder="Description" value={l.description} onChange={(e) => onPatch(l.key, { description: e.target.value })} />
           </div>
-          <div style={cell}>
+          <div className={styles.fieldCell}>
+            <span className={styles.mobileLabel}>Qty</span>
             <Input type="number" placeholder="Qty" value={l.quantity} onChange={(e) => onPatch(l.key, { quantity: e.target.value })} />
           </div>
-          <div style={cell}>
+          <div className={styles.fieldCell}>
+            <span className={styles.mobileLabel}>Unit</span>
             <Select options={rateUnitOptions} value={l.rateUnit} onChange={(e) => onPatch(l.key, { rateUnit: e.target.value as RateUnit })} />
           </div>
-          <div style={cell}>
+          <div className={styles.fieldCell}>
+            <span className={styles.mobileLabel}>Unit price ($)</span>
             <Input type="number" placeholder="Unit $" value={l.unitPriceDollars} onChange={(e) => onPatch(l.key, { unitPriceDollars: e.target.value })} />
           </div>
-          <div style={cell}>
+          <div className={styles.fieldCell}>
+            <span className={styles.mobileLabel}>GCT</span>
             <Select options={gctOptions} value={l.gctTreatment} onChange={(e) => onPatch(l.key, { gctTreatment: e.target.value as GctTreatment })} />
           </div>
-          <button
-            type="button"
-            aria-label="Save as favourite material"
-            title="Save this line's description & price for reuse"
-            onClick={() => onSaveFavourite(l.key)}
-            disabled={savingFavKey === l.key || !l.description.trim() || toCents(l.unitPriceDollars) === 0}
-            style={{
-              height: 38,
-              border: "1px solid var(--jq-border)",
-              background: "var(--jq-surface)",
-              color: "var(--jq-accent)",
-              borderRadius: 8,
-              cursor: "pointer",
-            }}
-          >
-            {savingFavKey === l.key ? "…" : "★"}
-          </button>
-          <button
-            aria-label="Remove line"
-            onClick={() => onRemove(l.key)}
-            style={{ height: 38, border: "1px solid var(--jq-border)", background: "var(--jq-surface)", color: "var(--jq-crit)", borderRadius: 8, cursor: "pointer" }}
-          >
-            ×
-          </button>
+          <div className={styles.actionsCell}>
+            <button
+              type="button"
+              aria-label="Save as favourite material"
+              title="Save this line's description & price for reuse"
+              onClick={() => onSaveFavourite(l.key)}
+              disabled={savingFavKey === l.key || !l.description.trim() || toCents(l.unitPriceDollars) === 0}
+              className={styles.saveFavButton}
+            >
+              {savingFavKey === l.key ? "…" : "★"}
+            </button>
+            <button type="button" aria-label="Remove line" onClick={() => onRemove(l.key)} className={styles.removeButton}>
+              ×
+            </button>
+          </div>
+
+          {addingMaterialKey === l.key && (
+            <Modal title="Add material" onClose={() => (addingMaterialBusy ? undefined : onCancelAddMaterial())}>
+              <MaterialForm
+                submitLabel="Add material"
+                onCancel={onCancelAddMaterial}
+                onSubmit={(values) => onCreateMaterial(l.key, values)}
+                onBusyChange={onAddMaterialBusyChange}
+              />
+            </Modal>
+          )}
         </div>
       ))}
     </div>
@@ -328,20 +350,26 @@ function LineRows({
 }
 
 export default function QuoteBuilder({
-  clients,
-  jobs,
+  clients: initialClients,
+  jobs: initialJobs,
   favourites: initialFavourites = [],
   mode = "create",
   quoteId,
   initial,
+  gctRatePct = DEFAULT_GCT_RATE,
 }: {
-  clients: { id: string; name: string }[];
-  jobs: { id: string; name: string }[];
+  clients: ClientOption[];
+  jobs: JobOption[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
+  /** The business's default GCT rate (Business.defaultGctRatePct from
+   * getBusiness()) — never hardcoded. Callers should pass the real rate;
+   * the default here only covers the case where the business is
+   * unavailable (see getBusiness()'s EMPTY_BUSINESS fallback). */
+  gctRatePct?: number;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit" && !!quoteId;
@@ -357,12 +385,18 @@ export default function QuoteBuilder({
   const [newHeadingText, setNewHeadingText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  // Local copy of the saved-materials list — kept in sync with the server on
-  // save so the picker (and last-price dedupe check) reflects new/updated
-  // favourites immediately, without a full page refresh.
+  // Local copies of the clients/jobs/saved-materials lists — seeded from
+  // props, then kept in sync locally when the user creates a new one inline
+  // ("+ Add new client…" / "+ Add new job…" / "+ Add material…") so it
+  // appears immediately in the picker without navigating away or losing the
+  // in-progress quote.
+  const [clients, setClients] = useState<ClientOption[]>(initialClients);
+  const [jobs, setJobs] = useState<JobOption[]>(initialJobs);
   const [favourites, setFavourites] = useState<MaterialFavourite[]>(initialFavourites);
   const [savingFavKey, setSavingFavKey] = useState<string | null>(null);
   const [favError, setFavError] = useState("");
+  const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
+  const [addingMaterialBusy, setAddingMaterialBusy] = useState(false);
 
   const favouriteOptions = useMemo(
     () => favourites.map((f) => ({ value: f.id, label: favouriteLabel(f) })),
@@ -418,6 +452,18 @@ export default function QuoteBuilder({
     }
   };
 
+  /** "+ Add material…" from a line's saved-materials picker: creates a new
+   * favourite, appends it to the local list, and applies its name/price to
+   * the line that opened the modal — all without navigating away. */
+  const createMaterialForLine = async (key: string, values: MaterialFormValues) => {
+    const created = await createMaterialFavourite(materialPayloadFromValues(values));
+    setFavourites((favs) => [...favs, created]);
+    setLines((ls) =>
+      ls.map((l) => (l.key === key ? { ...l, description: created.name, unitPriceDollars: String(created.priceDollars) } : l)),
+    );
+    setAddingMaterialKey(null);
+  };
+
   const headingOptions = useMemo(
     () => [
       ...categoryHeadingOptions,
@@ -435,11 +481,11 @@ export default function QuoteBuilder({
           unitPriceCents: toCents(l.unitPriceDollars),
           gctTreatment: l.gctTreatment,
         })),
-        gctRatePct: GCT_RATE,
+        gctRatePct,
         discountPct: Number(discountPct) || 0,
         depositCents: toCents(depositDollars),
       }),
-    [lines, discountPct, depositDollars],
+    [lines, discountPct, depositDollars, gctRatePct],
   );
 
   const patch = (key: string, p: Partial<DraftLine>) =>
@@ -502,7 +548,7 @@ export default function QuoteBuilder({
     const payload = {
       clientId: clientId || undefined,
       jobId: jobId || undefined,
-      gctRatePct: GCT_RATE,
+      gctRatePct,
       discountPct: Number(discountPct) || 0,
       depositCents: toCents(depositDollars),
       validUntil: new Date(Date.now() + days * DAY_MS).toISOString(),
@@ -528,24 +574,21 @@ export default function QuoteBuilder({
             </a>
           </span>
           <h1 className={shared.title}>{isEdit ? "Edit quote" : "New quote"}</h1>
-          <span className={shared.subtitle}>Build an itemized estimate — GCT at {GCT_RATE}% on standard lines.</span>
+          <span className={shared.subtitle}>Build an itemized estimate — GCT at {gctRatePct}% on standard lines.</span>
         </div>
       </header>
 
       <Card>
         <div className={shared.list}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Select
-              label="Client"
-              options={[{ value: "", label: "Select client…" }, ...clients.map((c) => ({ value: c.id, label: c.name }))]}
-              value={clientId}
-              onChange={(e) => setClientId(e.target.value)}
-            />
-            <Select
-              label="Job (optional)"
-              options={[{ value: "", label: "None" }, ...jobs.map((j) => ({ value: j.id, label: j.name }))]}
+            <ClientSelectField clients={clients} value={clientId} onChange={setClientId} onCreated={(c) => setClients((cs) => [...cs, c])} />
+            <JobSelectField
+              jobs={jobs}
+              clients={clients}
               value={jobId}
-              onChange={(e) => setJobId(e.target.value)}
+              onChange={setJobId}
+              onCreated={(j) => setJobs((js) => [...js, j])}
+              onClientCreated={(c) => setClients((cs) => [...cs, c])}
             />
           </div>
         </div>
@@ -566,6 +609,8 @@ export default function QuoteBuilder({
             savingFavKey={savingFavKey}
             addingHeadingKey={addingHeadingKey}
             newHeadingText={newHeadingText}
+            addingMaterialKey={addingMaterialKey}
+            addingMaterialBusy={addingMaterialBusy}
             onPatch={patch}
             onRemove={removeLine}
             onHeadingChange={onHeadingChange}
@@ -574,6 +619,10 @@ export default function QuoteBuilder({
             onCancelNewHeading={cancelNewHeading}
             onPickFavourite={pickFavourite}
             onSaveFavourite={saveFavourite}
+            onOpenAddMaterial={setAddingMaterialKey}
+            onCancelAddMaterial={() => setAddingMaterialKey(null)}
+            onCreateMaterial={createMaterialForLine}
+            onAddMaterialBusyChange={setAddingMaterialBusy}
           />
         </Card>
         {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}
@@ -600,7 +649,7 @@ export default function QuoteBuilder({
               </div>
             )}
             <div className={shared.totalRowMuted}>
-              <span>GCT ({GCT_RATE}% on standard)</span>
+              <span>GCT ({gctRatePct}% on standard)</span>
               <MoneyText cents={totals.gctCents} tone="muted" weight={600} />
             </div>
             <div className={shared.totalRowGrand}>

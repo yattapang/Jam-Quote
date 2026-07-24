@@ -94,6 +94,9 @@ export default async function DashboardPage() {
           </div>
           <Card>
             <div className={shared.list}>
+              {recentQuotes.length === 0 && (
+                <div className={shared.empty}>No quotes yet — create your first one.</div>
+              )}
               {recentQuotes.map((q) => {
                 const pill = quoteStatusPill(q.status);
                 return (

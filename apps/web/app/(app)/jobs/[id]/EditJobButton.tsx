@@ -3,49 +3,24 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
-import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import Modal, { modalStyles } from "@/components/ui/Modal";
+import Modal from "@/components/ui/Modal";
 import { updateJob } from "@/lib/api-client";
-import { PARISHES } from "@jamquote/core";
+import JobForm, { jobFormValuesFromJob, jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
+import type { ClientOption } from "@/components/forms/types";
 import type { JobDetail } from "@/lib/mock-data";
 
-const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
-
-/** Header action on the job detail page — mirrors EditClientButton but
- * pre-fills from the existing job and PATCHes instead of POSTing. `clients`
- * comes from the server detail page, same as AddJobButton receives it. */
-export default function EditJobButton({ job, clients }: { job: JobDetail; clients: { id: string; name: string }[] }) {
+/** Header action on the job detail page — mirrors AddJobButton but pre-fills
+ * from the existing job and PATCHes instead of POSTing. `clients` comes from
+ * the server detail page, same as AddJobButton receives it. */
+export default function EditJobButton({ job, clients }: { job: JobDetail; clients: ClientOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(job.name);
-  const [clientId, setClientId] = useState(job.clientId);
-  const [parish, setParish] = useState(job.parish);
-  const [address, setAddress] = useState(job.addressLine);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const clientOptions = [{ value: "", label: "Select client…" }, ...clients.map((c) => ({ value: c.id, label: c.name }))];
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return setError("Job name is required.");
-    setSaving(true);
-    setError("");
-    try {
-      await updateJob(job.id, {
-        name: name.trim(),
-        clientId: clientId || undefined,
-        parish: parish || undefined,
-        addressLine: address.trim() || undefined,
-      });
-      setOpen(false);
-      router.refresh();
-    } catch {
-      setError("Couldn't save — is the API running?");
-    } finally {
-      setSaving(false);
-    }
+  async function handleSubmit(values: JobFormValues) {
+    await updateJob(job.id, jobPayloadFromValues(values));
+    setOpen(false);
+    router.refresh();
   }
 
   return (
@@ -54,24 +29,15 @@ export default function EditJobButton({ job, clients }: { job: JobDetail; client
         Edit
       </Button>
       {open && (
-        <Modal title="Edit job" onClose={() => (saving ? null : setOpen(false))}>
-          <form className={modalStyles.form} onSubmit={submit}>
-            <Input label="Job name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-            <Select label="Client" options={clientOptions} value={clientId} onChange={(e) => setClientId(e.target.value)} />
-            <div className={modalStyles.row2}>
-              <Input label="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
-              <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
-            </div>
-            {error && <span className={modalStyles.error}>{error}</span>}
-            <div className={modalStyles.actions}>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" type="submit">
-                {saving ? "Saving…" : "Save changes"}
-              </Button>
-            </div>
-          </form>
+        <Modal title="Edit job" onClose={() => (busy ? undefined : setOpen(false))}>
+          <JobForm
+            clients={clients}
+            initial={jobFormValuesFromJob(job)}
+            submitLabel="Save changes"
+            onCancel={() => setOpen(false)}
+            onSubmit={handleSubmit}
+            onBusyChange={setBusy}
+          />
         </Modal>
       )}
     </>

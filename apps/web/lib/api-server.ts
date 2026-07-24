@@ -30,19 +30,30 @@ import {
   type AdminReg,
 } from "./api-client";
 import type { Business, Client, MaterialFavourite, Quote } from "./types";
-import {
-  clients as fixtureClients,
-  quotes as fixtureQuotes,
-  jobs as fixtureJobs,
-  fixtureBusiness,
-  findJobDetail,
-  type JobSummary,
-  type JobDetail,
-} from "./mock-data";
-import { getQuoteTotals } from "./quote-totals";
+import type { JobSummary, JobDetail } from "./mock-data";
 
 const TOKEN_COOKIE = "jamquote_token";
 const DEMO_BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
+
+/**
+ * getBusiness()'s failure fallback. NOT a data fixture — it carries no
+ * identity a user could mistake for a real business (blank name/TRN/address),
+ * it just keeps pages that read `business.*` (dashboard header, quote GCT
+ * rate, settings) rendering instead of throwing when the API is briefly
+ * unreachable. See DemoDataBanner for the user-facing "can't reach the
+ * server" notice.
+ */
+const EMPTY_BUSINESS: Business = {
+  id: "",
+  name: "",
+  trn: "",
+  parish: "" as Business["parish"],
+  tradeType: "",
+  addressLine: "",
+  defaultGctRatePct: 15,
+  countryCode: "JM",
+  currency: "JMD",
+};
 
 /** Server-side GET with the caller's JWT (or the demo business fallback). */
 async function serverRequest<T>(path: string): Promise<T> {
@@ -61,8 +72,8 @@ export async function getClients(): Promise<Client[]> {
   try {
     return (await serverRequest<ApiClientRow[]>("/clients")).map(mapClient);
   } catch {
-    console.warn("[api-server] getClients: API unreachable, using fixtures");
-    return fixtureClients;
+    console.warn("[api-server] getClients: API unreachable, returning empty list");
+    return [];
   }
 }
 
@@ -70,8 +81,8 @@ export async function getClient(id: string): Promise<Client | undefined> {
   try {
     return mapClient(await serverRequest<ApiClientRow>(`/clients/${id}`));
   } catch {
-    console.warn(`[api-server] getClient(${id}): API unreachable, using fixtures`);
-    return fixtureClients.find((c) => c.id === id);
+    console.warn(`[api-server] getClient(${id}): API unreachable, returning undefined`);
+    return undefined;
   }
 }
 
@@ -81,8 +92,8 @@ export async function getBusiness(): Promise<Business> {
   try {
     return mapBusiness(await serverRequest<ApiBusiness>("/business/current"));
   } catch {
-    console.warn("[api-server] getBusiness: API unreachable, using fixture");
-    return fixtureBusiness;
+    console.warn("[api-server] getBusiness: API unreachable, returning empty business");
+    return EMPTY_BUSINESS;
   }
 }
 
@@ -122,8 +133,8 @@ export async function getJobs(): Promise<JobSummary[]> {
       };
     });
   } catch {
-    console.warn("[api-server] getJobs: API unreachable, using fixtures");
-    return fixtureJobs;
+    console.warn("[api-server] getJobs: API unreachable, returning empty list");
+    return [];
   }
 }
 
@@ -145,8 +156,8 @@ export async function getJob(id: string): Promise<JobDetail | undefined> {
       progressPct: job.progressPct,
     };
   } catch {
-    console.warn(`[api-server] getJob(${id}): API unreachable, using fixtures`);
-    return findJobDetail(id);
+    console.warn(`[api-server] getJob(${id}): API unreachable, returning undefined`);
+    return undefined;
   }
 }
 
@@ -161,8 +172,8 @@ export async function getQuotes(): Promise<Quote[]> {
       .map((q) => mapQuote(q, jobName.get(q.jobId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
   } catch {
-    console.warn("[api-server] getQuotes: API unreachable, using fixtures");
-    return fixtureQuotes.map((q) => ({ ...q, totalCents: getQuoteTotals(q).totalCents }));
+    console.warn("[api-server] getQuotes: API unreachable, returning empty list");
+    return [];
   }
 }
 
@@ -179,14 +190,14 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
     }
     return mapQuote(q, jobLabel);
   } catch {
-    console.warn(`[api-server] getQuote(${id}): API unreachable, using fixtures`);
-    const q = fixtureQuotes.find((x) => x.id === id);
-    return q ? { ...q, totalCents: getQuoteTotals(q).totalCents } : undefined;
+    console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
+    return undefined;
   }
 }
 
 /** Fetch everything the staff console shows, from the platform admin API. On
- * failure returns empty/null so the console falls back to its design sample. */
+ * failure each section returns empty/null independently, so the console keeps
+ * rendering with whichever sections did load. */
 export async function getAdminData(): Promise<AdminData> {
   const safe = async <T>(path: string, empty: T): Promise<T> => {
     try {

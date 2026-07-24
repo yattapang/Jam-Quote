@@ -249,11 +249,10 @@ describe("getClients", () => {
     expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
   });
 
-  it("falls back to fixtures when the API is unreachable", async () => {
+  it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const clients = await getClients();
-    expect(clients.length).toBeGreaterThan(0);
-    expect(clients.some((c) => c.name === "Basil Reid")).toBe(true);
+    expect(clients).toEqual([]);
   });
 });
 
@@ -266,10 +265,10 @@ describe("getClient", () => {
     expect(c?.lastName).toBe("Reid");
   });
 
-  it("falls back to a fixture client when the API is unreachable", async () => {
+  it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const c = await getClient("cl-basil-reid");
-    expect(c?.name).toBe("Basil Reid");
+    expect(c).toBeUndefined();
   });
 });
 
@@ -281,10 +280,13 @@ describe("getBusiness", () => {
     expect(b.defaultGctRatePct).toBe(15);
   });
 
-  it("falls back to the fixture business when the API is unreachable", async () => {
+  it("returns an empty (non-identifying) business when the API is unreachable", async () => {
     stubFetch(null);
     const b = await getBusiness();
-    expect(b.id).toBe("seed-business-blackwood");
+    expect(b.id).toBe("");
+    expect(b.name).toBe("");
+    // Pages that read defaultGctRatePct (e.g. the quote builder's GCT rate)
+    // still get a sane, non-zero fallback so a quote isn't built at 0% GCT.
     expect(b.defaultGctRatePct).toBeGreaterThan(0);
   });
 });
@@ -299,11 +301,10 @@ describe("getJob", () => {
     expect(j?.parish).toBe("St. Catherine");
   });
 
-  it("falls back to a fixture job when the API is unreachable", async () => {
+  it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const j = await getJob("job-0142");
-    expect(j?.name).toBe("Retaining wall, Spanish Town");
-    expect(j?.clientName).toBe("Basil Reid");
+    expect(j).toBeUndefined();
   });
 });
 
@@ -319,11 +320,10 @@ describe("getQuotes", () => {
     expect(quotes[0]?.totalCents).toBe(18_354_000);
   });
 
-  it("falls back to fixtures on failure (with derived totals)", async () => {
+  it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const quotes = await getQuotes();
-    const qt0142 = quotes.find((q) => q.num === "QT-0142");
-    expect(qt0142?.totalCents).toBe(18_354_000);
+    expect(quotes).toEqual([]);
   });
 });
 
@@ -336,11 +336,10 @@ describe("getQuote", () => {
     expect(q?.lines).toHaveLength(1);
   });
 
-  it("falls back to the fixture quote when the API is down", async () => {
+  it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const q = await getQuote("qt-0142");
-    expect(q?.num).toBe("QT-0142");
-    expect(q?.lines.length).toBeGreaterThan(0);
+    expect(q).toBeUndefined();
   });
 });
 
@@ -569,9 +568,9 @@ describe("getJobs", () => {
     expect(jobs[0]?.valueCents).toBe(18_354_000);
   });
 
-  it("falls back to fixtures on failure", async () => {
+  it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
     const jobs = await getJobs();
-    expect(jobs.length).toBeGreaterThan(0);
+    expect(jobs).toEqual([]);
   });
 });

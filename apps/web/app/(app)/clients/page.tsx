@@ -34,6 +34,9 @@ export default async function ClientsPage() {
 
       <Card>
         <div className={shared.list}>
+          {clients.length === 0 && (
+            <div className={shared.empty}>No clients yet — add one to get started.</div>
+          )}
           {clients.map((c) => {
             const { count, total } = statsFor(c.id);
             return (

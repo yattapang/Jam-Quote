@@ -25,6 +25,9 @@ export default async function JobsPage() {
 
       <Card>
         <div className={shared.list}>
+          {jobs.length === 0 && (
+            <div className={shared.empty}>No jobs yet — add one to get started.</div>
+          )}
           {jobs.map((job) => (
             <div key={job.id} className={shared.row}>
               <div className={shared.rowMain}>

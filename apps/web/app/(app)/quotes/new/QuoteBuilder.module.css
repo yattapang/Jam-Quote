@@ -1,0 +1,90 @@
+/* Quote builder line-item row. Desktop keeps the original fixed multi-column
+   grid; below 767px it reflows into a stacked "card" per line so nothing
+   overflows a phone viewport. Colors come only from --jq-* theme variables. */
+
+.linesWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lineRow {
+  display: grid;
+  grid-template-columns: 150px 150px 1fr 70px 90px 100px 100px 30px 32px;
+  gap: 8px;
+  align-items: end;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--jq-border);
+}
+
+.fieldCell {
+  min-width: 0;
+}
+
+/* Only meaningful on mobile, where fields lose their positional grid
+   context and need a label to say what they are. */
+.mobileLabel {
+  display: none;
+}
+
+/* On desktop the star/remove buttons stay two individual grid tracks
+   (matching the 30px/32px columns above) — `display: contents` un-wraps
+   this div so its children are placed directly into the row's grid. */
+.actionsCell {
+  display: contents;
+}
+
+.iconButton {
+  height: 38px;
+  border: 1px solid var(--jq-border);
+  background: var(--jq-surface);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.saveFavButton {
+  composes: iconButton;
+  color: var(--jq-accent);
+}
+
+.removeButton {
+  composes: iconButton;
+  color: var(--jq-crit);
+}
+
+@media (max-width: 767px) {
+  .lineRow {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    align-items: start;
+    padding: 14px;
+    border: 1px solid var(--jq-border);
+    border-radius: 10px;
+    background: var(--jq-surface-alt);
+  }
+
+  .fieldCell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .fieldCell.full {
+    grid-column: 1 / -1;
+  }
+
+  .mobileLabel {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--jq-text-muted);
+  }
+
+  .actionsCell {
+    display: flex;
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 2px;
+  }
+}

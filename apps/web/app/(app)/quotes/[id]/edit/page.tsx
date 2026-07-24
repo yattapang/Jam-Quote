@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getJobs, getMaterialFavourites } from "@/lib/api-server";
+import { getQuote, getClients, getJobs, getMaterialFavourites, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -8,7 +8,15 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const [clients, jobs, favourites] = await Promise.all([getClients(), getJobs(), getMaterialFavourites()]);
+  const [clients, jobs, favourites, business] = await Promise.all([
+    getClients(),
+    getJobs(),
+    getMaterialFavourites(),
+    getBusiness(),
+  ]);
+  // Never hardcode GCT — use the business's own default rate, falling back
+  // to 15% only if it's unavailable/unreadable.
+  const gctRatePct = Number.isFinite(business.defaultGctRatePct) ? business.defaultGctRatePct : 15;
 
   return (
     <QuoteBuilder
@@ -48,6 +56,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       jobs={jobs.map((j) => ({ id: j.id, name: j.name }))}
       favourites={favourites}
+      gctRatePct={gctRatePct}
     />
   );
 }
