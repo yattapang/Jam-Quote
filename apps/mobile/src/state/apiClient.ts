@@ -23,6 +23,17 @@ import {
 const API_PORT = 3001;
 const BUSINESS_ID = "seed-business-blackwood";
 
+// Set by AuthProvider (src/state/AuthContext) on login/logout. When a token is
+// present, requests authenticate as the signed-in user's business; otherwise we
+// fall back to the demo business via x-business-id (additive auth rollout).
+let authToken: string | null = null;
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+function authHeaders(): Record<string, string> {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : { "x-business-id": BUSINESS_ID };
+}
+
 export function apiBaseUrl(): string {
   const override = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (override) return override;
@@ -37,7 +48,7 @@ export function apiBaseUrl(): string {
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBaseUrl()}${path}`, {
-    headers: { "x-business-id": BUSINESS_ID },
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
   return (await res.json()) as T;
@@ -46,9 +57,75 @@ async function get<T>(path: string): Promise<T> {
 async function del(path: string): Promise<void> {
   const res = await fetch(`${apiBaseUrl()}${path}`, {
     method: "DELETE",
-    headers: { "x-business-id": BUSINESS_ID },
+    headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`DELETE ${path} -> ${res.status}`);
+}
+
+// --- Auth ------------------------------------------------------------------
+
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  role: string;
+}
+export interface AuthBusiness {
+  id: string;
+  name: string;
+}
+export interface AuthResult {
+  token: string;
+  user: AuthUser;
+  business: AuthBusiness | null;
+}
+export interface RegisterInput {
+  email: string;
+  password: string;
+  businessName: string;
+  fullName?: string;
+}
+
+function authErrorMessage(data: unknown, fallback: string): string {
+  if (data && typeof data === "object" && "message" in data) {
+    const m = (data as { message: unknown }).message;
+    if (Array.isArray(m)) return m.join(", ");
+    if (typeof m === "string") return m;
+  }
+  return fallback;
+}
+
+async function postAuth(path: string, body: unknown): Promise<AuthResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${apiBaseUrl()}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error("Couldn't reach the server. Check your connection and try again.");
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(authErrorMessage(data, "Authentication failed."));
+  return data as AuthResult;
+}
+
+export function apiLogin(email: string, password: string): Promise<AuthResult> {
+  return postAuth("/auth/login", { email, password });
+}
+
+export function apiRegister(input: RegisterInput): Promise<AuthResult> {
+  return postAuth("/auth/register", input);
+}
+
+/** Verify a stored token and return the current user/business, or throw. */
+export async function fetchMe(token: string): Promise<{ user: AuthUser; business: AuthBusiness | null }> {
+  const res = await fetch(`${apiBaseUrl()}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`GET /auth/me -> ${res.status}`);
+  return (await res.json()) as { user: AuthUser; business: AuthBusiness | null };
 }
 
 interface ApiQuote {

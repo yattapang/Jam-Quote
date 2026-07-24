@@ -3,6 +3,7 @@ import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { rateBookRows } from "../../src/state/mockData";
+import { useAuth } from "../../src/state/AuthContext";
 import { useTheme, type ThemePreference } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -29,6 +30,17 @@ const MENU_ITEMS: MenuItem[] = [
 export default function MoreScreen() {
   const { colors, space, preference, setPreference } = useTheme();
   const router = useRouter();
+  const { user, business, isAuthenticated, logout } = useAuth();
+
+  const displayName = user?.fullName || user?.email || "Guest";
+  const displayBusiness = business?.name ?? "Demo business · not signed in";
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join("") || "?";
 
   const options: { key: ThemePreference; label: string }[] = [
     { key: "system", label: "System" },
@@ -50,17 +62,37 @@ export default function MoreScreen() {
           }}
         >
           <Text style={{ fontFamily: resolveFontFamily("display", "800"), color: colors.accent, fontSize: 18 }}>
-            OB
+            {initials}
           </Text>
         </View>
         <View>
           <Text style={{ fontFamily: resolveFontFamily("display", "800"), fontSize: 18, color: colors.text }}>
-            Owen Blackwood
+            {displayName}
           </Text>
-          <Text style={{ fontSize: 12.5, color: colors.textMuted, marginTop: 2 }}>
-            Blackwood Construction · TRN 123-456-789
-          </Text>
+          <Text style={{ fontSize: 12.5, color: colors.textMuted, marginTop: 2 }}>{displayBusiness}</Text>
         </View>
+
+        <Pressable
+          onPress={() => (isAuthenticated ? logout() : router.push("/login"))}
+          style={{
+            paddingVertical: 12,
+            borderRadius: 10,
+            alignItems: "center",
+            backgroundColor: isAuthenticated ? colors.surfaceAlt : colors.accent,
+            borderWidth: isAuthenticated ? 1 : 0,
+            borderColor: colors.border,
+          }}
+        >
+          <Text
+            style={{
+              fontFamily: resolveFontFamily("body", "700"),
+              fontSize: 14,
+              color: isAuthenticated ? colors.text : colors.onAccent,
+            }}
+          >
+            {isAuthenticated ? "Sign out" : "Sign in"}
+          </Text>
+        </Pressable>
 
         <View>
           <Text

@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { View } from "react-native";
+import { AuthProvider } from "../src/state/AuthContext";
 import { QuoteDraftProvider } from "../src/state/QuoteDraftContext";
 import { fontsToLoad } from "../src/theme/fonts";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
@@ -23,6 +24,7 @@ function RootStack() {
         <Stack.Screen name="add-material" options={{ presentation: "modal" }} />
         <Stack.Screen name="invoice-detail" options={{ presentation: "card" }} />
         <Stack.Screen name="feature-preview" options={{ presentation: "card" }} />
+        <Stack.Screen name="login" options={{ presentation: "modal" }} />
       </Stack>
     </View>
   );
@@ -43,9 +45,11 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <QuoteDraftProvider>
-        <RootStack />
-      </QuoteDraftProvider>
+      <AuthProvider>
+        <QuoteDraftProvider>
+          <RootStack />
+        </QuoteDraftProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
