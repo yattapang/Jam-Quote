@@ -1,6 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { HealthController } from "./health.controller.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -23,6 +25,11 @@ import { SyncModule } from "./sync/sync.module.js";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
+    // Global default rate limit: 120 requests / 60s per client IP. Stricter
+    // per-route limits (e.g. auth login/register) override this via the
+    // @Throttle decorator. Requires `trust proxy` in main.ts to see real
+    // client IPs behind Render's load balancer, not the proxy IP.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
     AuthModule,
     BusinessModule,
@@ -35,6 +42,10 @@ import { SyncModule } from "./sync/sync.module.js";
     SyncModule,
   ],
   controllers: [HealthController],
+  providers: [
+    // Apply the ThrottlerModule's rate limiting to every route globally.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
 export class AppModule implements NestModule {
   // Non-breaking auth bridge: if a request carries a valid Bearer JWT, this
