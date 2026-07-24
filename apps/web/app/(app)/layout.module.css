@@ -9,3 +9,11 @@
   overflow-y: auto;
   min-width: 0;
 }
+
+/* On mobile the sidebar is an off-canvas drawer and a fixed top bar takes its
+   place, so give the content room beneath it. */
+@media (max-width: 767px) {
+  .main {
+    padding-top: 52px;
+  }
+}

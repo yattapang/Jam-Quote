@@ -10,6 +10,15 @@
   gap: 22px;
 }
 
+@media (max-width: 767px) {
+  .page {
+    padding: 18px 16px 48px;
+  }
+  .title {
+    font-size: 22px;
+  }
+}
+
 .header {
   display: flex;
   align-items: flex-end;
