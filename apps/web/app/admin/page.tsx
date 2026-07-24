@@ -1,5 +1,5 @@
 import AdminConsole from "./AdminConsole";
-import { getAdminData } from "@/lib/api-client";
+import { getAdminData } from "@/lib/api-server";
 
 export const metadata = { title: "JamQuote Staff Console" };
 

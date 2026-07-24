@@ -5,7 +5,7 @@ import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
 import { regulatoryAlerts } from "@/lib/mock-data";
-import { getQuotes, getClients, getBusiness } from "@/lib/api-client";
+import { getQuotes, getClients, getBusiness } from "@/lib/api-server";
 import { computeDashboardStats, QuoteStatus } from "@jamquote/core";
 import shared from "../shared.module.css";
 

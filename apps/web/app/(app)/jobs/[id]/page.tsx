@@ -5,7 +5,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { quoteStatusPill } from "@/lib/status";
-import { getJob, getClients, getQuotes } from "@/lib/api-client";
+import { getJob, getClients, getQuotes } from "@/lib/api-server";
 import EditJobButton from "./EditJobButton";
 import shared from "../../shared.module.css";
 

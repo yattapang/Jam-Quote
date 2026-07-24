@@ -2,7 +2,7 @@ import Link from "next/link";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { getClients, getQuotes } from "@/lib/api-client";
+import { getClients, getQuotes } from "@/lib/api-server";
 import AddClientButton from "./AddClientButton";
 import shared from "../shared.module.css";
 

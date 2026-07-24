@@ -1,0 +1,71 @@
+.wrap {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 32px;
+  border-radius: 16px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+  background: var(--surface, #fff);
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted, #6b7280);
+  font-size: 14px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.error {
+  color: var(--danger, #b42318);
+  font-size: 13px;
+}
+
+.switch {
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+}
+
+.switchButton {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-left: 4px;
+  color: var(--accent, #9c6e1b);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.demoHint {
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  text-align: center;
+  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding-top: 12px;
+}

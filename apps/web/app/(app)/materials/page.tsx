@@ -1,7 +1,7 @@
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { getMaterialFavourites } from "@/lib/api-client";
+import { getMaterialFavourites } from "@/lib/api-server";
 import AddMaterialButton from "./AddMaterialButton";
 import shared from "../shared.module.css";
 

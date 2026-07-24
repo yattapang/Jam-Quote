@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getJobs, getMaterialFavourites } from "@/lib/api-client";
+import { getQuote, getClients, getJobs, getMaterialFavourites } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };

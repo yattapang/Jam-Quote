@@ -1,4 +1,4 @@
-import { getClients, getJobs, getMaterialFavourites } from "@/lib/api-client";
+import { getClients, getJobs, getMaterialFavourites } from "@/lib/api-server";
 import QuoteBuilder from "./QuoteBuilder";
 
 export const metadata = { title: "New quote · JamQuote" };

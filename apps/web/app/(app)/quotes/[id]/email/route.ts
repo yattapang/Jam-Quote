@@ -1,7 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { Resend } from "resend";
 import { formatJmd } from "@jamquote/core";
-import { getQuote, getClients, getBusiness } from "@/lib/api-client";
+import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import { getQuoteTotals } from "@/lib/quote-totals";
 import QuotePdf from "@/lib/pdf/QuotePdf";
 

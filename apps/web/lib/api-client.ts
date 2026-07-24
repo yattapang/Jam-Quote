@@ -1,31 +1,28 @@
 /**
- * Single chokepoint for talking to apps/api. Screens call the typed data
- * functions here (getClients, getQuotes, getQuote, getJobs) instead of
- * importing mock data. Each fetches from the live NestJS API and maps the
- * persistence shape to the view types; if the API is unreachable it falls back
- * to the shared @jamquote/core fixtures (same data) so the preview never breaks.
+ * Client-safe API layer. Client components import the write functions here;
+ * in the browser every call goes to the same-origin Next proxy
+ * (/api/proxy/*, see app/api/proxy/[...path]/route.ts), which attaches the
+ * logged-in user's JWT from the httpOnly cookie server-side (or the demo
+ * business as a fallback). Server-side READS live in ./api-server.ts, which
+ * reads the cookie directly via next/headers — that file must never be
+ * imported from a client component.
+ *
+ * Mappers and API shapes are declared here (framework-free) and reused by
+ * api-server.ts.
  */
 import type { Business, Client, MaterialFavourite, Quote } from "./types";
 import type { QuoteLineItemInput, QuoteStatus } from "@jamquote/core";
-import { getQuoteTotals } from "./quote-totals";
-import {
-  clients as fixtureClients,
-  quotes as fixtureQuotes,
-  jobs as fixtureJobs,
-  fixtureBusiness,
-  findJobDetail,
-  type JobSummary,
-  type JobDetail,
-} from "./mock-data";
 
-// Server components fetch server-side; default to the dev API. Override with
-// API_BASE_URL (server) or NEXT_PUBLIC_API_BASE_URL (build) in deploy.
+// Server-side (RSC/route handlers) reach the API directly; the browser goes
+// through the same-origin proxy so the httpOnly auth cookie is applied. Override
+// the server target with API_BASE_URL / NEXT_PUBLIC_API_BASE_URL in deploy.
 export const API_BASE_URL =
   process.env.API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:3001/api";
 
-// Temporary auth stand-in — matches the seeded business until JWT auth lands.
+// Demo fallback business used only on the (dead) server branch of request();
+// real server reads set this in api-server.ts, browser writes rely on the proxy.
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
 
 export class ApiError extends Error {
@@ -39,8 +36,16 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json", "x-business-id": BUSINESS_ID, ...init?.headers },
+  const isServer = typeof window === "undefined";
+  // Browser: hit the same-origin proxy (cookie auth applied there). Server:
+  // writes are never issued server-side, but keep a direct path for safety.
+  const base = isServer ? API_BASE_URL : "/api/proxy";
+  const res = await fetch(`${base}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(isServer ? { "x-business-id": BUSINESS_ID } : {}),
+      ...init?.headers,
+    },
     cache: "no-store",
     ...init,
   });
@@ -65,9 +70,7 @@ export const apiClient = {
  * Cheap liveness probe for the API. Returns false (instead of throwing) when
  * the API is unreachable or too slow to answer within `timeoutMs`, so the UI
  * can warn that the screens are showing bundled demo data rather than live
- * data. This is deliberately short-timeout: on the free tier a cold API can
- * take ~40s to wake, during which the page's own fetches fall back to fixtures
- * anyway, so a fast "not reachable" answer matches what actually rendered.
+ * data. Runs server-side (layout) and hits the API directly — no auth needed.
  */
 export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
   const controller = new AbortController();
@@ -85,9 +88,9 @@ export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
   }
 }
 
-// --- API (persistence) shapes we read ---------------------------------------
+// --- API (persistence) shapes (exported for api-server.ts) ------------------
 
-interface ApiClientRow {
+export interface ApiClientRow {
   id: string;
   firstName: string;
   lastName: string;
@@ -99,7 +102,7 @@ interface ApiClientRow {
   parish?: string | null;
   addressLine?: string | null;
 }
-interface ApiJob {
+export interface ApiJob {
   id: string;
   clientId?: string | null;
   name: string;
@@ -108,7 +111,7 @@ interface ApiJob {
   stage: string;
   progressPct: number;
 }
-interface ApiLineItem {
+export interface ApiLineItem {
   id: string;
   category: QuoteLineItemInput["category"];
   description: string;
@@ -119,14 +122,14 @@ interface ApiLineItem {
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   markupPct?: number | string | null;
 }
-interface ApiMaterialFavourite {
+export interface ApiMaterialFavourite {
   id: string;
   name: string;
   unit?: string | null;
   priceCents: number;
   supplierId?: string | null;
 }
-interface ApiBusiness {
+export interface ApiBusiness {
   id: string;
   name: string;
   countryCode?: string;
@@ -138,7 +141,7 @@ interface ApiBusiness {
   // Prisma Decimal comes over JSON as a numeric string, e.g. "15.00".
   defaultGctRate: number | string;
 }
-interface ApiQuote {
+export interface ApiQuote {
   id: string;
   clientId?: string | null;
   jobId?: string | null;
@@ -156,7 +159,7 @@ interface ApiQuote {
   sections?: { title: string; lineItems: ApiLineItem[] }[];
 }
 
-// --- Pure mappers (exported for testing) ------------------------------------
+// --- Pure mappers (exported; reused by api-server.ts and tests) -------------
 
 export function initialsOf(name: string): string {
   return name
@@ -259,136 +262,6 @@ export function mapBusiness(b: ApiBusiness): Business {
     countryCode: b.countryCode ?? "JM",
     currency: b.currency ?? "JMD",
   };
-}
-
-// --- Typed data functions (live API, fixture fallback) ----------------------
-
-export async function getClients(): Promise<Client[]> {
-  try {
-    return (await request<ApiClientRow[]>("/clients")).map(mapClient);
-  } catch {
-    console.warn("[api-client] getClients: API unreachable, using fixtures");
-    return fixtureClients;
-  }
-}
-
-export async function getClient(id: string): Promise<Client | undefined> {
-  try {
-    return mapClient(await request<ApiClientRow>(`/clients/${id}`));
-  } catch {
-    console.warn(`[api-client] getClient(${id}): API unreachable, using fixtures`);
-    return fixtureClients.find((c) => c.id === id);
-  }
-}
-
-/** GET /api/business/current — the caller's own business (resolved from the
- * x-business-id header; see BusinessController.current). */
-export async function getBusiness(): Promise<Business> {
-  try {
-    return mapBusiness(await request<ApiBusiness>("/business/current"));
-  } catch {
-    console.warn("[api-client] getBusiness: API unreachable, using fixture");
-    return fixtureBusiness;
-  }
-}
-
-/** GET /api/catalogs/material-favourites — saved materials with their last
- * price, for reuse in the quote builder. No fixture backs these (nothing to
- * fall back to yet), so an unreachable API just returns an empty list. */
-export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
-  try {
-    return (await request<ApiMaterialFavourite[]>("/catalogs/material-favourites")).map(
-      mapMaterialFavourite,
-    );
-  } catch {
-    console.warn("[api-client] getMaterialFavourites: API unreachable, using empty list");
-    return [];
-  }
-}
-
-export async function getJobs(): Promise<JobSummary[]> {
-  try {
-    const [jobs, quotes, clients] = await Promise.all([
-      request<ApiJob[]>("/jobs"),
-      request<ApiQuote[]>("/quotes"),
-      request<ApiClientRow[]>("/clients"),
-    ]);
-    const clientName = new Map(clients.map((c) => [c.id, c.name]));
-    return jobs.map((j) => {
-      const jobQuotes = quotes.filter((q) => q.jobId === j.id);
-      return {
-        id: j.id,
-        name: j.name,
-        clientName: clientName.get(j.clientId ?? "") ?? "Unknown",
-        addressLine: j.addressLine ?? "",
-        parish: j.parish ?? "",
-        stage: j.stage,
-        progressPct: j.progressPct,
-        quoteCount: jobQuotes.length,
-        valueCents: jobQuotes.reduce((sum, q) => sum + q.totalCents, 0),
-      };
-    });
-  } catch {
-    console.warn("[api-client] getJobs: API unreachable, using fixtures");
-    return fixtureJobs;
-  }
-}
-
-export async function getJob(id: string): Promise<JobDetail | undefined> {
-  try {
-    const [job, clients] = await Promise.all([
-      request<ApiJob>(`/jobs/${id}`),
-      request<ApiClientRow[]>("/clients"),
-    ]);
-    return {
-      id: job.id,
-      name: job.name,
-      clientId: job.clientId ?? "",
-      clientName: clients.find((c) => c.id === job.clientId)?.name ?? "Unknown",
-      addressLine: job.addressLine ?? "",
-      parish: job.parish ?? "",
-      stage: job.stage,
-      progressPct: job.progressPct,
-    };
-  } catch {
-    console.warn(`[api-client] getJob(${id}): API unreachable, using fixtures`);
-    return findJobDetail(id);
-  }
-}
-
-export async function getQuotes(): Promise<Quote[]> {
-  try {
-    const [quotes, jobs] = await Promise.all([
-      request<ApiQuote[]>("/quotes"),
-      request<ApiJob[]>("/jobs"),
-    ]);
-    const jobName = new Map(jobs.map((j) => [j.id, j.name]));
-    return quotes
-      .map((q) => mapQuote(q, jobName.get(q.jobId ?? "") ?? ""))
-      .sort((a, b) => b.num.localeCompare(a.num));
-  } catch {
-    console.warn("[api-client] getQuotes: API unreachable, using fixtures");
-    return fixtureQuotes.map((q) => ({ ...q, totalCents: getQuoteTotals(q).totalCents }));
-  }
-}
-
-export async function getQuote(id: string): Promise<Quote | undefined> {
-  try {
-    const q = await request<ApiQuote>(`/quotes/${id}`);
-    let jobLabel = "";
-    if (q.jobId) {
-      try {
-        jobLabel = (await request<ApiJob>(`/jobs/${q.jobId}`)).name;
-      } catch {
-        /* job label is best-effort */
-      }
-    }
-    return mapQuote(q, jobLabel);
-  } catch {
-    console.warn(`[api-client] getQuote(${id}): API unreachable, using fixtures`);
-    const q = fixtureQuotes.find((x) => x.id === id);
-    return q ? { ...q, totalCents: getQuoteTotals(q).totalCents } : undefined;
-  }
 }
 
 // --- Create (write path) ----------------------------------------------------
@@ -533,7 +406,7 @@ export async function deleteMaterialFavourite(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/material-favourites/${id}`);
 }
 
-// --- Admin (platform-level, staff console) ----------------------------------
+// --- Admin (platform-level, staff console) — types here, reads in api-server -
 
 export interface AdminOverview {
   businesses: number;
@@ -573,25 +446,6 @@ export interface AdminData {
   tenants: AdminTenant[];
   suppliers: AdminSupplier[];
   regulatory: AdminReg[];
-}
-
-/** Fetch everything the staff console shows, from the platform admin API. On
- * failure returns empty/null so the console falls back to its design sample. */
-export async function getAdminData(): Promise<AdminData> {
-  const safe = async <T>(path: string, empty: T): Promise<T> => {
-    try {
-      return await request<T>(path);
-    } catch {
-      return empty;
-    }
-  };
-  const [overview, tenants, suppliers, regulatory] = await Promise.all([
-    safe<AdminOverview | null>("/admin/overview", null),
-    safe<AdminTenant[]>("/admin/tenants", []),
-    safe<AdminSupplier[]>("/admin/suppliers", []),
-    safe<AdminReg[]>("/admin/regulatory", []),
-  ]);
-  return { overview, tenants, suppliers, regulatory };
 }
 
 export interface CardPaymentResponse {

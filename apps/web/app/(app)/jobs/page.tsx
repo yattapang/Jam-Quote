@@ -2,7 +2,7 @@ import Link from "next/link";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { getJobs, getClients } from "@/lib/api-client";
+import { getJobs, getClients } from "@/lib/api-server";
 import AddJobButton from "./AddJobButton";
 import shared from "../shared.module.css";
 

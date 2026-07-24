@@ -8,14 +8,6 @@ import {
   deleteJob,
   deleteMaterialFavourite,
   deleteQuote,
-  getBusiness,
-  getClient,
-  getClients,
-  getJob,
-  getJobs,
-  getMaterialFavourites,
-  getQuote,
-  getQuotes,
   initialsOf,
   mapBusiness,
   mapClient,
@@ -29,6 +21,21 @@ import {
   updateMaterialFavourite,
   updateQuote,
 } from "./api-client";
+// Reads moved to the server-only module; mock its server guards so the fetch/
+// mapping behaviour can still be unit-tested here (vitest runs under node, so
+// the write path below still exercises request()'s x-business-id branch).
+vi.mock("server-only", () => ({}));
+vi.mock("next/headers", () => ({ cookies: () => ({ get: () => undefined }) }));
+import {
+  getBusiness,
+  getClient,
+  getClients,
+  getJob,
+  getJobs,
+  getMaterialFavourites,
+  getQuote,
+  getQuotes,
+} from "./api-server";
 import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // --- fetch mock ------------------------------------------------------------

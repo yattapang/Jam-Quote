@@ -1,7 +1,7 @@
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import { businessProfile } from "@/lib/mock-data";
-import { getBusiness } from "@/lib/api-client";
+import { getBusiness } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import shared from "../shared.module.css";
 

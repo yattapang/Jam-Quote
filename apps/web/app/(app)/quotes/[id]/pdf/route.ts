@@ -1,5 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { getQuote, getClients, getBusiness } from "@/lib/api-client";
+import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import QuotePdf from "@/lib/pdf/QuotePdf";
 
 // @react-pdf/renderer needs Node's Buffer/streams — not available on the edge

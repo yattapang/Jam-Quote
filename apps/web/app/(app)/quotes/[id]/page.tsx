@@ -9,7 +9,7 @@ import {
   RATE_UNIT_LABEL,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
-import { getQuote, getClients, getBusiness } from "@/lib/api-client";
+import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import QuoteActions from "./QuoteActions";
 import WhatsAppButton from "./WhatsAppButton";
 import EmailQuoteButton from "./EmailQuoteButton";
