@@ -20,5 +20,10 @@ services:
         sync: false
       - key: WEB_ORIGIN
         sync: false
+      # REQUIRED: the API refuses to boot in production without this (auth.module
+      # resolveJwtSecret). Set a long random value in the Render dashboard before
+      # the first deploy that includes auth, or the service will crash on start.
+      - key: JWT_SECRET
+        sync: false
       - key: NODE_ENV
         value: production
