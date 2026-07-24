@@ -13,6 +13,9 @@ services:
     region: oregon
     branch: main
     buildCommand: npm ci --include=dev && npm run -w @jamquote/api prisma:generate && npx turbo run build --filter=@jamquote/api
+    # Applies pending Prisma migrations to the Neon DB before the new version
+    # goes live (safe/idempotent; needs DATABASE_URL set in the dashboard).
+    preDeployCommand: npm run -w @jamquote/api prisma:migrate:deploy
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
