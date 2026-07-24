@@ -20,7 +20,7 @@ jamquote/
 
 ## 2. Tech stack (confirmed)
 
-- **Backend:** NestJS, PostgreSQL, Prisma. REST + Zod validation. JWT auth (phone-first).
+- **Backend:** NestJS, PostgreSQL, Prisma. REST + Zod validation. JWT auth (email + password; phone login is a later option). Tenancy is migrating from an `x-business-id` header to JWT-derived `businessId`.
 - **Web:** Next.js App Router, React, TypeScript. Also hosts `/admin`.
 - **Mobile:** Expo (React Native). Expo Go for live phone preview; EAS Build for APK.
 - **Payments:** WiPay hosted checkout + signed webhook. Manual payments: cash / bank / Lynk.
@@ -71,6 +71,16 @@ Manual entry / override is **always** available and never blocked by a failed lo
 
 For each line: `base = round(quantity * unitPriceCents)`, `withMarkup = round(base * (1 + markupPct/100))`.
 Subtotal = Σ withMarkup. Apply quote-level discount. GCT computed only on STANDARD lines' post-discount share. Deposit is informational. All rounding at cents, half-up.
+
+## 5a. Offline-first sync (confirmed)
+
+The Android app must be **fully usable offline** and sync on reconnect. Mobile holds a local
+`expo-sqlite` replica with an outbox; the server is authoritative for money totals (always
+recomputed via `@jamquote/core`) and the sync cursor. IDs are client-generated UUID v7.
+Conflict handling is record-level LWW by server `updatedAt`, refined so **quotes merge at the
+line-item level** and totals are never trusted from a client. Concurrency target is "small
+team, rarely collide" — safe under occasional concurrent edits, no live collaboration in v1.
+Full design and required schema deltas: **`docs/SYNC.md`**. Build order: **`docs/MILESTONES.md`**.
 
 ## 6. Modules (apps/api)
 
