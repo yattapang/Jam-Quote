@@ -1,8 +1,10 @@
-import { Module } from "@nestjs/common";
+import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { HealthController } from "./health.controller.js";
+import { AuthModule } from "./auth/auth.module.js";
+import { AuthContextMiddleware } from "./auth/auth-context.middleware.js";
 import { BusinessModule } from "./business/business.module.js";
 import { ClientsModule } from "./clients/clients.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
@@ -13,15 +15,15 @@ import { AdminModule } from "./admin/admin.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
- * deliver them. Still TODO: AuthModule, PricingModule (scrapers),
- * InvoicingModule, DocumentsModule (PDF), MessagingModule (whatsapp/email),
- * ReportsModule.
+ * deliver them. Still TODO: PricingModule (scrapers), InvoicingModule,
+ * DocumentsModule (PDF), MessagingModule (whatsapp/email), ReportsModule.
  */
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    AuthModule,
     BusinessModule,
     ClientsModule,
     JobsModule,
@@ -32,4 +34,13 @@ import { AdminModule } from "./admin/admin.module.js";
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Non-breaking auth bridge: if a request carries a valid Bearer JWT, this
+  // sets req.user/req.businessId; it never rejects, so existing
+  // x-business-id header requests are completely unaffected. See
+  // @BusinessId() in ./common/business-id.decorator.ts for how the two
+  // auth paths are reconciled.
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(AuthContextMiddleware).forRoutes("*");
+  }
+}

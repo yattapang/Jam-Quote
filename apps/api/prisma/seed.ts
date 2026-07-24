@@ -8,6 +8,7 @@
  * totals are computed by computeTotals (via demoQuoteTotals) — never hand-typed.
  * Idempotent: clears this business's clients/jobs/quotes then re-inserts.
  */
+import bcrypt from "bcryptjs";
 import { PrismaClient, UserRole, RateUnit, PriceSource, EntityType } from "@prisma/client";
 import {
   demoClients,
@@ -19,6 +20,11 @@ import {
 const prisma = new PrismaClient();
 
 const BUSINESS_ID = "seed-business-blackwood";
+// Dev login for the seeded demo tenant. Documented here (not secret — this is
+// local/demo data only). Change or remove before any real deployment reuses
+// this business id.
+const OWNER_LOGIN_EMAIL = "owner@blackwood.jm";
+const OWNER_LOGIN_PASSWORD = "Blackwood123!";
 
 async function main(): Promise<void> {
   const business = await prisma.business.upsert({
@@ -36,6 +42,22 @@ async function main(): Promise<void> {
       defaultGctRate: "15.00",
       quotePrefix: "QT-",
       invoicePrefix: "INV-",
+    },
+  });
+
+  // Login-capable owner for this demo tenant (separate from the contact-only
+  // "seed-user-owen" row below). Idempotent by email so re-seeding is safe.
+  // Dev login: owner@blackwood.jm / Blackwood123!
+  const ownerPasswordHash = await bcrypt.hash(OWNER_LOGIN_PASSWORD, 10);
+  await prisma.user.upsert({
+    where: { email: OWNER_LOGIN_EMAIL },
+    update: { passwordHash: ownerPasswordHash, businessId: business.id, role: UserRole.OWNER },
+    create: {
+      email: OWNER_LOGIN_EMAIL,
+      passwordHash: ownerPasswordHash,
+      businessId: business.id,
+      role: UserRole.OWNER,
+      fullName: "Owen Blackwood",
     },
   });
 
@@ -425,6 +447,8 @@ async function main(): Promise<void> {
     `Seeded ${demoClients.length} clients, ${demoJobs.length} jobs, ${demoQuotes.length} quotes for ${business.name}; ` +
       `${otherBusinesses.length + 1} businesses, ${otherSuppliers.length + 1} suppliers, ${regulatoryUpdates.length} regulatory updates total.`,
   );
+  // eslint-disable-next-line no-console
+  console.log(`Seeded dev login for ${business.name}: ${OWNER_LOGIN_EMAIL} / ${OWNER_LOGIN_PASSWORD}`);
 }
 
 main()
