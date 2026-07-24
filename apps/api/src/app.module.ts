@@ -12,6 +12,7 @@ import { QuotesModule } from "./quotes/quotes.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
 import { AdminModule } from "./admin/admin.module.js";
+import { SyncModule } from "./sync/sync.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
@@ -31,6 +32,7 @@ import { AdminModule } from "./admin/admin.module.js";
     CatalogsModule,
     PaymentsModule,
     AdminModule,
+    SyncModule,
   ],
   controllers: [HealthController],
 })

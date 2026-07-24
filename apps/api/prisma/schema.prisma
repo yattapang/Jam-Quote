@@ -230,6 +230,7 @@ model QuoteSection {
   quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   title   String
   sort    Int    @default(0)
+  updatedAt DateTime @updatedAt // delta-sync cursor
   deletedAt DateTime? // soft-delete for offline sync
 
   lineItems QuoteLineItem[]
@@ -253,6 +254,7 @@ model QuoteLineItem {
   markupPct      Decimal?     @db.Decimal(6, 2)
   overrideNote   String?
   sort           Int          @default(0)
+  updatedAt      DateTime     @updatedAt // delta-sync cursor
   deletedAt      DateTime? // soft-delete for offline sync
 
   @@index([quoteId])
@@ -268,6 +270,7 @@ model Supplier {
   parish    String?
   isPartner Boolean  @default(false)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // delta-sync cursor
   deletedAt DateTime? // soft-delete for offline sync
 
   priceEntries MaterialPriceEntry[]
@@ -299,6 +302,7 @@ model LabourRate {
   skillTier  String? // helper / journeyman / master
   rateCents  Int
   rateUnit   RateUnit @default(DAY)
+  updatedAt  DateTime @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
@@ -312,6 +316,7 @@ model MaterialFavourite {
   unit       String?
   priceCents Int
   supplierId String?
+  updatedAt  DateTime @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
@@ -327,6 +332,7 @@ model EquipmentItem {
   vendorPhone String?
   rateCents  Int
   rateUnit   RateUnit @default(DAY)
+  updatedAt  DateTime @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
   @@index([businessId])
@@ -373,6 +379,7 @@ model Payment {
   status       String        @default("recorded") // recorded | pending | completed | failed
   paidAt       DateTime      @default(now())
   createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt // delta-sync cursor
   deletedAt    DateTime? // soft-delete for offline sync
 
   @@index([invoiceId])
