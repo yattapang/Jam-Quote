@@ -148,6 +148,22 @@ describe("AuthService.login", () => {
       svc.login({ email: "owner@blackwood.jm", password: "wrong-password" }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it("throws Unauthorized when the user's business has been suspended (deletedAt set)", async () => {
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(user) },
+      business: {
+        findUnique: vi.fn().mockResolvedValue({ ...business, deletedAt: new Date() }),
+      },
+    };
+    const jwt = makeJwt();
+    const svc = new AuthService(prisma as any, jwt as any);
+
+    await expect(
+      svc.login({ email: "owner@blackwood.jm", password: "Blackwood123!" }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(jwt.sign).not.toHaveBeenCalled();
+  });
 });
 
 describe("AuthService.forgotPassword", () => {

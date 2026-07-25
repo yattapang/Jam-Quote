@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AdminController } from "./admin.controller.js";
 import { AdminService } from "./admin.service.js";
+import { AuditService } from "./audit.service.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { BillingModule } from "../billing/billing.module.js";
@@ -11,7 +12,7 @@ import { BillingModule } from "../billing/billing.module.js";
   // exports PricingService, which backs GET/PATCH /admin/pricing.
   imports: [AuthModule, BillingModule],
   controllers: [AdminController],
-  providers: [AdminService, AdminGuard],
-  exports: [AdminService],
+  providers: [AdminService, AdminGuard, AuditService],
+  exports: [AdminService, AuditService],
 })
 export class AdminModule {}

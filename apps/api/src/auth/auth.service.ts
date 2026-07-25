@@ -122,6 +122,14 @@ export class AuthService {
       ? await this.prisma.business.findUnique({ where: { id: user.businessId } })
       : null;
 
+    // A suspended (soft-deleted) business's users can no longer sign in —
+    // this is what makes the admin "suspend tenant" action actually take
+    // effect for the affected users immediately, not just hide the tenant
+    // from admin listings.
+    if (business?.deletedAt) {
+      throw new UnauthorizedException("This account has been suspended.");
+    }
+
     const token = this.issueToken(user);
     return { token, user: toSafeUser(user), business: business ? toSafeBusiness(business) : null };
   }

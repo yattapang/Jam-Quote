@@ -1,17 +1,29 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
-import type { Subscription } from "@prisma/client";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
+import type { Request } from "express";
+import type { AuditLog, Business, Subscription, Supplier } from "@prisma/client";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import type { PricingSnapshot } from "../billing/pricing.service.js";
 import { updatePricingSchema, type UpdatePricingInput } from "../billing/billing.dto.js";
 import {
   AdminService,
+  type AdminFinancials,
   type AdminOverview,
   type AdminRegulatoryUpdate,
   type AdminSupplier,
   type AdminTenant,
 } from "./admin.service.js";
-import { setTenantPlanSchema, type SetTenantPlanInput } from "./admin.dto.js";
+import { AuditService } from "./audit.service.js";
+import {
+  createSupplierSchema,
+  hardDeleteTenantSchema,
+  setTenantPlanSchema,
+  updateSupplierSchema,
+  type CreateSupplierInput,
+  type HardDeleteTenantInput,
+  type SetTenantPlanInput,
+  type UpdateSupplierInput,
+} from "./admin.dto.js";
 
 /**
  * Platform-level admin API for the internal JamQuote staff console.
@@ -25,7 +37,10 @@ import { setTenantPlanSchema, type SetTenantPlanInput } from "./admin.dto.js";
 @Controller("admin")
 @UseGuards(AdminGuard)
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get("overview")
   overview(): Promise<AdminOverview> {
@@ -33,13 +48,62 @@ export class AdminController {
   }
 
   @Get("tenants")
-  tenants(): Promise<AdminTenant[]> {
-    return this.admin.tenants();
+  tenants(@Query("includeSuspended") includeSuspended?: string): Promise<AdminTenant[]> {
+    return this.admin.tenants(includeSuspended === "true");
+  }
+
+  /** Reversible soft-delete — sets Business.deletedAt. */
+  @Patch("tenants/:id/suspend")
+  suspendTenant(@Param("id") id: string, @Req() req: Request): Promise<Business> {
+    return this.admin.suspendTenant(id, req.user!.sub);
+  }
+
+  /** Undoes a suspend — clears Business.deletedAt. */
+  @Patch("tenants/:id/restore")
+  restoreTenant(@Param("id") id: string, @Req() req: Request): Promise<Business> {
+    return this.admin.restoreTenant(id, req.user!.sub);
+  }
+
+  /**
+   * PERMANENT hard delete. Requires the body's confirmName to exactly match
+   * the business's current name — see AdminService.hardDeleteTenant.
+   */
+  @Delete("tenants/:id")
+  hardDeleteTenant(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(hardDeleteTenantSchema)) body: HardDeleteTenantInput,
+    @Req() req: Request,
+  ): Promise<{ deleted: true; businessId: string }> {
+    return this.admin.hardDeleteTenant(id, body.confirmName, req.user!.sub);
   }
 
   @Get("suppliers")
   suppliers(): Promise<AdminSupplier[]> {
     return this.admin.suppliers();
+  }
+
+  /** Supplier is platform-level (not business-scoped). */
+  @Post("suppliers")
+  createSupplier(
+    @Body(new ZodValidationPipe(createSupplierSchema)) body: CreateSupplierInput,
+    @Req() req: Request,
+  ): Promise<Supplier> {
+    return this.admin.createSupplier(body, req.user!.sub);
+  }
+
+  @Patch("suppliers/:id")
+  updateSupplier(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateSupplierSchema)) body: UpdateSupplierInput,
+    @Req() req: Request,
+  ): Promise<Supplier> {
+    return this.admin.updateSupplier(id, body, req.user!.sub);
+  }
+
+  /** SOFT delete only — Supplier is FK-referenced by material prices/quote lines. */
+  @Delete("suppliers/:id")
+  deleteSupplier(@Param("id") id: string, @Req() req: Request): Promise<Supplier> {
+    return this.admin.deleteSupplier(id, req.user!.sub);
   }
 
   @Get("regulatory")
@@ -55,8 +119,9 @@ export class AdminController {
   @Patch("pricing")
   updatePricing(
     @Body(new ZodValidationPipe(updatePricingSchema)) body: UpdatePricingInput,
+    @Req() req: Request,
   ): Promise<PricingSnapshot> {
-    return this.admin.updatePricing(body);
+    return this.admin.updatePricing(body, req.user!.sub);
   }
 
   /** Manual-upgrade path: set a business's plan directly (bypasses payment). */
@@ -64,7 +129,20 @@ export class AdminController {
   setTenantPlan(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(setTenantPlanSchema)) body: SetTenantPlanInput,
+    @Req() req: Request,
   ): Promise<Subscription> {
-    return this.admin.setTenantPlan(id, body);
+    return this.admin.setTenantPlan(id, body, req.user!.sub);
+  }
+
+  /** Subscription & revenue overview — GET /admin/financials. */
+  @Get("financials")
+  financials(): Promise<AdminFinancials> {
+    return this.admin.financials();
+  }
+
+  /** Recent audit trail entries, newest first — GET /admin/audit. */
+  @Get("audit")
+  audit(): Promise<AuditLog[]> {
+    return this.auditService.recent();
   }
 }

@@ -473,3 +473,19 @@ model PricingConfig {
   currency            String   @default("JMD")
   updatedAt           DateTime @updatedAt
 }
+
+// Immutable audit trail for platform-admin actions (tenant suspend/restore/
+// delete, plan changes, pricing edits, supplier writes). Written only via
+// AuditService.record() — never updated or deleted by the app.
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId  String
+  actorEmail   String
+  action       String // e.g. "tenant.suspend"
+  targetType   String
+  targetId     String
+  details      Json?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+}
