@@ -35,6 +35,7 @@
  *   User (businessId is nullable, but still an FK to Business)
  *   Business
  */
+import "dotenv/config"; // load apps/api/.env so DATABASE_URL is set when run via tsx
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();

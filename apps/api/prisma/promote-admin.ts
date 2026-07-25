@@ -12,6 +12,7 @@
  * Takes effect immediately — AdminGuard and /auth/me both read the role fresh
  * from the DB, so there's no need to sign out and back in.
  */
+import "dotenv/config"; // load apps/api/.env so DATABASE_URL is set when run via tsx
 import { PrismaClient, UserRole } from "@prisma/client";
 
 const prisma = new PrismaClient();
