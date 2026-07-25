@@ -1,12 +1,25 @@
-import { ConflictException, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
+import { randomBytes, createHash } from "node:crypto";
+import { Resend } from "resend";
 import { EntityType, UserRole, type Business, type User } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { LoginInput, RegisterInput } from "./auth.dto.js";
+import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.dto.js";
 
 const BCRYPT_COST = 10;
 const TOKEN_EXPIRY = "30d";
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
+
+function hashResetToken(rawToken: string): string {
+  return createHash("sha256").update(rawToken).digest("hex");
+}
+
+function resolveWebBase(): string {
+  const origins = process.env.WEB_ORIGIN;
+  const first = origins?.split(",")[0]?.trim();
+  return first || "http://localhost:3000";
+}
 
 /** JWT payload shape signed by issueToken and read back by JwtAuthGuard / auth-context.middleware. */
 export interface AuthTokenPayload {
@@ -47,6 +60,8 @@ function toSafeBusiness(business: Business): SafeBusiness {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -120,6 +135,108 @@ export class AuthService {
       ? await this.prisma.business.findUnique({ where: { id: user.businessId } })
       : null;
     return { user: toSafeUser(user), business: business ? toSafeBusiness(business) : null };
+  }
+
+  /**
+   * Always resolves with a neutral { ok: true } whether or not the email
+   * belongs to an account — never leak account existence to the caller.
+   */
+  async forgotPassword(input: ForgotPasswordInput): Promise<{ ok: true }> {
+    const email = input.email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    if (user) {
+      const rawToken = randomBytes(32).toString("hex");
+      const tokenHash = hashResetToken(rawToken);
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+      await this.prisma.$transaction([
+        // Invalidate any prior unused tokens for this user before issuing a new one.
+        this.prisma.passwordResetToken.updateMany({
+          where: { userId: user.id, usedAt: null },
+          data: { usedAt: new Date() },
+        }),
+        this.prisma.passwordResetToken.create({
+          data: { userId: user.id, tokenHash, expiresAt },
+        }),
+      ]);
+
+      await this.sendResetEmail(user, rawToken);
+    }
+
+    return { ok: true };
+  }
+
+  async resetPassword(input: ResetPasswordInput): Promise<{ ok: true }> {
+    const tokenHash = hashResetToken(input.token);
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!resetToken) {
+      throw new BadRequestException("This reset link is invalid.");
+    }
+    if (resetToken.usedAt) {
+      throw new BadRequestException("This reset link has already been used.");
+    }
+    if (resetToken.expiresAt < new Date()) {
+      throw new BadRequestException("This reset link has expired.");
+    }
+
+    const passwordHash = await bcrypt.hash(input.newPassword, BCRYPT_COST);
+    const now = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: now },
+      }),
+      // Invalidate any other unused tokens for this user.
+      this.prisma.passwordResetToken.updateMany({
+        where: { userId: resetToken.userId, usedAt: null, id: { not: resetToken.id } },
+        data: { usedAt: now },
+      }),
+    ]);
+
+    return { ok: true };
+  }
+
+  private async sendResetEmail(user: User, rawToken: string): Promise<void> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      this.logger.warn(
+        `RESEND_API_KEY is not set — skipping password reset email for user ${user.id}.`,
+      );
+      return;
+    }
+
+    const webBase = resolveWebBase();
+    const resetLink = `${webBase}/reset-password?token=${rawToken}`;
+    const from =
+      process.env.PASSWORD_RESET_FROM_EMAIL ??
+      process.env.EMAIL_FROM ??
+      "JamQuote <onboarding@resend.dev>";
+
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send({
+      from,
+      to: user.email!,
+      subject: "Reset your JamQuote password",
+      html: `
+        <p>Hi ${user.fullName || "there"},</p>
+        <p>We received a request to reset your JamQuote password. Click the link below to choose a new one:</p>
+        <p><a href="${resetLink}">${resetLink}</a></p>
+        <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+      `,
+    });
+
+    if (error) {
+      this.logger.warn(`Failed to send password reset email for user ${user.id}: ${error.message}`);
+    }
   }
 
   issueToken(user: Pick<User, "id" | "businessId" | "role">): string {

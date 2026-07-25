@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useFormState, useFormStatus } from "react-dom";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -40,6 +41,12 @@ export default function LoginForm() {
         required
         autoComplete={isRegister ? "new-password" : "current-password"}
       />
+
+      {!isRegister && (
+        <Link href="/forgot-password" className={styles.switchButton}>
+          Forgot password?
+        </Link>
+      )}
 
       {state?.error && <span className={styles.error}>{state.error}</span>}
 

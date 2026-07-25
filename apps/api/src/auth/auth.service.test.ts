@@ -1,6 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
-import { ConflictException, UnauthorizedException } from "@nestjs/common";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BadRequestException, ConflictException, UnauthorizedException } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { AuthService } from "./auth.service.js";
+
+const sendMock = vi.fn(async (_args: { to: string; html: string }) => ({
+  data: { id: "email-1" },
+  error: null,
+}));
+
+vi.mock("resend", () => ({
+  Resend: vi.fn().mockImplementation(() => ({
+    emails: { send: sendMock },
+  })),
+}));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -135,5 +147,178 @@ describe("AuthService.login", () => {
     await expect(
       svc.login({ email: "owner@blackwood.jm", password: "wrong-password" }),
     ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
+describe("AuthService.forgotPassword", () => {
+  const ORIGINAL_ENV = { ...process.env };
+
+  beforeEach(() => {
+    sendMock.mockClear();
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  it("creates a hashed reset token and sends an email when the user exists", async () => {
+    process.env.RESEND_API_KEY = "test-key";
+    process.env.WEB_ORIGIN = "https://app.jamquote.jm,https://other.example";
+
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(user) },
+      passwordResetToken: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+      $transaction: vi.fn(async (ops: unknown[]) => ops),
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    const result = await svc.forgotPassword({ email: "Owner@Blackwood.JM" });
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: "owner@blackwood.jm" } });
+    expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "u1", usedAt: null } }),
+    );
+    expect(prisma.passwordResetToken.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: "u1" }),
+      }),
+    );
+    expect(sendMock).toHaveBeenCalledTimes(1);
+    const sentArgs = sendMock.mock.calls[0]![0];
+    expect(sentArgs.to).toBe("owner@blackwood.jm");
+    expect(sentArgs.html).toContain("https://app.jamquote.jm/reset-password?token=");
+
+    // The token embedded in the email must hash to the value persisted to the DB.
+    const createdData = prisma.passwordResetToken.create.mock.calls[0]![0].data;
+    const match = /token=([0-9a-f]+)/.exec(sentArgs.html);
+    const rawToken = match?.[1];
+    expect(rawToken).toBeTruthy();
+    expect(createHash("sha256").update(rawToken!).digest("hex")).toBe(createdData.tokenHash);
+  });
+
+  it("returns ok:true without querying tokens when the email is unknown (no user enumeration)", async () => {
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(null) },
+      passwordResetToken: { updateMany: vi.fn(), create: vi.fn() },
+      $transaction: vi.fn(),
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    const result = await svc.forgotPassword({ email: "nobody@nowhere.jm" });
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  it("skips sending and still returns ok:true when RESEND_API_KEY is missing", async () => {
+    delete process.env.RESEND_API_KEY;
+
+    const prisma = {
+      user: { findUnique: vi.fn().mockResolvedValue(user) },
+      passwordResetToken: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        create: vi.fn().mockResolvedValue({}),
+      },
+      $transaction: vi.fn(async (ops: unknown[]) => ops),
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    const result = await svc.forgotPassword({ email: "owner@blackwood.jm" });
+
+    expect(result).toEqual({ ok: true });
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("AuthService.resetPassword", () => {
+  const rawToken = "a".repeat(64);
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
+  it("updates the password hash and marks the token used on success", async () => {
+    const resetToken = {
+      id: "rt1",
+      userId: "u1",
+      tokenHash,
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: null,
+    };
+    const prisma = {
+      passwordResetToken: {
+        findUnique: vi.fn().mockResolvedValue(resetToken),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      user: { update: vi.fn().mockResolvedValue({}) },
+      $transaction: vi.fn(async (ops: unknown[]) => ops),
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    const result = await svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" });
+
+    expect(result).toEqual({ ok: true });
+    expect(prisma.passwordResetToken.findUnique).toHaveBeenCalledWith({ where: { tokenHash } });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "u1" },
+        data: expect.objectContaining({ passwordHash: "hashed:NewPass123!" }),
+      }),
+    );
+    expect(prisma.passwordResetToken.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "rt1" }, data: expect.objectContaining({ usedAt: expect.any(Date) }) }),
+    );
+  });
+
+  it("rejects an unknown token", async () => {
+    const prisma = {
+      passwordResetToken: { findUnique: vi.fn().mockResolvedValue(null) },
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    await expect(
+      svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects an already-used token", async () => {
+    const prisma = {
+      passwordResetToken: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "rt1",
+          userId: "u1",
+          tokenHash,
+          expiresAt: new Date(Date.now() + 60_000),
+          usedAt: new Date(),
+        }),
+      },
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    await expect(
+      svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("rejects an expired token", async () => {
+    const prisma = {
+      passwordResetToken: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "rt1",
+          userId: "u1",
+          tokenHash,
+          expiresAt: new Date(Date.now() - 60_000),
+          usedAt: null,
+        }),
+      },
+    };
+    const svc = new AuthService(prisma as any, makeJwt() as any);
+
+    await expect(
+      svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

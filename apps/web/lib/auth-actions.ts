@@ -104,3 +104,65 @@ export async function logout(): Promise<void> {
   cookies().delete(TOKEN_COOKIE);
   redirect("/login");
 }
+
+export interface ForgotPasswordState {
+  submitted?: boolean;
+  error?: string;
+}
+
+/**
+ * Always resolves to a neutral "submitted" state on any completed request —
+ * the API itself never reveals whether the email belongs to an account, and
+ * neither does this form. Only a genuine network failure (API unreachable)
+ * is reported differently, so the user knows to retry.
+ */
+export async function forgotPasswordAction(
+  _prev: ForgotPasswordState | undefined,
+  formData: FormData,
+): Promise<ForgotPasswordState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) return { error: "Enter your email address." };
+
+  try {
+    await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+      cache: "no-store",
+    });
+    return { submitted: true };
+  } catch {
+    return { error: "Couldn't reach the server. Is the API running?" };
+  }
+}
+
+export interface ResetPasswordState {
+  error?: string;
+}
+
+export async function resetPasswordAction(
+  _prev: ResetPasswordState | undefined,
+  formData: FormData,
+): Promise<ResetPasswordState> {
+  const token = String(formData.get("token") ?? "");
+  const newPassword = String(formData.get("newPassword") ?? "");
+  if (!token) return { error: "This reset link is missing its token. Request a new one." };
+  if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, newPassword }),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return { error: messageFrom(data) };
+    }
+  } catch {
+    return { error: "Couldn't reach the server. Is the API running?" };
+  }
+
+  redirect("/login?reset=success");
+}
