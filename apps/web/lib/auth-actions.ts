@@ -100,6 +100,43 @@ export async function authenticateAction(
   return mode === "register" ? register(prev, formData) : login(prev, formData);
 }
 
+/**
+ * Staff-console login (separate from the contractor login). Authenticates,
+ * then only establishes a session + lands on /admin if the account actually
+ * has the ADMIN role — a non-admin gets an error and NO session is set. (The
+ * real boundary is still AdminGuard on the API; this just keeps the staff
+ * entry point clean and lands admins in the right place.)
+ */
+export async function adminLogin(
+  _prev: AuthFormState | undefined,
+  formData: FormData,
+): Promise<AuthFormState> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+  if (!email || !password) return { error: "Email and password are required." };
+
+  let data: { token?: string; user?: { role?: string } };
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      cache: "no-store",
+    });
+    data = (await res.json().catch(() => ({}))) as typeof data;
+    if (!res.ok) return { error: messageFrom(data) };
+  } catch {
+    return { error: "Couldn't reach the server. Is the API running?" };
+  }
+
+  if (data.user?.role !== "ADMIN") {
+    return { error: "This account doesn't have staff/admin access." };
+  }
+  if (!data.token) return { error: "Authentication failed. Please try again." };
+  setToken(data.token);
+  redirect("/admin");
+}
+
 export async function logout(): Promise<void> {
   cookies().delete(TOKEN_COOKIE);
   redirect("/login");

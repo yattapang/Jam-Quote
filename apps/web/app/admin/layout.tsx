@@ -13,7 +13,8 @@ export const metadata = { title: "JamQuote Staff Console · internal" };
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session || session.user.role !== "ADMIN") {
-    redirect("/login");
+    // Send would-be staff to the dedicated staff login, not the contractor one.
+    redirect("/admin-login");
   }
   return <>{children}</>;
 }
