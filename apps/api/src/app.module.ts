@@ -15,11 +15,12 @@ import { CatalogsModule } from "./catalogs/catalogs.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { SyncModule } from "./sync/sync.module.js";
+import { BillingModule } from "./billing/billing.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
- * deliver them. Still TODO: PricingModule (scrapers), InvoicingModule,
- * DocumentsModule (PDF), MessagingModule (whatsapp/email), ReportsModule.
+ * deliver them. Still TODO: InvoicingModule, DocumentsModule (PDF),
+ * MessagingModule (whatsapp/email), ReportsModule.
  */
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { SyncModule } from "./sync/sync.module.js";
     PaymentsModule,
     AdminModule,
     SyncModule,
+    BillingModule,
   ],
   controllers: [HealthController],
   providers: [

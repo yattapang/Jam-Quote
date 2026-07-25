@@ -1,6 +1,9 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { supportedJurisdictions } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
+import type { UpdatePricingInput } from "../billing/billing.dto.js";
+import type { SetTenantPlanInput } from "./admin.dto.js";
 
 export interface AdminOverview {
   businesses: number;
@@ -46,7 +49,10 @@ export interface AdminRegulatoryUpdate {
  */
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pricingService: PricingService,
+  ) {}
 
   async overview(): Promise<AdminOverview> {
     const [businesses, activeSubscriptions, suppliersTracked] = await Promise.all([
@@ -125,6 +131,34 @@ export class AdminService {
         effectiveDate: true,
         sourceUrl: true,
         actionNeeded: true,
+      },
+    });
+  }
+
+  pricing(): Promise<PricingSnapshot> {
+    return this.pricingService.get();
+  }
+
+  updatePricing(patch: UpdatePricingInput): Promise<PricingSnapshot> {
+    return this.pricingService.update(patch);
+  }
+
+  /** Manual-upgrade path: admin sets a business's plan directly. */
+  async setTenantPlan(businessId: string, input: SetTenantPlanInput) {
+    const business = await this.prisma.business.findUnique({ where: { id: businessId } });
+    if (!business) throw new NotFoundException("Business not found");
+
+    return this.prisma.subscription.upsert({
+      where: { businessId },
+      create: {
+        businessId,
+        plan: input.plan,
+        status: "active",
+        renewsAt: input.renewsAt ? new Date(input.renewsAt) : null,
+      },
+      update: {
+        plan: input.plan,
+        renewsAt: input.renewsAt ? new Date(input.renewsAt) : null,
       },
     });
   }

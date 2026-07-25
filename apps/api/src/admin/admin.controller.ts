@@ -1,5 +1,9 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, UseGuards } from "@nestjs/common";
+import type { Subscription } from "@prisma/client";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
+import type { PricingSnapshot } from "../billing/pricing.service.js";
+import { updatePricingSchema, type UpdatePricingInput } from "../billing/billing.dto.js";
 import {
   AdminService,
   type AdminOverview,
@@ -7,6 +11,7 @@ import {
   type AdminSupplier,
   type AdminTenant,
 } from "./admin.service.js";
+import { setTenantPlanSchema, type SetTenantPlanInput } from "./admin.dto.js";
 
 /**
  * Platform-level admin API for the internal JamQuote staff console.
@@ -40,5 +45,26 @@ export class AdminController {
   @Get("regulatory")
   regulatory(): Promise<AdminRegulatoryUpdate[]> {
     return this.admin.regulatory();
+  }
+
+  @Get("pricing")
+  pricing(): Promise<PricingSnapshot> {
+    return this.admin.pricing();
+  }
+
+  @Patch("pricing")
+  updatePricing(
+    @Body(new ZodValidationPipe(updatePricingSchema)) body: UpdatePricingInput,
+  ): Promise<PricingSnapshot> {
+    return this.admin.updatePricing(body);
+  }
+
+  /** Manual-upgrade path: set a business's plan directly (bypasses payment). */
+  @Patch("tenants/:id/plan")
+  setTenantPlan(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(setTenantPlanSchema)) body: SetTenantPlanInput,
+  ): Promise<Subscription> {
+    return this.admin.setTenantPlan(id, body);
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, HttpException } from "@nestjs/common";
 import {
   computeTotals,
   GctTreatment,
@@ -38,9 +38,12 @@ describe("QuotesService.create", () => {
       quote: {
         findFirst: vi.fn().mockResolvedValue({ id: "q1", lineItems: [], sections: [] }),
       },
+      // "pro" so the free-tier gate returns early without needing
+      // pricingService/quote.count mocks for this unrelated test.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
     };
 
-    const svc = new QuotesService(prisma as any, businessService as any);
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
     await svc.create("b1", { sections: [], lineItems: [line], discountPct: 5 } as any);
 
     const expected = computeTotals({
@@ -62,6 +65,74 @@ describe("QuotesService.create", () => {
   });
 });
 
+describe("QuotesService.create free-tier gating", () => {
+  /** Builds a full create() harness; `plan`/`quotesThisMonth` drive the gate. */
+  function harness(plan: "free" | "pro", quotesThisMonth: number) {
+    const businessService = {
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
+    };
+    const pricingService = {
+      get: vi.fn().mockResolvedValue({
+        freeQuotesPerMonth: 5,
+        proMonthlyPriceCents: 200_000,
+        proAnnualPriceCents: 2_000_000,
+        currency: "JMD",
+      }),
+    };
+    const tx = {
+      quote: { create: vi.fn().mockResolvedValue({ id: "q1" }) },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: { create: vi.fn() },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({ id: "q1", lineItems: [], sections: [] }),
+        count: vi.fn().mockResolvedValue(quotesThisMonth),
+      },
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan }) },
+    };
+    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    return { svc, prisma, businessService, pricingService, tx };
+  }
+
+  it("blocks a free business that has reached its monthly limit (402)", async () => {
+    const { svc, prisma, businessService } = harness("free", 5);
+
+    const attempt = svc.create("b1", { sections: [], lineItems: [line] } as any);
+
+    await expect(attempt).rejects.toBeInstanceOf(HttpException);
+    await attempt.catch((err: HttpException) => {
+      expect(err.getStatus()).toBe(402);
+      expect(err.getResponse()).toEqual(
+        expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
+      );
+    });
+    // Gate runs before any quote is actually created.
+    expect(businessService.findById).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("allows a free business under its monthly limit", async () => {
+    const { svc, tx } = harness("free", 2);
+
+    await svc.create("b1", { sections: [], lineItems: [line] } as any);
+
+    expect(tx.quote.create).toHaveBeenCalled();
+  });
+
+  it("never limits a Pro business, regardless of quote count", async () => {
+    const { svc, tx, pricingService } = harness("pro", 999);
+
+    await svc.create("b1", { sections: [], lineItems: [line] } as any);
+
+    expect(tx.quote.create).toHaveBeenCalled();
+    // Pro short-circuits before even reading the pricing config.
+    expect(pricingService.get).not.toHaveBeenCalled();
+  });
+});
+
 describe("QuotesService.updateStatus", () => {
   function serviceForQuote(status: QuoteStatus) {
     const quote = { id: "q1", status, lineItems: [], sections: [] };
@@ -71,7 +142,7 @@ describe("QuotesService.updateStatus", () => {
         update: vi.fn().mockResolvedValue({}),
       },
     };
-    return { svc: new QuotesService(prisma as any, {} as any), prisma };
+    return { svc: new QuotesService(prisma as any, {} as any, {} as any), prisma };
   }
 
   it("allows a legal forward transition (DRAFT -> SENT)", async () => {
@@ -139,7 +210,7 @@ describe("QuotesService.revise", () => {
           .mockResolvedValueOnce(revisedQuote),
       },
     };
-    const svc = new QuotesService(prisma as any, businessService as any);
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
     return { svc, tx, businessService, prisma };
   }
 
@@ -243,7 +314,7 @@ describe("QuotesService.remove", () => {
       quoteSection: { deleteMany: vi.fn() },
       $transaction: vi.fn().mockResolvedValue([]),
     };
-    return { svc: new QuotesService(prisma as any, {} as any), prisma };
+    return { svc: new QuotesService(prisma as any, {} as any, {} as any), prisma };
   }
 
   it("deletes a DRAFT quote", async () => {

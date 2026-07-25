@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
   computeTotals,
@@ -8,6 +13,8 @@ import {
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
+import { PricingService } from "../billing/pricing.service.js";
+import { startOfCurrentMonth } from "../common/month.util.js";
 import type {
   CreateQuoteInput,
   QuoteLineItemInput,
@@ -80,7 +87,35 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly businessService: BusinessService,
+    private readonly pricingService: PricingService,
   ) {}
+
+  /**
+   * Free-tier gate: Pro businesses are never limited. Free businesses are
+   * blocked once they've hit their monthly quote allowance (the "month" is
+   * the current calendar month, server time). Throws HTTP 402 with a
+   * machine-readable code so the frontend can show an upgrade prompt.
+   */
+  private async assertCanCreateQuote(businessId: string): Promise<void> {
+    const subscription = await this.prisma.subscription.findUnique({ where: { businessId } });
+    const plan = subscription?.plan === "pro" ? "pro" : "free";
+    if (plan === "pro") return;
+
+    const { freeQuotesPerMonth } = await this.pricingService.get();
+    const quotesThisMonth = await this.prisma.quote.count({
+      where: { businessId, createdAt: { gte: startOfCurrentMonth() } },
+    });
+
+    if (quotesThisMonth >= freeQuotesPerMonth) {
+      throw new HttpException(
+        {
+          message: `You've reached your free plan limit of ${freeQuotesPerMonth} quotes this month. Upgrade to Pro for unlimited quotes.`,
+          code: "FREE_LIMIT_REACHED",
+        },
+        402,
+      );
+    }
+  }
 
   /** Write sections + line items for a (just-created, or just-cleared) quote. */
   private async persistLines(
@@ -105,6 +140,8 @@ export class QuotesService {
   }
 
   async create(businessId: string, input: CreateQuoteInput): Promise<QuoteWithLines> {
+    await this.assertCanCreateQuote(businessId);
+
     const business = await this.businessService.findById(businessId);
     const gctRatePct = input.gctRatePct ?? Number(business.defaultGctRate);
     const discountPct = input.discountPct ?? 0;

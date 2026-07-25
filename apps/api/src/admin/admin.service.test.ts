@@ -9,7 +9,7 @@ describe("AdminService.overview", () => {
       supplier: { count: vi.fn().mockResolvedValue(6) },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any);
+    const svc = new AdminService(prisma as any, {} as any);
 
     const overview = await svc.overview();
 
@@ -52,7 +52,7 @@ describe("AdminService.tenants", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any);
+    const svc = new AdminService(prisma as any, {} as any);
 
     const tenants = await svc.tenants();
 
@@ -107,7 +107,7 @@ describe("AdminService.suppliers", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any);
+    const svc = new AdminService(prisma as any, {} as any);
 
     const suppliers = await svc.suppliers();
 
@@ -141,7 +141,7 @@ describe("AdminService.suppliers", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any);
+    const svc = new AdminService(prisma as any, {} as any);
 
     const suppliers = await svc.suppliers();
 
@@ -164,7 +164,7 @@ describe("AdminService.regulatory", () => {
       regulatoryUpdate: { findMany: vi.fn().mockResolvedValue([row]) },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any);
+    const svc = new AdminService(prisma as any, {} as any);
 
     const updates = await svc.regulatory();
 
