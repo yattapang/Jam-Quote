@@ -1,14 +1,18 @@
 import Card from "@/components/ui/Card";
-import MoneyText from "@/components/ui/MoneyText";
 import { businessProfile } from "@/lib/mock-data";
-import { getBusiness } from "@/lib/api-server";
+import { getBusiness, getBillingStatus, getBillingPlans } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
+import BillingCard from "./BillingCard";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Settings · JamQuote" };
 
 export default async function SettingsPage() {
-  const business = await getBusiness();
+  const [business, billingStatus, billingPlans] = await Promise.all([
+    getBusiness(),
+    getBillingStatus(),
+    getBillingPlans(),
+  ]);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -64,16 +68,7 @@ export default async function SettingsPage() {
         </div>
       </Card>
 
-      {/* Subscription/billing isn't part of the Business persistence model
-          yet (Phase 3 per CLAUDE.md) — the plan card stays on the fixture. */}
-      <Card>
-        <div className={shared.statLabel}>{businessProfile.plan.name}</div>
-        <div className={shared.totalRow}>
-          <span>{businessProfile.plan.features}</span>
-          <MoneyText cents={businessProfile.plan.priceCents} tone="accent" />
-        </div>
-        <div className={shared.statHint}>{businessProfile.plan.renewsLabel}</div>
-      </Card>
+      <BillingCard status={billingStatus} plans={billingPlans} />
     </div>
   );
 }

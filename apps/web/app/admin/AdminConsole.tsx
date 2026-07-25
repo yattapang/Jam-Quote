@@ -1,11 +1,41 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { getJurisdiction } from "@jamquote/core";
-import type { AdminData } from "@/lib/api-client";
+import {
+  getAdminPricing,
+  updateAdminPricing,
+  setTenantPlan,
+  type AdminData,
+  type PricingConfig,
+} from "@/lib/api-client";
 import styles from "./console.module.css";
 
-type Screen = "overview" | "tenants" | "suppliers" | "regulatory" | "rulepack";
+type Screen = "overview" | "tenants" | "suppliers" | "regulatory" | "rulepack" | "pricing";
+
+/** Lowercases and normalizes a plan string for comparisons/API calls — real
+ * tenant data comes back "free"/"pro" (see PATCH /admin/tenants/:id/plan),
+ * while the design-mock rows use capitalized display strings ("Free", "Pro",
+ * plus mock-only "Starter"/"Core" tiers that don't exist in the real API). */
+function isPro(plan: string): boolean {
+  return plan.trim().toLowerCase() === "pro";
+}
+/** Display label for a plan value — normalizes real lowercase "free"/"pro"
+ * to the same capitalized form the mock rows and planTone map use. */
+function planDisplay(plan: string): string {
+  const p = plan.trim().toLowerCase();
+  if (p === "pro") return "Pro";
+  if (p === "free") return "Free";
+  return plan;
+}
+/** cents <-> dollar-string helpers for the pricing editor's money inputs
+ * (mirrors the fromCents/toCents pattern used in QuoteBuilder). */
+function centsToDollarsStr(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+function dollarsStrToCents(v: string): number {
+  return Math.round(Number(v) * 100);
+}
 
 const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
@@ -55,12 +85,92 @@ export default function AdminConsole({ data }: { data: AdminData }) {
   const [published, setPublished] = useState(false);
   const [toast, setToast] = useState(false);
 
+  // --- Pricing editor (GET/PATCH /admin/pricing) ---
+  const [pricing, setPricing] = useState<PricingConfig | null>(null);
+  const [pricingLoadError, setPricingLoadError] = useState(false);
+  const [pricingForm, setPricingForm] = useState({
+    freeQuotesPerMonth: "",
+    proMonthlyPriceDollars: "",
+    proAnnualPriceDollars: "",
+    currency: "",
+  });
+  const [pricingSaving, setPricingSaving] = useState(false);
+  const [pricingStatus, setPricingStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    let cancelled = false;
+    getAdminPricing()
+      .then((p) => {
+        if (cancelled) return;
+        setPricing(p);
+        setPricingForm({
+          freeQuotesPerMonth: String(p.freeQuotesPerMonth),
+          proMonthlyPriceDollars: centsToDollarsStr(p.proMonthlyPriceCents),
+          proAnnualPriceDollars: centsToDollarsStr(p.proAnnualPriceCents),
+          currency: p.currency,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setPricingLoadError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function savePricing() {
+    setPricingSaving(true);
+    setPricingStatus("idle");
+    try {
+      const updated = await updateAdminPricing({
+        freeQuotesPerMonth: Number(pricingForm.freeQuotesPerMonth) || undefined,
+        proMonthlyPriceCents: dollarsStrToCents(pricingForm.proMonthlyPriceDollars) || undefined,
+        proAnnualPriceCents: dollarsStrToCents(pricingForm.proAnnualPriceDollars) || undefined,
+        currency: pricingForm.currency.trim() || undefined,
+      });
+      setPricing(updated);
+      setPricingForm({
+        freeQuotesPerMonth: String(updated.freeQuotesPerMonth),
+        proMonthlyPriceDollars: centsToDollarsStr(updated.proMonthlyPriceCents),
+        proAnnualPriceDollars: centsToDollarsStr(updated.proAnnualPriceCents),
+        currency: updated.currency,
+      });
+      setPricingStatus("saved");
+    } catch {
+      setPricingStatus("error");
+    } finally {
+      setPricingSaving(false);
+    }
+  }
+
+  // --- Per-tenant plan toggle (PATCH /admin/tenants/:id/plan) — only wired
+  // for real tenant rows (data.tenants has real ids; the design-mock rows
+  // below don't correspond to a real business, so no action is offered). ---
+  const [tenantPlanOverride, setTenantPlanOverride] = useState<Record<string, string>>({});
+  const [tenantPlanBusy, setTenantPlanBusy] = useState<Record<string, boolean>>({});
+  const [tenantPlanError, setTenantPlanError] = useState<Record<string, boolean>>({});
+
+  async function toggleTenantPlan(id: string, currentPlan: string) {
+    const nextPlan = isPro(currentPlan) ? "free" : "pro";
+    setTenantPlanBusy((b) => ({ ...b, [id]: true }));
+    setTenantPlanError((e) => ({ ...e, [id]: false }));
+    try {
+      await setTenantPlan(id, { plan: nextPlan });
+      setTenantPlanOverride((o) => ({ ...o, [id]: nextPlan }));
+    } catch {
+      setTenantPlanError((e) => ({ ...e, [id]: true }));
+    } finally {
+      setTenantPlanBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
     tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
     suppliers: ["Supplier price index", "Live material pricing feeds & scrape health"],
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
+    pricing: ["Pricing", "Free-tier limit & Pro pricing for the whole platform"],
   };
   const [screenTitle, screenDesc] = titles[screen];
 
@@ -108,6 +218,9 @@ export default function AdminConsole({ data }: { data: AdminData }) {
   const tenantsRaw: TenantRow[] = data.tenants.length
     ? data.tenants.map((t): TenantRow => [t.name, t.parish ?? "—", t.plan, t.trn ?? "—", t.status, relTime(t.createdAt), "—", t.quoteCount, t.quoteCount])
     : tenantsMock;
+  // Real business ids, index-aligned with tenantsRaw — null for the
+  // design-mock rows (no real business behind them, so no plan toggle).
+  const tenantIds: (string | null)[] = data.tenants.length ? data.tenants.map((t) => t.id) : tenantsMock.map(() => null);
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
@@ -221,6 +334,10 @@ export default function AdminConsole({ data }: { data: AdminData }) {
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M4 4h11l5 5v11H4z" /><path d="M15 4v5h5" /><path d="M8 13h6M8 17h4" /></svg>
             <span>Rule-pack verify</span>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", marginLeft: "auto" }} />
+          </button>
+          <button className={styles.navBtn} onClick={() => setScreen("pricing")} style={navBtn("pricing")}>
+            <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9 9.5c0-1.4 1.3-2.5 3-2.5s3 1 3 2.2c0 2.8-6 1.3-6 4.1 0 1.2 1.3 2.2 3 2.2s3-1.1 3-2.5" /></svg>
+            <span>Pricing</span>
           </button>
         </nav>
         <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
@@ -348,19 +465,39 @@ export default function AdminConsole({ data }: { data: AdminData }) {
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th>
+                    <th style={th}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
                   </tr></thead>
                   <tbody>
                     {tenantsRaw.map((t, i) => {
                       const [sl, st] = statusMap[t[4]] ?? ["Active", "good"];
+                      const id = tenantIds[i];
+                      const currentPlan = (id && tenantPlanOverride[id]) || t[2];
+                      const busy = id ? !!tenantPlanBusy[id] : false;
+                      const rowError = id ? !!tenantPlanError[id] : false;
                       return (
                         <tr key={i} className={styles.rowHover} onClick={() => setTenantId(i)} style={{ cursor: "pointer", transition: "background .12s" }}>
                           <td style={td}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
                           <td style={{ ...td, color: "var(--muted)" }}>{t[1]}</td>
-                          <td style={td}><span style={pill(planTone[t[2]] ?? "muted")}>{t[2]}</span></td>
+                          <td style={td}><span style={pill(planTone[planDisplay(currentPlan)] ?? "muted")}>{planDisplay(currentPlan)}</span></td>
                           <td style={{ ...td, ...archivo, fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{t[3]}</td>
                           <td style={td}><span style={pill(st)}>{sl}</span></td>
                           <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
+                          <td style={{ ...td, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                            {id ? (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                                <button
+                                  disabled={busy}
+                                  onClick={() => toggleTenantPlan(id, currentPlan)}
+                                  style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
+                                >
+                                  {busy ? "Saving…" : isPro(currentPlan) ? "Set Free" : "Set Pro"}
+                                </button>
+                                {rowError && <span style={{ fontSize: 10.5, color: "var(--critical)" }}>Failed — retry</span>}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -516,6 +653,78 @@ export default function AdminConsole({ data }: { data: AdminData }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* PRICING */}
+          {screen === "pricing" && (
+            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 720, margin: "0 auto" }}>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 22px", boxShadow: "var(--shadow)" }}>
+                <div style={{ ...archivo, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Platform pricing</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
+                  Sets the live PricingConfig — the free-tier monthly quote limit and Pro price shown to every
+                  business. Takes effect immediately for new limit checks.
+                </div>
+                {pricingLoadError && !pricing && (
+                  <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 14 }}>Couldn&apos;t load pricing — is the API running?</div>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                    Free quotes / month
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={pricingForm.freeQuotesPerMonth}
+                      onChange={(e) => setPricingForm((f) => ({ ...f, freeQuotesPerMonth: e.target.value }))}
+                      style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                    Currency
+                    <input
+                      type="text"
+                      value={pricingForm.currency}
+                      onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
+                      maxLength={3}
+                      style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                    Pro price / month ({pricingForm.currency || "—"})
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={pricingForm.proMonthlyPriceDollars}
+                      onChange={(e) => setPricingForm((f) => ({ ...f, proMonthlyPriceDollars: e.target.value }))}
+                      style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                    Pro price / year ({pricingForm.currency || "—"})
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={pricingForm.proAnnualPriceDollars}
+                      onChange={(e) => setPricingForm((f) => ({ ...f, proAnnualPriceDollars: e.target.value }))}
+                      style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
+                    />
+                  </label>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <button
+                    onClick={savePricing}
+                    disabled={pricingSaving}
+                    style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 9, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: pricingSaving ? "default" : "pointer", fontFamily: "inherit", opacity: pricingSaving ? 0.7 : 1 }}
+                  >
+                    {pricingSaving ? "Saving…" : "Save pricing"}
+                  </button>
+                  {pricingStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
+                  {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save — is the API running?</span>}
+                </div>
               </div>
             </div>
           )}

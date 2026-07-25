@@ -28,6 +28,8 @@ import {
   type AdminTenant,
   type AdminSupplier,
   type AdminReg,
+  type BillingStatus,
+  type PricingConfig,
 } from "./api-client";
 import type { Business, Client, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
@@ -192,6 +194,29 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
   } catch {
     console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
     return undefined;
+  }
+}
+
+/** GET /billing/plans (public) — the platform's current PricingConfig, used
+ * by the settings page to show the Pro price. Returns null (rather than
+ * throwing) when the API is unreachable, same convention as getAdminData. */
+export async function getBillingPlans(): Promise<PricingConfig | null> {
+  try {
+    return await serverRequest<PricingConfig>("/billing/plans");
+  } catch {
+    console.warn("[api-server] getBillingPlans: API unreachable, returning null");
+    return null;
+  }
+}
+
+/** GET /billing/status (business-scoped) — the caller's own plan, usage and
+ * renewal date. Returns null when the API is unreachable. */
+export async function getBillingStatus(): Promise<BillingStatus | null> {
+  try {
+    return await serverRequest<BillingStatus>("/billing/status");
+  } catch {
+    console.warn("[api-server] getBillingStatus: API unreachable, returning null");
+    return null;
   }
 }
 

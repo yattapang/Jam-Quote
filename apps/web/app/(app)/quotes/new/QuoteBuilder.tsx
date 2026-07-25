@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   computeTotals,
   GctTreatment,
@@ -15,7 +16,13 @@ import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
 import MoneyText from "@/components/ui/MoneyText";
 import { CATEGORY_LABEL } from "@/lib/quote-totals";
-import { createQuote, updateQuote, createMaterialFavourite, updateMaterialFavourite } from "@/lib/api-client";
+import {
+  createQuote,
+  updateQuote,
+  createMaterialFavourite,
+  updateMaterialFavourite,
+  ApiError,
+} from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import JobSelectField from "@/components/forms/JobSelectField";
 import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
@@ -385,6 +392,9 @@ export default function QuoteBuilder({
   const [newHeadingText, setNewHeadingText] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Set when save() fails with the API's 402 FREE_LIMIT_REACHED response, so
+  // the error banner can add an "Upgrade to Pro" link to /settings.
+  const [limitReached, setLimitReached] = useState(false);
   // Local copies of the clients/jobs/saved-materials lists — seeded from
   // props, then kept in sync locally when the user creates a new one inline
   // ("+ Add new client…" / "+ Add new job…" / "+ Add material…") so it
@@ -524,6 +534,7 @@ export default function QuoteBuilder({
 
     setSaving(true);
     setError("");
+    setLimitReached(false);
 
     // Every heading becomes a section, ordered by the heading's
     // first-appearance position across the (ordered) line list.
@@ -558,8 +569,17 @@ export default function QuoteBuilder({
     try {
       const { id } = isEdit ? await updateQuote(quoteId!, payload) : await createQuote(payload);
       router.push(`/quotes/${id}`);
-    } catch {
-      setError(isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?");
+    } catch (err) {
+      // Free-plan quote limit: the API returns 402 with
+      // { message, code: "FREE_LIMIT_REACHED" } — surface its own message
+      // (it names the limit) rather than the generic "couldn't save" text.
+      if (err instanceof ApiError && err.status === 402) {
+        setError(err.body?.message || "You've reached your free plan limit for this month. Upgrade to Pro to keep creating quotes.");
+        setLimitReached(err.body?.code === "FREE_LIMIT_REACHED");
+      } else {
+        setError(isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?");
+        setLimitReached(false);
+      }
       setSaving(false);
     }
   }
@@ -666,7 +686,19 @@ export default function QuoteBuilder({
         </Card>
       </div>
 
-      {error && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{error}</div>}
+      {error && (
+        <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>
+          {error}
+          {limitReached && (
+            <>
+              {" "}
+              <Link href="/settings" style={{ color: "inherit", textDecoration: "underline", fontWeight: 600 }}>
+                Upgrade to Pro
+              </Link>
+            </>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
         <Button href={backHref} variant="ghost">
           Cancel

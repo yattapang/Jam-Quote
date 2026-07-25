@@ -25,10 +25,21 @@ export const API_BASE_URL =
 // real server reads set this in api-server.ts, browser writes rely on the proxy.
 const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
 
+/** Parsed JSON body of a non-2xx response, when the API sent one (e.g. the
+ * quote-creation 402 `{ message, code: "FREE_LIMIT_REACHED" }`). */
+export interface ApiErrorBody {
+  message?: string;
+  code?: string;
+  [key: string]: unknown;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public status?: number,
+    /** Parsed error body, when the response had one — lets callers branch on
+     * `body?.code` (e.g. FREE_LIMIT_REACHED) instead of re-parsing. */
+    public body?: ApiErrorBody,
   ) {
     super(message);
     this.name = "ApiError";
@@ -50,7 +61,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!res.ok) {
-    throw new ApiError(`Request to ${path} failed`, res.status);
+    // Surface the server's own message (e.g. the 402 FREE_LIMIT_REACHED body)
+    // when it sent JSON; fall back to the generic message otherwise.
+    let body: ApiErrorBody | undefined;
+    try {
+      const text = await res.text();
+      body = text ? JSON.parse(text) : undefined;
+    } catch {
+      body = undefined;
+    }
+    throw new ApiError(body?.message || `Request to ${path} failed`, res.status, body);
   }
   // DELETE (and any Promise<void> handler) comes back with a 200 and no body.
   const text = await res.text();
@@ -464,4 +484,50 @@ export async function payInvoiceByCard(invoiceId: string): Promise<CardPaymentRe
       reference: `WPY-MOCK-${invoiceId}`,
     };
   }
+}
+
+// --- Billing (Phase-1 subscription tiers) ------------------------------------
+
+/** The platform's PricingConfig snapshot. GET /billing/plans (public) and
+ * GET/PATCH /admin/pricing (ADMIN) both read/write this same shape — the
+ * public endpoint just mirrors whatever the admin editor last saved. */
+export interface PricingConfig {
+  freeQuotesPerMonth: number;
+  proMonthlyPriceCents: number;
+  proAnnualPriceCents: number;
+  currency: string;
+}
+
+/** GET /billing/status (business-scoped) — the caller's own subscription
+ * state. `renewsAt` is only meaningful for Pro; free businesses get null. */
+export interface BillingStatus {
+  plan: "free" | "pro";
+  isPro: boolean;
+  quotesThisMonth: number;
+  freeQuotesPerMonth: number;
+  renewsAt: string | null;
+}
+
+/** GET /admin/pricing — ADMIN only, read via the proxy so the logged-in
+ * admin's cookie is forwarded. */
+export async function getAdminPricing(): Promise<PricingConfig> {
+  return apiClient.get<PricingConfig>("/admin/pricing");
+}
+
+/** PATCH /admin/pricing — all fields optional/positive ints, ADMIN only. */
+export type UpdateAdminPricingInput = Partial<PricingConfig>;
+export async function updateAdminPricing(input: UpdateAdminPricingInput): Promise<PricingConfig> {
+  return apiClient.patch<PricingConfig>("/admin/pricing", input);
+}
+
+export interface SetTenantPlanInput {
+  plan: "free" | "pro";
+  renewsAt?: string;
+}
+/** PATCH /admin/tenants/:id/plan — ADMIN only; sets a business's subscription. */
+export async function setTenantPlan(
+  businessId: string,
+  input: SetTenantPlanInput,
+): Promise<{ id: string; plan: string }> {
+  return apiClient.patch<{ id: string; plan: string }>(`/admin/tenants/${businessId}/plan`, input);
 }
