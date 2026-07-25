@@ -13,10 +13,14 @@ services:
     region: oregon
     branch: main
     buildCommand: npm ci --include=dev && npm run -w @jamquote/api prisma:generate && npx turbo run build --filter=@jamquote/api
-    # Applies pending Prisma migrations to the Neon DB before the new version
-    # goes live (safe/idempotent; needs DATABASE_URL set in the dashboard).
-    preDeployCommand: npm run -w @jamquote/api prisma:migrate:deploy
-    startCommand: node apps/api/dist/main.js
+    # Apply pending Prisma migrations, THEN start. This lives in the start command
+    # (not preDeployCommand) on purpose: Render's pre-deploy hook is a PAID-plan
+    # feature and is silently ignored on the free tier, so migrations were never
+    # actually being applied — the DB drifted behind the deployed code. `migrate
+    # deploy` is idempotent (a no-op when nothing is pending), so running it on
+    # every boot is safe; if a migration fails the service won't start, surfacing
+    # the problem loudly instead of drifting silently. Needs DATABASE_URL set.
+    startCommand: npm run -w @jamquote/api prisma:migrate:deploy && node apps/api/dist/main.js
     healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
