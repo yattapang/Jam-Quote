@@ -1,12 +1,17 @@
 import AdminConsole from "./AdminConsole";
 import { getAdminData } from "@/lib/api-server";
+import { getSession } from "@/lib/session";
 
 export const metadata = { title: "JamQuote Staff Console" };
 
-// Internal staff-only console (not linked from the contractor app). Reads the
-// same Neon-backed API as the contractor app via the platform /admin endpoints;
-// falls back to the design sample when the API is unreachable.
+// Internal staff-only console (gated to ADMIN by app/admin/layout.tsx). Reads
+// the platform /admin endpoints; the profile chip shows the real signed-in
+// admin (not the old design-mock identity).
 export default async function AdminPage() {
-  const data = await getAdminData();
-  return <AdminConsole data={data} />;
+  const [data, session] = await Promise.all([getAdminData(), getSession()]);
+  const admin = {
+    name: session?.user.fullName?.trim() || session?.user.email || "Admin",
+    email: session?.user.email ?? "",
+  };
+  return <AdminConsole data={data} admin={admin} />;
 }

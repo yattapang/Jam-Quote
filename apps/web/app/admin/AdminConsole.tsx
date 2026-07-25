@@ -9,6 +9,7 @@ import {
   type AdminData,
   type PricingConfig,
 } from "@/lib/api-client";
+import { logout } from "@/lib/auth-actions";
 import styles from "./console.module.css";
 
 type Screen = "overview" | "tenants" | "suppliers" | "regulatory" | "rulepack" | "pricing";
@@ -76,8 +77,21 @@ type RegRow = [string, string, string, string, string];
 
 const jm = getJurisdiction("JM");
 
-export default function AdminConsole({ data }: { data: AdminData }) {
+export default function AdminConsole({
+  data,
+  admin,
+}: {
+  data: AdminData;
+  admin: { name: string; email: string };
+}) {
   const ov = data.overview;
+  const adminInitials =
+    admin.name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join("") || "A";
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [screen, setScreen] = useState<Screen>("overview");
   const [tenantId, setTenantId] = useState<number | null>(null);
@@ -342,12 +356,20 @@ export default function AdminConsole({ data }: { data: AdminData }) {
         </nav>
         <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 9, background: "var(--surface-alt)" }}>
-            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--info)", color: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12 }}>AM</div>
+            <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--info)", color: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 12 }}>{adminInitials}</div>
             <div style={{ lineHeight: 1.2, flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Aisha Meyers</div>
-              <div style={{ fontSize: 11, color: "var(--muted)" }}>Platform Ops · Admin</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{admin.name}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{admin.email || "Platform Admin"}</div>
             </div>
           </div>
+          <form action={logout} style={{ marginTop: 8 }}>
+            <button
+              type="submit"
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 9, border: "1px solid var(--border)", background: "transparent", color: "inherit", fontSize: 12, cursor: "pointer" }}
+            >
+              Sign out
+            </button>
+          </form>
         </div>
       </aside>
 
