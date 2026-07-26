@@ -16,11 +16,13 @@ import {
   ApiError,
   mapBusiness,
   mapClient,
+  mapLabourRate,
   mapMaterialFavourite,
   mapQuote,
   type ApiBusiness,
   type ApiClientRow,
   type ApiJob,
+  type ApiLabourRate,
   type ApiMaterialFavourite,
   type ApiQuote,
   type AdminData,
@@ -34,7 +36,7 @@ import {
   type PricingConfig,
   type Trade,
 } from "./api-client";
-import type { Business, Client, MaterialFavourite, Quote } from "./types";
+import type { Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
 
 const TOKEN_COOKIE = "jamquote_token";
@@ -111,6 +113,18 @@ export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
     );
   } catch {
     console.warn("[api-server] getMaterialFavourites: API unreachable, using empty list");
+    return [];
+  }
+}
+
+/** GET /api/catalogs/labour-rates — the business's labour rate book. No
+ * fixture backs these, so an unreachable API returns an empty list (same
+ * convention as getMaterialFavourites). */
+export async function getLabourRates(): Promise<LabourRate[]> {
+  try {
+    return (await serverRequest<ApiLabourRate[]>("/catalogs/labour-rates")).map(mapLabourRate);
+  } catch {
+    console.warn("[api-server] getLabourRates: API unreachable, using empty list");
     return [];
   }
 }

@@ -4,6 +4,7 @@ import type {
   Parish,
   QuoteLineItemInput,
   QuoteStatus,
+  RateUnit,
 } from "@jamquote/core";
 
 export interface QuoteLine extends QuoteLineItemInput {
@@ -61,6 +62,18 @@ export interface MaterialFavourite {
   /** Convenience for display/inputs — priceCents / 100. */
   priceDollars: number;
   supplierId?: string;
+}
+
+/** A reusable labour rate a contractor keeps on hand for quoting (mirrors the
+ * Prisma `LabourRate` model). rateCents is always integer JMD cents. */
+export interface LabourRate {
+  id: string;
+  trade: string;
+  skillTier?: string;
+  rateCents: number;
+  /** Convenience for display/inputs — rateCents / 100. */
+  rateDollars: number;
+  rateUnit: RateUnit;
 }
 
 export interface Payment {

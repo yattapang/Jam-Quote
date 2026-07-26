@@ -10,8 +10,8 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Business, Client, MaterialFavourite, Quote } from "./types";
-import type { QuoteLineItemInput, QuoteStatus } from "@jamquote/core";
+import type { Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
+import type { QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -150,6 +150,13 @@ export interface ApiMaterialFavourite {
   priceCents: number;
   supplierId?: string | null;
 }
+export interface ApiLabourRate {
+  id: string;
+  trade: string;
+  skillTier?: string | null;
+  rateCents: number;
+  rateUnit: RateUnit;
+}
 export interface ApiBusiness {
   id: string;
   name: string;
@@ -220,6 +227,17 @@ export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite
     priceCents: m.priceCents,
     priceDollars: m.priceCents / 100,
     supplierId: m.supplierId ?? undefined,
+  };
+}
+
+export function mapLabourRate(r: ApiLabourRate): LabourRate {
+  return {
+    id: r.id,
+    trade: r.trade,
+    skillTier: r.skillTier ?? undefined,
+    rateCents: r.rateCents,
+    rateDollars: r.rateCents / 100,
+    rateUnit: r.rateUnit,
   };
 }
 
@@ -323,6 +341,18 @@ export async function createMaterialFavourite(
   );
 }
 
+export interface NewLabourRateInput {
+  trade: string;
+  skillTier?: string;
+  rateCents: number;
+  rateUnit: RateUnit;
+}
+export async function createLabourRate(input: NewLabourRateInput): Promise<LabourRate> {
+  return mapLabourRate(
+    await apiClient.post<ApiLabourRate>("/catalogs/labour-rates", input),
+  );
+}
+
 export interface NewQuoteLineInput {
   category: QuoteLineItemInput["category"];
   description: string;
@@ -372,6 +402,17 @@ export async function updateMaterialFavourite(
 ): Promise<MaterialFavourite> {
   return mapMaterialFavourite(
     await apiClient.patch<ApiMaterialFavourite>(`/catalogs/material-favourites/${id}`, input),
+  );
+}
+
+/** PATCH /api/catalogs/labour-rates/:id — same shape as create, all fields optional. */
+export type UpdateLabourRateInput = Partial<NewLabourRateInput>;
+export async function updateLabourRate(
+  id: string,
+  input: UpdateLabourRateInput,
+): Promise<LabourRate> {
+  return mapLabourRate(
+    await apiClient.patch<ApiLabourRate>(`/catalogs/labour-rates/${id}`, input),
   );
 }
 
@@ -425,6 +466,11 @@ export async function deleteQuote(id: string): Promise<void> {
 
 export async function deleteMaterialFavourite(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/material-favourites/${id}`);
+}
+
+/** DELETE /api/catalogs/labour-rates/:id — soft delete (API sets deletedAt). */
+export async function deleteLabourRate(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/catalogs/labour-rates/${id}`);
 }
 
 // --- Admin (platform-level, staff console) — types here, reads in api-server -

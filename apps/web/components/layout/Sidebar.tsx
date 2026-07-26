@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/clients", label: "Clients" },
   { href: "/jobs", label: "Jobs" },
   { href: "/materials", label: "Materials" },
+  { href: "/labour", label: "Labour" },
   { href: "/invoices", label: "Invoices" },
   { href: "/reports", label: "Reports" },
   { href: "/settings", label: "Settings" },

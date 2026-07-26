@@ -4,7 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "./Button";
 import Modal, { modalStyles } from "./Modal";
-import { deleteClient, deleteJob, deleteMaterialFavourite, deleteQuote } from "@/lib/api-client";
+import {
+  deleteClient,
+  deleteJob,
+  deleteLabourRate,
+  deleteMaterialFavourite,
+  deleteQuote,
+} from "@/lib/api-client";
 import styles from "./DeleteRowButton.module.css";
 
 const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
@@ -12,9 +18,10 @@ const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   job: deleteJob,
   quote: deleteQuote,
   material: deleteMaterialFavourite,
+  labourRate: deleteLabourRate,
 };
 
-export type DeleteKind = "client" | "job" | "quote" | "material";
+export type DeleteKind = "client" | "job" | "quote" | "material" | "labourRate";
 
 /**
  * Small, unobtrusive per-row delete affordance. Always confirms via a Modal

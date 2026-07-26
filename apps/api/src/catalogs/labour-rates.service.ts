@@ -12,11 +12,16 @@ export class LabourRatesService {
   }
 
   findAll(businessId: string): Promise<LabourRate[]> {
-    return this.prisma.labourRate.findMany({ where: { businessId }, orderBy: { trade: "asc" } });
+    return this.prisma.labourRate.findMany({
+      where: { businessId, deletedAt: null },
+      orderBy: { trade: "asc" },
+    });
   }
 
   async findOne(businessId: string, id: string): Promise<LabourRate> {
-    const rate = await this.prisma.labourRate.findFirst({ where: { id, businessId } });
+    const rate = await this.prisma.labourRate.findFirst({
+      where: { id, businessId, deletedAt: null },
+    });
     if (!rate) throw new NotFoundException("Labour rate not found");
     return rate;
   }
@@ -30,8 +35,10 @@ export class LabourRatesService {
     return this.prisma.labourRate.update({ where: { id }, data: input });
   }
 
+  /** Soft-delete: sets deletedAt rather than removing the row, so offline
+   * clients doing a delta-sync can observe the tombstone. */
   async remove(businessId: string, id: string): Promise<void> {
     await this.findOne(businessId, id);
-    await this.prisma.labourRate.delete({ where: { id } });
+    await this.prisma.labourRate.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }
