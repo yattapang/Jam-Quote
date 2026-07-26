@@ -28,6 +28,8 @@ import {
   type AdminTenant,
   type AdminSupplier,
   type AdminReg,
+  type AdminFinancials,
+  type AdminAuditEntry,
   type BillingStatus,
   type PricingConfig,
 } from "./api-client";
@@ -231,11 +233,16 @@ export async function getAdminData(): Promise<AdminData> {
       return empty;
     }
   };
-  const [overview, tenants, suppliers, regulatory] = await Promise.all([
+  const [overview, tenants, suppliers, regulatory, financials, audit] = await Promise.all([
     safe<AdminOverview | null>("/admin/overview", null),
-    safe<AdminTenant[]>("/admin/tenants", []),
+    // includeSuspended=true so suspended tenants still show (with their
+    // `suspended` flag) rather than disappearing from the tenants table.
+    safe<AdminTenant[]>("/admin/tenants?includeSuspended=true", []),
     safe<AdminSupplier[]>("/admin/suppliers", []),
     safe<AdminReg[]>("/admin/regulatory", []),
+    safe<AdminFinancials | null>("/admin/financials", null),
+    safe<AdminAuditEntry[]>("/admin/audit", []),
   ]);
-  return { overview, tenants, suppliers, regulatory };
+  // Cap the audit feed the console renders, even if the API ever returns more.
+  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100) };
 }

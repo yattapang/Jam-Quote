@@ -1,18 +1,34 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
-import { getJurisdiction } from "@jamquote/core";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { getJurisdiction, formatJmd } from "@jamquote/core";
 import {
   getAdminPricing,
   updateAdminPricing,
   setTenantPlan,
+  suspendTenant,
+  restoreTenant,
+  hardDeleteTenant,
+  createSupplier,
+  updateSupplier,
+  deleteSupplier,
+  ApiError,
   type AdminData,
   type PricingConfig,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
 import styles from "./console.module.css";
 
-type Screen = "overview" | "tenants" | "suppliers" | "regulatory" | "rulepack" | "pricing";
+type Screen =
+  | "overview"
+  | "tenants"
+  | "suppliers"
+  | "regulatory"
+  | "rulepack"
+  | "pricing"
+  | "financials"
+  | "activity";
 
 /** Lowercases and normalizes a plan string for comparisons/API calls — real
  * tenant data comes back "free"/"pro" (see PATCH /admin/tenants/:id/plan),
@@ -51,6 +67,7 @@ const dot = (tone: string, extra?: CSSProperties): CSSProperties => ({
 });
 const th: CSSProperties = { textAlign: "left", padding: "11px 16px", fontSize: 10.5, letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, borderBottom: "1px solid var(--border)" };
 const td: CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(--border)" };
+const inputStyle: CSSProperties = { height: 36, padding: "0 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", width: "100%" };
 const planTone: Record<string, string> = { Free: "muted", Starter: "info", Core: "accent", Pro: "good" };
 
 function relTime(iso: string | null): string {
@@ -62,6 +79,19 @@ function relTime(iso: string | null): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+/** Compact one-line rendering of an audit entry's free-form `details` payload
+ * (shape varies by action — e.g. a tenant delete's confirmName, a plan
+ * change's before/after). Never throws on odd shapes. */
+function detailsPreview(details: unknown): string {
+  if (details === null || details === undefined || details === "") return "—";
+  if (typeof details === "string") return details;
+  try {
+    const s = JSON.stringify(details);
+    return s.length > 90 ? `${s.slice(0, 87)}…` : s;
+  } catch {
+    return String(details);
+  }
 }
 function freshnessOf(iso: string | null): { key: "fresh" | "cached" | "stale"; label: string } {
   if (!iso) return { key: "stale", label: "No data" };
@@ -178,6 +208,150 @@ export default function AdminConsole({
     }
   }
 
+  // --- Tenant lifecycle: suspend / restore / permanent delete ---
+  // useRouter().refresh() re-runs the server AdminPage after every mutation
+  // so the props (tenants/financials/audit) reflect the API's new state —
+  // the optimistic *Override state below just avoids a flash while that
+  // round-trip is in flight.
+  const router = useRouter();
+  const [tenantSuspendOverride, setTenantSuspendOverride] = useState<Record<string, boolean>>({});
+  const [tenantLifecycleBusy, setTenantLifecycleBusy] = useState<Record<string, boolean>>({});
+  const [tenantLifecycleError, setTenantLifecycleError] = useState<Record<string, string>>({});
+
+  async function toggleTenantSuspend(id: string, currentlySuspended: boolean) {
+    setTenantLifecycleBusy((b) => ({ ...b, [id]: true }));
+    setTenantLifecycleError((e) => ({ ...e, [id]: "" }));
+    try {
+      if (currentlySuspended) await restoreTenant(id);
+      else await suspendTenant(id);
+      setTenantSuspendOverride((o) => ({ ...o, [id]: !currentlySuspended }));
+      router.refresh();
+    } catch (err) {
+      setTenantLifecycleError((e) => ({
+        ...e,
+        [id]: err instanceof ApiError ? err.message : "Failed — try again",
+      }));
+    } finally {
+      setTenantLifecycleBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
+  // Permanent-delete modal — the operator must type the exact business name
+  // (mirrors the server's confirmName check on DELETE /admin/tenants/:id).
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteTyped, setDeleteTyped] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  function openDeleteModal(id: string, name: string) {
+    setDeleteTarget({ id, name });
+    setDeleteTyped("");
+    setDeleteError("");
+  }
+  function closeDeleteModal() {
+    if (deleteBusy) return;
+    setDeleteTarget(null);
+    setDeleteTyped("");
+    setDeleteError("");
+  }
+  async function confirmHardDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError("");
+    try {
+      await hardDeleteTenant(deleteTarget.id, deleteTyped);
+      setDeleteTarget(null);
+      setDeleteTyped("");
+      router.refresh();
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : "Couldn't delete — try again");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  // --- Suppliers: add / edit / soft-remove (POST/PATCH/DELETE /admin/suppliers) ---
+  const [supplierForm, setSupplierForm] = useState({ name: "", website: "", parish: "", isPartner: false });
+  const [supplierCreating, setSupplierCreating] = useState(false);
+  const [supplierCreateError, setSupplierCreateError] = useState("");
+  const [supplierCreateOk, setSupplierCreateOk] = useState(false);
+
+  async function submitNewSupplier(e: FormEvent) {
+    e.preventDefault();
+    if (!supplierForm.name.trim()) return;
+    setSupplierCreating(true);
+    setSupplierCreateError("");
+    setSupplierCreateOk(false);
+    try {
+      await createSupplier({
+        name: supplierForm.name.trim(),
+        website: supplierForm.website.trim() || undefined,
+        parish: supplierForm.parish.trim() || undefined,
+        isPartner: supplierForm.isPartner,
+      });
+      setSupplierForm({ name: "", website: "", parish: "", isPartner: false });
+      setSupplierCreateOk(true);
+      router.refresh();
+    } catch (err) {
+      setSupplierCreateError(err instanceof ApiError ? err.message : "Couldn't add supplier");
+    } finally {
+      setSupplierCreating(false);
+    }
+  }
+
+  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
+  const [supplierEditForm, setSupplierEditForm] = useState({ name: "", website: "", parish: "", isPartner: false });
+  const [supplierEditBusy, setSupplierEditBusy] = useState(false);
+  const [supplierEditError, setSupplierEditError] = useState("");
+  const [supplierRemoveBusy, setSupplierRemoveBusy] = useState<Record<string, boolean>>({});
+  const [supplierRemoveError, setSupplierRemoveError] = useState<Record<string, string>>({});
+
+  function startEditSupplier(id: string, name: string, parish: string, isPartner: boolean) {
+    setEditingSupplierId(id);
+    // The admin-supplier read shape doesn't echo `website`, so the edit form
+    // starts blank for it — only fields the operator actually changes here
+    // are sent (all fields are optional on PATCH).
+    setSupplierEditForm({ name, website: "", parish, isPartner });
+    setSupplierEditError("");
+  }
+  function cancelEditSupplier() {
+    setEditingSupplierId(null);
+    setSupplierEditError("");
+  }
+  async function saveSupplierEdit(id: string) {
+    setSupplierEditBusy(true);
+    setSupplierEditError("");
+    try {
+      await updateSupplier(id, {
+        name: supplierEditForm.name.trim() || undefined,
+        website: supplierEditForm.website.trim() || undefined,
+        parish: supplierEditForm.parish.trim() || undefined,
+        isPartner: supplierEditForm.isPartner,
+      });
+      setEditingSupplierId(null);
+      router.refresh();
+    } catch (err) {
+      setSupplierEditError(err instanceof ApiError ? err.message : "Couldn't save changes");
+    } finally {
+      setSupplierEditBusy(false);
+    }
+  }
+  async function removeSupplier(id: string) {
+    setSupplierRemoveBusy((b) => ({ ...b, [id]: true }));
+    setSupplierRemoveError((e) => ({ ...e, [id]: "" }));
+    try {
+      await deleteSupplier(id);
+      router.refresh();
+    } catch (err) {
+      setSupplierRemoveError((e) => ({
+        ...e,
+        [id]: err instanceof ApiError ? err.message : "Couldn't remove",
+      }));
+    } finally {
+      setSupplierRemoveBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
     tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
@@ -185,6 +359,8 @@ export default function AdminConsole({
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
     pricing: ["Pricing", "Free-tier limit & Pro pricing for the whole platform"],
+    financials: ["Financials", "Plan mix, MRR & upcoming renewals across the platform"],
+    activity: ["Activity log", "Recent admin actions across the platform, newest first"],
   };
   const [screenTitle, screenDesc] = titles[screen];
 
@@ -235,6 +411,9 @@ export default function AdminConsole({
   // Real business ids, index-aligned with tenantsRaw — null for the
   // design-mock rows (no real business behind them, so no plan toggle).
   const tenantIds: (string | null)[] = data.tenants.length ? data.tenants.map((t) => t.id) : tenantsMock.map(() => null);
+  // Suspended flag, index-aligned with tenantsRaw (from GET
+  // /admin/tenants?includeSuspended=true) — mock rows are never suspended.
+  const tenantSuspendedBase: boolean[] = data.tenants.length ? data.tenants.map((t) => t.suspended) : tenantsMock.map(() => false);
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
@@ -256,6 +435,9 @@ export default function AdminConsole({
         return [s.name, s.parish ?? "—", s.isPartner, f.key, f.label, s.lastFetch ? relTime(s.lastFetch) : "—", s.skuCount];
       })
     : suppliersMock;
+  // Real supplier ids, index-aligned with suppliersRaw — null for the
+  // design-mock rows (no real supplier behind them, so no edit/remove).
+  const supplierIds: (string | null)[] = data.suppliers.length ? data.suppliers.map((s) => s.id) : suppliersMock.map(() => null);
   const freshTone: Record<string, string> = { fresh: "good", cached: "warn", stale: "critical" };
   const supplierStats = data.suppliers.length
     ? [
@@ -308,6 +490,15 @@ export default function AdminConsole({
 
   const selTenant = tenantId !== null ? tenantsRaw[tenantId] : null;
 
+  // --- Financials screen data (GET /admin/financials) ---
+  const financials = data.financials;
+  const upcomingRenewals = financials
+    ? [...financials.upcomingRenewals].sort((a, b) => a.renewsAt.localeCompare(b.renewsAt))
+    : [];
+
+  // --- Activity screen data (GET /admin/audit, newest first) ---
+  const auditEntries = data.audit;
+
   const iconStroke = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
   return (
@@ -338,6 +529,10 @@ export default function AdminConsole({
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 9l1-5h16l1 5" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></svg>
             <span>Supplier index</span>
           </button>
+          <button className={styles.navBtn} onClick={() => setScreen("financials")} style={navBtn("financials")}>
+            <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>
+            <span>Financials</span>
+          </button>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".09em", color: "var(--muted)", padding: "16px 10px 8px" }}>GOVERN</div>
           <button className={styles.navBtn} onClick={() => setScreen("regulatory")} style={navBtn("regulatory")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M9 12l2 2 4-4" /></svg>
@@ -352,6 +547,10 @@ export default function AdminConsole({
           <button className={styles.navBtn} onClick={() => setScreen("pricing")} style={navBtn("pricing")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9 9.5c0-1.4 1.3-2.5 3-2.5s3 1 3 2.2c0 2.8-6 1.3-6 4.1 0 1.2 1.3 2.2 3 2.2s3-1.1 3-2.5" /></svg>
             <span>Pricing</span>
+          </button>
+          <button className={styles.navBtn} onClick={() => setScreen("activity")} style={navBtn("activity")}>
+            <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
+            <span>Activity log</span>
           </button>
         </nav>
         <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
@@ -496,25 +695,59 @@ export default function AdminConsole({
                       const currentPlan = (id && tenantPlanOverride[id]) || t[2];
                       const busy = id ? !!tenantPlanBusy[id] : false;
                       const rowError = id ? !!tenantPlanError[id] : false;
+                      const suspended = id ? tenantSuspendOverride[id] ?? tenantSuspendedBase[i] ?? false : false;
+                      const lifecycleBusy = id ? !!tenantLifecycleBusy[id] : false;
+                      const lifecycleError = id ? tenantLifecycleError[id] : "";
                       return (
-                        <tr key={i} className={styles.rowHover} onClick={() => setTenantId(i)} style={{ cursor: "pointer", transition: "background .12s" }}>
+                        <tr
+                          key={i}
+                          className={styles.rowHover}
+                          onClick={() => setTenantId(i)}
+                          style={{
+                            cursor: "pointer",
+                            transition: "background .12s",
+                            opacity: suspended ? 0.58 : 1,
+                            background: suspended ? "color-mix(in srgb, var(--critical) 5%, transparent)" : undefined,
+                          }}
+                        >
                           <td style={td}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
                           <td style={{ ...td, color: "var(--muted)" }}>{t[1]}</td>
                           <td style={td}><span style={pill(planTone[planDisplay(currentPlan)] ?? "muted")}>{planDisplay(currentPlan)}</span></td>
                           <td style={{ ...td, ...archivo, fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{t[3]}</td>
-                          <td style={td}><span style={pill(st)}>{sl}</span></td>
+                          <td style={td}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <span style={pill(st)}>{sl}</span>
+                              {suspended && <span style={pill("critical")}>Suspended</span>}
+                            </div>
+                          </td>
                           <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
                           <td style={{ ...td, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
                             {id ? (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                                <button
-                                  disabled={busy}
-                                  onClick={() => toggleTenantPlan(id, currentPlan)}
-                                  style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
-                                >
-                                  {busy ? "Saving…" : isPro(currentPlan) ? "Set Free" : "Set Pro"}
-                                </button>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                                  <button
+                                    disabled={busy}
+                                    onClick={() => toggleTenantPlan(id, currentPlan)}
+                                    style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
+                                  >
+                                    {busy ? "Saving…" : isPro(currentPlan) ? "Set Free" : "Set Pro"}
+                                  </button>
+                                  <button
+                                    disabled={lifecycleBusy}
+                                    onClick={() => toggleTenantSuspend(id, suspended)}
+                                    style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: lifecycleBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: suspended ? "var(--good)" : "var(--warn)", opacity: lifecycleBusy ? 0.6 : 1 }}
+                                  >
+                                    {lifecycleBusy ? "…" : suspended ? "Restore" : "Suspend"}
+                                  </button>
+                                  <button
+                                    onClick={() => openDeleteModal(id, t[0])}
+                                    style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid color-mix(in srgb, var(--critical) 45%, var(--border))", background: "color-mix(in srgb, var(--critical) 10%, transparent)", color: "var(--critical)" }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
                                 {rowError && <span style={{ fontSize: 10.5, color: "var(--critical)" }}>Failed — retry</span>}
+                                {lifecycleError && <span style={{ fontSize: 10.5, color: "var(--critical)", maxWidth: 220 }}>{lifecycleError}</span>}
                               </div>
                             ) : (
                               <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>
@@ -540,14 +773,117 @@ export default function AdminConsole({
                   </div>
                 ))}
               </div>
+
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
+                <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 12 }}>+ Add supplier</div>
+                <form onSubmit={submitNewSupplier} style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr auto auto", gap: 10, alignItems: "end" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                    Name
+                    <input
+                      required
+                      value={supplierForm.name}
+                      onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                    Website
+                    <input
+                      value={supplierForm.website}
+                      onChange={(e) => setSupplierForm((f) => ({ ...f, website: e.target.value }))}
+                      placeholder="https://…"
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                    Parish
+                    <input
+                      value={supplierForm.parish}
+                      onChange={(e) => setSupplierForm((f) => ({ ...f, parish: e.target.value }))}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--text)", height: 36, whiteSpace: "nowrap" }}>
+                    <input
+                      type="checkbox"
+                      checked={supplierForm.isPartner}
+                      onChange={(e) => setSupplierForm((f) => ({ ...f, isPartner: e.target.checked }))}
+                    />
+                    Partner
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={supplierCreating || !supplierForm.name.trim()}
+                    style={{ height: 36, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: supplierCreating ? "default" : "pointer", fontFamily: "inherit", opacity: supplierCreating || !supplierForm.name.trim() ? 0.6 : 1, whiteSpace: "nowrap" }}
+                  >
+                    {supplierCreating ? "Adding…" : "+ Add supplier"}
+                  </button>
+                </form>
+                {supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--critical)", marginTop: 10 }}>{supplierCreateError}</div>}
+                {supplierCreateOk && !supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--good)", marginTop: 10 }}>Supplier added ✓</div>}
+              </div>
+
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th}>SUPPLIER</th><th style={th}>PARISH</th><th style={{ ...th, textAlign: "right" }}>SKUS</th><th style={th}>PRICE FRESHNESS</th><th style={th}>LAST FETCH</th>
+                    <th style={th}>SUPPLIER</th><th style={th}>PARISH</th><th style={{ ...th, textAlign: "right" }}>SKUS</th><th style={th}>PRICE FRESHNESS</th><th style={th}>LAST FETCH</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
                   </tr></thead>
                   <tbody>
                     {suppliersRaw.map((s, i) => {
                       const tone = freshTone[s[3]]!;
+                      const id = supplierIds[i];
+                      if (id && editingSupplierId === id) {
+                        return (
+                          <tr key={i} style={{ background: "var(--surface-alt)" }}>
+                            <td colSpan={6} style={{ padding: "14px 16px" }}>
+                              <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr auto auto auto", gap: 10, alignItems: "center" }}>
+                                <input
+                                  value={supplierEditForm.name}
+                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, name: e.target.value }))}
+                                  placeholder="Name"
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={supplierEditForm.website}
+                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, website: e.target.value }))}
+                                  placeholder="Website"
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={supplierEditForm.parish}
+                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, parish: e.target.value }))}
+                                  placeholder="Parish"
+                                  style={inputStyle}
+                                />
+                                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={supplierEditForm.isPartner}
+                                    onChange={(e) => setSupplierEditForm((f) => ({ ...f, isPartner: e.target.checked }))}
+                                  />
+                                  Partner
+                                </label>
+                                <button
+                                  disabled={supplierEditBusy}
+                                  onClick={() => saveSupplierEdit(id)}
+                                  style={{ height: 32, padding: "0 13px", border: "none", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: supplierEditBusy ? "default" : "pointer", fontFamily: "inherit", opacity: supplierEditBusy ? 0.6 : 1 }}
+                                >
+                                  {supplierEditBusy ? "Saving…" : "Save"}
+                                </button>
+                                <button
+                                  onClick={cancelEditSupplier}
+                                  style={{ height: 32, padding: "0 13px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--text)", fontWeight: 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              {supplierEditError && <div style={{ fontSize: 12, color: "var(--critical)", marginTop: 8 }}>{supplierEditError}</div>}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const removeBusy = id ? !!supplierRemoveBusy[id] : false;
+                      const removeErr = id ? supplierRemoveError[id] : "";
                       return (
                         <tr key={i} className={styles.rowHover}>
                           <td style={{ ...td, padding: "13px 16px" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ fontWeight: 600 }}>{s[0]}</span>{s[2] && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700, color: "var(--accent)", background: "color-mix(in srgb,var(--accent) 14%,transparent)", border: "1px solid color-mix(in srgb,var(--accent) 32%,transparent)", padding: "2px 7px", borderRadius: 999 }}>★ PARTNER</span>}</div></td>
@@ -555,6 +891,30 @@ export default function AdminConsole({
                           <td style={{ ...td, padding: "13px 16px", textAlign: "right", ...archivo, fontVariantNumeric: "tabular-nums" }}>{s[6].toLocaleString("en-US")}</td>
                           <td style={{ ...td, padding: "13px 16px" }}><span style={pill(tone)}><span style={dot(tone, { marginTop: 0, ...(s[3] === "stale" ? { animation: "admin-pulse 1.4s infinite" } : {}) })} />{s[4]}</span></td>
                           <td style={{ ...td, padding: "13px 16px", color: "var(--muted)", fontSize: 12.5 }}>{s[5]}</td>
+                          <td style={{ ...td, padding: "13px 16px", textAlign: "right" }}>
+                            {id ? (
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                                  <button
+                                    onClick={() => startEditSupplier(id, s[0], s[1] === "—" ? "" : s[1], s[2])}
+                                    style={{ height: 27, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    disabled={removeBusy}
+                                    onClick={() => removeSupplier(id)}
+                                    style={{ height: 27, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: removeBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid color-mix(in srgb, var(--critical) 45%, var(--border))", background: "color-mix(in srgb, var(--critical) 10%, transparent)", color: "var(--critical)", opacity: removeBusy ? 0.6 : 1 }}
+                                  >
+                                    {removeBusy ? "…" : "Remove"}
+                                  </button>
+                                </div>
+                                {removeErr && <span style={{ fontSize: 10.5, color: "var(--critical)" }}>{removeErr}</span>}
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>
+                            )}
+                          </td>
                         </tr>
                       );
                     })}
@@ -750,11 +1110,153 @@ export default function AdminConsole({
               </div>
             </div>
           )}
+
+          {/* FINANCIALS */}
+          {screen === "financials" && (
+            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1000, margin: "0 auto" }}>
+              {!financials && (
+                <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 16 }}>Couldn&apos;t load financials — is the API running?</div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 18 }}>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Free-tier businesses</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? financials.freeCount.toLocaleString() : "—"}</div>
+                </div>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Pro businesses</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: "var(--good)" }}>{financials ? financials.proCount.toLocaleString() : "—"}</div>
+                </div>
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>MRR</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? formatJmd(financials.mrrCents) : "—"}</div>
+                  {financials && (
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+                      Pro @ {formatJmd(financials.proMonthlyPriceCents)}/mo · {financials.currency}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
+                <div style={{ padding: "14px 18px 10px", ...archivo, fontWeight: 700, fontSize: 14.5 }}>Upcoming renewals (next 60 days)</div>
+                {upcomingRenewals.length === 0 ? (
+                  <div style={{ padding: "18px 18px 22px", fontSize: 13, color: "var(--muted)" }}>
+                    {financials ? "No Pro renewals due in the next 60 days." : "—"}
+                  </div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr style={{ background: "var(--surface-alt)" }}>
+                      <th style={th}>BUSINESS</th><th style={th}>PLAN</th><th style={{ ...th, textAlign: "right" }}>RENEWS</th>
+                    </tr></thead>
+                    <tbody>
+                      {upcomingRenewals.map((r) => (
+                        <tr key={r.businessId} className={styles.rowHover}>
+                          <td style={{ ...td, padding: "12px 18px" }}>{r.businessName}</td>
+                          <td style={{ ...td, padding: "12px 18px" }}><span style={pill(planTone[planDisplay(r.plan)] ?? "muted")}>{planDisplay(r.plan)}</span></td>
+                          <td style={{ ...td, padding: "12px 18px", textAlign: "right", ...archivo, fontVariantNumeric: "tabular-nums" }}>{new Date(r.renewsAt).toLocaleDateString("en-JM", { year: "numeric", month: "short", day: "numeric" })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ACTIVITY */}
+          {screen === "activity" && (
+            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1180, margin: "0 auto" }}>
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ background: "var(--surface-alt)" }}>
+                    <th style={th}>WHEN</th><th style={th}>WHO</th><th style={th}>ACTION</th><th style={th}>TARGET</th><th style={th}>DETAILS</th>
+                  </tr></thead>
+                  <tbody>
+                    {auditEntries.length === 0 ? (
+                      <tr><td colSpan={5} style={{ ...td, padding: "18px", color: "var(--muted)" }}>No activity recorded yet.</td></tr>
+                    ) : (
+                      auditEntries.map((a) => (
+                        <tr key={a.id} className={styles.rowHover}>
+                          <td style={{ ...td, padding: "12px 16px", color: "var(--muted)", whiteSpace: "nowrap" }} title={a.createdAt}>{relTime(a.createdAt)}</td>
+                          <td style={{ ...td, padding: "12px 16px" }}>{a.actorEmail}</td>
+                          <td style={{ ...td, padding: "12px 16px", fontWeight: 600 }}>{a.action}</td>
+                          <td style={{ ...td, padding: "12px 16px", color: "var(--muted)" }}>{a.targetType}{a.targetId ? ` · ${a.targetId}` : ""}</td>
+                          <td style={{ ...td, padding: "12px 16px", color: "var(--muted)", fontSize: 12, ...archivo, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{detailsPreview(a.details)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
       {/* TENANT DRAWER */}
       {selTenant && <TenantDrawer raw={selTenant} onClose={() => setTenantId(null)} />}
+
+      {/* PERMANENT DELETE MODAL — operator must type the exact business name;
+          mirrors the server's confirmName check on DELETE /admin/tenants/:id. */}
+      {deleteTarget && (
+        <div onClick={closeDeleteModal} style={{ position: "fixed", inset: 0, background: "rgba(15,12,8,.5)", zIndex: 55, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: "100%", background: "var(--surface)", border: "1px solid color-mix(in srgb, var(--critical) 40%, var(--border))", borderRadius: 16, boxShadow: "0 30px 80px -20px rgba(0,0,0,.55)", animation: "admin-fadein .2s ease" }}>
+            <div style={{ padding: "20px 22px 4px", display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{ width: 36, height: 36, flex: "none", borderRadius: 10, background: "color-mix(in srgb, var(--critical) 14%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--critical)" }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ ...archivo, fontWeight: 700, fontSize: 16.5 }}>Permanently delete tenant</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>
+                  This permanently deletes <b style={{ color: "var(--text)" }}>{deleteTarget.name}</b> and ALL its data — clients,
+                  jobs, quotes, invoices. This action cannot be undone.
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "14px 22px 4px" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                Type the business name <b style={{ color: "var(--text)" }}>{deleteTarget.name}</b> to confirm
+                <input
+                  autoFocus
+                  value={deleteTyped}
+                  onChange={(e) => setDeleteTyped(e.target.value)}
+                  placeholder={deleteTarget.name}
+                  style={{ height: 38, padding: "0 12px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
+                />
+              </label>
+              {deleteError && <div style={{ fontSize: 12.5, color: "var(--critical)", marginTop: 10 }}>{deleteError}</div>}
+            </div>
+            <div style={{ padding: "18px 22px 22px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10 }}>
+              <button
+                onClick={closeDeleteModal}
+                disabled={deleteBusy}
+                style={{ height: 38, padding: "0 16px", border: "1px solid var(--border)", borderRadius: 9, background: "var(--surface)", color: "var(--text)", fontWeight: 600, fontSize: 13, cursor: deleteBusy ? "default" : "pointer", fontFamily: "inherit" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmHardDelete}
+                disabled={deleteBusy || deleteTyped !== deleteTarget.name}
+                style={{
+                  height: 38,
+                  padding: "0 18px",
+                  border: "none",
+                  borderRadius: 9,
+                  background: "var(--critical)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: deleteBusy || deleteTyped !== deleteTarget.name ? "default" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: deleteBusy || deleteTyped !== deleteTarget.name ? 0.5 : 1,
+                }}
+              >
+                {deleteBusy ? "Deleting…" : "Permanently delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* DIFF MODAL */}
       {diffOpen && (

@@ -83,7 +83,8 @@ export const apiClient = {
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
-  delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined }),
 };
 
 /**
@@ -443,6 +444,8 @@ export interface AdminTenant {
   status: string;
   createdAt: string;
   quoteCount: number;
+  /** Set when read via GET /admin/tenants?includeSuspended=true (see getAdminData). */
+  suspended: boolean;
 }
 export interface AdminSupplier {
   id: string;
@@ -461,11 +464,41 @@ export interface AdminReg {
   sourceUrl: string | null;
   actionNeeded: string | null;
 }
+/** GET /admin/financials — ADMIN only. Plan mix, MRR & renewals within the
+ * next 60 days. */
+export interface AdminUpcomingRenewal {
+  businessId: string;
+  businessName: string;
+  plan: string;
+  renewsAt: string;
+}
+export interface AdminFinancials {
+  freeCount: number;
+  proCount: number;
+  currency: string;
+  proMonthlyPriceCents: number;
+  mrrCents: number;
+  upcomingRenewals: AdminUpcomingRenewal[];
+}
+/** GET /admin/audit — ADMIN only. Newest first. `details` is a free-form,
+ * action-specific payload the API attaches (e.g. the confirmName typed for a
+ * tenant delete) — rendered compactly rather than typed strictly. */
+export interface AdminAuditEntry {
+  id: string;
+  actorEmail: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  details: unknown;
+  createdAt: string;
+}
 export interface AdminData {
   overview: AdminOverview | null;
   tenants: AdminTenant[];
   suppliers: AdminSupplier[];
   regulatory: AdminReg[];
+  financials: AdminFinancials | null;
+  audit: AdminAuditEntry[];
 }
 
 export interface CardPaymentResponse {
@@ -530,4 +563,49 @@ export async function setTenantPlan(
   input: SetTenantPlanInput,
 ): Promise<{ id: string; plan: string }> {
   return apiClient.patch<{ id: string; plan: string }>(`/admin/tenants/${businessId}/plan`, input);
+}
+
+// --- Admin tenant lifecycle (suspend / restore / hard delete) ---------------
+
+/** PATCH /admin/tenants/:id/suspend — ADMIN only; blocks the tenant's own
+ * users from signing in while preserving all data. */
+export async function suspendTenant(businessId: string): Promise<{ id: string; suspended: boolean }> {
+  return apiClient.patch<{ id: string; suspended: boolean }>(`/admin/tenants/${businessId}/suspend`);
+}
+
+/** PATCH /admin/tenants/:id/restore — ADMIN only; reverses a suspend. */
+export async function restoreTenant(businessId: string): Promise<{ id: string; suspended: boolean }> {
+  return apiClient.patch<{ id: string; suspended: boolean }>(`/admin/tenants/${businessId}/restore`);
+}
+
+/** DELETE /admin/tenants/:id — ADMIN only, IRREVERSIBLE. The API rejects the
+ * request unless `confirmName` exactly matches the business's name; the
+ * console mirrors that check client-side before enabling the delete button. */
+export async function hardDeleteTenant(businessId: string, confirmName: string): Promise<void> {
+  await apiClient.delete<unknown>(`/admin/tenants/${businessId}`, { confirmName });
+}
+
+// --- Admin suppliers (create / update / soft delete) -------------------------
+
+export interface NewSupplierInput {
+  name: string;
+  website?: string;
+  parish?: string;
+  isPartner?: boolean;
+}
+export type UpdateSupplierInput = Partial<NewSupplierInput>;
+
+/** POST /admin/suppliers — ADMIN only. */
+export async function createSupplier(input: NewSupplierInput): Promise<AdminSupplier> {
+  return apiClient.post<AdminSupplier>("/admin/suppliers", input);
+}
+
+/** PATCH /admin/suppliers/:id — ADMIN only, all fields optional. */
+export async function updateSupplier(id: string, input: UpdateSupplierInput): Promise<AdminSupplier> {
+  return apiClient.patch<AdminSupplier>(`/admin/suppliers/${id}`, input);
+}
+
+/** DELETE /admin/suppliers/:id — ADMIN only, soft delete. */
+export async function deleteSupplier(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/admin/suppliers/${id}`);
 }
