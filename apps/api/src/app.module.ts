@@ -13,6 +13,7 @@ import { TradesModule } from "./trades/trades.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
+import { AssembliesModule } from "./assemblies/assemblies.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { SyncModule } from "./sync/sync.module.js";
@@ -40,6 +41,7 @@ import { BillingModule } from "./billing/billing.module.js";
     JobsModule,
     QuotesModule,
     CatalogsModule,
+    AssembliesModule,
     PaymentsModule,
     AdminModule,
     SyncModule,

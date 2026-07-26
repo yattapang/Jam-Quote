@@ -77,6 +77,15 @@ export const EntityType = {
 } as const;
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 
+/** What an assembly component draws its cost from. */
+export const AssemblyComponentKind = {
+  MATERIAL: "MATERIAL",
+  LABOUR: "LABOUR",
+  OTHER: "OTHER",
+} as const;
+export type AssemblyComponentKind =
+  (typeof AssemblyComponentKind)[keyof typeof AssemblyComponentKind];
+
 /** The 14 parishes of Jamaica. */
 export const PARISHES = [
   "Kingston",

@@ -86,57 +86,64 @@ enum MessageChannel {
   EMAIL
 }
 
+enum AssemblyComponentKind {
+  MATERIAL
+  LABOUR
+  OTHER
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & identity
 // ---------------------------------------------------------------------------
 model Business {
-  id             String  @id @default(uuid())
+  id             String     @id @default(uuid())
   name           String
   // Jurisdiction rule-pack selector. countryCode/currency default to Jamaica;
   // tax rate, taxpayer-id format, regions & payment rails resolve from the
   // rule-pack in @jamquote/core (getJurisdiction). Do not hardcode elsewhere.
-  countryCode    String  @default("JM") // ISO 3166-1 alpha-2
-  currency       String  @default("JMD") // ISO 4217
+  countryCode    String     @default("JM") // ISO 3166-1 alpha-2
+  currency       String     @default("JMD") // ISO 4217
   entityType     EntityType @default(SOLE_TRADER)
   trn            String? // taxpayer id (TRN in JM), validated per jurisdiction
   logoUrl        String?
   addressLine    String?
   parish         String? // administrative region (label per jurisdiction)
   tradeType      String?
-  defaultGctRate Decimal @default(15.0) @db.Decimal(5, 2) // resolved tax rate; default from rule-pack
-  quotePrefix    String  @default("QT-")
-  invoicePrefix  String  @default("INV-")
-  nextQuoteSeq   Int     @default(1)
-  nextInvoiceSeq Int     @default(1)
-  jmdPerUsd      Decimal? @db.Decimal(10, 4) // optional USD reference rate
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  defaultGctRate Decimal    @default(15.0) @db.Decimal(5, 2) // resolved tax rate; default from rule-pack
+  quotePrefix    String     @default("QT-")
+  invoicePrefix  String     @default("INV-")
+  nextQuoteSeq   Int        @default(1)
+  nextInvoiceSeq Int        @default(1)
+  jmdPerUsd      Decimal?   @db.Decimal(10, 4) // optional USD reference rate
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
   deletedAt      DateTime? // soft-delete for offline sync
 
-  users         User[]
-  clients       Client[]
-  jobs          Job[]
-  quotes        Quote[]
-  invoices      Invoice[]
-  labourRates   LabourRate[]
-  materialFavs  MaterialFavourite[]
-  equipment     EquipmentItem[]
-  connections   Connection[]
-  subscription  Subscription?
-  trades        Trade[]
+  users        User[]
+  clients      Client[]
+  jobs         Job[]
+  quotes       Quote[]
+  invoices     Invoice[]
+  labourRates  LabourRate[]
+  materialFavs MaterialFavourite[]
+  equipment    EquipmentItem[]
+  connections  Connection[]
+  subscription Subscription?
+  trades       Trade[]
+  assemblies   Assembly[]
 }
 
 model User {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   businessId   String?
   business     Business? @relation(fields: [businessId], references: [id])
-  role         UserRole @default(OWNER)
+  role         UserRole  @default(OWNER)
   fullName     String?
-  email        String?  @unique
-  phone        String?  @unique
+  email        String?   @unique
+  phone        String?   @unique
   passwordHash String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   resetTokens PasswordResetToken[]
 }
@@ -160,19 +167,19 @@ model PasswordResetToken {
 // Clients & jobs
 // ---------------------------------------------------------------------------
 model Client {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
+  business    Business  @relation(fields: [businessId], references: [id])
   firstName   String
-  lastName    String   @default("")
+  lastName    String    @default("")
   phone       String?
   whatsapp    String?
   email       String?
   addressLine String?
   parish      String?
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime? // soft-delete for offline sync
 
   jobs     Job[]
@@ -183,18 +190,18 @@ model Client {
 }
 
 model Job {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   businessId  String
-  business    Business @relation(fields: [businessId], references: [id])
+  business    Business  @relation(fields: [businessId], references: [id])
   clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id])
+  client      Client?   @relation(fields: [clientId], references: [id])
   name        String
   addressLine String?
   parish      String?
-  stage       String   @default("Quoted")
-  progressPct Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  stage       String    @default("Quoted")
+  progressPct Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   deletedAt   DateTime? // soft-delete for offline sync
 
   quotes      Quote[]
@@ -243,36 +250,36 @@ model Quote {
 }
 
 model QuoteSection {
-  id      String @id @default(uuid())
-  quoteId String
-  quote   Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  title   String
-  sort    Int    @default(0)
-  updatedAt DateTime @default(now()) @updatedAt // delta-sync cursor
+  id        String    @id @default(uuid())
+  quoteId   String
+  quote     Quote     @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  title     String
+  sort      Int       @default(0)
+  updatedAt DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt DateTime? // soft-delete for offline sync
 
   lineItems QuoteLineItem[]
 }
 
 model QuoteLineItem {
-  id             String       @id @default(uuid())
+  id             String        @id @default(uuid())
   quoteId        String
-  quote          Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quote          Quote         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   sectionId      String?
   section        QuoteSection? @relation(fields: [sectionId], references: [id])
   category       LineCategory
   description    String
-  quantity       Decimal      @db.Decimal(12, 3)
-  rateUnit       RateUnit     @default(UNIT)
+  quantity       Decimal       @db.Decimal(12, 3)
+  rateUnit       RateUnit      @default(UNIT)
   unitPriceCents Int
-  priceSource    PriceSource  @default(MANUAL)
+  priceSource    PriceSource   @default(MANUAL)
   supplierId     String?
-  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
-  gctTreatment   GctTreatment @default(STANDARD)
-  markupPct      Decimal?     @db.Decimal(6, 2)
+  supplier       Supplier?     @relation(fields: [supplierId], references: [id])
+  gctTreatment   GctTreatment  @default(STANDARD)
+  markupPct      Decimal?      @db.Decimal(6, 2)
   overrideNote   String?
-  sort           Int          @default(0)
-  updatedAt      DateTime     @default(now()) @updatedAt // delta-sync cursor
+  sort           Int           @default(0)
+  updatedAt      DateTime      @default(now()) @updatedAt // delta-sync cursor
   deletedAt      DateTime? // soft-delete for offline sync
 
   @@index([quoteId])
@@ -282,13 +289,13 @@ model QuoteLineItem {
 // Catalogs & pricing
 // ---------------------------------------------------------------------------
 model Supplier {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   name      String
   website   String?
   parish    String?
-  isPartner Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt // delta-sync cursor
+  isPartner Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt DateTime? // soft-delete for offline sync
 
   priceEntries MaterialPriceEntry[]
@@ -296,40 +303,42 @@ model Supplier {
 }
 
 model MaterialPriceEntry {
-  id          String      @id @default(uuid())
-  supplierId  String
-  supplier    Supplier    @relation(fields: [supplierId], references: [id])
-  name        String
-  sku         String?
-  unit        String? // "42.5kg bag", "20ft length"
-  priceCents  Int
-  source      PriceSource @default(LOOKUP)
-  sourceUrl   String?
-  fetchedAt   DateTime    @default(now())
-  createdAt   DateTime    @default(now())
+  id         String      @id @default(uuid())
+  supplierId String
+  supplier   Supplier    @relation(fields: [supplierId], references: [id])
+  name       String
+  sku        String?
+  unit       String? // "42.5kg bag", "20ft length"
+  priceCents Int
+  source     PriceSource @default(LOOKUP)
+  sourceUrl  String?
+  fetchedAt  DateTime    @default(now())
+  createdAt  DateTime    @default(now())
 
   @@index([supplierId])
   @@index([name])
 }
 
 model LabourRate {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  business   Business  @relation(fields: [businessId], references: [id])
   trade      String // mason, electrician, helper...
   skillTier  String? // helper / journeyman / master
   rateCents  Int
-  rateUnit   RateUnit @default(DAY)
-  updatedAt  DateTime @default(now()) @updatedAt // delta-sync cursor
+  rateUnit   RateUnit  @default(DAY)
+  updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
+
+  assemblyComponents AssemblyComponent[]
 
   @@index([businessId])
 }
 
 model MaterialFavourite {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  business   Business  @relation(fields: [businessId], references: [id])
   name       String
   unit       String?
   priceCents Int
@@ -341,8 +350,10 @@ model MaterialFavourite {
   // free-form contractor input, not FK'd to any enum.
   category   String?
   specs      Json?
-  updatedAt  DateTime @default(now()) @updatedAt // delta-sync cursor
+  updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
+
+  assemblyComponents AssemblyComponent[]
 
   @@index([businessId])
 }
@@ -362,40 +373,84 @@ model Trade {
 }
 
 model EquipmentItem {
-  id         String   @id @default(uuid())
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id])
-  name       String
-  owned      Boolean  @default(false)
-  vendor     String?
+  id          String    @id @default(uuid())
+  businessId  String
+  business    Business  @relation(fields: [businessId], references: [id])
+  name        String
+  owned       Boolean   @default(false)
+  vendor      String?
   vendorPhone String?
-  rateCents  Int
-  rateUnit   RateUnit @default(DAY)
-  updatedAt  DateTime @default(now()) @updatedAt // delta-sync cursor
-  deletedAt  DateTime? // soft-delete for offline sync
+  rateCents   Int
+  rateUnit    RateUnit  @default(DAY)
+  updatedAt   DateTime  @default(now()) @updatedAt // delta-sync cursor
+  deletedAt   DateTime? // soft-delete for offline sync
 
   @@index([businessId])
+}
+
+// A reusable composite unit ("job type", e.g. "Tiling — per sq ft") built
+// from material/labour/other components. Its unit cost is computed from
+// those components (see computeAssemblyUnitCostCents in @jamquote/core) but
+// stays editable/overridable later once used on a quote.
+model Assembly {
+  id         String    @id @default(uuid())
+  businessId String
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  unit       String // e.g. "sq ft"
+  markupPct  Decimal   @default(0) @db.Decimal(6, 2)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime? // soft-delete for offline sync
+
+  components AssemblyComponent[]
+
+  @@index([businessId])
+}
+
+// One line of an Assembly's recipe. unitPriceCents is a snapshot of the
+// source (MaterialFavourite.priceCents / LabourRate.rateCents) at the time
+// it was added, so a saved assembly's cost is stable even if the underlying
+// catalog price later changes; it can be recomputed from the library on
+// demand. materialFavouriteId/labourRateId are optional back-references for
+// that recompute path and are set null (not deleted) if the source row goes
+// away.
+model AssemblyComponent {
+  id                  String                @id @default(uuid())
+  assemblyId          String
+  assembly            Assembly              @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  kind                AssemblyComponentKind
+  materialFavouriteId String?
+  materialFavourite   MaterialFavourite?    @relation(fields: [materialFavouriteId], references: [id], onDelete: SetNull)
+  labourRateId        String?
+  labourRate          LabourRate?           @relation(fields: [labourRateId], references: [id], onDelete: SetNull)
+  description         String
+  quantityPerUnit     Decimal               @db.Decimal(12, 3)
+  unitPriceCents      Int
+  sort                Int                   @default(0)
+
+  @@index([assemblyId])
 }
 
 // ---------------------------------------------------------------------------
 // Invoicing & payments
 // ---------------------------------------------------------------------------
 model Invoice {
-  id            String        @id @default(uuid())
-  businessId    String
-  business      Business      @relation(fields: [businessId], references: [id])
-  clientId      String?
-  client        Client?       @relation(fields: [clientId], references: [id])
-  quoteId       String?
-  quote         Quote?        @relation(fields: [quoteId], references: [id])
-  number        String
-  status        InvoiceStatus @default(INVOICED)
-  totalCents    Int
-  paidCents     Int           @default(0)
-  dueDate       DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  deletedAt     DateTime? // soft-delete for offline sync
+  id         String        @id @default(uuid())
+  businessId String
+  business   Business      @relation(fields: [businessId], references: [id])
+  clientId   String?
+  client     Client?       @relation(fields: [clientId], references: [id])
+  quoteId    String?
+  quote      Quote?        @relation(fields: [quoteId], references: [id])
+  number     String
+  status     InvoiceStatus @default(INVOICED)
+  totalCents Int
+  paidCents  Int           @default(0)
+  dueDate    DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  deletedAt  DateTime? // soft-delete for offline sync
 
   payments Payment[]
 
@@ -438,28 +493,28 @@ model MessageLog {
 }
 
 model Connection {
-  id         String   @id @default(uuid())
+  id         String         @id @default(uuid())
   businessId String
-  business   Business @relation(fields: [businessId], references: [id])
+  business   Business       @relation(fields: [businessId], references: [id])
   channel    MessageChannel
   // e.g. linked WhatsApp business number or OAuth email account
   identifier String?
   accessData Json?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime       @default(now())
 
   @@index([businessId])
 }
 
 model RegulatoryUpdate {
-  id            String   @id @default(uuid())
+  id            String    @id @default(uuid())
   title         String
   category      String // GCT | NHT | TRN | MIN_WAGE | PERMIT | OTHER
   summary       String
   effectiveDate DateTime?
   actionNeeded  String?
   sourceUrl     String?
-  publishedAt   DateTime @default(now())
-  createdAt     DateTime @default(now())
+  publishedAt   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
 
   @@index([category])
 }
@@ -474,40 +529,40 @@ model Attachment {
 }
 
 model Subscription {
-  id         String   @id @default(uuid())
-  businessId String   @unique
-  business   Business @relation(fields: [businessId], references: [id])
-  plan       String   @default("free") // free | pro
-  status     String   @default("active")
+  id         String    @id @default(uuid())
+  businessId String    @unique
+  business   Business  @relation(fields: [businessId], references: [id])
+  plan       String    @default("free") // free | pro
+  status     String    @default("active")
   renewsAt   DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 // Singleton row (fixed id "default") holding admin-editable Phase-1 pricing.
 // Read via PricingService.get(), which falls back to in-code defaults if
 // this row (or the table itself, pre-migration) is missing.
 model PricingConfig {
-  id                  String   @id @default("default")
-  freeQuotesPerMonth  Int
+  id                   String   @id @default("default")
+  freeQuotesPerMonth   Int
   proMonthlyPriceCents Int
-  proAnnualPriceCents Int
-  currency            String   @default("JMD")
-  updatedAt           DateTime @updatedAt
+  proAnnualPriceCents  Int
+  currency             String   @default("JMD")
+  updatedAt            DateTime @updatedAt
 }
 
 // Immutable audit trail for platform-admin actions (tenant suspend/restore/
 // delete, plan changes, pricing edits, supplier writes). Written only via
 // AuditService.record() — never updated or deleted by the app.
 model AuditLog {
-  id           String   @id @default(uuid())
-  actorUserId  String
-  actorEmail   String
-  action       String // e.g. "tenant.suspend"
-  targetType   String
-  targetId     String
-  details      Json?
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  actorUserId String
+  actorEmail  String
+  action      String // e.g. "tenant.suspend"
+  targetType  String
+  targetId    String
+  details     Json?
+  createdAt   DateTime @default(now())
 
   @@index([createdAt])
 }
