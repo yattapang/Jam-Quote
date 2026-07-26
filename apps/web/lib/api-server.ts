@@ -32,6 +32,7 @@ import {
   type AdminAuditEntry,
   type BillingStatus,
   type PricingConfig,
+  type Trade,
 } from "./api-client";
 import type { Business, Client, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
@@ -196,6 +197,20 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
   } catch {
     console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
     return undefined;
+  }
+}
+
+/** GET /trades (server-side read) — merged global + this business's custom
+ * trades, for populating TradeSelectField from a server component (e.g. the
+ * settings page passing the list into EditBusinessButton). Returns an empty
+ * list (rather than throwing) when the API is unreachable — the picker still
+ * works as a plain free-text field in that case. */
+export async function getTrades(): Promise<Trade[]> {
+  try {
+    return await serverRequest<Trade[]>("/trades");
+  } catch {
+    console.warn("[api-server] getTrades: API unreachable, returning empty list");
+    return [];
   }
 }
 

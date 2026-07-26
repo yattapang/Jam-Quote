@@ -609,3 +609,28 @@ export async function updateSupplier(id: string, input: UpdateSupplierInput): Pr
 export async function deleteSupplier(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/admin/suppliers/${id}`);
 }
+
+// --- Trades (curated master list + per-business custom trades) --------------
+
+/** A trade the business can pick for its profile / labour library — either a
+ * curated global trade (custom: false) or one this business added itself. No
+ * mapping needed: the API already returns exactly this shape (see
+ * TradesService, apps/api/src/trades/trades.service.ts). */
+export interface Trade {
+  id: string;
+  name: string;
+  custom: boolean;
+}
+
+/** GET /trades (client-side, via the proxy) — merged global + this business's
+ * custom trades, de-duped by name (case-insensitive) and sorted alphabetically. */
+export async function getTradesClient(): Promise<Trade[]> {
+  return apiClient.get<Trade[]>("/trades");
+}
+
+/** POST /trades — idempotent: if a global trade or one of this business's own
+ * custom trades already matches `name` (case-insensitive), that existing row
+ * is returned as-is rather than duplicated. */
+export async function createTrade(name: string): Promise<Trade> {
+  return apiClient.post<Trade>("/trades", { name });
+}

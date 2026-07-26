@@ -123,6 +123,7 @@ model Business {
   equipment     EquipmentItem[]
   connections   Connection[]
   subscription  Subscription?
+  trades        Trade[]
 }
 
 model User {
@@ -335,6 +336,20 @@ model MaterialFavourite {
   supplierId String?
   updatedAt  DateTime @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
+
+  @@index([businessId])
+}
+
+// Curated master trade list (businessId null) + per-business custom trades
+// (businessId set). No DB-level unique constraint across the null
+// businessId group — de-duping by name (case-insensitive) is handled in
+// TradesService so the global list and custom trades share one path.
+model Trade {
+  id         String    @id @default(uuid())
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id])
+  name       String
+  createdAt  DateTime  @default(now())
 
   @@index([businessId])
 }

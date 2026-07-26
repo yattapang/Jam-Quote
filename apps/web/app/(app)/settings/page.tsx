@@ -1,6 +1,6 @@
 import Card from "@/components/ui/Card";
 import { businessProfile } from "@/lib/mock-data";
-import { getBusiness, getBillingStatus, getBillingPlans } from "@/lib/api-server";
+import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import BillingCard from "./BillingCard";
 import shared from "../shared.module.css";
@@ -8,10 +8,11 @@ import shared from "../shared.module.css";
 export const metadata = { title: "Settings · JamQuote" };
 
 export default async function SettingsPage() {
-  const [business, billingStatus, billingPlans] = await Promise.all([
+  const [business, billingStatus, billingPlans, trades] = await Promise.all([
     getBusiness(),
     getBillingStatus(),
     getBillingPlans(),
+    getTrades(),
   ]);
   return (
     <div className={shared.page}>
@@ -22,7 +23,7 @@ export default async function SettingsPage() {
           <span className={shared.subtitle}>Business profile &amp; connections</span>
         </div>
         <div className={shared.headerActions}>
-          <EditBusinessButton business={business} />
+          <EditBusinessButton business={business} trades={trades} />
         </div>
       </header>
 

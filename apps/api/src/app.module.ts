@@ -9,6 +9,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { AuthContextMiddleware } from "./auth/auth-context.middleware.js";
 import { BusinessModule } from "./business/business.module.js";
 import { ClientsModule } from "./clients/clients.module.js";
+import { TradesModule } from "./trades/trades.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
@@ -35,6 +36,7 @@ import { BillingModule } from "./billing/billing.module.js";
     AuthModule,
     BusinessModule,
     ClientsModule,
+    TradesModule,
     JobsModule,
     QuotesModule,
     CatalogsModule,

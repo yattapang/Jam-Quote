@@ -6,7 +6,8 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { updateBusiness } from "@/lib/api-client";
+import TradeSelectField from "@/components/forms/TradeSelectField";
+import { updateBusiness, type Trade } from "@/lib/api-client";
 import { PARISHES } from "@jamquote/core";
 import type { Business } from "@/lib/types";
 
@@ -17,7 +18,15 @@ const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map
  * Fields exposed here match updateBusinessSchema (business.dto.ts) exactly;
  * the Business Prisma model has no phone/email field (those live only on the
  * not-yet-persisted WhatsApp/email fixture cards elsewhere on this page). */
-export default function EditBusinessButton({ business }: { business: Business }) {
+export default function EditBusinessButton({
+  business,
+  trades = [],
+}: {
+  business: Business;
+  /** Trades list to populate the type-ahead picker, fetched server-side by
+   * the settings page (getTrades()) so it's ready before the modal opens. */
+  trades?: Trade[];
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(business.name);
@@ -70,7 +79,7 @@ export default function EditBusinessButton({ business }: { business: Business })
               <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
             </div>
             <div className={modalStyles.row2}>
-              <Input label="Trade type" value={tradeType} onChange={(e) => setTradeType(e.target.value)} />
+              <TradeSelectField trades={trades} value={tradeType} onChange={setTradeType} />
               <Input
                 label="Default GCT rate (%)"
                 type="number"
