@@ -1,7 +1,17 @@
 # JamQuote — Roadmap & Resume State
 
-Updated 2026-07-25. Single source of truth for picking work back up cheaply
+Updated 2026-07-26. Single source of truth for picking work back up cheaply
 after a usage-limit pause. Read this first on resume.
+
+> PROGRESS: admin-ops console (backend + UI) DONE & deployed. Estimating catalog:
+> Trades DONE, Labour library DONE, Material library (categories+specs) DONE,
+> Assemblies BACKEND DONE (Assembly/AssemblyComponent model + migration +
+> `computeAssemblyUnitCostCents` in core + CRUD API — all deployed).
+> RESUME HERE → (1) Assemblies LIBRARY UI (job-types page: build an assembly
+> from material/labour pickers with live unit cost — a stalled attempt is
+> stashed), then (2) Assemblies QUOTE INTEGRATION (drop a job type into a quote
+> as a line + per-quote summary/detailed toggle → PDF). Then RBAC #13,
+> rule-pack #11 (lighter), invoicing/edit #18, mobile M3.
 
 ## Live now (deployed)
 - **API**: Render (free) + Neon Postgres. Migrations apply on boot via the
