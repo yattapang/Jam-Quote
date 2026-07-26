@@ -16,6 +16,12 @@ export const createMaterialFavouriteSchema = z.object({
   unit: z.string().optional(),
   priceCents: z.number().int().nonnegative(),
   supplierId: z.string().uuid().optional(),
+  // Structured catalog fields (both optional/nullable — see MaterialFavourite
+  // in schema.prisma). category names the spec-field set from
+  // apps/web/lib/material-categories.ts (e.g. "Steel / Rebar"); specs is a
+  // free-form key->value map of that category's spec values.
+  category: z.string().optional(),
+  specs: z.record(z.string(), z.string()).optional(),
 });
 export type CreateMaterialFavouriteInput = z.infer<typeof createMaterialFavouriteSchema>;
 export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial();

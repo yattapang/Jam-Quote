@@ -149,6 +149,8 @@ export interface ApiMaterialFavourite {
   unit?: string | null;
   priceCents: number;
   supplierId?: string | null;
+  category?: string | null;
+  specs?: Record<string, string> | null;
 }
 export interface ApiLabourRate {
   id: string;
@@ -227,6 +229,8 @@ export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite
     priceCents: m.priceCents,
     priceDollars: m.priceCents / 100,
     supplierId: m.supplierId ?? undefined,
+    category: m.category ?? undefined,
+    specs: m.specs ?? undefined,
   };
 }
 
@@ -332,6 +336,8 @@ export interface NewMaterialFavouriteInput {
   unit?: string;
   priceCents: number;
   supplierId?: string;
+  category?: string;
+  specs?: Record<string, string>;
 }
 export async function createMaterialFavourite(
   input: NewMaterialFavouriteInput,

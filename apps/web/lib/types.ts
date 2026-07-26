@@ -62,6 +62,11 @@ export interface MaterialFavourite {
   /** Convenience for display/inputs — priceCents / 100. */
   priceDollars: number;
   supplierId?: string;
+  /** Structured catalog fields (see apps/web/lib/material-categories.ts).
+   * Both optional — older/unclassified materials simply omit them and
+   * display/behave exactly as before. */
+  category?: string;
+  specs?: Record<string, string>;
 }
 
 /** A reusable labour rate a contractor keeps on hand for quoting (mirrors the

@@ -3,22 +3,60 @@
 import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
+import { MATERIAL_CATEGORIES, specFieldsFor } from "@/lib/material-categories";
 import type { NewMaterialFavouriteInput } from "@/lib/api-client";
+import type { MaterialFavourite } from "@/lib/types";
 
 export interface MaterialFormValues {
   name: string;
   unit: string;
   priceDollars: string;
+  /** "" means no category — matches MaterialFavourite.category being unset. */
+  category: string;
+  /** Keyed by the selected category's spec field labels (see
+   * specFieldsFor). Fields outside the current category's set are dropped
+   * on submit rather than carried along silently. */
+  specs: Record<string, string>;
 }
 
-export const emptyMaterialForm: MaterialFormValues = { name: "", unit: "", priceDollars: "" };
+export const emptyMaterialForm: MaterialFormValues = {
+  name: "",
+  unit: "",
+  priceDollars: "",
+  category: "",
+  specs: {},
+};
+
+/** Prefills the form's values from an existing saved material (edit flow). */
+export function materialFormValuesFromMaterial(m: MaterialFavourite): MaterialFormValues {
+  return {
+    name: m.name,
+    unit: m.unit ?? "",
+    priceDollars: String(m.priceDollars),
+    category: m.category ?? "",
+    specs: m.specs ?? {},
+  };
+}
 
 export function materialPayloadFromValues(values: MaterialFormValues): NewMaterialFavouriteInput {
+  const category = values.category.trim() || undefined;
+  // Only keep spec values for fields the chosen category actually asks for,
+  // and drop blanks — an all-blank specs object collapses to undefined so a
+  // material with no filled-in specs stores the same as one with none at all.
+  const fields = specFieldsFor(category);
+  const specs: Record<string, string> = {};
+  for (const field of fields) {
+    const value = values.specs[field]?.trim();
+    if (value) specs[field] = value;
+  }
   return {
     name: values.name.trim(),
     unit: values.unit.trim() || undefined,
     priceCents: Math.round((Number(values.priceDollars) || 0) * 100),
+    category,
+    specs: Object.keys(specs).length ? specs : undefined,
   };
 }
 
@@ -45,6 +83,9 @@ export default function MaterialForm({
 
   const set = <K extends keyof MaterialFormValues>(key: K, value: MaterialFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
+  const setSpec = (field: string, value: string) =>
+    setValues((v) => ({ ...v, specs: { ...v.specs, [field]: value } }));
+  const specFields = specFieldsFor(values.category);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +105,24 @@ export default function MaterialForm({
   return (
     <form className={modalStyles.form} onSubmit={submit}>
       <Input label="Name" value={values.name} onChange={(e) => set("name", e.target.value)} autoFocus placeholder="e.g. Cement" />
+      <Select
+        label="Category"
+        options={[{ value: "", label: "No category" }, ...MATERIAL_CATEGORIES.map((c) => ({ value: c.name, label: c.name }))]}
+        value={values.category}
+        onChange={(e) => set("category", e.target.value)}
+      />
+      {specFields.length > 0 && (
+        <div className={modalStyles.row2}>
+          {specFields.map((field) => (
+            <Input
+              key={field}
+              label={field}
+              value={values.specs[field] ?? ""}
+              onChange={(e) => setSpec(field, e.target.value)}
+            />
+          ))}
+        </div>
+      )}
       <div className={modalStyles.row2}>
         <Input label="Unit" value={values.unit} onChange={(e) => set("unit", e.target.value)} placeholder="e.g. bag" />
         <Input

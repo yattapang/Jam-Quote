@@ -77,11 +77,18 @@ function categoryForLabel(label: string): LineCategory | undefined {
   return (Object.entries(CATEGORY_LABEL) as [LineCategory, string][]).find(([, l]) => l === label)?.[0];
 }
 
-/** Display label for a saved-materials picker option — name, unit (if any),
- * and last known price so contractors can tell stale prices apart at a glance. */
+/** Display label for a saved-materials picker option — name, spec values
+ * (if the material has a category with filled-in specs, e.g. "1/2in x
+ * 20ft"), unit (if any), and last known price, so contractors can tell
+ * variants and stale prices apart at a glance. Materials with no
+ * category/specs (the pre-existing shape) render exactly as before:
+ * "name (unit) — price". */
 function favouriteLabel(f: MaterialFavourite): string {
   const price = `$${f.priceDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return f.unit ? `${f.name} (${f.unit}) — ${price}` : `${f.name} — ${price}`;
+  const specValues = f.specs ? Object.values(f.specs).filter(Boolean) : [];
+  const base = specValues.length > 0 ? `${f.name} ${specValues.join(" x ")}` : f.name;
+  const withUnit = f.unit ? `${base} (${f.unit})` : base;
+  return `${withUnit} — ${price}`;
 }
 
 interface DraftLine {
@@ -216,7 +223,9 @@ function initialValidDays(initial?: InitialQuote): number {
 function LineRows({
   lines,
   headingOptions,
-  favouriteOptions,
+  favourites,
+  favouriteCategories,
+  materialFilters,
   savingFavKey,
   addingHeadingKey,
   newHeadingText,
@@ -228,6 +237,7 @@ function LineRows({
   onNewHeadingTextChange,
   onCommitNewHeading,
   onCancelNewHeading,
+  onMaterialFilterChange,
   onPickFavourite,
   onSaveFavourite,
   onOpenAddMaterial,
@@ -237,7 +247,15 @@ function LineRows({
 }: {
   lines: DraftLine[];
   headingOptions: { value: string; label: string }[];
-  favouriteOptions: { value: string; label: string }[];
+  /** Full saved-materials list (not pre-filtered) — each line filters its own
+   * picker options locally from `materialFilters[line.key]`. */
+  favourites: MaterialFavourite[];
+  /** Distinct categories present across `favourites`, for the per-line
+   * category filter dropdown. Empty when no saved material has a category
+   * yet, in which case the filter is hidden entirely (backward compatible). */
+  favouriteCategories: string[];
+  /** Selected category filter per line key ("" / absent = all categories). */
+  materialFilters: Record<string, string>;
   savingFavKey: string | null;
   addingHeadingKey: string | null;
   newHeadingText: string;
@@ -249,6 +267,7 @@ function LineRows({
   onNewHeadingTextChange: (value: string) => void;
   onCommitNewHeading: (key: string) => void;
   onCancelNewHeading: () => void;
+  onMaterialFilterChange: (key: string, value: string) => void;
   onPickFavourite: (key: string, favouriteId: string) => void;
   onSaveFavourite: (key: string) => void;
   onOpenAddMaterial: (key: string) => void;
@@ -258,10 +277,23 @@ function LineRows({
 }) {
   return (
     <div className={styles.linesWrap}>
-      {lines.map((l) => (
+      {lines.map((l) => {
+        const materialFilter = materialFilters[l.key] ?? "";
+        const lineFavourites = materialFilter ? favourites.filter((f) => f.category === materialFilter) : favourites;
+        const favouriteOptions = lineFavourites.map((f) => ({ value: f.id, label: favouriteLabel(f) }));
+        return (
         <div key={l.key} className={styles.lineRow}>
           <div className={`${styles.fieldCell} ${styles.full}`}>
             <span className={styles.mobileLabel}>Saved material</span>
+            {favouriteCategories.length > 0 && (
+              <Select
+                aria-label="Filter saved materials by category"
+                options={[{ value: "", label: "All categories" }, ...favouriteCategories.map((c) => ({ value: c, label: c }))]}
+                value={materialFilter}
+                onChange={(e) => onMaterialFilterChange(l.key, e.target.value)}
+                style={{ marginBottom: 6 }}
+              />
+            )}
             <Select
               options={[
                 { value: "", label: favouriteOptions.length ? "Saved materials…" : "No saved materials" },
@@ -351,7 +383,8 @@ function LineRows({
             </Modal>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -407,11 +440,20 @@ export default function QuoteBuilder({
   const [favError, setFavError] = useState("");
   const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
   const [addingMaterialBusy, setAddingMaterialBusy] = useState(false);
+  // Per-line saved-material category filter ("" = all categories). Keyed by
+  // line key so each line's picker narrows independently.
+  const [materialFilters, setMaterialFilters] = useState<Record<string, string>>({});
 
-  const favouriteOptions = useMemo(
-    () => favourites.map((f) => ({ value: f.id, label: favouriteLabel(f) })),
+  /** Distinct categories present across saved materials, for the per-line
+   * filter dropdown. Empty (and the filter hidden) until any material has a
+   * category — existing businesses with only flat, uncategorized materials
+   * see no change here. */
+  const favouriteCategories = useMemo(
+    () => Array.from(new Set(favourites.map((f) => f.category).filter((c): c is string => !!c))).sort(),
     [favourites],
   );
+  const setMaterialFilter = (key: string, value: string) =>
+    setMaterialFilters((f) => ({ ...f, [key]: value }));
 
   /** Fills a line's description + unit price from a picked favourite. Only
    * nudges the heading to Materials when the line is still on its untouched
@@ -625,7 +667,9 @@ export default function QuoteBuilder({
           <LineRows
             lines={lines}
             headingOptions={headingOptions}
-            favouriteOptions={favouriteOptions}
+            favourites={favourites}
+            favouriteCategories={favouriteCategories}
+            materialFilters={materialFilters}
             savingFavKey={savingFavKey}
             addingHeadingKey={addingHeadingKey}
             newHeadingText={newHeadingText}
@@ -637,6 +681,7 @@ export default function QuoteBuilder({
             onNewHeadingTextChange={setNewHeadingText}
             onCommitNewHeading={commitNewHeading}
             onCancelNewHeading={cancelNewHeading}
+            onMaterialFilterChange={setMaterialFilter}
             onPickFavourite={pickFavourite}
             onSaveFavourite={saveFavourite}
             onOpenAddMaterial={setAddingMaterialKey}

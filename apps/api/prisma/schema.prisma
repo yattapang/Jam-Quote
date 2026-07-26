@@ -334,6 +334,13 @@ model MaterialFavourite {
   unit       String?
   priceCents Int
   supplierId String?
+  // Structured catalog fields (additive — both nullable, no backfill).
+  // category names the spec-field set (see apps/web/lib/material-categories.ts,
+  // e.g. "Steel / Rebar"); specs is a small key->value map of that category's
+  // spec values (e.g. {"Diameter":"1/2in","Length":"20ft"}). Both are
+  // free-form contractor input, not FK'd to any enum.
+  category   String?
+  specs      Json?
   updatedAt  DateTime @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
