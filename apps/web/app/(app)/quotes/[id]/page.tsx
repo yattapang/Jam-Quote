@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
@@ -25,6 +26,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const totals = getQuoteTotals(quote);
   const pill = quoteStatusPill(quote.status);
   const groups = groupLinesByHeading(quote);
+  // When the quote is set to DETAILED, job-type lines expand into their saved
+  // component breakdown beneath the line (display only — totals are unchanged).
+  const detailed = quote.detailLevel === QuoteDetailLevel.DETAILED;
 
   // Map each line to its computed after-markup amount (index-aligned with core).
   const amountByLineId = new Map<string, number>();
@@ -76,16 +80,61 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
                 <div className={shared.groupHead}>
                   <span className={shared.groupName}>{g.title}</span>
                 </div>
-                {g.lines.map((line) => (
-                  <div key={line.id} className={shared.lineRow}>
-                    <span className={shared.lineDesc}>{line.description}</span>
-                    <span className={shared.lineMeta}>
-                      {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]} ·{" "}
-                      {GCT_TREATMENT_LABEL[line.gctTreatment]}
-                    </span>
-                    <MoneyText cents={amountByLineId.get(line.id) ?? 0} weight={700} />
-                  </div>
-                ))}
+                {g.lines.map((line) => {
+                  const showBreakdown = detailed && !!line.assemblyComponents?.length;
+                  return (
+                    <div key={line.id}>
+                      <div className={shared.lineRow}>
+                        <span className={shared.lineDesc}>{line.description}</span>
+                        <span className={shared.lineMeta}>
+                          {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]} ·{" "}
+                          {GCT_TREATMENT_LABEL[line.gctTreatment]}
+                        </span>
+                        <MoneyText cents={amountByLineId.get(line.id) ?? 0} weight={700} />
+                      </div>
+                      {showBreakdown && (
+                        <div
+                          style={{
+                            margin: "2px 0 10px 12px",
+                            borderLeft: "2px solid var(--jq-border)",
+                            paddingLeft: 12,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: 11,
+                              textTransform: "uppercase",
+                              letterSpacing: 0.4,
+                              color: "var(--jq-text-muted)",
+                              padding: "2px 0",
+                            }}
+                          >
+                            Breakdown{line.assemblyUnit ? ` (per ${line.assemblyUnit})` : ""}
+                          </div>
+                          {line.assemblyComponents!.map((c, i) => (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                fontSize: 12.5,
+                                color: "var(--jq-text-muted)",
+                                padding: "1px 0",
+                              }}
+                            >
+                              <span>{c.description}</span>
+                              <span>
+                                {c.quantityPerUnit} × {formatJmd(c.unitPriceCents)} ={" "}
+                                {formatJmd(Math.round(c.quantityPerUnit * c.unitPriceCents))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </Card>

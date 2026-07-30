@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getJobs, getMaterialFavourites, getBusiness } from "@/lib/api-server";
+import { getQuote, getClients, getJobs, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -8,10 +8,11 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const [clients, jobs, favourites, business] = await Promise.all([
+  const [clients, jobs, favourites, assemblies, business] = await Promise.all([
     getClients(),
     getJobs(),
     getMaterialFavourites(),
+    getAssemblies(),
     getBusiness(),
   ]);
   // Never hardcode GCT. On EDIT, preserve the rate the quote was originally
@@ -30,6 +31,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
         jobId: quote.jobId,
         discountPct: quote.discountPct,
         depositCents: quote.depositCents,
+        detailLevel: quote.detailLevel,
         validUntil: quote.validUntil,
         createdAt: quote.createdAt,
         // Ungrouped lines only — sectioned lines are carried separately below
@@ -43,6 +45,10 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             rateUnit: l.rateUnit,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
+            assemblyId: l.assemblyId,
+            assemblyName: l.assemblyName,
+            assemblyUnit: l.assemblyUnit,
+            assemblyComponents: l.assemblyComponents,
           })),
         sections: quote.sections?.map((s) => ({
           title: s.title,
@@ -53,12 +59,17 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             rateUnit: l.rateUnit,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
+            assemblyId: l.assemblyId,
+            assemblyName: l.assemblyName,
+            assemblyUnit: l.assemblyUnit,
+            assemblyComponents: l.assemblyComponents,
           })),
         })),
       }}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       jobs={jobs.map((j) => ({ id: j.id, name: j.name }))}
       favourites={favourites}
+      assemblies={assemblies}
       gctRatePct={gctRatePct}
     />
   );

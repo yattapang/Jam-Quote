@@ -10,7 +10,7 @@ import {
   type ViewProps,
   type TextProps,
 } from "@react-pdf/renderer";
-import { formatJmd } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
 import { getQuoteTotals, groupLinesByHeading, RATE_UNIT_LABEL, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
 
@@ -125,6 +125,27 @@ const styles = StyleSheet.create({
   },
   cell: { fontSize: 9.5 },
   cellMuted: { fontSize: 9, color: COLOR.textMuted },
+  breakdown: {
+    marginLeft: 12,
+    marginTop: 2,
+    marginBottom: 4,
+    paddingLeft: 8,
+    borderLeft: `1px solid ${COLOR.border}`,
+  },
+  breakdownHead: {
+    fontSize: 7.5,
+    color: COLOR.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 2,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 1,
+  },
+  breakdownDesc: { fontSize: 8.5, color: COLOR.textMuted, width: "55%" },
+  breakdownAmt: { fontSize: 8.5, color: COLOR.textMuted, width: "45%", textAlign: "right" },
   totals: {
     marginTop: 18,
     alignSelf: "flex-end",
@@ -181,6 +202,7 @@ interface QuotePdfProps {
 export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
   const totals = getQuoteTotals(quote);
   const groups = groupLinesByHeading(quote);
+  const detailed = quote.detailLevel === QuoteDetailLevel.DETAILED;
 
   const amountByLineId = new Map<string, number>();
   quote.lines.forEach((l, i) => {
@@ -223,20 +245,41 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
               <Text style={[styles.colGct, styles.headCell]}>GCT</Text>
               <Text style={[styles.colAmt, styles.headCell]}>Amount</Text>
             </View>
-            {g.lines.map((line) => (
-              <View key={line.id} style={styles.row}>
-                <Text style={[styles.colDesc, styles.cell]}>{line.description}</Text>
-                <Text style={[styles.colQty, styles.cellMuted]}>
-                  {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]}
-                </Text>
-                <Text style={[styles.colGct, styles.cellMuted]}>
-                  {GCT_TREATMENT_LABEL[line.gctTreatment]}
-                </Text>
-                <Text style={[styles.colAmt, styles.cell]}>
-                  {formatJmd(amountByLineId.get(line.id) ?? 0)}
-                </Text>
-              </View>
-            ))}
+            {g.lines.map((line) => {
+              const showBreakdown = detailed && !!line.assemblyComponents?.length;
+              return (
+                <View key={line.id} wrap={false}>
+                  <View style={styles.row}>
+                    <Text style={[styles.colDesc, styles.cell]}>{line.description}</Text>
+                    <Text style={[styles.colQty, styles.cellMuted]}>
+                      {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]}
+                    </Text>
+                    <Text style={[styles.colGct, styles.cellMuted]}>
+                      {GCT_TREATMENT_LABEL[line.gctTreatment]}
+                    </Text>
+                    <Text style={[styles.colAmt, styles.cell]}>
+                      {formatJmd(amountByLineId.get(line.id) ?? 0)}
+                    </Text>
+                  </View>
+                  {showBreakdown && (
+                    <View style={styles.breakdown}>
+                      <Text style={styles.breakdownHead}>
+                        Breakdown{line.assemblyUnit ? ` (per ${line.assemblyUnit})` : ""}
+                      </Text>
+                      {line.assemblyComponents!.map((c, i) => (
+                        <View key={i} style={styles.breakdownRow}>
+                          <Text style={styles.breakdownDesc}>{c.description}</Text>
+                          <Text style={styles.breakdownAmt}>
+                            {c.quantityPerUnit} x {formatJmd(c.unitPriceCents)} ={" "}
+                            {formatJmd(Math.round(c.quantityPerUnit * c.unitPriceCents))}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
         ))}
 

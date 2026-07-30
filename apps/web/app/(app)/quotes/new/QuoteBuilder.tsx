@@ -5,8 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   computeTotals,
+  formatJmd,
   GctTreatment,
   LineCategory,
+  QuoteDetailLevel,
   RateUnit,
 } from "@jamquote/core";
 import Card from "@/components/ui/Card";
@@ -27,7 +29,7 @@ import ClientSelectField from "@/components/forms/ClientSelectField";
 import JobSelectField from "@/components/forms/JobSelectField";
 import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
 import type { ClientOption, JobOption } from "@/components/forms/types";
-import type { MaterialFavourite } from "@/lib/types";
+import type { Assembly, MaterialFavourite, QuoteLineAssemblyComponent } from "@/lib/types";
 import shared from "../../shared.module.css";
 import styles from "./QuoteBuilder.module.css";
 
@@ -99,6 +101,14 @@ interface DraftLine {
   rateUnit: RateUnit;
   unitPriceDollars: string;
   gctTreatment: GctTreatment;
+  /** Set only on a line dropped in from a job type ("+ Add job type"). The
+   * unit price stays editable like any other line; these fields ride along as
+   * a snapshot so the line can render its component breakdown in DETAILED view
+   * and stay stable even if the source assembly later changes. */
+  assemblyId?: string;
+  assemblyName?: string;
+  assemblyUnit?: string;
+  assemblyComponents?: QuoteLineAssemblyComponent[];
 }
 
 let counter = 0;
@@ -114,6 +124,32 @@ function newLine(): DraftLine {
   };
 }
 
+/** Builds a draft line from a picked job type: description = assembly name,
+ * unit price = its computed unit cost (editable afterwards), and the component
+ * snapshot carried for DETAILED rendering. Assembly lines default to the OTHER
+ * heading — a composite job type isn't a single material/labour category — and
+ * carry the assembly's free-text unit (e.g. "sq ft") in assemblyUnit. */
+function assemblyLine(a: Assembly, quantity: number): DraftLine {
+  return {
+    key: `l${++counter}`,
+    heading: { kind: "category", category: LineCategory.OTHER },
+    description: a.name,
+    quantity: String(quantity),
+    rateUnit: RateUnit.UNIT,
+    unitPriceDollars: fromCents(a.unitCostCents),
+    gctTreatment: GctTreatment.STANDARD,
+    assemblyId: a.id,
+    assemblyName: a.name,
+    assemblyUnit: a.unit,
+    assemblyComponents: a.components.map((c) => ({
+      kind: c.kind,
+      description: c.description,
+      quantityPerUnit: c.quantityPerUnit,
+      unitPriceCents: c.unitPriceCents,
+    })),
+  };
+}
+
 const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
 const fromCents = (cents: number) => (cents / 100).toString();
 
@@ -125,6 +161,16 @@ function toLineInput(l: DraftLine) {
     rateUnit: l.rateUnit,
     unitPriceCents: toCents(l.unitPriceDollars),
     gctTreatment: l.gctTreatment,
+    // Assembly provenance rides along only for job-type lines; a plain line
+    // omits all of these entirely.
+    ...(l.assemblyId
+      ? {
+          assemblyId: l.assemblyId,
+          assemblyName: l.assemblyName,
+          assemblyUnit: l.assemblyUnit,
+          assemblyComponents: l.assemblyComponents,
+        }
+      : {}),
   };
 }
 
@@ -135,6 +181,11 @@ export interface InitialQuoteLine {
   rateUnit: RateUnit;
   unitPriceCents: number;
   gctTreatment: GctTreatment;
+  /** Carried through on edit so a job-type line keeps its breakdown snapshot. */
+  assemblyId?: string;
+  assemblyName?: string;
+  assemblyUnit?: string;
+  assemblyComponents?: QuoteLineAssemblyComponent[];
 }
 export interface InitialQuoteSection {
   title: string;
@@ -147,6 +198,8 @@ export interface InitialQuote {
   depositCents: number;
   lines: InitialQuoteLine[];
   sections?: InitialQuoteSection[];
+  /** Per-quote summary/detailed presentation setting to restore on edit. */
+  detailLevel?: QuoteDetailLevel;
   /** Raw ISO timestamps, used only to derive the "valid for N days" default. */
   validUntil?: string;
   createdAt?: string;
@@ -161,6 +214,10 @@ function draftLineFromInitial(l: InitialQuoteLine, heading: Heading): DraftLine 
     rateUnit: l.rateUnit,
     unitPriceDollars: fromCents(l.unitPriceCents),
     gctTreatment: l.gctTreatment,
+    assemblyId: l.assemblyId,
+    assemblyName: l.assemblyName,
+    assemblyUnit: l.assemblyUnit,
+    assemblyComponents: l.assemblyComponents,
   };
 }
 
@@ -393,6 +450,7 @@ export default function QuoteBuilder({
   clients: initialClients,
   jobs: initialJobs,
   favourites: initialFavourites = [],
+  assemblies = [],
   mode = "create",
   quoteId,
   initial,
@@ -402,6 +460,9 @@ export default function QuoteBuilder({
   jobs: JobOption[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
+  /** The business's job-type library, offered via "+ Add job type". Each
+   * carries a server-computed unitCostCents and its component snapshot. */
+  assemblies?: Assembly[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
@@ -443,6 +504,17 @@ export default function QuoteBuilder({
   // Per-line saved-material category filter ("" = all categories). Keyed by
   // line key so each line's picker narrows independently.
   const [materialFilters, setMaterialFilters] = useState<Record<string, string>>({});
+  // Per-quote presentation setting: SUMMARY (each job-type line as one priced
+  // row) vs DETAILED (expand its component snapshot on the quote/PDF). Display
+  // only — never affects totals.
+  const [detailLevel, setDetailLevel] = useState<QuoteDetailLevel>(
+    initial?.detailLevel ?? QuoteDetailLevel.SUMMARY,
+  );
+  // "+ Add job type" picker: the assembly being previewed and the quantity to
+  // add. Null id = the modal is closed.
+  const [jobTypeId, setJobTypeId] = useState<string>("");
+  const [jobTypeQty, setJobTypeQty] = useState("1");
+  const [addingJobType, setAddingJobType] = useState(false);
 
   /** Distinct categories present across saved materials, for the per-line
    * filter dropdown. Empty (and the filter hidden) until any material has a
@@ -516,6 +588,23 @@ export default function QuoteBuilder({
     setAddingMaterialKey(null);
   };
 
+  const selectedAssembly = assemblies.find((a) => a.id === jobTypeId);
+
+  const openJobTypePicker = () => {
+    setJobTypeId(assemblies[0]?.id ?? "");
+    setJobTypeQty("1");
+    setAddingJobType(true);
+  };
+  /** Drops the picked job type onto the quote as a new line, pre-filled from
+   * the assembly's computed unit cost (still editable) and carrying its
+   * component snapshot for DETAILED rendering. */
+  const confirmAddJobType = () => {
+    if (!selectedAssembly) return;
+    const qty = Number(jobTypeQty) > 0 ? Number(jobTypeQty) : 1;
+    setLines((ls) => [...ls, assemblyLine(selectedAssembly, qty)]);
+    setAddingJobType(false);
+  };
+
   const headingOptions = useMemo(
     () => [
       ...categoryHeadingOptions,
@@ -539,6 +628,10 @@ export default function QuoteBuilder({
       }),
     [lines, discountPct, depositDollars, gctRatePct],
   );
+
+  // Drives whether the summary/detailed toggle is offered — the setting only
+  // affects job-type lines, so it's hidden until the quote has at least one.
+  const hasAssemblyLine = lines.some((l) => l.assemblyId);
 
   const patch = (key: string, p: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
@@ -605,6 +698,7 @@ export default function QuoteBuilder({
       discountPct: Number(discountPct) || 0,
       depositCents: toCents(depositDollars),
       validUntil: new Date(Date.now() + days * DAY_MS).toISOString(),
+      detailLevel,
       lineItems: [],
       sections,
     };
@@ -659,10 +753,46 @@ export default function QuoteBuilder({
       <section className={shared.section}>
         <div className={shared.sectionHead}>
           <h2 className={shared.sectionTitle}>Line items</h2>
-          <Button variant="outlineAccent" size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}>
-            + Add line
-          </Button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <Button variant="outlineAccent" size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}>
+              + Add line
+            </Button>
+            <Button
+              variant="outlineAccent"
+              size="sm"
+              onClick={openJobTypePicker}
+              disabled={assemblies.length === 0}
+              title={assemblies.length === 0 ? "Create a job type first (Job types in the sidebar)" : "Add a saved job type as a line"}
+            >
+              + Add job type
+            </Button>
+          </div>
         </div>
+        {hasAssemblyLine && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              margin: "0 0 10px",
+              fontSize: 13,
+              color: "var(--jq-text-muted)",
+            }}
+          >
+            <span>Job type detail on quote:</span>
+            <div style={{ maxWidth: 200 }}>
+              <Select
+                aria-label="Job type detail on quote"
+                options={[
+                  { value: QuoteDetailLevel.SUMMARY, label: "Summary (one line each)" },
+                  { value: QuoteDetailLevel.DETAILED, label: "Detailed (show breakdown)" },
+                ]}
+                value={detailLevel}
+                onChange={(e) => setDetailLevel(e.target.value as QuoteDetailLevel)}
+              />
+            </div>
+          </div>
+        )}
         <Card>
           <LineRows
             lines={lines}
@@ -752,6 +882,48 @@ export default function QuoteBuilder({
           {saving ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
         </Button>
       </div>
+
+      {addingJobType && (
+        <Modal title="Add job type" onClose={() => setAddingJobType(false)}>
+          <div style={{ display: "grid", gap: 12 }}>
+            <Select
+              label="Job type"
+              options={assemblies.map((a) => ({
+                value: a.id,
+                label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}`,
+              }))}
+              value={jobTypeId}
+              onChange={(e) => setJobTypeId(e.target.value)}
+            />
+            <Input
+              label="Quantity"
+              type="number"
+              min={0}
+              step="any"
+              value={jobTypeQty}
+              onChange={(e) => setJobTypeQty(e.target.value)}
+              hint={selectedAssembly ? `Priced per ${selectedAssembly.unit}` : undefined}
+            />
+            {selectedAssembly && (
+              <div className={shared.totalRow} style={{ fontSize: 14 }}>
+                <span>Line total (editable after adding)</span>
+                <MoneyText
+                  cents={Math.round((Number(jobTypeQty) || 0) * selectedAssembly.unitCostCents)}
+                  weight={700}
+                />
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
+              <Button variant="ghost" onClick={() => setAddingJobType(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={confirmAddJobType} disabled={!selectedAssembly}>
+                Add to quote
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

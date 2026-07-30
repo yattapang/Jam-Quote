@@ -3,13 +3,32 @@ import type {
   InvoiceStatus,
   PaymentMethod,
   Parish,
+  QuoteDetailLevel,
   QuoteLineItemInput,
   QuoteStatus,
   RateUnit,
 } from "@jamquote/core";
 
+/** Display-only snapshot of one assembly component, captured on the quote
+ * line at the moment a job type was dropped onto the quote. Never used for
+ * totals math — only to expand a line in DETAILED view. Mirrors the API's
+ * `quoteLineAssemblyComponentSchema` (quotes.dto.ts). */
+export interface QuoteLineAssemblyComponent {
+  kind: AssemblyComponentKind;
+  description: string;
+  quantityPerUnit: number;
+  unitPriceCents: number;
+}
+
 export interface QuoteLine extends QuoteLineItemInput {
   id: string;
+  /** Set only on lines created from an assembly ("job type"). assemblyId is a
+   * plain reference back to the source Assembly (not an FK — the snapshot
+   * fields keep historical quotes stable even if the assembly later changes). */
+  assemblyId?: string;
+  assemblyName?: string;
+  assemblyUnit?: string;
+  assemblyComponents?: QuoteLineAssemblyComponent[];
 }
 
 export interface Quote {
@@ -37,6 +56,10 @@ export interface Quote {
   /** Denormalized total from the API (computed via computeTotals). Set on list
    * rows where `lines` may be omitted; detail rows carry both. */
   totalCents?: number;
+  /** Per-quote presentation setting: SUMMARY renders each assembly line as a
+   * single priced row; DETAILED expands it into its component snapshot beneath
+   * the line. Display only — never affects totals. Defaults to SUMMARY. */
+  detailLevel?: QuoteDetailLevel;
 }
 
 export interface Client {

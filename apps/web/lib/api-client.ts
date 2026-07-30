@@ -10,8 +10,8 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
-import type { AssemblyComponentKind, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLineAssemblyComponent } from "./types";
+import type { AssemblyComponentKind, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -132,6 +132,13 @@ export interface ApiJob {
   stage: string;
   progressPct: number;
 }
+export interface ApiLineAssemblyComponent {
+  kind: AssemblyComponentKind;
+  description: string;
+  // Prisma Decimal / JSON snapshot — may come over as a numeric string.
+  quantityPerUnit: number | string;
+  unitPriceCents: number;
+}
 export interface ApiLineItem {
   id: string;
   category: QuoteLineItemInput["category"];
@@ -142,6 +149,13 @@ export interface ApiLineItem {
   priceSource: QuoteLineItemInput["priceSource"];
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   markupPct?: number | string | null;
+  // Assembly ("job type") provenance — present only on lines built from an
+  // assembly. assemblyComponents is a display-only snapshot (see
+  // quotes.dto.ts quoteLineAssemblyComponentSchema).
+  assemblyId?: string | null;
+  assemblyName?: string | null;
+  assemblyUnit?: string | null;
+  assemblyComponents?: ApiLineAssemblyComponent[] | null;
 }
 export interface ApiMaterialFavourite {
   id: string;
@@ -207,6 +221,9 @@ export interface ApiQuote {
   totalCents: number;
   validUntil?: string | null;
   createdAt: string;
+  // Per-quote presentation setting; absent on older quotes (mapQuote defaults
+  // to SUMMARY).
+  detailLevel?: QuoteDetailLevel | null;
   lineItems?: ApiLineItem[];
   sections?: { title: string; lineItems: ApiLineItem[] }[];
 }
@@ -291,6 +308,15 @@ export function mapAssembly(a: ApiAssembly): Assembly {
   };
 }
 
+function mapLineAssemblyComponent(c: ApiLineAssemblyComponent): QuoteLineAssemblyComponent {
+  return {
+    kind: c.kind,
+    description: c.description,
+    quantityPerUnit: Number(c.quantityPerUnit),
+    unitPriceCents: c.unitPriceCents,
+  };
+}
+
 function mapLine(l: ApiLineItem): Quote["lines"][number] {
   return {
     id: l.id,
@@ -302,6 +328,10 @@ function mapLine(l: ApiLineItem): Quote["lines"][number] {
     priceSource: l.priceSource,
     gctTreatment: l.gctTreatment,
     markupPct: l.markupPct == null ? undefined : Number(l.markupPct),
+    assemblyId: l.assemblyId ?? undefined,
+    assemblyName: l.assemblyName ?? undefined,
+    assemblyUnit: l.assemblyUnit ?? undefined,
+    assemblyComponents: l.assemblyComponents?.map(mapLineAssemblyComponent) ?? undefined,
   };
 }
 
@@ -328,6 +358,7 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     discountPct: Number(q.discountPct),
     depositCents: q.depositCents,
     totalCents: q.totalCents, // denormalized; API computed it via computeTotals
+    detailLevel: q.detailLevel ?? undefined,
     createdAt: q.createdAt,
     createdLabel: dateLabel(q.createdAt, "Created "),
     validUntil: q.validUntil ?? undefined,
@@ -428,6 +459,14 @@ export async function createAssembly(input: NewAssemblyInput): Promise<Assembly>
   return mapAssembly(await apiClient.post<ApiAssembly>("/assemblies", input));
 }
 
+/** Display-only assembly component snapshot sent with an assembly-backed line
+ * (mirrors the API's quoteLineAssemblyComponentSchema). */
+export interface NewQuoteLineAssemblyComponentInput {
+  kind: AssemblyComponentKind;
+  description: string;
+  quantityPerUnit: number;
+  unitPriceCents: number;
+}
 export interface NewQuoteLineInput {
   category: QuoteLineItemInput["category"];
   description: string;
@@ -435,6 +474,12 @@ export interface NewQuoteLineInput {
   rateUnit: QuoteLineItemInput["rateUnit"];
   unitPriceCents: number;
   gctTreatment: QuoteLineItemInput["gctTreatment"];
+  /** Assembly ("job type") provenance — set only when this line was built
+   * from an assembly. The snapshot keeps historical quotes stable. */
+  assemblyId?: string;
+  assemblyName?: string;
+  assemblyUnit?: string;
+  assemblyComponents?: NewQuoteLineAssemblyComponentInput[];
 }
 export interface NewQuoteInput {
   clientId?: string;
@@ -445,6 +490,9 @@ export interface NewQuoteInput {
   /** ISO date the quote stops being valid; the API auto-expires SENT/VIEWED
    * quotes past this date (see quote-expiry.service.ts). */
   validUntil?: string;
+  /** Per-quote presentation setting (SUMMARY/DETAILED). Omitted → API defaults
+   * to SUMMARY. Display only — never affects totals. */
+  detailLevel?: QuoteDetailLevel;
   lineItems: NewQuoteLineInput[];
   /** Named groupings of line items rendered under their own heading. `sort`
    * is the section's position — the quote builder sets it to the heading's
