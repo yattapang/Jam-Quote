@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, HttpException } from "@nestjs/common";
 import {
+  AssemblyComponentKind,
   computeTotals,
   GctTreatment,
   LineCategory,
   PriceSource,
+  QuoteDetailLevel,
   QuoteStatus,
   RateUnit,
 } from "@jamquote/core";
@@ -62,6 +64,135 @@ describe("QuotesService.create", () => {
         }),
       }),
     );
+  });
+});
+
+describe("QuotesService.create — assembly lines + detail level", () => {
+  const assemblyLine = {
+    category: LineCategory.LABOUR,
+    description: "Tiling — per sq ft",
+    quantity: 100,
+    rateUnit: RateUnit.UNIT,
+    unitPriceCents: 2_500,
+    priceSource: PriceSource.MANUAL,
+    gctTreatment: GctTreatment.STANDARD,
+    assemblyId: "asm-1",
+    assemblyName: "Tiling — per sq ft",
+    assemblyUnit: "sq ft",
+    assemblyComponents: [
+      {
+        kind: AssemblyComponentKind.MATERIAL,
+        description: "Tile, 12x12",
+        quantityPerUnit: 1,
+        unitPriceCents: 1500,
+      },
+      {
+        kind: AssemblyComponentKind.LABOUR,
+        description: "Mason",
+        quantityPerUnit: 0.5,
+        unitPriceCents: 2000,
+      },
+    ],
+  };
+
+  // Priced identically to assemblyLine (same category/quantity/unitPriceCents/
+  // gctTreatment) but with no assembly fields at all — the plain-line case.
+  const plainEquivalentLine = {
+    category: LineCategory.LABOUR,
+    description: "Tiling — per sq ft",
+    quantity: 100,
+    rateUnit: RateUnit.UNIT,
+    unitPriceCents: 2_500,
+    priceSource: PriceSource.MANUAL,
+    gctTreatment: GctTreatment.STANDARD,
+  };
+
+  /** Harness whose fake prisma actually captures create() calls so findOne's
+   * read-back reflects what was written — enough to assert a round-trip. */
+  function harness() {
+    const businessService = {
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
+    };
+    const createdLineItems: any[] = [];
+    let createdQuoteData: any;
+    const tx = {
+      quote: {
+        create: vi.fn((args: any) => {
+          createdQuoteData = args.data;
+          return Promise.resolve({ id: "q1" });
+        }),
+      },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: {
+        create: vi.fn((args: any) => {
+          createdLineItems.push(args.data);
+          return Promise.resolve({});
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi.fn(() =>
+          Promise.resolve({
+            id: "q1",
+            ...createdQuoteData,
+            lineItems: createdLineItems.filter((li) => !li.sectionId),
+            sections: [],
+          }),
+        ),
+      },
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+    };
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+    return { svc };
+  }
+
+  it("round-trips detailLevel + the assembly snapshot, with totals unchanged vs an equivalent plain line", async () => {
+    const assemblyQuote = await harness().svc.create("b1", {
+      sections: [],
+      lineItems: [assemblyLine],
+      detailLevel: QuoteDetailLevel.DETAILED,
+    } as any);
+
+    // Round-trip: detailLevel and the assembly fields come back as given.
+    expect(assemblyQuote.detailLevel).toBe(QuoteDetailLevel.DETAILED);
+    expect(assemblyQuote.lineItems).toHaveLength(1);
+    expect(assemblyQuote.lineItems[0]).toMatchObject({
+      assemblyId: "asm-1",
+      assemblyName: "Tiling — per sq ft",
+      assemblyUnit: "sq ft",
+      assemblyComponents: assemblyLine.assemblyComponents,
+    });
+
+    const plainQuote = await harness().svc.create("b1", {
+      sections: [],
+      lineItems: [plainEquivalentLine],
+    } as any);
+
+    // A normal (non-assembly) line leaves the assembly fields unset, and
+    // detailLevel defaults to SUMMARY when not supplied.
+    expect(plainQuote.detailLevel).toBe(QuoteDetailLevel.SUMMARY);
+    expect(plainQuote.lineItems[0]?.assemblyId).toBeUndefined();
+    expect(plainQuote.lineItems[0]?.assemblyComponents).toBeUndefined();
+
+    // Totals math is UNCHANGED by the assembly snapshot: an assembly line
+    // is priced like any line (quantity x unitPriceCents), the component
+    // snapshot is display-only and never fed into computeTotals, so the two
+    // quotes' totals are identical despite one being DETAILED with a
+    // component breakdown and the other a plain SUMMARY line.
+    expect(assemblyQuote.subtotalCents).toBe(plainQuote.subtotalCents);
+    expect(assemblyQuote.gctCents).toBe(plainQuote.gctCents);
+    expect(assemblyQuote.totalCents).toBe(plainQuote.totalCents);
+
+    const expected = computeTotals({
+      lines: [{ quantity: 100, unitPriceCents: 2_500, gctTreatment: GctTreatment.STANDARD }],
+      gctRatePct: 15,
+      discountPct: 0,
+      depositCents: 0,
+    });
+    expect(assemblyQuote.totalCents).toBe(expected.totalCents);
   });
 });
 

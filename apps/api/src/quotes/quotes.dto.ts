@@ -1,9 +1,40 @@
 import { z } from "zod";
-import { QuoteStatus, quoteLineItemSchema } from "@jamquote/core";
+import {
+  AssemblyComponentKind,
+  QuoteDetailLevel,
+  QuoteStatus,
+  quoteLineItemSchema,
+} from "@jamquote/core";
 
-/** A quote line item, plus display ordering within its section/quote. */
+/**
+ * Display-only snapshot of one assembly component, captured at the moment
+ * the assembly was dropped onto the quote. Never used in totals math (the
+ * line's own quantity x unitPriceCents is) — only for DETAILED rendering.
+ */
+export const quoteLineAssemblyComponentSchema = z.object({
+  kind: z.nativeEnum(AssemblyComponentKind),
+  description: z.string().min(1),
+  quantityPerUnit: z.number().positive(),
+  unitPriceCents: z.number().int().nonnegative(),
+});
+export type QuoteLineAssemblyComponentInput = z.infer<
+  typeof quoteLineAssemblyComponentSchema
+>;
+
+/**
+ * A quote line item, plus display ordering within its section/quote and
+ * optional assembly ("job type") fields. assemblyId is a plain reference
+ * back to the source Assembly (not validated/FK'd here) — a normal,
+ * non-assembly line simply omits all of these.
+ */
 export const quoteLineItemInputSchema = quoteLineItemSchema.and(
-  z.object({ sort: z.number().int().nonnegative().optional() }),
+  z.object({
+    sort: z.number().int().nonnegative().optional(),
+    assemblyId: z.string().min(1).optional(),
+    assemblyName: z.string().min(1).optional(),
+    assemblyUnit: z.string().min(1).optional(),
+    assemblyComponents: z.array(quoteLineAssemblyComponentSchema).optional(),
+  }),
 );
 export type QuoteLineItemInput = z.infer<typeof quoteLineItemInputSchema>;
 
@@ -27,6 +58,10 @@ export const createQuoteSchema = z.object({
   depositCents: z.number().int().nonnegative().optional(),
   validUntil: z.coerce.date().optional(),
   terms: z.string().optional(),
+  // Display setting only (defaults to SUMMARY in the service): does not
+  // affect totals math, only whether assembly lines render collapsed or
+  // expanded into their component snapshot.
+  detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
   sections: z.array(quoteSectionInputSchema).default([]),
   lineItems: z.array(quoteLineItemInputSchema).default([]),
 });

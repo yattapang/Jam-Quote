@@ -86,6 +86,17 @@ export const AssemblyComponentKind = {
 export type AssemblyComponentKind =
   (typeof AssemblyComponentKind)[keyof typeof AssemblyComponentKind];
 
+/**
+ * Per-quote rendering detail level: SUMMARY shows an assembly line as a
+ * single priced row; DETAILED expands it into its component snapshot.
+ * Purely a display setting — pricing/totals are identical either way.
+ */
+export const QuoteDetailLevel = {
+  SUMMARY: "SUMMARY",
+  DETAILED: "DETAILED",
+} as const;
+export type QuoteDetailLevel = (typeof QuoteDetailLevel)[keyof typeof QuoteDetailLevel];
+
 /** The 14 parishes of Jamaica. */
 export const PARISHES = [
   "Kingston",

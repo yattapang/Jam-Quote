@@ -92,6 +92,14 @@ enum AssemblyComponentKind {
   OTHER
 }
 
+// Per-quote rendering detail level: SUMMARY shows an assembly line as a
+// single priced row; DETAILED expands it into its component snapshot.
+// Purely a display setting — pricing/totals are identical either way.
+enum QuoteDetailLevel {
+  SUMMARY
+  DETAILED
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & identity
 // ---------------------------------------------------------------------------
@@ -215,28 +223,32 @@ model Job {
 // Quotes
 // ---------------------------------------------------------------------------
 model Quote {
-  id            String      @id @default(uuid())
+  id            String           @id @default(uuid())
   businessId    String
-  business      Business    @relation(fields: [businessId], references: [id])
+  business      Business         @relation(fields: [businessId], references: [id])
   clientId      String?
-  client        Client?     @relation(fields: [clientId], references: [id])
+  client        Client?          @relation(fields: [clientId], references: [id])
   jobId         String?
-  job           Job?        @relation(fields: [jobId], references: [id])
+  job           Job?             @relation(fields: [jobId], references: [id])
   number        String // e.g. QT-0142
-  status        QuoteStatus @default(DRAFT)
-  version       Int         @default(1)
+  status        QuoteStatus      @default(DRAFT)
+  // Display setting only: SUMMARY collapses assembly lines to one priced
+  // row, DETAILED expands them into their component snapshot. Totals math
+  // (subtotalCents/gctCents/totalCents) is identical either way.
+  detailLevel   QuoteDetailLevel @default(SUMMARY)
+  version       Int              @default(1)
   parentQuoteId String? // for revisions
-  gctRate       Decimal     @db.Decimal(5, 2)
-  discountPct   Decimal     @default(0) @db.Decimal(5, 2)
-  depositCents  Int         @default(0)
+  gctRate       Decimal          @db.Decimal(5, 2)
+  discountPct   Decimal          @default(0) @db.Decimal(5, 2)
+  depositCents  Int              @default(0)
   validUntil    DateTime?
   terms         String?
   // Denormalized computed totals (source of truth = packages/core).
-  subtotalCents Int         @default(0)
-  gctCents      Int         @default(0)
-  totalCents    Int         @default(0)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  subtotalCents Int              @default(0)
+  gctCents      Int              @default(0)
+  totalCents    Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   deletedAt     DateTime? // soft-delete for offline sync
 
   sections  QuoteSection[]
@@ -262,25 +274,36 @@ model QuoteSection {
 }
 
 model QuoteLineItem {
-  id             String        @id @default(uuid())
-  quoteId        String
-  quote          Quote         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
-  sectionId      String?
-  section        QuoteSection? @relation(fields: [sectionId], references: [id])
-  category       LineCategory
-  description    String
-  quantity       Decimal       @db.Decimal(12, 3)
-  rateUnit       RateUnit      @default(UNIT)
-  unitPriceCents Int
-  priceSource    PriceSource   @default(MANUAL)
-  supplierId     String?
-  supplier       Supplier?     @relation(fields: [supplierId], references: [id])
-  gctTreatment   GctTreatment  @default(STANDARD)
-  markupPct      Decimal?      @db.Decimal(6, 2)
-  overrideNote   String?
-  sort           Int           @default(0)
-  updatedAt      DateTime      @default(now()) @updatedAt // delta-sync cursor
-  deletedAt      DateTime? // soft-delete for offline sync
+  id                 String        @id @default(uuid())
+  quoteId            String
+  quote              Quote         @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sectionId          String?
+  section            QuoteSection? @relation(fields: [sectionId], references: [id])
+  category           LineCategory
+  description        String
+  quantity           Decimal       @db.Decimal(12, 3)
+  rateUnit           RateUnit      @default(UNIT)
+  unitPriceCents     Int
+  priceSource        PriceSource   @default(MANUAL)
+  supplierId         String?
+  supplier           Supplier?     @relation(fields: [supplierId], references: [id])
+  gctTreatment       GctTreatment  @default(STANDARD)
+  markupPct          Decimal?      @db.Decimal(6, 2)
+  overrideNote       String?
+  // Assembly ("job type") snapshot fields — all optional; null on a normal
+  // line. assemblyId is a plain reference back to the source Assembly, NOT
+  // a FK: it's a point-in-time snapshot, so editing/deleting the source
+  // Assembly must never alter historical quotes. Priced like any other line
+  // (quantity x unitPriceCents, unchanged); assemblyComponents is a
+  // display-only snapshot ([{kind, description, quantityPerUnit,
+  // unitPriceCents}]) for DETAILED rendering, never used in totals math.
+  assemblyId         String?
+  assemblyName       String?
+  assemblyUnit       String?
+  assemblyComponents Json?
+  sort               Int           @default(0)
+  updatedAt          DateTime      @default(now()) @updatedAt // delta-sync cursor
+  deletedAt          DateTime? // soft-delete for offline sync
 
   @@index([quoteId])
 }

@@ -7,6 +7,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import {
   computeTotals,
+  QuoteDetailLevel,
   QuoteStatus,
   type GctTreatment,
   type TotalsLineInput,
@@ -78,6 +79,13 @@ function lineItemCreateData(
     gctTreatment: li.gctTreatment,
     markupPct: li.markupPct,
     overrideNote: li.overrideNote,
+    // Assembly ("job type") snapshot — all optional/undefined on a normal
+    // line. Priced like any line (quantity x unitPriceCents above, unchanged);
+    // these are display-only, never read by computeTotals.
+    assemblyId: li.assemblyId,
+    assemblyName: li.assemblyName,
+    assemblyUnit: li.assemblyUnit,
+    assemblyComponents: li.assemblyComponents as Prisma.InputJsonValue | undefined,
     sort: li.sort ?? idx,
   };
 }
@@ -146,6 +154,7 @@ export class QuotesService {
     const gctRatePct = input.gctRatePct ?? Number(business.defaultGctRate);
     const discountPct = input.discountPct ?? 0;
     const depositCents = input.depositCents ?? 0;
+    const detailLevel = input.detailLevel ?? QuoteDetailLevel.SUMMARY;
 
     const totals = computeTotals({
       lines: collectLines(input).map(toTotalsLine),
@@ -165,6 +174,7 @@ export class QuotesService {
           number,
           status: QuoteStatus.DRAFT,
           version: 1,
+          detailLevel,
           gctRate: gctRatePct,
           discountPct,
           depositCents,
@@ -213,6 +223,7 @@ export class QuotesService {
     const gctRatePct = input.gctRatePct ?? Number(existing.gctRate);
     const discountPct = input.discountPct ?? Number(existing.discountPct);
     const depositCents = input.depositCents ?? existing.depositCents;
+    const detailLevel = input.detailLevel ?? existing.detailLevel;
 
     const linesForTotals: TotalsLineInput[] = replacingLines
       ? collectLines({
@@ -245,6 +256,7 @@ export class QuotesService {
         data: {
           clientId: input.clientId ?? existing.clientId,
           jobId: input.jobId ?? existing.jobId,
+          detailLevel,
           gctRate: gctRatePct,
           discountPct,
           depositCents,
@@ -320,6 +332,7 @@ export class QuotesService {
           status: QuoteStatus.DRAFT,
           version,
           parentQuoteId: original.id,
+          detailLevel: original.detailLevel,
           gctRate: original.gctRate,
           discountPct: original.discountPct,
           depositCents: original.depositCents,
@@ -358,6 +371,12 @@ export class QuotesService {
             gctTreatment: li.gctTreatment,
             markupPct: li.markupPct ?? undefined,
             overrideNote: li.overrideNote ?? undefined,
+            assemblyId: li.assemblyId ?? undefined,
+            assemblyName: li.assemblyName ?? undefined,
+            assemblyUnit: li.assemblyUnit ?? undefined,
+            assemblyComponents: (li.assemblyComponents ?? undefined) as
+              | Prisma.InputJsonValue
+              | undefined,
             sort: li.sort,
           },
         });
