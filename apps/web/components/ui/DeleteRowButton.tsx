@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "./Button";
 import Modal, { modalStyles } from "./Modal";
 import {
+  deleteAssembly,
   deleteClient,
   deleteJob,
   deleteLabourRate,
@@ -19,9 +20,10 @@ const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   quote: deleteQuote,
   material: deleteMaterialFavourite,
   labourRate: deleteLabourRate,
+  assembly: deleteAssembly,
 };
 
-export type DeleteKind = "client" | "job" | "quote" | "material" | "labourRate";
+export type DeleteKind = "client" | "job" | "quote" | "material" | "labourRate" | "assembly";
 
 /**
  * Small, unobtrusive per-row delete affordance. Always confirms via a Modal

@@ -20,6 +20,10 @@
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 }
 
+.cardWide {
+  max-width: 680px;
+}
+
 .head {
   display: flex;
   align-items: center;

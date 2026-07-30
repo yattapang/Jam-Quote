@@ -10,8 +10,8 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
-import type { QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
+import type { AssemblyComponentKind, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -159,6 +159,28 @@ export interface ApiLabourRate {
   rateCents: number;
   rateUnit: RateUnit;
 }
+export interface ApiAssemblyComponent {
+  id: string;
+  kind: AssemblyComponentKind;
+  materialFavouriteId?: string | null;
+  labourRateId?: string | null;
+  description: string;
+  // Prisma Decimal comes over JSON as a numeric string for quantityPerUnit.
+  quantityPerUnit: number | string;
+  unitPriceCents: number;
+  sort: number;
+}
+export interface ApiAssembly {
+  id: string;
+  name: string;
+  unit: string;
+  // Prisma Decimal comes over JSON as a numeric string, e.g. "20.00".
+  markupPct: number | string;
+  // Attached server-side by AssembliesService.withUnitCost via
+  // computeAssemblyUnitCostCents — never computed here from stale data.
+  unitCostCents: number;
+  components: ApiAssemblyComponent[];
+}
 export interface ApiBusiness {
   id: string;
   name: string;
@@ -242,6 +264,30 @@ export function mapLabourRate(r: ApiLabourRate): LabourRate {
     rateCents: r.rateCents,
     rateDollars: r.rateCents / 100,
     rateUnit: r.rateUnit,
+  };
+}
+
+export function mapAssemblyComponent(c: ApiAssemblyComponent): AssemblyComponent {
+  return {
+    id: c.id,
+    kind: c.kind,
+    materialFavouriteId: c.materialFavouriteId ?? undefined,
+    labourRateId: c.labourRateId ?? undefined,
+    description: c.description,
+    quantityPerUnit: Number(c.quantityPerUnit),
+    unitPriceCents: c.unitPriceCents,
+    sort: c.sort,
+  };
+}
+
+export function mapAssembly(a: ApiAssembly): Assembly {
+  return {
+    id: a.id,
+    name: a.name,
+    unit: a.unit,
+    markupPct: Number(a.markupPct),
+    unitCostCents: a.unitCostCents,
+    components: a.components.map(mapAssemblyComponent),
   };
 }
 
@@ -359,6 +405,29 @@ export async function createLabourRate(input: NewLabourRateInput): Promise<Labou
   );
 }
 
+export interface NewAssemblyComponentInput {
+  kind: AssemblyComponentKind;
+  materialFavouriteId?: string;
+  labourRateId?: string;
+  description: string;
+  quantityPerUnit: number;
+  unitPriceCents: number;
+}
+export interface NewAssemblyInput {
+  name: string;
+  unit: string;
+  markupPct?: number;
+  components: NewAssemblyComponentInput[];
+}
+/** GET /api/assemblies (client-side, via the proxy) — this business's job
+ * types, each with its components and server-computed unitCostCents. */
+export async function getAssembliesClient(): Promise<Assembly[]> {
+  return (await apiClient.get<ApiAssembly[]>("/assemblies")).map(mapAssembly);
+}
+export async function createAssembly(input: NewAssemblyInput): Promise<Assembly> {
+  return mapAssembly(await apiClient.post<ApiAssembly>("/assemblies", input));
+}
+
 export interface NewQuoteLineInput {
   category: QuoteLineItemInput["category"];
   description: string;
@@ -422,6 +491,14 @@ export async function updateLabourRate(
   );
 }
 
+/** PATCH /api/assemblies/:id — same shape as create, all fields optional;
+ * sending `components` replaces the assembly's full recipe (see
+ * AssembliesService.update). */
+export type UpdateAssemblyInput = Partial<NewAssemblyInput>;
+export async function updateAssembly(id: string, input: UpdateAssemblyInput): Promise<Assembly> {
+  return mapAssembly(await apiClient.patch<ApiAssembly>(`/assemblies/${id}`, input));
+}
+
 /** PATCH /api/business/:id — editable fields mirror updateBusinessSchema
  * (business.dto.ts). `defaultGctRatePct` is renamed to the API's
  * `defaultGctRate` on the way out — both are the same percentage unit (see
@@ -477,6 +554,11 @@ export async function deleteMaterialFavourite(id: string): Promise<void> {
 /** DELETE /api/catalogs/labour-rates/:id — soft delete (API sets deletedAt). */
 export async function deleteLabourRate(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/labour-rates/${id}`);
+}
+
+/** DELETE /api/assemblies/:id — soft delete (API sets deletedAt). */
+export async function deleteAssembly(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/assemblies/${id}`);
 }
 
 // --- Admin (platform-level, staff console) — types here, reads in api-server -

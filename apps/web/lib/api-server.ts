@@ -14,11 +14,13 @@ import { cookies } from "next/headers";
 import {
   API_BASE_URL,
   ApiError,
+  mapAssembly,
   mapBusiness,
   mapClient,
   mapLabourRate,
   mapMaterialFavourite,
   mapQuote,
+  type ApiAssembly,
   type ApiBusiness,
   type ApiClientRow,
   type ApiJob,
@@ -36,7 +38,7 @@ import {
   type PricingConfig,
   type Trade,
 } from "./api-client";
-import type { Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
+import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
 
 const TOKEN_COOKIE = "jamquote_token";
@@ -125,6 +127,19 @@ export async function getLabourRates(): Promise<LabourRate[]> {
     return (await serverRequest<ApiLabourRate[]>("/catalogs/labour-rates")).map(mapLabourRate);
   } catch {
     console.warn("[api-server] getLabourRates: API unreachable, using empty list");
+    return [];
+  }
+}
+
+/** GET /api/assemblies — the business's job-type library (each with its
+ * components and server-computed unitCostCents). No fixture backs these, so
+ * an unreachable API returns an empty list (same convention as
+ * getMaterialFavourites/getLabourRates). */
+export async function getAssemblies(): Promise<Assembly[]> {
+  try {
+    return (await serverRequest<ApiAssembly[]>("/assemblies")).map(mapAssembly);
+  } catch {
+    console.warn("[api-server] getAssemblies: API unreachable, using empty list");
     return [];
   }
 }

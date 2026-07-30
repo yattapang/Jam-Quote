@@ -1,0 +1,79 @@
+/* Assembly ("job type") component builder — one card per recipe line, plus
+   a live cost readout below. Colors come only from --jq-* theme variables. */
+
+.componentsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.componentRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+  background: var(--jq-surface-alt);
+}
+
+.componentTopRow {
+  display: grid;
+  grid-template-columns: 130px 1fr 32px;
+  gap: 8px;
+  align-items: end;
+}
+
+.componentBottomRow {
+  display: grid;
+  grid-template-columns: 1fr 80px 110px;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .componentTopRow {
+    grid-template-columns: 1fr 32px;
+  }
+  .componentBottomRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.removeButton {
+  height: 38px;
+  border: 1px solid var(--jq-border);
+  background: var(--jq-surface);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--jq-crit);
+}
+
+.costBox {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid var(--jq-border);
+}
+
+.costRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.costRowMuted {
+  composes: costRow;
+  color: var(--jq-text-muted);
+}
+
+.costRowGrand {
+  composes: costRow;
+  padding-top: 8px;
+  margin-top: 2px;
+  border-top: 1px solid var(--jq-border);
+  font-weight: 800;
+  font-size: 15px;
+}

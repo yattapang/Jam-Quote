@@ -1,4 +1,5 @@
 import type {
+  AssemblyComponentKind,
   InvoiceStatus,
   PaymentMethod,
   Parish,
@@ -79,6 +80,32 @@ export interface LabourRate {
   /** Convenience for display/inputs — rateCents / 100. */
   rateDollars: number;
   rateUnit: RateUnit;
+}
+
+/** One recipe line inside an assembly — either a snapshot of a saved
+ * material/labour rate (materialFavouriteId/labourRateId set) or a freeform
+ * "OTHER" line (mirrors the Prisma `AssemblyComponent` model). */
+export interface AssemblyComponent {
+  id: string;
+  kind: AssemblyComponentKind;
+  materialFavouriteId?: string;
+  labourRateId?: string;
+  description: string;
+  quantityPerUnit: number;
+  unitPriceCents: number;
+  sort: number;
+}
+
+/** A reusable "job type" (e.g. "Tiling — per sq ft") built from material/
+ * labour/other components, with a server-computed unit cost (mirrors the
+ * Prisma `Assembly` model + AssembliesService.withUnitCost). */
+export interface Assembly {
+  id: string;
+  name: string;
+  unit: string;
+  markupPct: number;
+  unitCostCents: number;
+  components: AssemblyComponent[];
 }
 
 export interface Payment {
