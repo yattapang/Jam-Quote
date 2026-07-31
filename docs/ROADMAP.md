@@ -30,6 +30,18 @@ after a usage-limit pause. Read this first on resume.
 - **Seed/demo data still present** (Blackwood + biz-2..8). Cleanup ready but
   NOT run (user testing): `CONFIRM_CLEANUP=yes npm run -w @jamquote/api db:clean-seed`.
 
+> RBAC #13 SHIPPED & DEPLOYED (2026-07-31, verified live: /admin/me + /admin/admins
+> return 401 unauth'd — routes exist & guarded; the x-business-id header is not
+> accepted as admin auth; migration applied on boot): super-admin
+> + granular per-admin capabilities. Core `AdminCapability` set, `User.isSuperAdmin`
+> + `adminCapabilities`, migration backfills the existing admin (yattapang) to
+> super-admin. `AdminGuard` enforces `@RequireCapability` per route; admin-management
+> endpoints (GET /admin/me, GET/POST /admin/admins, PATCH/DELETE /admin/admins/:id)
+> with self-lockout + last-super-admin guards, all audited. Console gets a
+> super-admin-only Admins screen + capability gating of tenants/suppliers/pricing/
+> financials. Local api+web builds green, 101 api tests pass. NEXT → rule-pack #11
+> (lighter), then invoicing/edit #18, then mobile M3.
+
 ## LOCKED build order (next up)
 1. **Admin-ops console UI** — backend done + deployed; rebuild the UI fresh (a
    partial attempt is stashed): tenant actions + type-to-confirm delete,
@@ -40,8 +52,8 @@ after a usage-limit pause. Read this first on resume.
    c. Material library — categories + specs/variants (#14) ✅
    d. Assemblies / job types — calculated+editable unit cost, per-quote
       summary/detail toggle, PDF rendering (#17) ✅
-3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13) ← NEXT
-4. **Rule-pack** — lighter editable-JM-values step (#11)
+3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13) ✅ SHIPPED
+4. **Rule-pack** — lighter editable-JM-values step (#11) ← NEXT
 5. **Quote→invoice editing** / invoicing M5 (#18)
 6. **M3** — mobile offline-first (local replica + outbox + sync engine)
 
