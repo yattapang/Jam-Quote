@@ -9,6 +9,7 @@ declare global {
     interface Request {
       user?: AuthTokenPayload;
       businessId?: string;
+      adminContext?: { userId: string; isSuperAdmin: boolean; capabilities: string[] };
     }
   }
 }

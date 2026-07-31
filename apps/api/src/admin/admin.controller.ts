@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 import type { AuditLog, Business, Subscription, Supplier } from "@prisma/client";
+import { AdminCapability } from "@jamquote/core";
 import { AdminGuard } from "../auth/admin.guard.js";
+import { RequireCapability } from "../auth/require-capability.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import type { PricingSnapshot } from "../billing/pricing.service.js";
 import { updatePricingSchema, type UpdatePricingInput } from "../billing/billing.dto.js";
@@ -12,16 +14,21 @@ import {
   type AdminRegulatoryUpdate,
   type AdminSupplier,
   type AdminTenant,
+  type AdminUser,
 } from "./admin.service.js";
 import { AuditService } from "./audit.service.js";
 import {
   createSupplierSchema,
   hardDeleteTenantSchema,
+  promoteAdminSchema,
   setTenantPlanSchema,
+  updateAdminSchema,
   updateSupplierSchema,
   type CreateSupplierInput,
   type HardDeleteTenantInput,
+  type PromoteAdminInput,
   type SetTenantPlanInput,
+  type UpdateAdminInput,
   type UpdateSupplierInput,
 } from "./admin.dto.js";
 
@@ -54,12 +61,14 @@ export class AdminController {
 
   /** Reversible soft-delete — sets Business.deletedAt. */
   @Patch("tenants/:id/suspend")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
   suspendTenant(@Param("id") id: string, @Req() req: Request): Promise<Business> {
     return this.admin.suspendTenant(id, req.user!.sub);
   }
 
   /** Undoes a suspend — clears Business.deletedAt. */
   @Patch("tenants/:id/restore")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
   restoreTenant(@Param("id") id: string, @Req() req: Request): Promise<Business> {
     return this.admin.restoreTenant(id, req.user!.sub);
   }
@@ -69,6 +78,7 @@ export class AdminController {
    * the business's current name — see AdminService.hardDeleteTenant.
    */
   @Delete("tenants/:id")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
   hardDeleteTenant(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(hardDeleteTenantSchema)) body: HardDeleteTenantInput,
@@ -84,6 +94,7 @@ export class AdminController {
 
   /** Supplier is platform-level (not business-scoped). */
   @Post("suppliers")
+  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
   createSupplier(
     @Body(new ZodValidationPipe(createSupplierSchema)) body: CreateSupplierInput,
     @Req() req: Request,
@@ -92,6 +103,7 @@ export class AdminController {
   }
 
   @Patch("suppliers/:id")
+  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
   updateSupplier(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateSupplierSchema)) body: UpdateSupplierInput,
@@ -102,6 +114,7 @@ export class AdminController {
 
   /** SOFT delete only — Supplier is FK-referenced by material prices/quote lines. */
   @Delete("suppliers/:id")
+  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
   deleteSupplier(@Param("id") id: string, @Req() req: Request): Promise<Supplier> {
     return this.admin.deleteSupplier(id, req.user!.sub);
   }
@@ -117,6 +130,7 @@ export class AdminController {
   }
 
   @Patch("pricing")
+  @RequireCapability(AdminCapability.MANAGE_PRICING)
   updatePricing(
     @Body(new ZodValidationPipe(updatePricingSchema)) body: UpdatePricingInput,
     @Req() req: Request,
@@ -126,6 +140,7 @@ export class AdminController {
 
   /** Manual-upgrade path: set a business's plan directly (bypasses payment). */
   @Patch("tenants/:id/plan")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
   setTenantPlan(
     @Param("id") id: string,
     @Body(new ZodValidationPipe(setTenantPlanSchema)) body: SetTenantPlanInput,
@@ -136,6 +151,7 @@ export class AdminController {
 
   /** Subscription & revenue overview — GET /admin/financials. */
   @Get("financials")
+  @RequireCapability(AdminCapability.VIEW_FINANCIALS)
   financials(): Promise<AdminFinancials> {
     return this.admin.financials();
   }
@@ -144,5 +160,54 @@ export class AdminController {
   @Get("audit")
   audit(): Promise<AuditLog[]> {
     return this.auditService.recent();
+  }
+
+  // --- Admin management (super-admin / MANAGE_ADMINS) -----------------------
+
+  /** GET /admin/me — the signed-in admin's own authorization (drives UI gating). */
+  @Get("me")
+  me(@Req() req: Request): Promise<{ isSuperAdmin: boolean; capabilities: string[] }> {
+    return this.admin.adminMe(req.user!.sub);
+  }
+
+  @Get("admins")
+  @RequireCapability(AdminCapability.MANAGE_ADMINS)
+  admins(): Promise<AdminUser[]> {
+    return this.admin.listAdmins();
+  }
+
+  /** Promote an existing user (by email) to admin with the given capabilities. */
+  @Post("admins")
+  @RequireCapability(AdminCapability.MANAGE_ADMINS)
+  promoteAdmin(
+    @Body(new ZodValidationPipe(promoteAdminSchema)) body: PromoteAdminInput,
+    @Req() req: Request,
+  ): Promise<AdminUser> {
+    return this.admin.promoteAdmin(body, {
+      userId: req.adminContext!.userId,
+      isSuperAdmin: req.adminContext!.isSuperAdmin,
+    });
+  }
+
+  @Patch("admins/:id")
+  @RequireCapability(AdminCapability.MANAGE_ADMINS)
+  updateAdmin(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateAdminSchema)) body: UpdateAdminInput,
+    @Req() req: Request,
+  ): Promise<AdminUser> {
+    return this.admin.updateAdmin(id, body, {
+      userId: req.adminContext!.userId,
+      isSuperAdmin: req.adminContext!.isSuperAdmin,
+    });
+  }
+
+  @Delete("admins/:id")
+  @RequireCapability(AdminCapability.MANAGE_ADMINS)
+  revokeAdmin(@Param("id") id: string, @Req() req: Request): Promise<{ revoked: true; userId: string }> {
+    return this.admin.revokeAdmin(id, {
+      userId: req.adminContext!.userId,
+      isSuperAdmin: req.adminContext!.isSuperAdmin,
+    });
   }
 }

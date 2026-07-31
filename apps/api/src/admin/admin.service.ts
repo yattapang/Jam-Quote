@@ -1,14 +1,34 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Business, Supplier } from "@prisma/client";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { UserRole, type Business, type Supplier } from "@prisma/client";
 import { supportedJurisdictions } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
 import type { UpdatePricingInput } from "../billing/billing.dto.js";
 import type {
   CreateSupplierInput,
+  PromoteAdminInput,
   SetTenantPlanInput,
+  UpdateAdminInput,
   UpdateSupplierInput,
 } from "./admin.dto.js";
+
+/** The acting admin's authorization, from AdminGuard's req.adminContext.
+ * Passed into admin-management methods so they can enforce super-admin-only
+ * rules and prevent self-lockout. */
+export interface AdminActor {
+  userId: string;
+  isSuperAdmin: boolean;
+}
+
+/** One internal staff admin, as returned by the admin-management endpoints. */
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  isSuperAdmin: boolean;
+  capabilities: string[];
+  createdAt: Date;
+}
 import { AuditService } from "./audit.service.js";
 import { deleteBusinessCascade } from "./tenant-deletion.util.js";
 
@@ -414,5 +434,204 @@ export class AdminService {
       mrrCents: proCount * pricing.proMonthlyPriceCents,
       upcomingRenewals,
     };
+  }
+
+  // --- Admin RBAC (super-admin + granular capabilities) --------------------
+
+  private toAdminUser(u: {
+    id: string;
+    email: string | null;
+    fullName: string | null;
+    isSuperAdmin: boolean;
+    adminCapabilities: string[];
+    createdAt: Date;
+  }): AdminUser {
+    return {
+      id: u.id,
+      email: u.email,
+      fullName: u.fullName,
+      isSuperAdmin: u.isSuperAdmin,
+      capabilities: u.adminCapabilities,
+      createdAt: u.createdAt,
+    };
+  }
+
+  private readonly ADMIN_SELECT = {
+    id: true,
+    email: true,
+    fullName: true,
+    isSuperAdmin: true,
+    adminCapabilities: true,
+    createdAt: true,
+  } as const;
+
+  /** GET /admin/me — the signed-in admin's own authorization. */
+  async adminMe(userId: string): Promise<{ isSuperAdmin: boolean; capabilities: string[] }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true, adminCapabilities: true },
+    });
+    return {
+      isSuperAdmin: user?.isSuperAdmin ?? false,
+      capabilities: user?.adminCapabilities ?? [],
+    };
+  }
+
+  /** GET /admin/admins — every internal staff admin. */
+  async listAdmins(): Promise<AdminUser[]> {
+    const users = await this.prisma.user.findMany({
+      where: { role: UserRole.ADMIN },
+      select: this.ADMIN_SELECT,
+      orderBy: { createdAt: "asc" },
+    });
+    return users.map((u) => this.toAdminUser(u));
+  }
+
+  /** How many super-admins exist — used to prevent removing the last one. */
+  private countSuperAdmins(): Promise<number> {
+    return this.prisma.user.count({ where: { role: UserRole.ADMIN, isSuperAdmin: true } });
+  }
+
+  /**
+   * POST /admin/admins — promote an EXISTING user (matched by email) to an
+   * internal admin with the given capabilities. Only a super-admin may grant
+   * super-admin status. We deliberately never create a brand-new account here
+   * (that needs a password) — the person must sign up first, then be promoted.
+   */
+  async promoteAdmin(input: PromoteAdminInput, actor: AdminActor): Promise<AdminUser> {
+    if (input.isSuperAdmin && !actor.isSuperAdmin) {
+      throw new ForbiddenException("Only a super-admin can grant super-admin status.");
+    }
+
+    const email = input.email.trim().toLowerCase();
+    const user = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
+      select: { id: true, isSuperAdmin: true },
+    });
+    if (!user) {
+      throw new NotFoundException("No user with that email — ask them to sign up first, then promote them.");
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        role: UserRole.ADMIN,
+        adminCapabilities: input.capabilities,
+        isSuperAdmin: input.isSuperAdmin ?? user.isSuperAdmin,
+      },
+      select: this.ADMIN_SELECT,
+    });
+
+    await this.audit.record({
+      actorUserId: actor.userId,
+      action: "admin.promote",
+      targetType: "User",
+      targetId: user.id,
+      details: { email, capabilities: input.capabilities, isSuperAdmin: updated.isSuperAdmin },
+    });
+
+    return this.toAdminUser(updated);
+  }
+
+  /**
+   * PATCH /admin/admins/:id — update an admin's capabilities and/or
+   * super-admin status. Guards: only a super-admin may change super-admin
+   * status or edit a super-admin; the last super-admin can't be demoted; an
+   * actor can't strip their own super-admin or MANAGE_ADMINS access.
+   */
+  async updateAdmin(id: string, input: UpdateAdminInput, actor: AdminActor): Promise<AdminUser> {
+    const target = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, isSuperAdmin: true, adminCapabilities: true },
+    });
+    if (!target || target.role !== UserRole.ADMIN) {
+      throw new NotFoundException("Admin not found");
+    }
+
+    const touchesSuperAdmin = input.isSuperAdmin !== undefined;
+    if ((touchesSuperAdmin || target.isSuperAdmin) && !actor.isSuperAdmin) {
+      throw new ForbiddenException("Only a super-admin can modify a super-admin.");
+    }
+
+    // Demoting the last super-admin would lock everyone out of admin management.
+    if (touchesSuperAdmin && input.isSuperAdmin === false && target.isSuperAdmin) {
+      if ((await this.countSuperAdmins()) <= 1) {
+        throw new BadRequestException("Cannot remove the last super-admin.");
+      }
+      if (target.id === actor.userId) {
+        throw new BadRequestException("You can't remove your own super-admin status.");
+      }
+    }
+
+    // Prevent an actor from removing their own path back into admin management.
+    if (
+      target.id === actor.userId &&
+      !actor.isSuperAdmin &&
+      input.capabilities !== undefined &&
+      !input.capabilities.includes("MANAGE_ADMINS")
+    ) {
+      throw new BadRequestException("You can't remove your own 'Manage admins' capability.");
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(input.capabilities !== undefined ? { adminCapabilities: input.capabilities } : {}),
+        ...(touchesSuperAdmin ? { isSuperAdmin: input.isSuperAdmin } : {}),
+      },
+      select: this.ADMIN_SELECT,
+    });
+
+    await this.audit.record({
+      actorUserId: actor.userId,
+      action: "admin.update",
+      targetType: "User",
+      targetId: id,
+      details: {
+        capabilities: input.capabilities ?? null,
+        isSuperAdmin: touchesSuperAdmin ? input.isSuperAdmin : null,
+      },
+    });
+
+    return this.toAdminUser(updated);
+  }
+
+  /**
+   * DELETE /admin/admins/:id — revoke a user's admin access (back to OWNER,
+   * capabilities cleared). Guards: can't revoke yourself; can't revoke the
+   * last super-admin; only a super-admin may revoke a super-admin.
+   */
+  async revokeAdmin(id: string, actor: AdminActor): Promise<{ revoked: true; userId: string }> {
+    const target = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, isSuperAdmin: true },
+    });
+    if (!target || target.role !== UserRole.ADMIN) {
+      throw new NotFoundException("Admin not found");
+    }
+    if (target.id === actor.userId) {
+      throw new BadRequestException("You can't revoke your own admin access.");
+    }
+    if (target.isSuperAdmin && !actor.isSuperAdmin) {
+      throw new ForbiddenException("Only a super-admin can revoke a super-admin.");
+    }
+    if (target.isSuperAdmin && (await this.countSuperAdmins()) <= 1) {
+      throw new BadRequestException("Cannot revoke the last super-admin.");
+    }
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { role: UserRole.OWNER, isSuperAdmin: false, adminCapabilities: [] },
+    });
+
+    await this.audit.record({
+      actorUserId: actor.userId,
+      action: "admin.revoke",
+      targetType: "User",
+      targetId: id,
+      details: {},
+    });
+
+    return { revoked: true, userId: id };
   }
 }
