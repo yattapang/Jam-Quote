@@ -153,6 +153,13 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Admin RBAC (only meaningful when role = ADMIN). A super-admin implicitly
+  // holds every capability and is the only one who can manage other admins;
+  // regular admins are limited to adminCapabilities (values from core's
+  // AdminCapability). See apps/api/src/auth/admin.guard.ts.
+  isSuperAdmin      Boolean  @default(false)
+  adminCapabilities String[] @default([])
+
   resetTokens PasswordResetToken[]
 }
 

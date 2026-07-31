@@ -97,6 +97,45 @@ export const QuoteDetailLevel = {
 } as const;
 export type QuoteDetailLevel = (typeof QuoteDetailLevel)[keyof typeof QuoteDetailLevel];
 
+/**
+ * Granular capabilities a JamQuote staff admin can be granted. A super-admin
+ * (User.isSuperAdmin) implicitly holds all of them and is the only one who
+ * can grant/revoke super-admin or manage other admins. Regular admins are
+ * limited to the capabilities in their User.adminCapabilities list — the
+ * AdminGuard enforces the required capability per route. Stored as plain
+ * strings (User.adminCapabilities String[]) rather than a Prisma enum so
+ * adding a capability never needs a DB enum migration.
+ */
+export const AdminCapability = {
+  /** Suspend / restore / hard-delete tenants and change their plan. */
+  MANAGE_TENANTS: "MANAGE_TENANTS",
+  /** Create / edit / soft-delete platform suppliers. */
+  MANAGE_SUPPLIERS: "MANAGE_SUPPLIERS",
+  /** Edit platform subscription pricing. */
+  MANAGE_PRICING: "MANAGE_PRICING",
+  /** View the subscription & revenue (financials) screen. */
+  VIEW_FINANCIALS: "VIEW_FINANCIALS",
+  /** Edit jurisdiction rule-packs (feature not yet built — reserved). */
+  MANAGE_RULEPACK: "MANAGE_RULEPACK",
+  /** Manage admin users and their capabilities. */
+  MANAGE_ADMINS: "MANAGE_ADMINS",
+} as const;
+export type AdminCapability = (typeof AdminCapability)[keyof typeof AdminCapability];
+
+/** Every capability, in display order — the source of truth for admin UIs
+ * and server-side validation of a submitted capability list. */
+export const ADMIN_CAPABILITIES: AdminCapability[] = Object.values(AdminCapability);
+
+/** Human-readable label + description for each capability, for admin UIs. */
+export const ADMIN_CAPABILITY_META: Record<AdminCapability, { label: string; description: string }> = {
+  MANAGE_TENANTS: { label: "Manage tenants", description: "Suspend, restore, delete businesses and change their plan" },
+  MANAGE_SUPPLIERS: { label: "Manage suppliers", description: "Add, edit and remove platform suppliers" },
+  MANAGE_PRICING: { label: "Manage pricing", description: "Edit subscription plan pricing" },
+  VIEW_FINANCIALS: { label: "View financials", description: "See subscription revenue and renewals" },
+  MANAGE_RULEPACK: { label: "Manage rule-packs", description: "Edit jurisdiction tax/regulatory rules" },
+  MANAGE_ADMINS: { label: "Manage admins", description: "Add admins and set their capabilities" },
+};
+
 /** The 14 parishes of Jamaica. */
 export const PARISHES = [
   "Kingston",
