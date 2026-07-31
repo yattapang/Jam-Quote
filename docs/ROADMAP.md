@@ -1,17 +1,18 @@
 # JamQuote — Roadmap & Resume State
 
-Updated 2026-07-26. Single source of truth for picking work back up cheaply
+Updated 2026-07-30. Single source of truth for picking work back up cheaply
 after a usage-limit pause. Read this first on resume.
 
-> PROGRESS: admin-ops console (backend + UI) DONE & deployed. Estimating catalog:
-> Trades DONE, Labour library DONE, Material library (categories+specs) DONE,
-> Assemblies BACKEND DONE (Assembly/AssemblyComponent model + migration +
-> `computeAssemblyUnitCostCents` in core + CRUD API — all deployed).
-> RESUME HERE → (1) Assemblies LIBRARY UI (job-types page: build an assembly
-> from material/labour pickers with live unit cost — a stalled attempt is
-> stashed), then (2) Assemblies QUOTE INTEGRATION (drop a job type into a quote
-> as a line + per-quote summary/detailed toggle → PDF). Then RBAC #13,
-> rule-pack #11 (lighter), invoicing/edit #18, mobile M3.
+> PROGRESS: admin-ops console (backend + UI) DONE & deployed. **Estimating
+> catalog epic COMPLETE & deployed** — Trades, Labour library, Material library
+> (categories+specs), Assemblies (backend + library UI), and Assembly QUOTE
+> INTEGRATION (quote builder "+ Add job type" picker, per-quote
+> Summary/Detailed toggle, DETAILED breakdown on the quote detail page + PDF —
+> commit ad1deb7). Verified live: the deployed API returns `detailLevel` and
+> the assembly line fields.
+> RESUME HERE → next locked item is **Admin RBAC #13** (super-admin +
+> granular per-admin capabilities). Then rule-pack #11 (lighter),
+> invoicing/edit #18, mobile M3.
 
 ## Live now (deployed)
 - **API**: Render (free) + Neon Postgres. Migrations apply on boot via the
@@ -33,13 +34,13 @@ after a usage-limit pause. Read this first on resume.
 1. **Admin-ops console UI** — backend done + deployed; rebuild the UI fresh (a
    partial attempt is stashed): tenant actions + type-to-confirm delete,
    supplier CRUD, Financials screen, Activity/audit screen.
-2. **Estimating catalog** (core contractor value):
-   a. Trades — master JA list + custom + type-ahead picker (#15)
-   b. Labour library (#16)
-   c. Material library — categories + specs/variants (#14)
+2. **Estimating catalog** (core contractor value) — ✅ DONE & deployed:
+   a. Trades — master JA list + custom + type-ahead picker (#15) ✅
+   b. Labour library (#16) ✅
+   c. Material library — categories + specs/variants (#14) ✅
    d. Assemblies / job types — calculated+editable unit cost, per-quote
-      summary/detail toggle, PDF rendering (#17)
-3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13)
+      summary/detail toggle, PDF rendering (#17) ✅
+3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13) ← NEXT
 4. **Rule-pack** — lighter editable-JM-values step (#11)
 5. **Quote→invoice editing** / invoicing M5 (#18)
 6. **M3** — mobile offline-first (local replica + outbox + sync engine)
