@@ -674,6 +674,21 @@ export interface AdminAuditEntry {
   details: unknown;
   createdAt: string;
 }
+/** GET /admin/me — the signed-in admin's own authorization, used to gate the
+ * console UI. A super-admin implicitly has every capability. */
+export interface AdminMe {
+  isSuperAdmin: boolean;
+  capabilities: string[];
+}
+/** One internal staff admin (GET /admin/admins). */
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  isSuperAdmin: boolean;
+  capabilities: string[];
+  createdAt: string;
+}
 export interface AdminData {
   overview: AdminOverview | null;
   tenants: AdminTenant[];
@@ -681,6 +696,36 @@ export interface AdminData {
   regulatory: AdminReg[];
   financials: AdminFinancials | null;
   audit: AdminAuditEntry[];
+  /** The viewing admin's own capabilities (drives which screens/actions show).
+   * Defaults to no access when the API is unreachable. */
+  me: AdminMe;
+  /** All staff admins — only populated for admins with MANAGE_ADMINS. */
+  admins: AdminUser[];
+}
+
+// --- Admin management writes (MANAGE_ADMINS) ---------------------------------
+
+/** POST /admin/admins — promote an existing user (by email) to admin. Throws
+ * ApiError (404) with a "must sign up first" message when no user matches. */
+export async function promoteAdmin(input: {
+  email: string;
+  capabilities: string[];
+  isSuperAdmin?: boolean;
+}): Promise<AdminUser> {
+  return apiClient.post<AdminUser>("/admin/admins", input);
+}
+
+/** PATCH /admin/admins/:id — update an admin's capabilities and/or super-admin. */
+export async function updateAdmin(
+  id: string,
+  input: { capabilities?: string[]; isSuperAdmin?: boolean },
+): Promise<AdminUser> {
+  return apiClient.patch<AdminUser>(`/admin/admins/${id}`, input);
+}
+
+/** DELETE /admin/admins/:id — revoke a user's admin access. */
+export async function revokeAdmin(id: string): Promise<{ revoked: true; userId: string }> {
+  return apiClient.delete<{ revoked: true; userId: string }>(`/admin/admins/${id}`);
 }
 
 export interface CardPaymentResponse {

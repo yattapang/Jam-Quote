@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { getJurisdiction, formatJmd } from "@jamquote/core";
+import { getJurisdiction, formatJmd, ADMIN_CAPABILITIES, ADMIN_CAPABILITY_META } from "@jamquote/core";
 import {
   getAdminPricing,
   updateAdminPricing,
@@ -13,8 +13,12 @@ import {
   createSupplier,
   updateSupplier,
   deleteSupplier,
+  promoteAdmin,
+  updateAdmin,
+  revokeAdmin,
   ApiError,
   type AdminData,
+  type AdminUser,
   type PricingConfig,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
@@ -28,7 +32,8 @@ type Screen =
   | "rulepack"
   | "pricing"
   | "financials"
-  | "activity";
+  | "activity"
+  | "admins";
 
 /** Lowercases and normalizes a plan string for comparisons/API calls — real
  * tenant data comes back "free"/"pro" (see PATCH /admin/tenants/:id/plan),
@@ -115,6 +120,16 @@ export default function AdminConsole({
   admin: { name: string; email: string };
 }) {
   const ov = data.overview;
+  // The viewing admin's own authorization (from GET /admin/me). A super-admin
+  // implicitly holds every capability — the API enforces the same; this only
+  // gates what the console offers. See @jamquote/core AdminCapability.
+  const me = data.me;
+  const can = (cap: string) => me.isSuperAdmin || me.capabilities.includes(cap);
+  const canManageTenants = can("MANAGE_TENANTS");
+  const canManageSuppliers = can("MANAGE_SUPPLIERS");
+  const canManagePricing = can("MANAGE_PRICING");
+  const canViewFinancials = can("VIEW_FINANCIALS");
+  const canManageAdmins = can("MANAGE_ADMINS");
   const adminInitials =
     admin.name
       .split(/\s+/)
@@ -352,6 +367,89 @@ export default function AdminConsole({
     }
   }
 
+  // --- Admins: promote by email / edit capabilities / revoke (MANAGE_ADMINS) ---
+  const [promoteEmail, setPromoteEmail] = useState("");
+  const [promoteCaps, setPromoteCaps] = useState<string[]>([]);
+  const [promoteBusy, setPromoteBusy] = useState(false);
+  const [promoteError, setPromoteError] = useState("");
+  const [promoteOk, setPromoteOk] = useState(false);
+  // Per-admin edited capability draft (absent = showing the saved list).
+  const [capDraft, setCapDraft] = useState<Record<string, string[]>>({});
+  const [adminRowBusy, setAdminRowBusy] = useState<Record<string, boolean>>({});
+  const [adminRowError, setAdminRowError] = useState<Record<string, string>>({});
+  const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
+
+  const toggleInList = (list: string[], cap: string) =>
+    list.includes(cap) ? list.filter((c) => c !== cap) : [...list, cap];
+  const capsFor = (a: AdminUser) => capDraft[a.id] ?? a.capabilities;
+  const isSelfAdmin = (a: AdminUser) =>
+    !!a.email && !!admin.email && a.email.toLowerCase() === admin.email.toLowerCase();
+
+  async function submitPromote(e: FormEvent) {
+    e.preventDefault();
+    const email = promoteEmail.trim();
+    if (!email) return;
+    setPromoteBusy(true);
+    setPromoteError("");
+    setPromoteOk(false);
+    try {
+      await promoteAdmin({ email, capabilities: promoteCaps });
+      setPromoteEmail("");
+      setPromoteCaps([]);
+      setPromoteOk(true);
+      router.refresh();
+    } catch (err) {
+      setPromoteError(err instanceof ApiError ? err.message : "Couldn't add admin");
+    } finally {
+      setPromoteBusy(false);
+    }
+  }
+
+  async function saveAdminCaps(a: AdminUser) {
+    setAdminRowBusy((b) => ({ ...b, [a.id]: true }));
+    setAdminRowError((e) => ({ ...e, [a.id]: "" }));
+    try {
+      await updateAdmin(a.id, { capabilities: capsFor(a) });
+      setCapDraft((d) => {
+        const next = { ...d };
+        delete next[a.id];
+        return next;
+      });
+      router.refresh();
+    } catch (err) {
+      setAdminRowError((e) => ({ ...e, [a.id]: err instanceof ApiError ? err.message : "Couldn't save" }));
+    } finally {
+      setAdminRowBusy((b) => ({ ...b, [a.id]: false }));
+    }
+  }
+
+  async function toggleSuperAdmin(a: AdminUser) {
+    setAdminRowBusy((b) => ({ ...b, [a.id]: true }));
+    setAdminRowError((e) => ({ ...e, [a.id]: "" }));
+    try {
+      await updateAdmin(a.id, { isSuperAdmin: !a.isSuperAdmin });
+      router.refresh();
+    } catch (err) {
+      setAdminRowError((e) => ({ ...e, [a.id]: err instanceof ApiError ? err.message : "Couldn't update" }));
+    } finally {
+      setAdminRowBusy((b) => ({ ...b, [a.id]: false }));
+    }
+  }
+
+  async function doRevokeAdmin(id: string) {
+    setAdminRowBusy((b) => ({ ...b, [id]: true }));
+    setAdminRowError((e) => ({ ...e, [id]: "" }));
+    try {
+      await revokeAdmin(id);
+      setRevokeConfirmId(null);
+      router.refresh();
+    } catch (err) {
+      setAdminRowError((e) => ({ ...e, [id]: err instanceof ApiError ? err.message : "Couldn't revoke" }));
+    } finally {
+      setAdminRowBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
     tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
@@ -361,6 +459,7 @@ export default function AdminConsole({
     pricing: ["Pricing", "Free-tier limit & Pro pricing for the whole platform"],
     financials: ["Financials", "Plan mix, MRR & upcoming renewals across the platform"],
     activity: ["Activity log", "Recent admin actions across the platform, newest first"],
+    admins: ["Admins", "Staff admins and what each is authorized to do"],
   };
   const [screenTitle, screenDesc] = titles[screen];
 
@@ -529,10 +628,12 @@ export default function AdminConsole({
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 9l1-5h16l1 5" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></svg>
             <span>Supplier index</span>
           </button>
-          <button className={styles.navBtn} onClick={() => setScreen("financials")} style={navBtn("financials")}>
-            <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>
-            <span>Financials</span>
-          </button>
+          {canViewFinancials && (
+            <button className={styles.navBtn} onClick={() => setScreen("financials")} style={navBtn("financials")}>
+              <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>
+              <span>Financials</span>
+            </button>
+          )}
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".09em", color: "var(--muted)", padding: "16px 10px 8px" }}>GOVERN</div>
           <button className={styles.navBtn} onClick={() => setScreen("regulatory")} style={navBtn("regulatory")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M9 12l2 2 4-4" /></svg>
@@ -552,6 +653,12 @@ export default function AdminConsole({
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
             <span>Activity log</span>
           </button>
+          {canManageAdmins && (
+            <button className={styles.navBtn} onClick={() => setScreen("admins")} style={navBtn("admins")}>
+              <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M17 8h5M19.5 5.5v5" /></svg>
+              <span>Admins</span>
+            </button>
+          )}
         </nav>
         <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 9, background: "var(--surface-alt)" }}>
@@ -722,7 +829,7 @@ export default function AdminConsole({
                           </td>
                           <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
                           <td style={{ ...td, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
-                            {id ? (
+                            {id && canManageTenants ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
                                   <button
@@ -774,6 +881,7 @@ export default function AdminConsole({
                 ))}
               </div>
 
+              {canManageSuppliers && (
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
                 <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 12 }}>+ Add supplier</div>
                 <form onSubmit={submitNewSupplier} style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr auto auto", gap: 10, alignItems: "end" }}>
@@ -822,6 +930,7 @@ export default function AdminConsole({
                 {supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--critical)", marginTop: 10 }}>{supplierCreateError}</div>}
                 {supplierCreateOk && !supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--good)", marginTop: 10 }}>Supplier added ✓</div>}
               </div>
+              )}
 
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
@@ -892,7 +1001,7 @@ export default function AdminConsole({
                           <td style={{ ...td, padding: "13px 16px" }}><span style={pill(tone)}><span style={dot(tone, { marginTop: 0, ...(s[3] === "stale" ? { animation: "admin-pulse 1.4s infinite" } : {}) })} />{s[4]}</span></td>
                           <td style={{ ...td, padding: "13px 16px", color: "var(--muted)", fontSize: 12.5 }}>{s[5]}</td>
                           <td style={{ ...td, padding: "13px 16px", textAlign: "right" }}>
-                            {id ? (
+                            {id && canManageSuppliers ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                                 <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                                   <button
@@ -1099,11 +1208,13 @@ export default function AdminConsole({
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <button
                     onClick={savePricing}
-                    disabled={pricingSaving}
-                    style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 9, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: pricingSaving ? "default" : "pointer", fontFamily: "inherit", opacity: pricingSaving ? 0.7 : 1 }}
+                    disabled={pricingSaving || !canManagePricing}
+                    title={canManagePricing ? undefined : "You don't have the Manage pricing capability"}
+                    style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 9, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: pricingSaving || !canManagePricing ? "default" : "pointer", fontFamily: "inherit", opacity: pricingSaving || !canManagePricing ? 0.7 : 1 }}
                   >
                     {pricingSaving ? "Saving…" : "Save pricing"}
                   </button>
+                  {!canManagePricing && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Read-only — needs the Manage pricing capability.</span>}
                   {pricingStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
                   {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save — is the API running?</span>}
                 </div>
@@ -1184,6 +1295,115 @@ export default function AdminConsole({
                           <td style={{ ...td, padding: "12px 16px", color: "var(--muted)", fontSize: 12, ...archivo, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{detailsPreview(a.details)}</td>
                         </tr>
                       ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ADMINS — super-admin / MANAGE_ADMINS only */}
+          {screen === "admins" && canManageAdmins && (
+            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1100, margin: "0 auto" }}>
+              {/* Promote an existing user by email. */}
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
+                <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 4 }}>+ Add admin</div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
+                  Promote an existing JamQuote user by email — they must have signed up first. Choose which capabilities to grant.
+                </div>
+                <form onSubmit={submitPromote} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)", minWidth: 260 }}>
+                      User email
+                      <input required type="email" value={promoteEmail} onChange={(e) => setPromoteEmail(e.target.value)} placeholder="name@example.com" style={inputStyle} />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={promoteBusy || !promoteEmail.trim()}
+                      style={{ height: 36, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: promoteBusy ? "default" : "pointer", fontFamily: "inherit", opacity: promoteBusy || !promoteEmail.trim() ? 0.6 : 1, whiteSpace: "nowrap" }}
+                    >
+                      {promoteBusy ? "Adding…" : "Add admin"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {ADMIN_CAPABILITIES.map((cap) => (
+                      <label key={cap} title={ADMIN_CAPABILITY_META[cap].description} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, padding: "5px 10px", border: "1px solid var(--border)", borderRadius: 8, background: promoteCaps.includes(cap) ? "var(--surface-alt)" : "var(--surface)", cursor: "pointer" }}>
+                        <input type="checkbox" checked={promoteCaps.includes(cap)} onChange={() => setPromoteCaps((c) => toggleInList(c, cap))} />
+                        {ADMIN_CAPABILITY_META[cap].label}
+                      </label>
+                    ))}
+                  </div>
+                </form>
+                {promoteError && <div style={{ fontSize: 12.5, color: "var(--critical)", marginTop: 10 }}>{promoteError}</div>}
+                {promoteOk && !promoteError && <div style={{ fontSize: 12.5, color: "var(--good)", marginTop: 10 }}>Admin added ✓</div>}
+              </div>
+
+              {/* Existing admins. */}
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead><tr style={{ background: "var(--surface-alt)" }}>
+                    <th style={th}>ADMIN</th><th style={th}>CAPABILITIES</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
+                  </tr></thead>
+                  <tbody>
+                    {data.admins.length === 0 ? (
+                      <tr><td colSpan={3} style={{ ...td, padding: "18px", color: "var(--muted)" }}>No admins found.</td></tr>
+                    ) : (
+                      data.admins.map((a) => {
+                        const self = isSelfAdmin(a);
+                        const rowBusy = !!adminRowBusy[a.id];
+                        const rowErr = adminRowError[a.id];
+                        const caps = capsFor(a);
+                        const dirty = a.id in capDraft;
+                        return (
+                          <tr key={a.id} className={styles.rowHover}>
+                            <td style={{ ...td, padding: "13px 16px", verticalAlign: "top" }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                <span style={{ fontWeight: 600 }}>
+                                  {a.fullName || a.email || "—"}
+                                  {self && <span style={{ color: "var(--muted)", fontWeight: 500 }}> (you)</span>}
+                                </span>
+                                {a.email && <span style={{ fontSize: 12, color: "var(--muted)" }}>{a.email}</span>}
+                                {a.isSuperAdmin && <span style={{ ...pill("accent"), marginTop: 4, alignSelf: "flex-start" }}>Super-admin</span>}
+                              </div>
+                            </td>
+                            <td style={{ ...td, padding: "13px 16px", verticalAlign: "top" }}>
+                              {a.isSuperAdmin ? (
+                                <span style={{ fontSize: 12.5, color: "var(--muted)" }}>All capabilities (super-admin)</span>
+                              ) : (
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                                  {ADMIN_CAPABILITIES.map((cap) => (
+                                    <label key={cap} title={ADMIN_CAPABILITY_META[cap].description} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, padding: "4px 8px", border: "1px solid var(--border)", borderRadius: 7, background: caps.includes(cap) ? "var(--surface-alt)" : "var(--surface)", cursor: "pointer" }}>
+                                      <input type="checkbox" checked={caps.includes(cap)} onChange={() => setCapDraft((d) => ({ ...d, [a.id]: toggleInList(capsFor(a), cap) }))} />
+                                      {ADMIN_CAPABILITY_META[cap].label}
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ ...td, padding: "13px 16px", textAlign: "right", verticalAlign: "top" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                                  {!a.isSuperAdmin && dirty && (
+                                    <button disabled={rowBusy} onClick={() => saveAdminCaps(a)} style={{ height: 28, padding: "0 12px", border: "none", borderRadius: 7, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 12, cursor: rowBusy ? "default" : "pointer", fontFamily: "inherit", opacity: rowBusy ? 0.6 : 1 }}>{rowBusy ? "…" : "Save"}</button>
+                                  )}
+                                  {me.isSuperAdmin && !self && (
+                                    <button disabled={rowBusy} onClick={() => toggleSuperAdmin(a)} style={{ height: 28, padding: "0 12px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: rowBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>{a.isSuperAdmin ? "Revoke super-admin" : "Make super-admin"}</button>
+                                  )}
+                                  {!self && (revokeConfirmId === a.id ? (
+                                    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                                      <button disabled={rowBusy} onClick={() => doRevokeAdmin(a.id)} style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: rowBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid color-mix(in srgb, var(--critical) 45%, var(--border))", background: "color-mix(in srgb, var(--critical) 10%, transparent)", color: "var(--critical)" }}>{rowBusy ? "…" : "Confirm revoke"}</button>
+                                      <button onClick={() => setRevokeConfirmId(null)} style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>Cancel</button>
+                                    </span>
+                                  ) : (
+                                    <button onClick={() => setRevokeConfirmId(a.id)} style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--muted)" }}>Revoke</button>
+                                  ))}
+                                </div>
+                                {rowErr && <span style={{ fontSize: 10.5, color: "var(--critical)", maxWidth: 260 }}>{rowErr}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

@@ -34,6 +34,8 @@ import {
   type AdminReg,
   type AdminFinancials,
   type AdminAuditEntry,
+  type AdminMe,
+  type AdminUser,
   type BillingStatus,
   type PricingConfig,
   type Trade,
@@ -277,16 +279,22 @@ export async function getAdminData(): Promise<AdminData> {
       return empty;
     }
   };
-  const [overview, tenants, suppliers, regulatory, financials, audit] = await Promise.all([
+  const [overview, tenants, suppliers, regulatory, financials, audit, me, admins] = await Promise.all([
     safe<AdminOverview | null>("/admin/overview", null),
     // includeSuspended=true so suspended tenants still show (with their
     // `suspended` flag) rather than disappearing from the tenants table.
     safe<AdminTenant[]>("/admin/tenants?includeSuspended=true", []),
     safe<AdminSupplier[]>("/admin/suppliers", []),
     safe<AdminReg[]>("/admin/regulatory", []),
+    // Capability-gated on the API: a non-VIEW_FINANCIALS admin gets 403, which
+    // safe() turns into null — the console simply hides the Financials screen.
     safe<AdminFinancials | null>("/admin/financials", null),
     safe<AdminAuditEntry[]>("/admin/audit", []),
+    // The viewer's own authorization — drives which screens/actions render.
+    safe<AdminMe>("/admin/me", { isSuperAdmin: false, capabilities: [] }),
+    // Only admins with MANAGE_ADMINS get a list here (others get 403 → []).
+    safe<AdminUser[]>("/admin/admins", []),
   ]);
   // Cap the audit feed the console renders, even if the API ever returns more.
-  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100) };
+  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins };
 }
