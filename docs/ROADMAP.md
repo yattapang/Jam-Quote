@@ -10,9 +10,8 @@ after a usage-limit pause. Read this first on resume.
 > Summary/Detailed toggle, DETAILED breakdown on the quote detail page + PDF —
 > commit ad1deb7). Verified live: the deployed API returns `detailLevel` and
 > the assembly line fields.
-> RESUME HERE → next locked item is **Admin RBAC #13** (super-admin +
-> granular per-admin capabilities). Then rule-pack #11 (lighter),
-> invoicing/edit #18, mobile M3.
+> RESUME HERE → next locked item is **invoicing / quote→invoice edit #18**.
+> Then mobile M3. (Admin RBAC #13 and rule-pack #11 both SHIPPED — see below.)
 
 ## Live now (deployed)
 - **API**: Render (free) + Neon Postgres. Migrations apply on boot via the
@@ -42,6 +41,19 @@ after a usage-limit pause. Read this first on resume.
 > financials. Local api+web builds green, 101 api tests pass. NEXT → rule-pack #11
 > (lighter), then invoicing/edit #18, then mobile M3.
 
+> RULE-PACK #11 SHIPPED (2026-07-31, the "lighter" editable-JM-values step):
+> a super-admin / MANAGE_RULEPACK holder can now edit the consumption-tax rate +
+> label, its provenance (verified date + source), and the statutory payroll rates
+> — DB-backed (RulePackConfig, one nullable-column row per country) and merged over
+> the static @jamquote/core baseline via the pure applyRulePackOverride. GET/PATCH
+> /admin/rulepack (view = any admin, edit = MANAGE_RULEPACK, audited). Registration
+> seeds a new tenant's default GCT rate from the effective pack. Console rule-pack
+> screen shows real values + a gated edit form (removing the old fake reviewer/diff
+> placeholders). Code-owned values (taxpayer id, regions, payment rails) stay in
+> core. DEFERRED (heavy engine): versioned history, regulatory-monitoring feed,
+> multi-country packs. All 5 workspaces green (core 57 / api 107 / web 48 / mobile
+> 19). NEXT → invoicing/edit #18.
+
 ## LOCKED build order (next up)
 1. **Admin-ops console UI** — backend done + deployed; rebuild the UI fresh (a
    partial attempt is stashed): tenant actions + type-to-confirm delete,
@@ -53,8 +65,8 @@ after a usage-limit pause. Read this first on resume.
    d. Assemblies / job types — calculated+editable unit cost, per-quote
       summary/detail toggle, PDF rendering (#17) ✅
 3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13) ✅ SHIPPED
-4. **Rule-pack** — lighter editable-JM-values step (#11) ← NEXT
-5. **Quote→invoice editing** / invoicing M5 (#18)
+4. **Rule-pack** — lighter editable-JM-values step (#11) ✅ SHIPPED
+5. **Quote→invoice editing** / invoicing M5 (#18) ← NEXT
 6. **M3** — mobile offline-first (local replica + outbox + sync engine)
 
 ## Decisions locked
