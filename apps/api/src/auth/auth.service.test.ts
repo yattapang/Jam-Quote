@@ -27,6 +27,12 @@ function makeJwt() {
   return { sign: vi.fn().mockReturnValue("signed.jwt.token") };
 }
 
+// RulePackService dependency — registration reads the effective default GCT
+// rate from it. Baseline JM rate is 15.
+function makeRulePack() {
+  return { defaultTaxRatePct: vi.fn().mockResolvedValue(15) };
+}
+
 const business = { id: "biz-1", name: "Blackwood Construction", countryCode: "JM", currency: "JMD" };
 const user = {
   id: "u1",
@@ -51,7 +57,7 @@ describe("AuthService.register", () => {
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     const jwt = makeJwt();
-    const svc = new AuthService(prisma as any, jwt as any);
+    const svc = new AuthService(prisma as any, jwt as any, makeRulePack() as any);
 
     const result = await svc.register({
       email: "Owner@Blackwood.JM",
@@ -67,6 +73,7 @@ describe("AuthService.register", () => {
           name: "Blackwood Construction",
           countryCode: "JM",
           currency: "JMD",
+          defaultGctRate: 15, // seeded from the effective rule-pack, not hardcoded
         }),
       }),
     );
@@ -95,7 +102,7 @@ describe("AuthService.register", () => {
       user: { findUnique: vi.fn().mockResolvedValue(user) },
       $transaction: vi.fn(),
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(
       svc.register({
@@ -115,7 +122,7 @@ describe("AuthService.login", () => {
       business: { findUnique: vi.fn().mockResolvedValue(business) },
     };
     const jwt = makeJwt();
-    const svc = new AuthService(prisma as any, jwt as any);
+    const svc = new AuthService(prisma as any, jwt as any, makeRulePack() as any);
 
     const result = await svc.login({ email: "owner@blackwood.jm", password: "Blackwood123!" });
 
@@ -131,7 +138,7 @@ describe("AuthService.login", () => {
     const prisma = {
       user: { findUnique: vi.fn().mockResolvedValue(null) },
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(svc.login({ email: "nobody@nowhere.jm", password: "x" })).rejects.toBeInstanceOf(
       UnauthorizedException,
@@ -142,7 +149,7 @@ describe("AuthService.login", () => {
     const prisma = {
       user: { findUnique: vi.fn().mockResolvedValue(user) },
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(
       svc.login({ email: "owner@blackwood.jm", password: "wrong-password" }),
@@ -157,7 +164,7 @@ describe("AuthService.login", () => {
       },
     };
     const jwt = makeJwt();
-    const svc = new AuthService(prisma as any, jwt as any);
+    const svc = new AuthService(prisma as any, jwt as any, makeRulePack() as any);
 
     await expect(
       svc.login({ email: "owner@blackwood.jm", password: "Blackwood123!" }),
@@ -189,7 +196,7 @@ describe("AuthService.forgotPassword", () => {
       },
       $transaction: vi.fn(async (ops: unknown[]) => ops),
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     const result = await svc.forgotPassword({ email: "Owner@Blackwood.JM" });
 
@@ -222,7 +229,7 @@ describe("AuthService.forgotPassword", () => {
       passwordResetToken: { updateMany: vi.fn(), create: vi.fn() },
       $transaction: vi.fn(),
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     const result = await svc.forgotPassword({ email: "nobody@nowhere.jm" });
 
@@ -242,7 +249,7 @@ describe("AuthService.forgotPassword", () => {
       },
       $transaction: vi.fn(async (ops: unknown[]) => ops),
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     const result = await svc.forgotPassword({ email: "owner@blackwood.jm" });
 
@@ -272,7 +279,7 @@ describe("AuthService.resetPassword", () => {
       user: { update: vi.fn().mockResolvedValue({}) },
       $transaction: vi.fn(async (ops: unknown[]) => ops),
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     const result = await svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" });
 
@@ -293,7 +300,7 @@ describe("AuthService.resetPassword", () => {
     const prisma = {
       passwordResetToken: { findUnique: vi.fn().mockResolvedValue(null) },
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(
       svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),
@@ -312,7 +319,7 @@ describe("AuthService.resetPassword", () => {
         }),
       },
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(
       svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),
@@ -331,7 +338,7 @@ describe("AuthService.resetPassword", () => {
         }),
       },
     };
-    const svc = new AuthService(prisma as any, makeJwt() as any);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
 
     await expect(
       svc.resetPassword({ token: rawToken, newPassword: "NewPass123!" }),

@@ -5,6 +5,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { Resend } from "resend";
 import { EntityType, UserRole, type Business, type User } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { RulePackService } from "../rulepack/rulepack.service.js";
 import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.dto.js";
 
 const BCRYPT_COST = 10;
@@ -65,6 +66,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly rulePack: RulePackService,
   ) {}
 
   async register(input: RegisterInput): Promise<AuthResult> {
@@ -77,6 +79,11 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
 
+    // Seed the new tenant's default consumption-tax rate from the effective
+    // rule-pack (baseline + any admin override) rather than a hardcoded 15, so
+    // a rate change in /admin/rulepack applies to businesses created afterward.
+    const defaultGctRate = await this.rulePack.defaultTaxRatePct("JM");
+
     const { user, business } = await this.prisma.$transaction(async (tx) => {
       const business = await tx.business.create({
         data: {
@@ -84,7 +91,7 @@ export class AuthService {
           countryCode: "JM",
           currency: "JMD",
           entityType: EntityType.SOLE_TRADER,
-          defaultGctRate: 15,
+          defaultGctRate,
           quotePrefix: "QT-",
           nextQuoteSeq: 1,
         },

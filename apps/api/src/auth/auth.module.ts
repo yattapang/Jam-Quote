@@ -4,6 +4,7 @@ import { AuthController } from "./auth.controller.js";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { AuthContextMiddleware } from "./auth-context.middleware.js";
+import { RulePackModule } from "../rulepack/rulepack.module.js";
 
 // Dev-only fallback so `npm run dev` works out of the box without a .env
 // entry. Never used when NODE_ENV=production — see resolveJwtSecret below.
@@ -26,6 +27,7 @@ function resolveJwtSecret(): string {
       secret: resolveJwtSecret(),
       signOptions: { expiresIn: "30d" },
     }),
+    RulePackModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtAuthGuard, AuthContextMiddleware],

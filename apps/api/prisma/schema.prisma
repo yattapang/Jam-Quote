@@ -581,6 +581,24 @@ model PricingConfig {
   updatedAt            DateTime @updatedAt
 }
 
+// Admin-editable overrides on top of the static @jamquote/core jurisdiction
+// baseline (getJurisdiction / applyRulePackOverride). One row per country (JM
+// today). Only the editable slice lives here — consumption-tax rate + label,
+// provenance, and statutory payroll split rates; everything else (currency,
+// taxpayer-id, regions, payment rails) stays code-owned. Every column is
+// nullable so a partial edit falls back to the baseline. Written only via
+// /admin/rulepack (MANAGE_RULEPACK), audited.
+model RulePackConfig {
+  countryCode       String    @id // ISO 3166-1 alpha-2, matches Business.countryCode
+  taxLabel          String?
+  defaultTaxRatePct Decimal?  @db.Decimal(5, 2)
+  verifiedAsOf      DateTime? // date the pack was last human-verified
+  sourceUrl         String? // primary provenance link
+  statutoryRates    Json? // { [code]: { employeePct: number|null, employerPct: number|null } }
+  updatedByUserId   String?
+  updatedAt         DateTime  @updatedAt
+}
+
 // Immutable audit trail for platform-admin actions (tenant suspend/restore/
 // delete, plan changes, pricing edits, supplier writes). Written only via
 // AuditService.record() — never updated or deleted by the app.

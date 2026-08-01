@@ -7,6 +7,8 @@ import { RequireCapability } from "../auth/require-capability.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import type { PricingSnapshot } from "../billing/pricing.service.js";
 import { updatePricingSchema, type UpdatePricingInput } from "../billing/billing.dto.js";
+import { RulePackService, type EffectiveRulePack } from "../rulepack/rulepack.service.js";
+import { updateRulePackSchema, type UpdateRulePackInput } from "../rulepack/rulepack.dto.js";
 import {
   AdminService,
   type AdminFinancials,
@@ -47,6 +49,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly auditService: AuditService,
+    private readonly rulePack: RulePackService,
   ) {}
 
   @Get("overview")
@@ -136,6 +139,28 @@ export class AdminController {
     @Req() req: Request,
   ): Promise<PricingSnapshot> {
     return this.admin.updatePricing(body, req.user!.sub);
+  }
+
+  /**
+   * GET /admin/rulepack — the effective jurisdiction pack (static core baseline
+   * merged with any stored override). Viewable by any admin; the console reads
+   * it to render the rule-pack screen.
+   */
+  @Get("rulepack")
+  rulepack(@Query("country") country?: string): Promise<EffectiveRulePack> {
+    return this.rulePack.get(country ?? "JM");
+  }
+
+  /** PATCH /admin/rulepack — edit the pack's editable slice (rate/label/
+   * provenance/statutory rates). Baseline values stay code-owned. */
+  @Patch("rulepack")
+  @RequireCapability(AdminCapability.MANAGE_RULEPACK)
+  updateRulepack(
+    @Query("country") country: string | undefined,
+    @Body(new ZodValidationPipe(updateRulePackSchema)) body: UpdateRulePackInput,
+    @Req() req: Request,
+  ): Promise<EffectiveRulePack> {
+    return this.rulePack.update(country ?? "JM", body, req.user!.sub);
   }
 
   /** Manual-upgrade path: set a business's plan directly (bypasses payment). */
