@@ -42,6 +42,10 @@ export interface StatutoryContributionDef {
   appliesTo: "EMPLOYEE" | "EMPLOYER" | "BOTH" | "SELF_EMPLOYED";
   /** null until a rate is sourced and verified. */
   ratePct: number | null;
+  /** Split rates when known — filled from a rule-pack override (Phase 6 uses
+   * them). null/undefined until an admin sources them. */
+  employeePct?: number | null;
+  employerPct?: number | null;
   verified: boolean;
   asOf: string | null; // ISO date the rate was verified
   source: string | null;
@@ -147,4 +151,94 @@ export function supportedJurisdictions(): string[] {
 /** Currency descriptor for a jurisdiction (convenience). */
 export function jurisdictionCurrency(countryCode: string): Currency {
   return getCurrency(getJurisdiction(countryCode).currency.code);
+}
+
+// ---------------------------------------------------------------------------
+// Editable rule-pack overrides (the "lighter" DB-backed step)
+// ---------------------------------------------------------------------------
+//
+// The static profiles above are the verified in-code baseline. A super-admin
+// (MANAGE_RULEPACK) can persist an override — the handful of values that change
+// often enough to want editing without a code deploy: the consumption-tax rate
+// and label, the pack's provenance (verified date + sources), and the statutory
+// payroll rates that ship unverified. Everything else (taxpayer-id format,
+// regions, payment rails) stays code-owned. Overrides are stored per country in
+// the API and merged over the baseline via `applyRulePackOverride`, which is a
+// pure function so api, web and mobile all resolve the SAME effective pack.
+
+/** Admin-entered employee/employer split for one statutory contribution. */
+export interface StatutoryRateOverride {
+  employeePct?: number | null;
+  employerPct?: number | null;
+}
+
+/** The editable slice of a rule-pack. Any omitted field falls back to the
+ * static baseline; the shape is deliberately a strict subset of what a full
+ * versioned engine would own. */
+export interface RulePackOverride {
+  taxLabel?: string;
+  defaultTaxRatePct?: number;
+  /** ISO date the pack was last human-verified; null clears it. */
+  verifiedAsOf?: string | null;
+  sources?: string[];
+  /** Keyed by statutory code (NIS / NHT / EDUCATION_TAX / HEART). */
+  statutoryRates?: Record<string, StatutoryRateOverride>;
+  rulePackVersion?: string;
+}
+
+/** The fields `applyRulePackOverride` will honour — the source of truth for
+ * both API validation and the admin edit form. */
+export const EDITABLE_RULEPACK_FIELDS = [
+  "taxLabel",
+  "defaultTaxRatePct",
+  "verifiedAsOf",
+  "sources",
+  "statutoryRates",
+  "rulePackVersion",
+] as const;
+
+/**
+ * Merge a stored override over the static baseline, returning a fully-resolved
+ * `JurisdictionProfile`. Pure and total: a null/empty override returns the
+ * baseline unchanged. Only the editable slice is touched — currency, taxpayer
+ * id, regions and payment rails always come from code.
+ */
+export function applyRulePackOverride(
+  base: JurisdictionProfile,
+  override?: RulePackOverride | null,
+): JurisdictionProfile {
+  if (!override) return base;
+  return {
+    ...base,
+    taxLabel: override.taxLabel ?? base.taxLabel,
+    defaultTaxRatePct: override.defaultTaxRatePct ?? base.defaultTaxRatePct,
+    verifiedAsOf:
+      override.verifiedAsOf !== undefined ? override.verifiedAsOf : base.verifiedAsOf,
+    sources: override.sources ?? base.sources,
+    rulePackVersion: override.rulePackVersion ?? base.rulePackVersion,
+    statutory: base.statutory.map((s) => {
+      const o = override.statutoryRates?.[s.code];
+      if (!o) return s;
+      const employeePct = o.employeePct ?? null;
+      const employerPct = o.employerPct ?? null;
+      const anySet = employeePct !== null || employerPct !== null;
+      return {
+        ...s,
+        employeePct,
+        employerPct,
+        // An admin-entered rate is vouched-for; reflect that in provenance so
+        // the console doesn't keep showing it as unverified.
+        verified: anySet ? true : s.verified,
+        asOf: anySet ? (override.verifiedAsOf ?? s.asOf) : s.asOf,
+      };
+    }),
+  };
+}
+
+/** Resolve the effective (baseline + override) pack for a country in one call. */
+export function getEffectiveJurisdiction(
+  countryCode: string,
+  override?: RulePackOverride | null,
+): JurisdictionProfile {
+  return applyRulePackOverride(getJurisdiction(countryCode), override);
 }
