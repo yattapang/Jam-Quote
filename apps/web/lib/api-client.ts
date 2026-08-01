@@ -689,6 +689,40 @@ export interface AdminUser {
   capabilities: string[];
   createdAt: string;
 }
+/** One statutory payroll contribution in the effective rule-pack. Split rates
+ * are null until an admin sources them. */
+export interface EffectiveStatutory {
+  code: string;
+  label: string;
+  appliesTo: string;
+  employeePct: number | null;
+  employerPct: number | null;
+  verified: boolean;
+  asOf: string | null;
+}
+/** GET /admin/rulepack — the effective jurisdiction pack (static core baseline
+ * merged with any stored override). `overridden` is true when a DB override is
+ * layered on top; code-owned values (currency, taxpayer id, regions, payment
+ * rails) are always the baseline's. */
+export interface EffectiveRulePack {
+  countryCode: string;
+  countryName: string;
+  currencyCode: string;
+  taxLabel: string;
+  taxLongName: string;
+  defaultTaxRatePct: number;
+  taxpayerIdLabel: string;
+  regionLabel: string;
+  regions: string[];
+  paymentProviders: { code: string; label: string }[];
+  statutory: EffectiveStatutory[];
+  verifiedAsOf: string | null;
+  sourceUrl: string | null;
+  sources: string[];
+  rulePackVersion: string;
+  overridden: boolean;
+  updatedAt: string | null;
+}
 export interface AdminData {
   overview: AdminOverview | null;
   tenants: AdminTenant[];
@@ -701,6 +735,9 @@ export interface AdminData {
   me: AdminMe;
   /** All staff admins — only populated for admins with MANAGE_ADMINS. */
   admins: AdminUser[];
+  /** The effective jurisdiction rule-pack (baseline + override); null if the
+   * API was unreachable. */
+  rulepack: EffectiveRulePack | null;
 }
 
 // --- Admin management writes (MANAGE_ADMINS) ---------------------------------
@@ -726,6 +763,26 @@ export async function updateAdmin(
 /** DELETE /admin/admins/:id — revoke a user's admin access. */
 export async function revokeAdmin(id: string): Promise<{ revoked: true; userId: string }> {
   return apiClient.delete<{ revoked: true; userId: string }>(`/admin/admins/${id}`);
+}
+
+// --- Rule-pack write (MANAGE_RULEPACK) ---------------------------------------
+
+/** The editable slice of a rule-pack. Any omitted field keeps its stored value;
+ * a statutory entry may set either side to null to mean "not sourced yet". */
+export interface UpdateRulePackInput {
+  taxLabel?: string;
+  defaultTaxRatePct?: number;
+  verifiedAsOf?: string | null;
+  sourceUrl?: string | null;
+  statutoryRates?: Record<string, { employeePct?: number | null; employerPct?: number | null }>;
+}
+
+/** PATCH /admin/rulepack — edit the jurisdiction pack's editable slice. */
+export async function updateAdminRulePack(
+  input: UpdateRulePackInput,
+  country = "JM",
+): Promise<EffectiveRulePack> {
+  return apiClient.patch<EffectiveRulePack>(`/admin/rulepack?country=${country}`, input);
 }
 
 export interface CardPaymentResponse {

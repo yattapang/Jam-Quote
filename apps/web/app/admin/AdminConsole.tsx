@@ -16,10 +16,12 @@ import {
   promoteAdmin,
   updateAdmin,
   revokeAdmin,
+  updateAdminRulePack,
   ApiError,
   type AdminData,
   type AdminUser,
   type PricingConfig,
+  type EffectiveRulePack,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
 import styles from "./console.module.css";
@@ -130,6 +132,7 @@ export default function AdminConsole({
   const canManagePricing = can("MANAGE_PRICING");
   const canViewFinancials = can("VIEW_FINANCIALS");
   const canManageAdmins = can("MANAGE_ADMINS");
+  const canManageRulepack = can("MANAGE_RULEPACK");
   const adminInitials =
     admin.name
       .split(/\s+/)
@@ -199,6 +202,62 @@ export default function AdminConsole({
       setPricingStatus("error");
     } finally {
       setPricingSaving(false);
+    }
+  }
+
+  // --- Rule-pack editor (GET/PATCH /admin/rulepack) — the effective pack comes
+  // in via server props (data.rulepack); edits PATCH the override and swap the
+  // returned effective pack into local state so the screen re-renders. ---
+  const [rulepack, setRulepack] = useState<EffectiveRulePack | null>(data.rulepack);
+  const rpToForm = (rp: EffectiveRulePack) => ({
+    taxLabel: rp.taxLabel,
+    defaultTaxRatePct: String(rp.defaultTaxRatePct),
+    verifiedAsOf: rp.verifiedAsOf ?? "",
+    sourceUrl: rp.sourceUrl ?? "",
+    statutory: Object.fromEntries(
+      rp.statutory.map((s) => [
+        s.code,
+        {
+          employeePct: s.employeePct != null ? String(s.employeePct) : "",
+          employerPct: s.employerPct != null ? String(s.employerPct) : "",
+        },
+      ]),
+    ) as Record<string, { employeePct: string; employerPct: string }>,
+  });
+  const [rpForm, setRpForm] = useState(() => (data.rulepack ? rpToForm(data.rulepack) : null));
+  const [rpSaving, setRpSaving] = useState(false);
+  const [rpStatus, setRpStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  function setRpStat(code: string, side: "employeePct" | "employerPct", value: string) {
+    setRpForm((f) => (f ? { ...f, statutory: { ...f.statutory, [code]: { ...f.statutory[code]!, [side]: value } } } : f));
+  }
+
+  async function saveRulepack() {
+    if (!rpForm) return;
+    setRpSaving(true);
+    setRpStatus("idle");
+    try {
+      const statutoryRates: Record<string, { employeePct: number | null; employerPct: number | null }> = {};
+      for (const [code, v] of Object.entries(rpForm.statutory)) {
+        statutoryRates[code] = {
+          employeePct: v.employeePct.trim() === "" ? null : Number(v.employeePct),
+          employerPct: v.employerPct.trim() === "" ? null : Number(v.employerPct),
+        };
+      }
+      const updated = await updateAdminRulePack({
+        taxLabel: rpForm.taxLabel.trim() || undefined,
+        defaultTaxRatePct: rpForm.defaultTaxRatePct.trim() === "" ? undefined : Number(rpForm.defaultTaxRatePct),
+        verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
+        sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
+        statutoryRates,
+      });
+      setRulepack(updated);
+      setRpForm(rpToForm(updated));
+      setRpStatus("saved");
+    } catch {
+      setRpStatus("error");
+    } finally {
+      setRpSaving(false);
     }
   }
 
@@ -575,17 +634,34 @@ export default function AdminConsole({
         { value: "31", label: "Applied (YTD)", tone: "good" },
       ];
 
-  // rule-pack — wired to the REAL @jamquote/core jurisdiction rule-pack
+  // rule-pack — the editable consumption-tax + provenance + statutory rates come
+  // from the effective pack (GET /admin/rulepack; live `rulepack` state); the
+  // code-owned values (taxpayer id, regions, payment rails) stay from core `jm`.
   const verified = pill("accent", { padding: "3px 10px" });
+  const rp = rulepack; // effective pack, or null when the API was unreachable
+  const taxLabelEff = rp?.taxLabel ?? jm.taxLabel;
+  const taxRateEff = rp?.defaultTaxRatePct ?? jm.defaultTaxRatePct;
+  const verifiedEff = rp?.verifiedAsOf ?? jm.verifiedAsOf;
+  const sourceEff = rp?.sourceUrl ?? jm.sources[0] ?? null;
+  const rpOverridden = rp?.overridden ?? false;
+  const taxProv = `${verifiedEff ? `Verified ${verifiedEff}` : "Unverified"} · ${rpOverridden ? "admin override" : "core baseline"}`;
   const ruleCards = [
-    { label: "CONSUMPTION TAX", value: `${jm.taxLabel} ${jm.defaultTaxRatePct}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: `Verified ${jm.verifiedAsOf} · Devon Reid`, sourceLink: "TAJ", chips: [] as string[] },
-    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Verified 2026-02-28 · Aisha Meyers", sourceLink: "TAJ", chips: [] as string[] },
-    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Verified 2026-01-15 · Devon Reid", sourceLink: "Gov.jm", chips: [...jm.regions] },
-    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Verified 2026-03-01 · Aisha Meyers", sourceLink: "BOJ", chips: [] as string[] },
+    { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, sourceLink: sourceEff ? "Source" : "TAJ", chips: [] as string[] },
+    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", sourceLink: "TAJ", chips: [] as string[] },
+    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", sourceLink: "Gov.jm", chips: [...jm.regions] },
+    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", sourceLink: "BOJ", chips: [] as string[] },
   ];
-  // payroll rates are illustrative (design values); item list comes from the rule-pack.
-  const payrollRates: Record<string, [string, string]> = { NIS: ["3.0%", "3.0%"], NHT: ["2.0%", "3.0%"], EDUCATION_TAX: ["2.25%", "3.5%"], HEART: ["—", "3.0%"] };
-  const payroll = jm.statutory.map((s) => ({ name: s.code === "EDUCATION_TAX" ? "Education Tax" : s.code, full: s.label, employee: payrollRates[s.code]?.[0] ?? "—", employer: payrollRates[s.code]?.[1] ?? "—", prov: "TAJ · 2026-01-06" }));
+  // Payroll statutory rates now come from the effective pack (admin-editable);
+  // fall back to the core item list (rates unset) when the API was unreachable.
+  const payroll = (rp?.statutory ?? jm.statutory.map((s) => ({ code: s.code, label: s.label, employeePct: null as number | null, employerPct: null as number | null, verified: false, asOf: null as string | null }))).map((s) => ({
+    name: s.code === "EDUCATION_TAX" ? "Education Tax" : s.code,
+    full: s.label,
+    employee: s.employeePct != null ? `${s.employeePct}%` : "—",
+    employer: s.employerPct != null ? `${s.employerPct}%` : "—",
+    verified: s.verified,
+    prov: s.asOf ? `TAJ · ${s.asOf}` : "Not sourced yet",
+  }));
+  const payrollVerifiedCount = payroll.filter((p) => p.verified).length;
 
   const selTenant = tenantId !== null ? tenantsRaw[tenantId] : null;
 
@@ -1075,21 +1151,85 @@ export default function AdminConsole({
                   <div style={{ flex: 1, minWidth: 220 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                       <span style={{ ...archivo, fontWeight: 800, fontSize: 22, letterSpacing: "-.02em" }}>{jm.countryName}</span>
-                      <span style={{ ...archivo, fontWeight: 700, fontSize: 12, background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 7, padding: "3px 9px", letterSpacing: ".02em" }}>{published ? "v2025.4" : "v2025.3"}</span>
-                      <span style={pill("good", { padding: "3px 10px" })}>{published ? "Up to date ✓" : "Verified ✓"}</span>
+                      <span style={{ ...archivo, fontWeight: 700, fontSize: 12, background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 7, padding: "3px 9px", letterSpacing: ".02em" }}>{rp?.rulePackVersion ?? jm.rulePackVersion}</span>
+                      <span style={pill(rpOverridden ? "warn" : "good", { padding: "3px 10px" })}>{rpOverridden ? "Admin override" : "Core baseline"}</span>
                     </div>
-                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>Rule-pack governs {jm.taxLabel}, {jm.taxpayerId.label} validation, parish regions, payroll statutory items &amp; payment rails · Last published {published ? "just now" : jm.verifiedAsOf} by Devon Reid</div>
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>Rule-pack governs {taxLabelEff}, {jm.taxpayerId.label} validation, parish regions, payroll statutory items &amp; payment rails · {verifiedEff ? `Verified ${verifiedEff}` : "Unverified"}{rp?.updatedAt ? ` · last edited ${rp.updatedAt.slice(0, 10)}` : ""}</div>
                   </div>
-                  <button onClick={() => setDiffOpen(true)} style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 38, padding: "0 16px", borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" {...iconStroke}><path d="M8 3v18M16 3v18" /><path d="M8 8h8M8 16h8" /></svg>Review incoming diff
-                  </button>
+                  <span style={{ fontSize: 12, color: "var(--muted)", alignSelf: "center" }}>
+                    Editable values are DB-backed; everything else is code-owned in the app.
+                  </span>
                 </div>
-                {!published && (
-                  <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 11, background: "color-mix(in srgb,var(--warn) 11%,transparent)", border: "1px solid color-mix(in srgb,var(--warn) 30%,transparent)" }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4M12 16h.01" /></svg>
-                    <div style={{ flex: 1, fontSize: 13 }}><b style={{ fontWeight: 700 }}>1 change pending review</b> — TAJ proposes a tourism-sector GCT sub-rate. Diff drafted as v2025.4.</div>
-                    <button onClick={() => setDiffOpen(true)} style={{ background: "none", border: "none", color: "var(--warn)", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Review →</button>
-                  </div>
+              </div>
+
+              {/* Editable slice — gated by MANAGE_RULEPACK (the API enforces it too). */}
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 15 }}>Edit jurisdiction values</div>
+                  {rpOverridden && <span style={pill("warn", { padding: "3px 10px" })}>Override active</span>}
+                </div>
+                <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>
+                  Overrides the static baseline for the consumption-tax rate, its provenance, and the statutory
+                  payroll rates. The tax rate seeds every newly-registered business&apos;s default {taxLabelEff}.
+                </div>
+                {!rpForm ? (
+                  <div style={{ fontSize: 13, color: "var(--critical)" }}>Couldn&apos;t load the rule-pack — is the API running?</div>
+                ) : (
+                  <>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 16 }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                        Consumption-tax rate (%)
+                        <input type="number" min={0} max={100} step="0.01" disabled={!canManageRulepack} value={rpForm.defaultTaxRatePct}
+                          onChange={(e) => setRpForm((f) => (f ? { ...f, defaultTaxRatePct: e.target.value } : f))}
+                          style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }} />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                        Tax label
+                        <input type="text" maxLength={16} disabled={!canManageRulepack} value={rpForm.taxLabel}
+                          onChange={(e) => setRpForm((f) => (f ? { ...f, taxLabel: e.target.value } : f))}
+                          style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }} />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                        Verified as of
+                        <input type="date" disabled={!canManageRulepack} value={rpForm.verifiedAsOf}
+                          onChange={(e) => setRpForm((f) => (f ? { ...f, verifiedAsOf: e.target.value } : f))}
+                          style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }} />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
+                        Source URL
+                        <input type="url" placeholder="https://…" disabled={!canManageRulepack} value={rpForm.sourceUrl}
+                          onChange={(e) => setRpForm((f) => (f ? { ...f, sourceUrl: e.target.value } : f))}
+                          style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }} />
+                      </label>
+                    </div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 8 }}>STATUTORY PAYROLL RATES (%)</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px 12px", alignItems: "center", marginBottom: 16 }}>
+                      <div />
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textAlign: "right", width: 92 }}>EMPLOYEE</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textAlign: "right", width: 92 }}>EMPLOYER</div>
+                      {(rp?.statutory ?? []).map((s) => (
+                        <div key={s.code} style={{ display: "contents" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
+                          <input type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
+                            onChange={(e) => setRpStat(s.code, "employeePct", e.target.value)}
+                            style={{ height: 32, width: 92, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                          <input type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
+                            onChange={(e) => setRpStat(s.code, "employerPct", e.target.value)}
+                            style={{ height: 32, width: 92, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <button onClick={saveRulepack} disabled={rpSaving || !canManageRulepack}
+                        title={canManageRulepack ? undefined : "You don't have the Manage rule-packs capability"}
+                        style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 9, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: rpSaving || !canManageRulepack ? "default" : "pointer", fontFamily: "inherit", opacity: rpSaving || !canManageRulepack ? 0.7 : 1 }}>
+                        {rpSaving ? "Saving…" : "Save rule-pack"}
+                      </button>
+                      {!canManageRulepack && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Read-only — needs the Manage rule-packs capability.</span>}
+                      {rpStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
+                      {rpStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save — check the values and try again.</span>}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -1124,7 +1264,9 @@ export default function AdminConsole({
                     <div style={{ ...archivo, fontWeight: 700, fontSize: 15 }}>Payroll statutory items</div>
                     <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>Employee &amp; employer contribution rates applied to estimates with labour</div>
                   </div>
-                  <span style={verified}>All {payroll.length} verified ✓</span>
+                  <span style={payrollVerifiedCount === payroll.length && payroll.length > 0 ? verified : pill("muted", { padding: "3px 10px" })}>
+                    {payrollVerifiedCount === payroll.length && payroll.length > 0 ? `All ${payroll.length} verified ✓` : `${payrollVerifiedCount} of ${payroll.length} sourced`}
+                  </span>
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
@@ -1139,7 +1281,7 @@ export default function AdminConsole({
                         <td style={{ ...td, padding: "13px 20px" }}><div style={{ fontWeight: 600 }}>{p.name}</div><div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>{p.full}</div></td>
                         <td style={{ ...td, textAlign: "right", ...archivo, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{p.employee}</td>
                         <td style={{ ...td, textAlign: "right", ...archivo, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{p.employer}</td>
-                        <td style={{ ...td, padding: "13px 20px" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={verified}>Verified ✓</span><span style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.prov}</span></div></td>
+                        <td style={{ ...td, padding: "13px 20px" }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}>{p.verified ? <span style={verified}>Verified ✓</span> : <span style={pill("muted", { padding: "3px 10px" })}>Unverified</span>}<span style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.prov}</span></div></td>
                       </tr>
                     ))}
                   </tbody>

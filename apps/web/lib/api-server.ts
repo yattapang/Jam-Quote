@@ -36,6 +36,7 @@ import {
   type AdminAuditEntry,
   type AdminMe,
   type AdminUser,
+  type EffectiveRulePack,
   type BillingStatus,
   type PricingConfig,
   type Trade,
@@ -279,7 +280,7 @@ export async function getAdminData(): Promise<AdminData> {
       return empty;
     }
   };
-  const [overview, tenants, suppliers, regulatory, financials, audit, me, admins] = await Promise.all([
+  const [overview, tenants, suppliers, regulatory, financials, audit, me, admins, rulepack] = await Promise.all([
     safe<AdminOverview | null>("/admin/overview", null),
     // includeSuspended=true so suspended tenants still show (with their
     // `suspended` flag) rather than disappearing from the tenants table.
@@ -294,7 +295,9 @@ export async function getAdminData(): Promise<AdminData> {
     safe<AdminMe>("/admin/me", { isSuperAdmin: false, capabilities: [] }),
     // Only admins with MANAGE_ADMINS get a list here (others get 403 → []).
     safe<AdminUser[]>("/admin/admins", []),
+    // Effective jurisdiction rule-pack (any admin can read); null if unreachable.
+    safe<EffectiveRulePack | null>("/admin/rulepack", null),
   ]);
   // Cap the audit feed the console renders, even if the API ever returns more.
-  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins };
+  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack };
 }
