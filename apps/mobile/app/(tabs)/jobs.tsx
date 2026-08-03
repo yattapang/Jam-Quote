@@ -2,9 +2,10 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MoneyText, StatusPill } from "../../src/components";
-import { jobRows, type JobRow } from "../../src/state/mockData";
-import { deleteJob, fetchJobRows } from "../../src/state/apiClient";
+import { MoneyText, SignInPrompt, StatusPill } from "../../src/components";
+import { type JobRow } from "../../src/state/mockData";
+import { ApiAuthError, deleteJob, fetchJobRows } from "../../src/state/apiClient";
+import { useAuth } from "../../src/state/AuthContext";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -13,10 +14,29 @@ import { resolveFontFamily } from "../../src/theme/fontFamily";
 export default function JobsListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
-  const [rows, setRows] = useState<JobRow[]>(jobRows);
+  const { isAuthenticated, initializing } = useAuth();
+  // Every tenant route requires auth now — no rows until we know who's signed
+  // in. Fixtures only ever come back from fetchJobRows() itself, as a
+  // network-failure fallback.
+  const [rows, setRows] = useState<JobRow[]>([]);
   useEffect(() => {
-    fetchJobRows().then(setRows).catch(() => {});
-  }, []);
+    if (!isAuthenticated) return;
+    fetchJobRows()
+      .then(setRows)
+      .catch((err) => {
+        // ApiAuthError: the central handler (AuthContext) already cleared the
+        // session and is routing to /login — leave rows empty, never fixtures.
+        if (!(err instanceof ApiAuthError)) throw err;
+      });
+  }, [isAuthenticated]);
+
+  if (!initializing && !isAuthenticated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
+        <SignInPrompt label="jobs" />
+      </SafeAreaView>
+    );
+  }
 
   const handleDelete = (item: JobRow) => {
     Alert.alert(`Delete ${item.name}?`, "This permanently removes the job. This can't be undone.", [

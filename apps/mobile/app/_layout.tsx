@@ -1,10 +1,10 @@
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { View } from "react-native";
-import { AuthProvider } from "../src/state/AuthContext";
+import { AuthProvider, useAuth } from "../src/state/AuthContext";
 import { QuoteDraftProvider } from "../src/state/QuoteDraftContext";
 import { fontsToLoad } from "../src/theme/fonts";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
@@ -15,6 +15,19 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 
 function RootStack() {
   const { colors } = useTheme();
+  const router = useRouter();
+  const { authRequired, acknowledgeAuthRequired } = useAuth();
+
+  // Central 401/403 response: AuthContext (apiClient's setUnauthorizedHandler)
+  // already cleared the local session; send the user to sign in from wherever
+  // they are in the app, instead of every screen handling this individually.
+  useEffect(() => {
+    if (authRequired) {
+      acknowledgeAuthRequired();
+      router.push("/login");
+    }
+  }, [authRequired, acknowledgeAuthRequired, router]);
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <StatusBar style={colors.bg === "#17140F" ? "light" : "dark"} />

@@ -1,7 +1,17 @@
 /**
  * Mobile data access — the single place the app talks to apps/api. Fetches from
- * the live NestJS API and maps to the on-screen row types; falls back to the
- * shared fixtures when the API is unreachable (offline / no dev server).
+ * the live NestJS API and maps to the on-screen row types.
+ *
+ * Auth: every tenant route (/quotes, /clients, /jobs, ...) requires a Bearer
+ * token; there is no more header-based fallback. With no token, requests carry
+ * no auth at all and the API will (correctly) answer 401 — see ApiAuthError.
+ *
+ * Fixtures: this app has no offline persistence/outbox (no local db, no sync
+ * queue — see src/state/) — the bundled fixtures are dev/demo scaffolding for
+ * "API unreachable" (no dev server, LAN hiccup), not a real offline mode. They
+ * are used ONLY for genuine network failures, never to paper over an
+ * authentication/authorization failure — see ApiAuthError handling below and
+ * in fetchQuoteRows/fetchClientRows/fetchJobRows.
  *
  * Base URL: on Expo web use the browser host; on a device derive the dev
  * machine's LAN IP from the Metro packager host (expo-constants) — a phone
@@ -21,17 +31,50 @@ import {
 } from "./mockData";
 
 const API_PORT = 3001;
-const BUSINESS_ID = "seed-business-blackwood";
 
-// Set by AuthProvider (src/state/AuthContext) on login/logout. When a token is
-// present, requests authenticate as the signed-in user's business; otherwise we
-// fall back to the demo business via x-business-id (additive auth rollout).
+// Set by AuthProvider (src/state/AuthContext) on login/logout.
 let authToken: string | null = null;
 export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 function authHeaders(): Record<string, string> {
-  return authToken ? { Authorization: `Bearer ${authToken}` } : { "x-business-id": BUSINESS_ID };
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
+/**
+ * Thrown when the API rejects a request as unauthenticated (401) or
+ * unauthorized for this tenant (403 — valid token, but no usable business:
+ * an admin account, or a suspended business). Never caught-and-masked with
+ * fixture data; callers/screens must treat it as "sign-in required".
+ */
+export class ApiAuthError extends Error {
+  status: 401 | 403;
+  constructor(status: 401 | 403, message: string) {
+    super(message);
+    this.name = "ApiAuthError";
+    this.status = status;
+  }
+}
+
+type UnauthorizedHandler = (status: 401 | 403) => void;
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+/**
+ * Registered once by AuthProvider so a 401/403 from ANY request is handled in
+ * one place (clear the session, prompt sign-in) instead of every screen
+ * coping individually. apiClient itself stays navigation-agnostic (and stays
+ * importable in plain vitest/node tests) — AuthProvider owns clearing the
+ * token / redirecting to the login screen.
+ */
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null): void {
+  unauthorizedHandler = handler;
+}
+
+/** Inspects a response for 401/403 and routes it through the central handler. Throws ApiAuthError; returns normally otherwise (caller still checks res.ok for other failures). */
+function checkAuth(res: Response): void {
+  if (res.status === 401 || res.status === 403) {
+    unauthorizedHandler?.(res.status);
+    throw new ApiAuthError(res.status, `${res.status}`);
+  }
 }
 
 export function apiBaseUrl(): string {
@@ -50,6 +93,7 @@ async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${apiBaseUrl()}${path}`, {
     headers: authHeaders(),
   });
+  checkAuth(res); // throws ApiAuthError on 401/403 — never falls through to !res.ok below
   if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
   return (await res.json()) as T;
 }
@@ -59,6 +103,7 @@ async function del(path: string): Promise<void> {
     method: "DELETE",
     headers: authHeaders(),
   });
+  checkAuth(res);
   if (!res.ok) throw new Error(`DELETE ${path} -> ${res.status}`);
 }
 
@@ -210,7 +255,9 @@ export async function fetchQuoteRows(): Promise<QuoteListRow[]> {
     return quotes
       .map((q) => mapQuoteRow(q, clientName.get(q.clientId ?? "") ?? "Unknown", jobName.get(q.jobId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
-  } catch {
+  } catch (err) {
+    // Auth failures are never masked as data — let the caller/central handler deal with it.
+    if (err instanceof ApiAuthError) throw err;
     return fixtureQuoteRows;
   }
 }
@@ -229,7 +276,8 @@ export async function fetchClientRows(): Promise<ClientRow[]> {
         theirs.length,
       );
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiAuthError) throw err;
     return fixtureClientRows;
   }
 }
@@ -250,7 +298,8 @@ export async function fetchJobRows(): Promise<JobRow[]> {
         theirs.reduce((sum, q) => sum + q.totalCents, 0),
       );
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiAuthError) throw err;
     return fixtureJobRows;
   }
 }

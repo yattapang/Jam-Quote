@@ -6,6 +6,7 @@ vi.mock("expo-constants", () => ({
 }));
 
 import {
+  ApiAuthError,
   apiBaseUrl,
   deleteClient,
   deleteJob,
@@ -17,6 +18,8 @@ import {
   mapClientRow,
   mapJobRow,
   mapQuoteRow,
+  setAuthToken,
+  setUnauthorizedHandler,
 } from "./apiClient";
 import { QuoteStatus } from "@jamquote/core";
 
@@ -33,7 +36,12 @@ function stubFetch(routes: Routes | null) {
     }),
   );
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // authToken/unauthorizedHandler are module-level state — reset between tests.
+  setAuthToken(null);
+  setUnauthorizedHandler(null);
+});
 
 const apiQuote = {
   id: "qt-0142",
@@ -116,10 +124,18 @@ describe("fetchQuoteRows", () => {
     expect(rows[0]?.amountCents).toBe(18_354_000);
   });
 
-  it("falls back to fixtures when the API is unreachable", async () => {
+  it("falls back to fixtures when the API is unreachable (network failure)", async () => {
     stubFetch(null);
     const rows = await fetchQuoteRows();
     expect(rows.some((r) => r.num === "QT-0142")).toBe(true);
+  });
+
+  it("does NOT fall back to fixtures on a 401 — rejects with ApiAuthError instead", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(fetchQuoteRows()).rejects.toBeInstanceOf(ApiAuthError);
   });
 });
 
@@ -132,10 +148,18 @@ describe("fetchClientRows", () => {
     expect(rows[0]?.totalCents).toBe(18_354_000);
   });
 
-  it("falls back to fixtures on failure", async () => {
+  it("falls back to fixtures on a network failure", async () => {
     stubFetch(null);
     const rows = await fetchClientRows();
     expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT fall back to fixtures on a 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(fetchClientRows()).rejects.toBeInstanceOf(ApiAuthError);
   });
 });
 
@@ -148,10 +172,18 @@ describe("fetchJobRows", () => {
     expect(rows[0]?.valueCents).toBe(18_354_000);
   });
 
-  it("falls back to fixtures on failure", async () => {
+  it("falls back to fixtures on a network failure", async () => {
     stubFetch(null);
     const rows = await fetchJobRows();
     expect(rows.length).toBeGreaterThan(0);
+  });
+
+  it("does NOT fall back to fixtures on a 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(fetchJobRows()).rejects.toBeInstanceOf(ApiAuthError);
   });
 });
 
@@ -162,38 +194,111 @@ describe("delete helpers", () => {
     return fetchMock;
   }
 
-  it("deleteClient issues a DELETE with the business header", async () => {
+  it("deleteClient issues a DELETE", async () => {
     const fetchMock = stubDelete();
     await deleteClient("cl-basil-reid");
     expect(fetchMock).toHaveBeenCalledWith(
       "http://10.0.0.5:3001/api/clients/cl-basil-reid",
-      expect.objectContaining({ method: "DELETE", headers: { "x-business-id": "seed-business-blackwood" } }),
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
-  it("deleteJob issues a DELETE with the business header", async () => {
+  it("deleteJob issues a DELETE", async () => {
     const fetchMock = stubDelete();
     await deleteJob("job-0142");
     expect(fetchMock).toHaveBeenCalledWith(
       "http://10.0.0.5:3001/api/jobs/job-0142",
-      expect.objectContaining({ method: "DELETE", headers: { "x-business-id": "seed-business-blackwood" } }),
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
-  it("deleteQuote issues a DELETE with the business header", async () => {
+  it("deleteQuote issues a DELETE", async () => {
     const fetchMock = stubDelete();
     await deleteQuote("qt-0142");
     expect(fetchMock).toHaveBeenCalledWith(
       "http://10.0.0.5:3001/api/quotes/qt-0142",
-      expect.objectContaining({ method: "DELETE", headers: { "x-business-id": "seed-business-blackwood" } }),
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 
-  it("throws when the API responds with a non-2xx status", async () => {
+  it("throws when the API responds with a non-2xx, non-auth status", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }) as unknown as Response),
     );
     await expect(deleteClient("missing")).rejects.toThrow("DELETE /clients/missing -> 404");
+  });
+});
+
+describe("auth headers", () => {
+  it("sends no auth header at all when signed out (no x-business-id fallback)", async () => {
+    setAuthToken(null);
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    await deleteClient("cl-1");
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ headers: {} }));
+  });
+
+  it("sends a Bearer Authorization header when a token is set", async () => {
+    setAuthToken("tok-123");
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    await deleteClient("cl-1");
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ headers: { Authorization: "Bearer tok-123" } }),
+    );
+  });
+});
+
+describe("central 401/403 handling", () => {
+  it("routes 401 and 403 through the registered handler with the status, and rejects with ApiAuthError", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(deleteClient("cl-1")).rejects.toBeInstanceOf(ApiAuthError);
+    expect(handler).toHaveBeenCalledWith(401);
+
+    handler.mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(deleteJob("job-1")).rejects.toBeInstanceOf(ApiAuthError);
+    expect(handler).toHaveBeenCalledWith(403);
+  });
+
+  it("does not invoke the handler for non-auth failures", async () => {
+    const handler = vi.fn();
+    setUnauthorizedHandler(handler);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 404, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(deleteClient("missing")).rejects.toThrow("DELETE /clients/missing -> 404");
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("a 401 clears the token (mirroring what AuthContext's handler does) so later requests carry no auth", async () => {
+    setAuthToken("tok-expired");
+    // Mirrors AuthContext's registered handler: on 401, drop the token locally.
+    setUnauthorizedHandler((status) => {
+      if (status === 401) setAuthToken(null);
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
+    );
+    await expect(deleteClient("cl-1")).rejects.toBeInstanceOf(ApiAuthError);
+
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({}) }) as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    await deleteClient("cl-2");
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ headers: {} }));
   });
 });

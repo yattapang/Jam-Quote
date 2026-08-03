@@ -2,9 +2,10 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { MoneyText } from "../../src/components";
-import { clientRows, type ClientRow } from "../../src/state/mockData";
-import { deleteClient, fetchClientRows } from "../../src/state/apiClient";
+import { MoneyText, SignInPrompt } from "../../src/components";
+import { type ClientRow } from "../../src/state/mockData";
+import { ApiAuthError, deleteClient, fetchClientRows } from "../../src/state/apiClient";
+import { useAuth } from "../../src/state/AuthContext";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -12,10 +13,29 @@ import { resolveFontFamily } from "../../src/theme/fontFamily";
 export default function ClientsListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
-  const [rows, setRows] = useState<ClientRow[]>(clientRows);
+  const { isAuthenticated, initializing } = useAuth();
+  // Every tenant route requires auth now — no rows until we know who's signed
+  // in. Fixtures only ever come back from fetchClientRows() itself, as a
+  // network-failure fallback.
+  const [rows, setRows] = useState<ClientRow[]>([]);
   useEffect(() => {
-    fetchClientRows().then(setRows).catch(() => {});
-  }, []);
+    if (!isAuthenticated) return;
+    fetchClientRows()
+      .then(setRows)
+      .catch((err) => {
+        // ApiAuthError: the central handler (AuthContext) already cleared the
+        // session and is routing to /login — leave rows empty, never fixtures.
+        if (!(err instanceof ApiAuthError)) throw err;
+      });
+  }, [isAuthenticated]);
+
+  if (!initializing && !isAuthenticated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
+        <SignInPrompt label="clients" />
+      </SafeAreaView>
+    );
+  }
 
   const handleDelete = (item: ClientRow) => {
     Alert.alert(`Delete ${item.name}?`, "This permanently removes the client. This can't be undone.", [

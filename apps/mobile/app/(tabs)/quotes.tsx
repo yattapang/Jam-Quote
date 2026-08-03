@@ -2,9 +2,10 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Alert, FlatList, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, MoneyText, StatusPill } from "../../src/components";
-import { quoteFilterNames, quoteListRows, type QuoteListRow } from "../../src/state/mockData";
-import { deleteQuote, fetchQuoteRows } from "../../src/state/apiClient";
+import { Button, MoneyText, SignInPrompt, StatusPill } from "../../src/components";
+import { quoteFilterNames, type QuoteListRow } from "../../src/state/mockData";
+import { ApiAuthError, deleteQuote, fetchQuoteRows } from "../../src/state/apiClient";
+import { useAuth } from "../../src/state/AuthContext";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
 
@@ -13,18 +14,35 @@ import { resolveFontFamily } from "../../src/theme/fontFamily";
 export default function QuotesListScreen() {
   const { colors, space } = useTheme();
   const router = useRouter();
+  const { isAuthenticated, initializing } = useAuth();
   const [filter, setFilter] = useState<(typeof quoteFilterNames)[number]>("All");
-  // Render fixtures instantly, then replace with live API data (falls back to
-  // the same fixtures if the API is unreachable).
-  const [allRows, setAllRows] = useState<QuoteListRow[]>(quoteListRows);
+  // Every tenant route requires auth now — no rows (fixture or otherwise)
+  // until we know who's signed in. Fixtures only ever come back from
+  // fetchQuoteRows() itself, as a network-failure fallback.
+  const [allRows, setAllRows] = useState<QuoteListRow[]>([]);
   useEffect(() => {
-    fetchQuoteRows().then(setAllRows).catch(() => {});
-  }, []);
+    if (!isAuthenticated) return;
+    fetchQuoteRows()
+      .then(setAllRows)
+      .catch((err) => {
+        // ApiAuthError: the central handler (AuthContext) already cleared the
+        // session and is routing to /login — leave rows empty, never fixtures.
+        if (!(err instanceof ApiAuthError)) throw err;
+      });
+  }, [isAuthenticated]);
 
   const rows = useMemo(
     () => (filter === "All" ? allRows : allRows.filter((q) => q.status === filter)),
     [filter, allRows],
   );
+
+  if (!initializing && !isAuthenticated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top"]}>
+        <SignInPrompt label="quotes" />
+      </SafeAreaView>
+    );
+  }
 
   const handleDelete = (item: QuoteListRow) => {
     Alert.alert(`Delete ${item.num}?`, "This permanently removes the quote. This can't be undone.", [

@@ -33,7 +33,8 @@ export default function MoreScreen() {
   const { user, business, isAuthenticated, logout } = useAuth();
 
   const displayName = user?.fullName || user?.email || "Guest";
-  const displayBusiness = business?.name ?? "Demo business · not signed in";
+  // No more implicit "demo business" — signed out means no business context.
+  const displayBusiness = business?.name ?? "Not signed in";
   const initials =
     displayName
       .split(/\s+/)
