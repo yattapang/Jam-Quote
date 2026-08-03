@@ -394,8 +394,13 @@ model MaterialFavourite {
 // TradesService so the global list and custom trades share one path.
 model Trade {
   id         String    @id @default(uuid())
+  // businessId NULL identifies a GLOBAL master trade (seeded in migration
+  // 20260725110000_trades); non-null is a tenant's own custom trade. Cascade
+  // is REQUIRED, not cosmetic: Prisma would otherwise infer SET NULL for this
+  // optional relation, which on tenant deletion would turn that tenant's
+  // private trades into global ones visible to every other tenant.
   businessId String?
-  business   Business? @relation(fields: [businessId], references: [id])
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
   name       String
   createdAt  DateTime  @default(now())
 
