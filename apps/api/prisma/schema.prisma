@@ -466,26 +466,85 @@ model AssemblyComponent {
 // Invoicing & payments
 // ---------------------------------------------------------------------------
 model Invoice {
-  id         String        @id @default(uuid())
-  businessId String
-  business   Business      @relation(fields: [businessId], references: [id])
-  clientId   String?
-  client     Client?       @relation(fields: [clientId], references: [id])
-  quoteId    String?
-  quote      Quote?        @relation(fields: [quoteId], references: [id])
-  number     String
-  status     InvoiceStatus @default(INVOICED)
-  totalCents Int
-  paidCents  Int           @default(0)
-  dueDate    DateTime?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  deletedAt  DateTime? // soft-delete for offline sync
+  id            String           @id @default(uuid())
+  businessId    String
+  business      Business         @relation(fields: [businessId], references: [id])
+  clientId      String?
+  client        Client?          @relation(fields: [clientId], references: [id])
+  // Point-in-time link back to the source quote (a snapshot origin, kept for
+  // provenance). Invoice lines are copied at convert time and edited
+  // independently while DRAFT — editing the quote never alters the invoice.
+  quoteId       String?
+  quote         Quote?           @relation(fields: [quoteId], references: [id])
+  number        String // e.g. INV-0007
+  // DRAFT = editable before finalize; finalizing flips to INVOICED (and the
+  // source quote to INVOICED). PARTIAL/PAID/OVERDUE are driven by payments.
+  status        InvoiceStatus    @default(DRAFT)
+  detailLevel   QuoteDetailLevel @default(SUMMARY) // display only, mirrors Quote
+  gctRate       Decimal          @default(15.0) @db.Decimal(5, 2)
+  discountPct   Decimal          @default(0) @db.Decimal(5, 2)
+  depositCents  Int              @default(0)
+  terms         String?
+  dueDate       DateTime?
+  // Denormalized computed totals (source of truth = packages/core computeTotals).
+  subtotalCents Int              @default(0)
+  gctCents      Int              @default(0)
+  totalCents    Int              @default(0)
+  paidCents     Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  deletedAt     DateTime? // soft-delete for offline sync
 
-  payments Payment[]
+  sections  InvoiceSection[]
+  lineItems InvoiceLineItem[]
+  payments  Payment[]
 
   @@unique([businessId, number])
   @@index([businessId, status])
+  @@index([clientId])
+}
+
+model InvoiceSection {
+  id        String    @id @default(uuid())
+  invoiceId String
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  title     String
+  sort      Int       @default(0)
+  updatedAt DateTime  @default(now()) @updatedAt // delta-sync cursor
+  deletedAt DateTime? // soft-delete for offline sync
+
+  lineItems InvoiceLineItem[]
+}
+
+model InvoiceLineItem {
+  id                 String          @id @default(uuid())
+  invoiceId          String
+  invoice            Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sectionId          String?
+  section            InvoiceSection? @relation(fields: [sectionId], references: [id])
+  category           LineCategory
+  description        String
+  quantity           Decimal         @db.Decimal(12, 3)
+  rateUnit           RateUnit        @default(UNIT)
+  unitPriceCents     Int
+  priceSource        PriceSource     @default(MANUAL)
+  // Plain snapshot reference (NOT a FK), same rationale as assemblyId below:
+  // a copied-forward invoice line must never change if the supplier is edited.
+  supplierId         String?
+  gctTreatment       GctTreatment    @default(STANDARD)
+  markupPct          Decimal?        @db.Decimal(6, 2)
+  overrideNote       String?
+  // Assembly ("job type") snapshot fields — see QuoteLineItem for semantics.
+  // Display-only in DETAILED mode; assemblyComponents is never used in totals.
+  assemblyId         String?
+  assemblyName       String?
+  assemblyUnit       String?
+  assemblyComponents Json?
+  sort               Int             @default(0)
+  updatedAt          DateTime        @default(now()) @updatedAt // delta-sync cursor
+  deletedAt          DateTime? // soft-delete for offline sync
+
+  @@index([invoiceId])
 }
 
 model Payment {
