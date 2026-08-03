@@ -10,8 +10,8 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLineAssemblyComponent } from "./types";
-import type { AssemblyComponentKind, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineAssemblyComponent } from "./types";
+import type { AssemblyComponentKind, InvoiceStatus, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -228,6 +228,37 @@ export interface ApiQuote {
   sections?: { title: string; lineItems: ApiLineItem[] }[];
 }
 
+/** Invoice line items share the exact persistence shape as quote line items
+ * (both come from the same `quoteLineItemSchema`-shaped table columns). */
+export type ApiInvoiceLineItem = ApiLineItem;
+export interface ApiInvoiceSection {
+  title: string;
+  lineItems: ApiInvoiceLineItem[];
+}
+export interface ApiInvoice {
+  id: string;
+  businessId: string;
+  clientId?: string | null;
+  quoteId?: string | null;
+  number: string;
+  status: InvoiceStatus;
+  // Prisma Decimal fields — may come over JSON as numeric strings.
+  gctRate: number | string;
+  discountPct: number | string;
+  depositCents: number;
+  terms?: string | null;
+  dueDate?: string | null;
+  subtotalCents: number;
+  gctCents: number;
+  totalCents: number;
+  paidCents: number;
+  createdAt: string;
+  updatedAt: string;
+  detailLevel?: QuoteDetailLevel | null;
+  lineItems?: ApiInvoiceLineItem[];
+  sections?: ApiInvoiceSection[];
+}
+
 // --- Pure mappers (exported; reused by api-server.ts and tests) -------------
 
 export function initialsOf(name: string): string {
@@ -363,6 +394,81 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     createdLabel: dateLabel(q.createdAt, "Created "),
     validUntil: q.validUntil ?? undefined,
     validUntilLabel: q.validUntil ? dateLabel(q.validUntil, "Valid until ") : "",
+  };
+}
+
+// --- Invoices ----------------------------------------------------------------
+
+/** Invoice line items are persisted identically to quote line items, so the
+ * view shape is the same `QuoteLine` (mapped via the same `mapLine`). */
+export type InvoiceLineItem = QuoteLine;
+export interface InvoiceSection {
+  title: string;
+  lines: InvoiceLineItem[];
+}
+export interface Invoice {
+  id: string;
+  businessId: string;
+  clientId?: string;
+  quoteId?: string;
+  num: string;
+  status: InvoiceStatus;
+  lines: InvoiceLineItem[];
+  /** Named groupings, title preserved — `lines` above already includes every
+   * section's lines flattened in (mirrors Quote.sections). */
+  sections?: InvoiceSection[];
+  gctRatePct: number;
+  discountPct: number;
+  depositCents: number;
+  terms?: string;
+  dueDate?: string;
+  dueDateLabel: string;
+  subtotalCents: number;
+  gctCents: number;
+  totalCents: number;
+  /** Sum of recorded payments against this invoice. */
+  paidCents: number;
+  /** Per-invoice presentation setting, carried from the source quote. */
+  detailLevel?: QuoteDetailLevel;
+  createdAt: string;
+  createdLabel: string;
+  updatedAt: string;
+}
+
+/** Map an API invoice to the view Invoice. `lines`/`sections` are populated
+ * only for detail (list rows may omit them). */
+export function mapInvoice(i: ApiInvoice): Invoice {
+  const lines = [
+    ...(i.lineItems ?? []),
+    ...(i.sections ?? []).flatMap((s) => s.lineItems),
+  ].map(mapLine);
+  const sections = (i.sections ?? []).map((s) => ({
+    title: s.title,
+    lines: s.lineItems.map(mapLine),
+  }));
+  return {
+    id: i.id,
+    businessId: i.businessId,
+    clientId: i.clientId ?? undefined,
+    quoteId: i.quoteId ?? undefined,
+    num: i.number,
+    status: i.status,
+    lines,
+    sections,
+    gctRatePct: Number(i.gctRate),
+    discountPct: Number(i.discountPct),
+    depositCents: i.depositCents,
+    terms: i.terms ?? undefined,
+    dueDate: i.dueDate ?? undefined,
+    dueDateLabel: i.dueDate ? dateLabel(i.dueDate, "Due ") : "",
+    subtotalCents: i.subtotalCents,
+    gctCents: i.gctCents,
+    totalCents: i.totalCents,
+    paidCents: i.paidCents,
+    detailLevel: i.detailLevel ?? undefined,
+    createdAt: i.createdAt,
+    createdLabel: dateLabel(i.createdAt, "Created "),
+    updatedAt: i.updatedAt,
   };
 }
 
@@ -581,6 +687,63 @@ export async function setQuoteStatus(id: string, status: QuoteStatus): Promise<v
   await apiClient.post<unknown>(`/quotes/${id}/status`, { status });
 }
 
+// --- Invoices ------------------------------------------------------------
+
+/** GET /api/invoices (client-side, via the proxy) — this business's invoices,
+ * newest first. Optional filters mirror the API's query params. */
+export async function getInvoices(params?: { status?: InvoiceStatus; clientId?: string }): Promise<Invoice[]> {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.clientId) qs.set("clientId", params.clientId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return (await apiClient.get<ApiInvoice[]>(`/invoices${suffix}`)).map(mapInvoice);
+}
+
+/** GET /api/invoices/:id (client-side, via the proxy) — invoice detail incl.
+ * sections + lineItems ordered by sort. */
+export async function getInvoice(id: string): Promise<Invoice> {
+  return mapInvoice(await apiClient.get<ApiInvoice>(`/invoices/${id}`));
+}
+
+/** POST /api/invoices/from-quote/:quoteId — no body. Converts an ACCEPTED
+ * quote into a DRAFT invoice; errors if the quote isn't ACCEPTED or has
+ * already been converted (see the API's InvoicesService). */
+export async function createInvoiceFromQuote(quoteId: string): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>(`/invoices/from-quote/${quoteId}`);
+}
+
+/** Same line-item/section shape as quotes (see NewQuoteLineInput), plus an
+ * explicit `sort` — the invoice editor sends sections/lineItems in order but
+ * the API preserves them by this field rather than array position alone. */
+export interface InvoiceLineItemInput extends NewQuoteLineInput {
+  sort?: number;
+}
+/** PATCH /api/invoices/:id body — all fields optional, DRAFT only. Note the
+ * API names this field `gctRatePct` on the way in even though the read side
+ * returns it as `gctRate` (see ApiInvoice) — no client-side renaming needed
+ * here, unlike updateBusiness. Providing `sections`/`lineItems` replaces the
+ * invoice's lines in full. */
+export interface UpdateInvoiceInput {
+  clientId?: string;
+  dueDate?: string;
+  terms?: string;
+  gctRatePct?: number;
+  discountPct?: number;
+  depositCents?: number;
+  detailLevel?: QuoteDetailLevel;
+  lineItems?: InvoiceLineItemInput[];
+  sections?: { title: string; sort?: number; lineItems: InvoiceLineItemInput[] }[];
+}
+export async function updateInvoice(id: string, input: UpdateInvoiceInput): Promise<{ id: string }> {
+  return apiClient.patch<{ id: string }>(`/invoices/${id}`, input);
+}
+
+/** POST /api/invoices/:id/finalize — DRAFT -> INVOICED (also flips the
+ * source quote to INVOICED); irreversible, locks the invoice from editing. */
+export async function finalizeInvoice(id: string): Promise<void> {
+  await apiClient.post<unknown>(`/invoices/${id}/finalize`);
+}
+
 // --- Delete (write path) -----------------------------------------------------
 
 export async function deleteClient(id: string): Promise<void> {
@@ -593,6 +756,11 @@ export async function deleteJob(id: string): Promise<void> {
 
 export async function deleteQuote(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/quotes/${id}`);
+}
+
+/** DELETE /api/invoices/:id — soft delete, DRAFT only. */
+export async function deleteInvoice(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/invoices/${id}`);
 }
 
 export async function deleteMaterialFavourite(id: string): Promise<void> {

@@ -46,6 +46,7 @@ export const QUOTE_STATUS_FILTERS: Array<{ label: string; value: QuoteStatus | "
 
 export const INVOICE_STATUS_FILTERS: Array<{ label: string; value: InvoiceStatus | "ALL" }> = [
   { label: "All", value: "ALL" },
+  { label: "Draft", value: InvoiceStatus.DRAFT },
   { label: "Invoiced", value: InvoiceStatus.INVOICED },
   { label: "Partial", value: InvoiceStatus.PARTIAL },
   { label: "Paid", value: InvoiceStatus.PAID },

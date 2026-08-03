@@ -7,6 +7,7 @@ import Modal, { modalStyles } from "./Modal";
 import {
   deleteAssembly,
   deleteClient,
+  deleteInvoice,
   deleteJob,
   deleteLabourRate,
   deleteMaterialFavourite,
@@ -21,9 +22,10 @@ const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   material: deleteMaterialFavourite,
   labourRate: deleteLabourRate,
   assembly: deleteAssembly,
+  invoice: deleteInvoice,
 };
 
-export type DeleteKind = "client" | "job" | "quote" | "material" | "labourRate" | "assembly";
+export type DeleteKind = "client" | "job" | "quote" | "material" | "labourRate" | "assembly" | "invoice";
 
 /**
  * Small, unobtrusive per-row delete affordance. Always confirms via a Modal

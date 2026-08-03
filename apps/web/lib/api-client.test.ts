@@ -1,22 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createClient,
+  createInvoiceFromQuote,
   createJob,
   createMaterialFavourite,
   createQuote,
   deleteClient,
+  deleteInvoice,
   deleteJob,
   deleteMaterialFavourite,
   deleteQuote,
+  finalizeInvoice,
   initialsOf,
   mapBusiness,
   mapClient,
+  mapInvoice,
   mapMaterialFavourite,
   mapQuote,
   reviseQuote,
   setQuoteStatus,
   updateBusiness,
   updateClient,
+  updateInvoice,
   updateJob,
   updateMaterialFavourite,
   updateQuote,
@@ -30,6 +35,8 @@ import {
   getBusiness,
   getClient,
   getClients,
+  getInvoice,
+  getInvoices,
   getJob,
   getJobs,
   getMaterialFavourites,
@@ -115,6 +122,40 @@ const apiQuote = {
   sections: [],
 };
 
+const apiInvoice = {
+  id: "inv-0007",
+  businessId: "seed-business-blackwood",
+  clientId: "cl-basil-reid",
+  quoteId: "qt-0142",
+  number: "INV-0007",
+  status: "DRAFT",
+  gctRate: "15",
+  discountPct: "5",
+  depositCents: 5_000_000,
+  terms: "Due on receipt",
+  dueDate: "2026-08-15T00:00:00.000Z",
+  subtotalCents: 16_800_000,
+  gctCents: 2_394_000,
+  totalCents: 18_354_000,
+  paidCents: 0,
+  createdAt: "2026-07-10T00:00:00.000Z",
+  updatedAt: "2026-07-10T00:00:00.000Z",
+  lineItems: [
+    {
+      id: "l1",
+      category: "MATERIAL",
+      description: "Cement",
+      quantity: "40",
+      rateUnit: "UNIT",
+      unitPriceCents: 115_000,
+      priceSource: "LOOKUP",
+      gctTreatment: "STANDARD",
+      markupPct: null,
+    },
+  ],
+  sections: [],
+};
+
 const apiBusiness = {
   id: "seed-business-blackwood",
   name: "Blackwood Construction & Masonry",
@@ -140,6 +181,7 @@ const apiMaterialFavourite = {
 // reference the mapper's own parameter type so the literals type-check
 // against it.
 type MapQuoteArg = Parameters<typeof mapQuote>[0];
+type MapInvoiceArg = Parameters<typeof mapInvoice>[0];
 type MapClientArg = Parameters<typeof mapClient>[0];
 type MapBusinessArg = Parameters<typeof mapBusiness>[0];
 type MapMaterialFavouriteArg = Parameters<typeof mapMaterialFavourite>[0];
@@ -181,6 +223,21 @@ describe("pure mappers", () => {
     expect(q.discountPct).toBe(5);
     expect(q.lines).toHaveLength(1);
     expect(q.lines[0]?.unitPriceCents).toBe(115_000);
+  });
+
+  it("mapInvoice maps persistence shape to the view Invoice, converting Decimal fields to numbers", () => {
+    const inv = mapInvoice(apiInvoice as MapInvoiceArg);
+    expect(inv.num).toBe("INV-0007");
+    expect(inv.status).toBe("DRAFT");
+    expect(inv.quoteId).toBe("qt-0142");
+    expect(inv.clientId).toBe("cl-basil-reid");
+    expect(inv.gctRatePct).toBe(15);
+    expect(inv.discountPct).toBe(5);
+    expect(inv.paidCents).toBe(0);
+    expect(inv.totalCents).toBe(18_354_000);
+    expect(inv.terms).toBe("Due on receipt");
+    expect(inv.lines).toHaveLength(1);
+    expect(inv.lines[0]?.unitPriceCents).toBe(115_000);
   });
 
   it("mapBusiness maps the persistence shape and converts the Decimal GCT rate to a percentage number", () => {
@@ -343,6 +400,36 @@ describe("getQuote", () => {
   });
 });
 
+describe("getInvoices", () => {
+  it("fetches and maps invoices", async () => {
+    stubFetch({ "/invoices": [apiInvoice] });
+    const invoices = await getInvoices();
+    expect(invoices[0]?.num).toBe("INV-0007");
+    expect(invoices[0]?.status).toBe("DRAFT");
+  });
+
+  it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
+    stubFetch(null);
+    const invoices = await getInvoices();
+    expect(invoices).toEqual([]);
+  });
+});
+
+describe("getInvoice", () => {
+  it("returns a detail invoice with line items", async () => {
+    stubFetch({ "/invoices/inv-0007": apiInvoice });
+    const inv = await getInvoice("inv-0007");
+    expect(inv?.num).toBe("INV-0007");
+    expect(inv?.lines).toHaveLength(1);
+  });
+
+  it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
+    stubFetch(null);
+    const inv = await getInvoice("inv-0007");
+    expect(inv).toBeUndefined();
+  });
+});
+
 describe("create (write path)", () => {
   it("createClient POSTs with the business header and maps the result", async () => {
     const spy = stubFetch({ "/clients": { id: "new-1", firstName: "Jane", lastName: "Doe", phone: "876 000 0000", parish: "Kingston", addressLine: "1 Main St" } });
@@ -396,6 +483,16 @@ describe("create (write path)", () => {
     expect(r.id).toBe("qt-new");
     const body = JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string);
     expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+
+  it("createInvoiceFromQuote POSTs to /invoices/from-quote/:quoteId with no body", async () => {
+    const spy = stubFetch({ "/invoices/from-quote/qt-0142": { id: "inv-new" } });
+    const r = await createInvoiceFromQuote("qt-0142");
+    expect(r.id).toBe("inv-new");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/invoices/from-quote/qt-0142");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
   });
 });
 
@@ -493,6 +590,43 @@ describe("update (write path)", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ status: "SENT" });
   });
+
+  it("updateInvoice PATCHes the invoice body to /invoices/:id (gctRatePct passed through unrenamed)", async () => {
+    const spy = stubFetch({ "/invoices/inv-0007": { id: "inv-0007" } });
+    const r = await updateInvoice("inv-0007", {
+      dueDate: "2026-08-15T00:00:00.000Z",
+      terms: "Due on receipt",
+      gctRatePct: 15,
+      discountPct: 0,
+      depositCents: 0,
+      lineItems: [
+        {
+          category: LineCategory.MATERIAL,
+          description: "Cement",
+          quantity: 10,
+          rateUnit: RateUnit.UNIT,
+          unitPriceCents: 115_000,
+          gctTreatment: GctTreatment.STANDARD,
+        },
+      ],
+    });
+    expect(r.id).toBe("inv-0007");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/invoices/inv-0007");
+    expect(init.method).toBe("PATCH");
+    const body = JSON.parse(init.body as string);
+    expect(body.gctRatePct).toBe(15);
+    expect(body.lineItems[0].unitPriceCents).toBe(115_000);
+  });
+
+  it("finalizeInvoice POSTs to /invoices/:id/finalize with no body", async () => {
+    const spy = stubFetch({ "/invoices/inv-0007/finalize": { id: "inv-0007" } });
+    await finalizeInvoice("inv-0007");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/invoices/inv-0007/finalize");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+  });
 });
 
 describe("delete (write path)", () => {
@@ -529,6 +663,14 @@ describe("delete (write path)", () => {
     await deleteQuote("qt-0142");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/quotes/qt-0142");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("deleteInvoice sends DELETE to /invoices/:id", async () => {
+    const spy = stubEmptyOk();
+    await deleteInvoice("inv-0007");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/invoices/inv-0007");
     expect(init.method).toBe("DELETE");
   });
 

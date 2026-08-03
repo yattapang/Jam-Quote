@@ -6,12 +6,14 @@ import { QuoteStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { reviseQuote, setQuoteStatus } from "@/lib/api-client";
+import { ApiError, createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
 
 /**
  * Header actions for the quote detail page. DRAFT quotes can be edited, sent
  * (DRAFT -> SENT), or deleted; any other status can be revised into a new
- * DRAFT copy (see ALLOWED_TRANSITIONS / revise in quotes.service.ts). Every
+ * DRAFT copy (see ALLOWED_TRANSITIONS / revise in quotes.service.ts). An
+ * ACCEPTED quote also offers "Convert to invoice", which creates a DRAFT
+ * invoice from it and lands the user in that invoice's editor. Every
  * state-changing action confirms via a Modal before calling the API.
  */
 export default function QuoteActions({ id, status }: { id: string; status: QuoteStatus }) {
@@ -22,6 +24,25 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
   const [reviseOpen, setReviseOpen] = useState(false);
   const [revising, setRevising] = useState(false);
   const [reviseError, setReviseError] = useState("");
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
+
+  async function convertToInvoice() {
+    setConverting(true);
+    setConvertError("");
+    try {
+      const { id: invoiceId } = await createInvoiceFromQuote(id);
+      router.push(`/invoices/${invoiceId}/edit`);
+    } catch (err) {
+      // The API's own message names the reason (e.g. "quote is not
+      // ACCEPTED" or "already converted to an invoice") — surface it as-is
+      // rather than a generic failure text.
+      setConvertError(
+        err instanceof ApiError && err.message ? err.message : "Couldn't convert to invoice — is the API running?",
+      );
+      setConverting(false);
+    }
+  }
 
   async function confirmSend() {
     setSending(true);
@@ -87,9 +108,15 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
 
   return (
     <>
+      {status === QuoteStatus.ACCEPTED && (
+        <Button variant="primary" size="sm" onClick={convertToInvoice} disabled={converting}>
+          {converting ? "Converting…" : "Convert to invoice"}
+        </Button>
+      )}
       <Button variant="outlineAccent" size="sm" onClick={() => setReviseOpen(true)}>
         Revise
       </Button>
+      {convertError && <span style={{ color: "var(--jq-crit)", fontSize: 12.5 }}>{convertError}</span>}
       {reviseOpen && (
         <Modal title="Create a revision?" onClose={() => (revising ? undefined : setReviseOpen(false))}>
           <div className={modalStyles.form}>

@@ -24,8 +24,8 @@ export function categorySubtotalCents(quote: Quote, totals: QuoteTotals, categor
   }, 0);
 }
 
-function groupByCategory(lines: Array<Quote["lines"][number]>) {
-  const groups: Array<{ category: LineCategory; lines: Array<Quote["lines"][number]> }> = [];
+function groupByCategory<L extends { category: LineCategory }>(lines: L[]) {
+  const groups: Array<{ category: LineCategory; lines: L[] }> = [];
   for (const cat of Object.values(LineCategory)) {
     const catLines = lines.filter((l) => l.category === cat);
     if (catLines.length > 0) groups.push({ category: cat, lines: catLines });
@@ -46,26 +46,37 @@ export const CATEGORY_LABEL: Record<LineCategory, string> = {
   [LineCategory.OTHER]: "Other",
 };
 
-export interface HeadingGroup {
+export interface HeadingGroup<L = Quote["lines"][number]> {
   title: string;
-  lines: Array<Quote["lines"][number]>;
+  lines: L[];
+}
+
+/** Structural shape `groupLinesByHeading` needs — satisfied by `Quote` and,
+ * separately, by the mapped `Invoice` view type in api-client.ts (both carry
+ * a flattened `lines` array plus optional named `sections`). */
+interface Groupable<L extends { id: string; category: LineCategory }> {
+  lines: L[];
+  sections?: { title: string; lines: L[] }[];
 }
 
 /**
- * Groups a quote's lines under their heading, ordered the way the user
- * introduced them: first the quote's named `sections` — already sort-ordered
- * by the API to first-appearance order (see quotes.service.ts) — each
- * keeping its custom or built-in-category title as-is.
+ * Groups an entity's lines (a quote or an invoice) under their heading,
+ * ordered the way the user introduced them: first the named `sections` —
+ * already sort-ordered by the API to first-appearance order (see
+ * quotes.service.ts) — each keeping its custom or built-in-category title
+ * as-is.
  *
- * Legacy fallback: quotes created before per-line headings existed may still
+ * Legacy fallback: rows created before per-line headings existed may still
  * carry lines outside any section. Those are grouped by built-in category
  * (canonical category order) and appended after the named sections, so old
  * quotes keep rendering instead of losing their line items.
  */
-export function groupLinesByHeading(quote: Quote): HeadingGroup[] {
-  const sections = (quote.sections ?? []).filter((s) => s.lines.length > 0);
+export function groupLinesByHeading<L extends { id: string; category: LineCategory }>(
+  entity: Groupable<L>,
+): HeadingGroup<L>[] {
+  const sections = (entity.sections ?? []).filter((s) => s.lines.length > 0);
   const sectionedIds = new Set(sections.flatMap((s) => s.lines.map((l) => l.id)));
-  const ungrouped = quote.lines.filter((l) => !sectionedIds.has(l.id));
+  const ungrouped = entity.lines.filter((l) => !sectionedIds.has(l.id));
   const legacyGroups = groupByCategory(ungrouped).map((g) => ({
     title: CATEGORY_LABEL[g.category],
     lines: g.lines,

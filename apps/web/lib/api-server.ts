@@ -17,16 +17,19 @@ import {
   mapAssembly,
   mapBusiness,
   mapClient,
+  mapInvoice,
   mapLabourRate,
   mapMaterialFavourite,
   mapQuote,
   type ApiAssembly,
   type ApiBusiness,
   type ApiClientRow,
+  type ApiInvoice,
   type ApiJob,
   type ApiLabourRate,
   type ApiMaterialFavourite,
   type ApiQuote,
+  type Invoice,
   type AdminData,
   type AdminOverview,
   type AdminTenant,
@@ -43,6 +46,7 @@ import {
 } from "./api-client";
 import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
+import type { InvoiceStatus } from "@jamquote/core";
 
 const TOKEN_COOKIE = "jamquote_token";
 const DEMO_BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
@@ -228,6 +232,32 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
     return mapQuote(q, jobLabel);
   } catch {
     console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
+    return undefined;
+  }
+}
+
+/** GET /api/invoices (server-side read) — this business's invoices, newest
+ * first. Optional filters mirror the API's query params. */
+export async function getInvoices(params?: { status?: InvoiceStatus; clientId?: string }): Promise<Invoice[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set("status", params.status);
+    if (params?.clientId) qs.set("clientId", params.clientId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return (await serverRequest<ApiInvoice[]>(`/invoices${suffix}`)).map(mapInvoice);
+  } catch {
+    console.warn("[api-server] getInvoices: API unreachable, returning empty list");
+    return [];
+  }
+}
+
+/** GET /api/invoices/:id (server-side read) — invoice detail incl. sections
+ * + lineItems ordered by sort. */
+export async function getInvoice(id: string): Promise<Invoice | undefined> {
+  try {
+    return mapInvoice(await serverRequest<ApiInvoice>(`/invoices/${id}`));
+  } catch {
+    console.warn(`[api-server] getInvoice(${id}): API unreachable, returning undefined`);
     return undefined;
   }
 }
