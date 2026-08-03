@@ -61,9 +61,9 @@ npx -w @jamquote/api prisma migrate deploy
 npm run -w @jamquote/api db:seed
 ```
 
-This seeds the business the app expects by default
-(`NEXT_PUBLIC_BUSINESS_ID=seed-business-blackwood`, matching
-`apps/web/lib/api-client.ts`).
+This seeds the demo business and its owner login (`owner@blackwood.jm` /
+`Blackwood123!`, shown on the web app's login page) — the web app no longer
+has a tenant fallback, so every session must sign in.
 
 ---
 
@@ -115,7 +115,6 @@ Vercel's Next.js framework preset handles it once you set the Root Directory.
 3. Environment variables (Project Settings → Environment Variables):
    - `NEXT_PUBLIC_API_BASE_URL` = `https://jamquote-api.onrender.com/api`
      (the Render URL from step 3, with `/api` appended)
-   - `NEXT_PUBLIC_BUSINESS_ID` = `seed-business-blackwood`
 4. Deploy. Note the resulting URL, e.g. `https://jamquote.vercel.app`.
 
 The web build consumes `@jamquote/core` from TypeScript source via tsconfig
@@ -181,7 +180,6 @@ browser/file manager you use). Use the `production` profile
 | Render (API) | `WEB_ORIGIN` | `https://jamquote.vercel.app` |
 | Render (API) | `NODE_ENV` | `production` |
 | Vercel (Web) | `NEXT_PUBLIC_API_BASE_URL` | `https://jamquote-api.onrender.com/api` |
-| Vercel (Web) | `NEXT_PUBLIC_BUSINESS_ID` | `seed-business-blackwood` |
 | EAS (Mobile) | `EXPO_PUBLIC_API_BASE_URL` | `https://jamquote-api.onrender.com/api` |
 
 ## Files added for this runbook

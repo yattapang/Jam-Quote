@@ -4,9 +4,11 @@
  * never exposed to browser JS, and there are no cross-origin/CORS concerns
  * between the web app and the API.
  *
- * Attaches the logged-in user's JWT as `Authorization: Bearer`; when there's no
- * cookie it falls back to the demo business via x-business-id so the open demo
- * keeps working. Server-side reads do not use this proxy — see lib/api-server.ts.
+ * Attaches the logged-in user's JWT as `Authorization: Bearer` when present.
+ * There is no tenant fallback anymore — the API's TenantAuthGuard requires a
+ * valid token on every tenant route, so a request with no cookie is forwarded
+ * with no auth at all and the API itself returns 401. Server-side reads do
+ * not use this proxy — see lib/api-server.ts.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -16,7 +18,6 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:3001/api";
 
-const DEMO_BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
 const TOKEN_COOKIE = "jamquote_token";
 
 async function forward(req: NextRequest, path: string[]): Promise<NextResponse> {
@@ -27,7 +28,6 @@ async function forward(req: NextRequest, path: string[]): Promise<NextResponse> 
   const contentType = req.headers.get("content-type");
   if (contentType) headers["content-type"] = contentType;
   if (token) headers["authorization"] = `Bearer ${token}`;
-  else headers["x-business-id"] = DEMO_BUSINESS_ID;
 
   const hasBody = req.method !== "GET" && req.method !== "HEAD";
   const res = await fetch(target, {

@@ -2,6 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { Resend } from "resend";
 import { formatJmd } from "@jamquote/core";
 import { getQuote, getClients, getBusiness } from "@/lib/api-server";
+import { getSession } from "@/lib/session";
 import { getQuoteTotals } from "@/lib/quote-totals";
 import QuotePdf from "@/lib/pdf/QuotePdf";
 
@@ -10,6 +11,20 @@ import QuotePdf from "@/lib/pdf/QuotePdf";
 export const runtime = "nodejs";
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {
+  // Auth is checked here explicitly, before touching api-server. The getX()
+  // helpers redirect to /login on a 401, and this route is called via fetch()
+  // — which follows redirects — so the caller would receive the login page as
+  // a 200 and report "Sent" for a quote that was never emailed. Middleware
+  // only checks that the cookie EXISTS, so a present-but-expired token still
+  // reaches this handler; getSession() validates it against /auth/me.
+  const session = await getSession();
+  if (!session) {
+    return Response.json(
+      { error: "Your session has expired. Please sign in again." },
+      { status: 401 },
+    );
+  }
+
   if (!process.env.RESEND_API_KEY) {
     return Response.json({ error: "Email is not configured yet." }, { status: 503 });
   }

@@ -28,9 +28,24 @@ import {
 } from "./api-client";
 // Reads moved to the server-only module; mock its server guards so the fetch/
 // mapping behaviour can still be unit-tested here (vitest runs under node, so
-// the write path below still exercises request()'s x-business-id branch).
+// the write path below still exercises request()'s isServer branch, which no
+// longer attaches any auth header at all — see api-client.ts). The next/headers
+// mock exposes a settable token so getX() tests can assert both the
+// signed-out (no auth header) and signed-in (Authorization: Bearer <token>)
+// cases against lib/api-server.ts's serverRequest().
+const { getMockToken, setMockToken } = vi.hoisted(() => {
+  let token: string | undefined;
+  return {
+    getMockToken: () => token,
+    setMockToken: (t: string | undefined) => {
+      token = t;
+    },
+  };
+});
 vi.mock("server-only", () => ({}));
-vi.mock("next/headers", () => ({ cookies: () => ({ get: () => undefined }) }));
+vi.mock("next/headers", () => ({
+  cookies: () => ({ get: () => (getMockToken() ? { value: getMockToken() } : undefined) }),
+}));
 import {
   getBusiness,
   getClient,
@@ -67,10 +82,12 @@ function stubFetch(routes: Routes | null) {
 
 beforeEach(() => {
   vi.spyOn(console, "warn").mockImplementation(() => {});
+  setMockToken(undefined);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  setMockToken(undefined);
 });
 
 const apiClientRow = {
@@ -298,12 +315,22 @@ describe("pure mappers", () => {
 });
 
 describe("getClients", () => {
-  it("fetches with the x-business-id header and maps rows", async () => {
+  it("fetches with no auth header when signed out (no tenant fallback) and maps rows", async () => {
     const spy = stubFetch({ "/clients": [apiClientRow] });
     const clients = await getClients();
     expect(clients[0]?.initials).toBe("BR");
     const init = spy.mock.calls[0]?.[1] as RequestInit;
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-business-id"]).toBeUndefined();
+    expect(headers["authorization"]).toBeUndefined();
+  });
+
+  it("sends the caller's JWT as Authorization: Bearer when signed in", async () => {
+    setMockToken("jwt-test-token");
+    const spy = stubFetch({ "/clients": [apiClientRow] });
+    await getClients();
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>)["authorization"]).toBe("Bearer jwt-test-token");
   });
 
   it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
@@ -431,14 +458,16 @@ describe("getInvoice", () => {
 });
 
 describe("create (write path)", () => {
-  it("createClient POSTs with the business header and maps the result", async () => {
+  it("createClient POSTs with no tenant fallback header and maps the result", async () => {
     const spy = stubFetch({ "/clients": { id: "new-1", firstName: "Jane", lastName: "Doe", phone: "876 000 0000", parish: "Kingston", addressLine: "1 Main St" } });
     const c = await createClient({ firstName: "Jane", lastName: "Doe", phone: "876 000 0000" });
     expect(c.name).toBe("Jane Doe");
     expect(c.initials).toBe("JD");
     const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    // No more x-business-id fallback anywhere in api-client.ts; the browser
+    // path relies entirely on the /api/proxy route attaching the JWT cookie.
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toMatchObject({ firstName: "Jane", lastName: "Doe" });
   });
 
@@ -458,7 +487,7 @@ describe("create (write path)", () => {
     expect(m.priceDollars).toBe(1150);
     const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toMatchObject({ name: "Cement (grey, 94lb)", priceCents: 115_000 });
   });
 
@@ -519,7 +548,7 @@ describe("update (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/quotes/qt-0142");
     expect(init.method).toBe("PATCH");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     const body = JSON.parse(init.body as string);
     expect(body.lineItems[0].unitPriceCents).toBe(115_000);
   });
@@ -533,7 +562,7 @@ describe("update (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/clients/cl-basil-reid");
     expect(init.method).toBe("PATCH");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ lastName: "Reid-Campbell" });
   });
 
@@ -544,7 +573,7 @@ describe("update (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/jobs/job-0142");
     expect(init.method).toBe("PATCH");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
   });
 
@@ -555,7 +584,7 @@ describe("update (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/business/seed-business-blackwood");
     expect(init.method).toBe("PATCH");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ name: "Blackwood & Sons", defaultGctRate: 12.5 });
   });
 
@@ -568,7 +597,7 @@ describe("update (write path)", () => {
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/catalogs/material-favourites/mf-cement");
     expect(init.method).toBe("PATCH");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ priceCents: 120_000 });
   });
 
@@ -641,13 +670,13 @@ describe("delete (write path)", () => {
     return spy;
   }
 
-  it("deleteClient sends DELETE to /clients/:id with the business header", async () => {
+  it("deleteClient sends DELETE to /clients/:id with no tenant fallback header", async () => {
     const spy = stubEmptyOk();
     await deleteClient("cl-basil-reid");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/clients/cl-basil-reid");
     expect(init.method).toBe("DELETE");
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
   });
 
   it("deleteJob sends DELETE to /jobs/:id", async () => {
@@ -684,13 +713,15 @@ describe("delete (write path)", () => {
 });
 
 describe("getMaterialFavourites", () => {
-  it("fetches with the x-business-id header and maps rows", async () => {
+  it("fetches with no auth header when signed out (no tenant fallback) and maps rows", async () => {
     const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
     const favourites = await getMaterialFavourites();
     expect(favourites).toHaveLength(1);
     expect(favourites[0]?.priceDollars).toBe(1150);
     const init = spy.mock.calls[0]?.[1] as RequestInit;
-    expect((init.headers as Record<string, string>)["x-business-id"]).toBe("seed-business-blackwood");
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-business-id"]).toBeUndefined();
+    expect(headers["authorization"]).toBeUndefined();
   });
 
   it("falls back to an empty list when the API is unreachable (no fixture backs these)", async () => {

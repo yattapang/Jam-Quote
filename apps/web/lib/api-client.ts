@@ -2,10 +2,12 @@
  * Client-safe API layer. Client components import the write functions here;
  * in the browser every call goes to the same-origin Next proxy
  * (/api/proxy/*, see app/api/proxy/[...path]/route.ts), which attaches the
- * logged-in user's JWT from the httpOnly cookie server-side (or the demo
- * business as a fallback). Server-side READS live in ./api-server.ts, which
- * reads the cookie directly via next/headers — that file must never be
- * imported from a client component.
+ * logged-in user's JWT from the httpOnly cookie server-side. There is no
+ * tenant fallback — a signed-out browser gets a 401 back from the proxy, and
+ * `request()` below sends it to /login rather than letting the caller treat
+ * the failure as "no data" (see the res.status === 401 branch). Server-side
+ * READS live in ./api-server.ts, which reads the cookie directly via
+ * next/headers — that file must never be imported from a client component.
  *
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
@@ -20,10 +22,6 @@ export const API_BASE_URL =
   process.env.API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   "http://localhost:3001/api";
-
-// Demo fallback business used only on the (dead) server branch of request();
-// real server reads set this in api-server.ts, browser writes rely on the proxy.
-const BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
 
 /** Parsed JSON body of a non-2xx response, when the API sent one (e.g. the
  * quote-creation 402 `{ message, code: "FREE_LIMIT_REACHED" }`). */
@@ -54,7 +52,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${base}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...(isServer ? { "x-business-id": BUSINESS_ID } : {}),
       ...init?.headers,
     },
     cache: "no-store",
@@ -69,6 +66,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       body = text ? JSON.parse(text) : undefined;
     } catch {
       body = undefined;
+    }
+    // The browser's cookie expired/was cleared mid-session, or this account
+    // has no business (an admin signed into the tenant app). Either way, the
+    // caller's local error handling (e.g. re-enabling a submit button) is
+    // about to fire, but the page underneath it is stale — send the user
+    // somewhere that explains why, instead of leaving them on a screen that
+    // just failed to save silently.
+    if (!isServer && typeof window !== "undefined") {
+      if (res.status === 401) {
+        window.location.assign(`/login?expired=1&redirect=${encodeURIComponent(window.location.pathname)}`);
+      } else if (res.status === 403) {
+        window.location.assign("/account-required");
+      }
     }
     throw new ApiError(body?.message || `Request to ${path} failed`, res.status, body);
   }

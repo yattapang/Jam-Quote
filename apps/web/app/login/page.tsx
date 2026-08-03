@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 import LoginForm from "./LoginForm";
 import styles from "./login.module.css";
 
@@ -9,10 +10,15 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { reset?: string };
+  // `redirect` is set by middleware.ts when it bounced an unauthenticated
+  // request away from a protected page; `expired` is set by the 401 handlers
+  // in lib/api-server.ts / lib/api-client.ts when a previously-valid session
+  // stopped working mid-visit.
+  searchParams: { reset?: string; redirect?: string; expired?: string };
 }) {
-  // Already signed in? Skip the form.
-  if (await getSession()) redirect("/dashboard");
+  const redirectTo = safeRedirectPath(searchParams.redirect);
+  // Already signed in? Skip the form and go straight to where they were headed.
+  if (await getSession()) redirect(redirectTo);
 
   return (
     <main className={styles.wrap}>
@@ -25,8 +31,11 @@ export default async function LoginPage({
         {searchParams.reset === "success" && (
           <p className={styles.subtitle}>Your password has been reset. Sign in with your new password.</p>
         )}
+        {searchParams.expired === "1" && (
+          <p className={styles.subtitle}>Your session expired — sign in again to continue.</p>
+        )}
 
-        <LoginForm />
+        <LoginForm redirectTo={redirectTo} />
 
         <p className={styles.demoHint}>
           Exploring the demo? Sign in with{" "}

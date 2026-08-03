@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { API_BASE_URL } from "./api-client";
 import { TOKEN_COOKIE } from "./session";
+import { safeRedirectPath } from "./safe-redirect";
 
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30d — matches the API token expiry.
 
@@ -63,7 +64,10 @@ export async function login(
   const result = await authenticate("/auth/login", { email, password });
   if (!result.ok) return { error: result.error };
   setToken(result.token);
-  redirect("/dashboard");
+  // Returns the user to the page they were trying to reach (set by
+  // middleware.ts's `?redirect=` or the login page's hidden field) rather
+  // than always dropping them on /dashboard.
+  redirect(safeRedirectPath(String(formData.get("redirectTo") ?? "")));
 }
 
 export async function register(

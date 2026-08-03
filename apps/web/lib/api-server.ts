@@ -2,8 +2,11 @@
  * Server-only API reads. Server Components and route handlers import their data
  * from here. Each request carries the logged-in user's JWT, read from the
  * httpOnly cookie via next/headers, so the API resolves the caller's own
- * business; when there's no cookie it falls back to the demo business so the
- * open demo keeps working (additive auth rollout).
+ * business. There is no tenant fallback anymore: a missing/expired/invalid
+ * token gets a 401 from the API, and a valid token with no business (an admin
+ * account) or a suspended business gets a 403 — both are handled explicitly
+ * below by redirecting rather than letting the page render as an empty list
+ * (see redirectOnAuthError).
  *
  * IMPORTANT: this module imports next/headers and is marked server-only — it
  * must never be imported from a client component. Client components use the
@@ -11,6 +14,7 @@
  */
 import "server-only";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   API_BASE_URL,
   ApiError,
@@ -49,7 +53,6 @@ import type { JobSummary, JobDetail } from "./mock-data";
 import type { InvoiceStatus } from "@jamquote/core";
 
 const TOKEN_COOKIE = "jamquote_token";
-const DEMO_BUSINESS_ID = process.env.NEXT_PUBLIC_BUSINESS_ID ?? "seed-business-blackwood";
 
 /**
  * getBusiness()'s failure fallback. NOT a data fixture — it carries no
@@ -71,23 +74,66 @@ const EMPTY_BUSINESS: Business = {
   currency: "JMD",
 };
 
-/** Server-side GET with the caller's JWT (or the demo business fallback). */
+/** Server-side GET with the caller's JWT. No token means no auth header at
+ * all — the API's TenantAuthGuard rejects that with 401, same as an
+ * expired/invalid token, which redirectOnAuthError below turns into a
+ * redirect to /login rather than an empty page. */
 async function serverRequest<T>(path: string): Promise<T> {
   const token = cookies().get(TOKEN_COOKIE)?.value;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["authorization"] = `Bearer ${token}`;
-  else headers["x-business-id"] = DEMO_BUSINESS_ID;
 
   const res = await fetch(`${API_BASE_URL}${path}`, { headers, cache: "no-store" });
-  if (!res.ok) throw new ApiError(`Request to ${path} failed`, res.status);
+  if (!res.ok) {
+    // Surface the API's own message (e.g. "requires a business account")
+    // when it sent JSON, so redirectOnAuthError can pass it along.
+    let body: { message?: string } | undefined;
+    try {
+      const text = await res.text();
+      body = text ? JSON.parse(text) : undefined;
+    } catch {
+      body = undefined;
+    }
+    throw new ApiError(body?.message || `Request to ${path} failed`, res.status, body);
+  }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/**
+ * Central handling for a caught serverRequest() error, called at the top of
+ * every getX() catch block (except the admin-console reads, which have their
+ * own per-section fallback and their own auth gate on /admin's layout).
+ *
+ * - 401 (no/expired/invalid token): the cookie is gone or stale — send the
+ *   user to sign in again rather than letting the page render as "no data."
+ * - 403 (valid token, no usable business — always an admin account per the
+ *   API's TenantAuthGuard, or a suspended business): send them to a page that
+ *   explains it, instead of a blank screen that looks broken.
+ * - anything else (network error, 5xx, timeout): not an auth problem: leave
+ *   it to the caller's existing empty-list/undefined fallback, which is
+ *   surfaced separately by DemoDataBanner ("can't reach the server").
+ *
+ * Calling redirect() here (inside the caller's catch block, not nested inside
+ * another try) is safe: Next's redirect() throws a special NEXT_REDIRECT
+ * error that must propagate uncaught, and this function isn't wrapped in a
+ * try of its own, so it does.
+ */
+function redirectOnAuthError(err: unknown): void {
+  if (!(err instanceof ApiError)) return;
+  if (err.status === 401) {
+    redirect("/login?expired=1");
+  }
+  if (err.status === 403) {
+    redirect(`/account-required?reason=${encodeURIComponent(err.message)}`);
+  }
 }
 
 export async function getClients(): Promise<Client[]> {
   try {
     return (await serverRequest<ApiClientRow[]>("/clients")).map(mapClient);
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getClients: API unreachable, returning empty list");
     return [];
   }
@@ -96,18 +142,20 @@ export async function getClients(): Promise<Client[]> {
 export async function getClient(id: string): Promise<Client | undefined> {
   try {
     return mapClient(await serverRequest<ApiClientRow>(`/clients/${id}`));
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn(`[api-server] getClient(${id}): API unreachable, returning undefined`);
     return undefined;
   }
 }
 
-/** GET /api/business/current — the caller's own business (resolved from the JWT
- * / x-business-id fallback; see BusinessController.current). */
+/** GET /api/business/current — the caller's own business (resolved from the
+ * caller's JWT; see BusinessController.current). */
 export async function getBusiness(): Promise<Business> {
   try {
     return mapBusiness(await serverRequest<ApiBusiness>("/business/current"));
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getBusiness: API unreachable, returning empty business");
     return EMPTY_BUSINESS;
   }
@@ -120,7 +168,8 @@ export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
     return (await serverRequest<ApiMaterialFavourite[]>("/catalogs/material-favourites")).map(
       mapMaterialFavourite,
     );
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getMaterialFavourites: API unreachable, using empty list");
     return [];
   }
@@ -132,7 +181,8 @@ export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
 export async function getLabourRates(): Promise<LabourRate[]> {
   try {
     return (await serverRequest<ApiLabourRate[]>("/catalogs/labour-rates")).map(mapLabourRate);
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getLabourRates: API unreachable, using empty list");
     return [];
   }
@@ -145,7 +195,8 @@ export async function getLabourRates(): Promise<LabourRate[]> {
 export async function getAssemblies(): Promise<Assembly[]> {
   try {
     return (await serverRequest<ApiAssembly[]>("/assemblies")).map(mapAssembly);
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getAssemblies: API unreachable, using empty list");
     return [];
   }
@@ -173,7 +224,8 @@ export async function getJobs(): Promise<JobSummary[]> {
         valueCents: jobQuotes.reduce((sum, q) => sum + q.totalCents, 0),
       };
     });
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getJobs: API unreachable, returning empty list");
     return [];
   }
@@ -196,7 +248,8 @@ export async function getJob(id: string): Promise<JobDetail | undefined> {
       stage: job.stage,
       progressPct: job.progressPct,
     };
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn(`[api-server] getJob(${id}): API unreachable, returning undefined`);
     return undefined;
   }
@@ -212,7 +265,8 @@ export async function getQuotes(): Promise<Quote[]> {
     return quotes
       .map((q) => mapQuote(q, jobName.get(q.jobId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getQuotes: API unreachable, returning empty list");
     return [];
   }
@@ -230,7 +284,8 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
       }
     }
     return mapQuote(q, jobLabel);
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
     return undefined;
   }
@@ -245,7 +300,8 @@ export async function getInvoices(params?: { status?: InvoiceStatus; clientId?: 
     if (params?.clientId) qs.set("clientId", params.clientId);
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return (await serverRequest<ApiInvoice[]>(`/invoices${suffix}`)).map(mapInvoice);
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getInvoices: API unreachable, returning empty list");
     return [];
   }
@@ -256,7 +312,8 @@ export async function getInvoices(params?: { status?: InvoiceStatus; clientId?: 
 export async function getInvoice(id: string): Promise<Invoice | undefined> {
   try {
     return mapInvoice(await serverRequest<ApiInvoice>(`/invoices/${id}`));
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn(`[api-server] getInvoice(${id}): API unreachable, returning undefined`);
     return undefined;
   }
@@ -270,7 +327,8 @@ export async function getInvoice(id: string): Promise<Invoice | undefined> {
 export async function getTrades(): Promise<Trade[]> {
   try {
     return await serverRequest<Trade[]>("/trades");
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getTrades: API unreachable, returning empty list");
     return [];
   }
@@ -293,7 +351,8 @@ export async function getBillingPlans(): Promise<PricingConfig | null> {
 export async function getBillingStatus(): Promise<BillingStatus | null> {
   try {
     return await serverRequest<BillingStatus>("/billing/status");
-  } catch {
+  } catch (err) {
+    redirectOnAuthError(err);
     console.warn("[api-server] getBillingStatus: API unreachable, returning null");
     return null;
   }

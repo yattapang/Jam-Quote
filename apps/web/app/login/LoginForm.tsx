@@ -17,7 +17,7 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-export default function LoginForm() {
+export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [state, formAction] = useFormState<AuthFormState, FormData>(authenticateAction, {});
   const isRegister = mode === "register";
@@ -25,6 +25,7 @@ export default function LoginForm() {
   return (
     <form className={styles.form} action={formAction}>
       <input type="hidden" name="mode" value={mode} />
+      {redirectTo && <input type="hidden" name="redirectTo" value={redirectTo} />}
 
       {isRegister && (
         <>
