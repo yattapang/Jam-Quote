@@ -21,7 +21,17 @@ import { createHash } from "node:crypto";
 export class WiPayService {
   private readonly logger = new Logger(WiPayService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly config: ConfigService) {
+    // Fail fast rather than run a live payment integration that cannot verify
+    // its own callbacks (see verifyCallback). Mirrors auth.module.ts, which
+    // refuses to boot in production without a JWT secret. Sandbox is left
+    // permissive so local/dev boots without WiPay credentials.
+    if (this.env.environment === "live" && !this.env.apiKey) {
+      throw new Error(
+        "WIPAY_ENVIRONMENT=live requires WIPAY_API_KEY — callback hashes cannot be verified without it.",
+      );
+    }
+  }
 
   private get env() {
     return {
@@ -43,7 +53,9 @@ export class WiPayService {
    * decimal string in major units.
    */
   async createPaymentRequest(params: {
-    orderId: string; // our invoice number / id
+    // Our invoice UUID — must be globally unique, since the callback resolves
+    // the invoice from whatever is sent here. Never pass invoice.number.
+    orderId: string;
     amountCents: number;
     customerName?: string;
     customerEmail?: string;
@@ -100,8 +112,20 @@ export class WiPayService {
    * transaction_id + total + API key. We recompute and compare in constant
    * time. Reject anything that doesn't match — never mark an invoice paid on an
    * unverified callback.
+   *
+   * The API key is the ONLY secret in that recipe, so an unset WIPAY_API_KEY
+   * would make the expected hash md5(transaction_id + total) — a value anyone
+   * can compute, letting a forged callback mark invoices paid. Missing config
+   * must therefore fail CLOSED, not fall back to hashing with an empty key.
    */
   verifyCallback(payload: Record<string, string>): boolean {
+    if (!this.env.apiKey) {
+      this.logger.error(
+        "WIPAY_API_KEY is not configured — rejecting callback. Without it the " +
+          "expected hash is publicly computable and cannot authenticate anything.",
+      );
+      return false;
+    }
     const { transaction_id, total, hash } = payload;
     if (!transaction_id || !total || !hash) return false;
     const expected = createHash("md5")

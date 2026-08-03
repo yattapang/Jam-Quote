@@ -27,7 +27,12 @@ export class PaymentsService {
 
     const balance = invoice.totalCents - invoice.paidCents;
     const { paymentUrl, providerRef } = await this.wipay.createPaymentRequest({
-      orderId: invoice.number,
+      // The invoice UUID, NOT invoice.number. Numbers are unique per tenant
+      // (@@unique([businessId, number])) and every business starts from
+      // INV-0001, so a number round-tripped through the provider comes back
+      // ambiguous — the callback could reconcile a real payment against a
+      // different tenant's invoice. handleWiPayCallback resolves this by id.
+      orderId: invoice.id,
       amountCents: balance,
       customerName: invoice.client
         ? `${invoice.client.firstName} ${invoice.client.lastName}`.trim()
@@ -56,10 +61,14 @@ export class PaymentsService {
       this.logger.warn("Rejected WiPay callback: hash mismatch");
       return; // never trust an unverified callback
     }
+    // order_id is the invoice's UUID (see startCardPayment). It must be
+    // resolved by id and never by number: invoice numbers are only unique
+    // within a business, so a number lookup here could match — and credit —
+    // another tenant's invoice entirely.
     const orderId = payload.order_id;
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { number: orderId },
-    });
+    const invoice = orderId
+      ? await this.prisma.invoice.findUnique({ where: { id: orderId } })
+      : null;
     if (!invoice) {
       this.logger.warn(`WiPay callback for unknown invoice ${orderId}`);
       return;
