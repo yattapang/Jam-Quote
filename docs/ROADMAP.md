@@ -10,8 +10,9 @@ after a usage-limit pause. Read this first on resume.
 > Summary/Detailed toggle, DETAILED breakdown on the quote detail page + PDF —
 > commit ad1deb7). Verified live: the deployed API returns `detailLevel` and
 > the assembly line fields.
-> RESUME HERE → next locked item is **invoicing / quote→invoice edit #18**.
-> Then mobile M3. (Admin RBAC #13 and rule-pack #11 both SHIPPED — see below.)
+> RESUME HERE → next locked item is **mobile M3 (offline-first)**, with a small
+> detour for **#19 Trade FK drift** (security-adjacent) first. (Admin RBAC #13,
+> rule-pack #11 and invoicing #18 all SHIPPED — see below.)
 
 ## Live now (deployed)
 - **API**: Render (free) + Neon Postgres. Migrations apply on boot via the
@@ -54,6 +55,23 @@ after a usage-limit pause. Read this first on resume.
 > multi-country packs. All 5 workspaces green (core 57 / api 107 / web 48 / mobile
 > 19). NEXT → invoicing/edit #18.
 
+> INVOICING #18 SHIPPED (2026-07-31, pushed — full slice: models + API + web).
+> Invoice went from header-only to a real editable document: new
+> InvoiceSection/InvoiceLineItem mirroring the Quote models, so the shared
+> computeTotals engine prices both identically. Invoice.status now defaults to
+> DRAFT. POST /invoices/from-quote/:quoteId snapshots an ACCEPTED quote (deep-copy
+> of sections + lines, number via reserveInvoiceNumber, blocks double-conversion);
+> PATCH edits while DRAFT; POST /:id/finalize flips invoice + source quote to
+> INVOICED atomically; DELETE soft-deletes DRAFT only. Payments untouched, so a
+> new invoice is WiPay-payable immediately. Web: real invoices list/detail/draft
+> editor replacing the placeholder, + "Convert to invoice" on ACCEPTED quotes.
+> Draft-only editing enforced at actions, route redirect, AND API. 232 tests green
+> (api 118 / web 57 / core 57); both builds pass.
+> FOLLOW-UP #19: Trade.businessId FK drift (DB CASCADE vs schema SET NULL) —
+> deliberately excluded from the invoice migration; SET NULL would leak a deleted
+> tenant's custom trades into the global master list.
+> NEXT → mobile M3 (offline-first), or #19 first (small, security-adjacent).
+
 ## LOCKED build order (next up)
 1. **Admin-ops console UI** — backend done + deployed; rebuild the UI fresh (a
    partial attempt is stashed): tenant actions + type-to-confirm delete,
@@ -66,8 +84,9 @@ after a usage-limit pause. Read this first on resume.
       summary/detail toggle, PDF rendering (#17) ✅
 3. **Admin RBAC** — super-admin + granular per-admin capabilities (#13) ✅ SHIPPED
 4. **Rule-pack** — lighter editable-JM-values step (#11) ✅ SHIPPED
-5. **Quote→invoice editing** / invoicing M5 (#18) ← NEXT
-6. **M3** — mobile offline-first (local replica + outbox + sync engine)
+5. **Quote→invoice editing** / invoicing M5 (#18) ✅ SHIPPED
+6. **M3** — mobile offline-first (local replica + outbox + sync engine) ← NEXT
+   (small detour first: #19 Trade FK drift — security-adjacent)
 
 ## Decisions locked
 - Assemblies: unit price = sum of parts + markup, EDITABLE/overridable per
