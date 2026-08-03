@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { NotFoundException } from "@nestjs/common";
 import { PaymentMethod } from "@jamquote/core";
 import { PaymentsService } from "./payments.service.js";
 
@@ -78,21 +79,84 @@ describe("PaymentsService.recordManualPayment", () => {
       invoice: { update: vi.fn().mockResolvedValue({}) },
     };
     const prisma = {
-      invoice: { findUnique: vi.fn().mockResolvedValue(invoice) },
+      invoice: { findFirst: vi.fn().mockResolvedValue(invoice) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     const svc = new PaymentsService(prisma as any, makeWiPay() as any);
 
     await svc.recordManualPayment({
+      businessId: "biz-1",
       invoiceId: "i1",
       amountCents: 50_000,
       method: PaymentMethod.CASH,
     });
 
+    expect(prisma.invoice.findFirst).toHaveBeenCalledWith({
+      where: { id: "i1", businessId: "biz-1" },
+    });
     expect(tx.invoice.update).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ paidCents: 50_000, status: "PARTIAL" }),
       }),
+    );
+  });
+
+  it("throws NotFound (not the other tenant's invoice) when the invoice belongs to a different business", async () => {
+    const prisma = {
+      // findFirst scoped to businessId finds nothing for a cross-tenant id.
+      invoice: { findFirst: vi.fn().mockResolvedValue(null) },
+      $transaction: vi.fn(),
+    };
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+
+    await expect(
+      svc.recordManualPayment({
+        businessId: "biz-attacker",
+        invoiceId: "i1-belongs-to-biz-1",
+        amountCents: 50_000,
+        method: PaymentMethod.CASH,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("PaymentsService.startCardPayment", () => {
+  it("scopes the invoice lookup to businessId and starts the WiPay request", async () => {
+    const invoice = {
+      id: "i1",
+      number: "INV-0007",
+      totalCents: 100_000,
+      paidCents: 0,
+      client: null,
+    };
+    const wipay = makeWiPay({
+      createPaymentRequest: vi
+        .fn()
+        .mockResolvedValue({ paymentUrl: "https://wipay.example/pay/1", providerRef: "ref-1" }),
+    });
+    const prisma = {
+      invoice: { findFirst: vi.fn().mockResolvedValue(invoice) },
+      payment: { create: vi.fn().mockResolvedValue({}) },
+    };
+    const svc = new PaymentsService(prisma as any, wipay as any);
+
+    const result = await svc.startCardPayment("biz-1", "i1");
+
+    expect(prisma.invoice.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "i1", businessId: "biz-1" } }),
+    );
+    expect(result).toEqual({ paymentUrl: "https://wipay.example/pay/1" });
+  });
+
+  it("throws NotFound for a cross-tenant invoiceId instead of leaking another tenant's invoice", async () => {
+    const prisma = {
+      invoice: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+
+    await expect(svc.startCardPayment("biz-attacker", "i1-belongs-to-biz-1")).rejects.toBeInstanceOf(
+      NotFoundException,
     );
   });
 });

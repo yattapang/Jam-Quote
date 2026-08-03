@@ -7,8 +7,10 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from "@nestjs/common";
 import { QuoteStatus } from "@jamquote/core";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { QuotesService } from "./quotes.service.js";
@@ -22,6 +24,7 @@ import {
 } from "./quotes.dto.js";
 
 @Controller("quotes")
+@UseGuards(TenantAuthGuard)
 export class QuotesController {
   constructor(private readonly quotes: QuotesService) {}
 

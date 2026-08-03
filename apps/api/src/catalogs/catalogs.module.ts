@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AuthModule } from "../auth/auth.module.js";
 import { EquipmentController } from "./equipment.controller.js";
 import { EquipmentService } from "./equipment.service.js";
 import { LabourRatesController } from "./labour-rates.controller.js";
@@ -14,6 +15,11 @@ import { SuppliersService } from "./suppliers.service.js";
  * equipment / labour rates / material favourites are business-scoped.
  */
 @Module({
+  // AuthModule exports JwtModule, needed by TenantAuthGuard (applied at the
+  // class level on Equipment/LabourRates/MaterialFavourites controllers, but
+  // NOT on SuppliersController — that directory is global/business-agnostic
+  // by design and stays public).
+  imports: [AuthModule],
   controllers: [
     EquipmentController,
     LabourRatesController,

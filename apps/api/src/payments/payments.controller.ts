@@ -1,19 +1,36 @@
-import { Body, Controller, Param, Post, Req } from "@nestjs/common";
+import { Body, Controller, Param, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 import { PaymentMethod } from "@jamquote/core";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
+import { BusinessId } from "../common/business-id.decorator.js";
 import { PaymentsService } from "./payments.service.js";
 
 @Controller("payments")
 export class PaymentsController {
   constructor(private readonly payments: PaymentsService) {}
 
-  /** Begin a card payment; client redirects to the returned WiPay URL. */
+  /**
+   * Begin a card payment; client redirects to the returned WiPay URL. Guarded
+   * (unlike the webhook below) — the service verifies invoiceId belongs to
+   * the caller's business before doing anything, closing what was an IDOR:
+   * any caller who knew/guessed an invoiceId could previously start (and on
+   * the manual route below, directly record) a payment against ANY tenant's
+   * invoice.
+   */
   @Post("invoices/:invoiceId/card")
-  startCard(@Param("invoiceId") invoiceId: string): Promise<{ paymentUrl: string }> {
-    return this.payments.startCardPayment(invoiceId);
+  @UseGuards(TenantAuthGuard)
+  startCard(
+    @Param("invoiceId") invoiceId: string,
+    @BusinessId() businessId: string,
+  ): Promise<{ paymentUrl: string }> {
+    return this.payments.startCardPayment(businessId, invoiceId);
   }
 
-  /** WiPay server-to-server callback. Body is form-encoded key/value pairs. */
+  /**
+   * WiPay server-to-server callback. Must stay public — WiPay cannot present
+   * a JWT — but is still verified: handleWiPayCallback checks the payload's
+   * hash (wipay.service.ts verifyCallback) before trusting anything in it.
+   */
   @Post("wipay/webhook")
   async webhook(@Req() req: Request): Promise<{ received: true }> {
     const payload = req.body as Record<string, string>;
@@ -23,11 +40,14 @@ export class PaymentsController {
 
   /** Record a manual payment (cash / bank transfer / Lynk). */
   @Post("invoices/:invoiceId/manual")
+  @UseGuards(TenantAuthGuard)
   recordManual(
     @Param("invoiceId") invoiceId: string,
+    @BusinessId() businessId: string,
     @Body() body: { amountCents: number; method: PaymentMethod },
   ): Promise<void> {
     return this.payments.recordManualPayment({
+      businessId,
       invoiceId,
       amountCents: body.amountCents,
       method: body.method,

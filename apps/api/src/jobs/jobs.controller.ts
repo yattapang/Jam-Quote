@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { Job } from "@prisma/client";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { JobsService } from "./jobs.service.js";
@@ -11,6 +12,7 @@ import {
 } from "./jobs.dto.js";
 
 @Controller("jobs")
+@UseGuards(TenantAuthGuard)
 export class JobsController {
   constructor(private readonly jobs: JobsService) {}
 

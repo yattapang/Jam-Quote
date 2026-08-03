@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { AssembliesService, type AssemblyWithCost } from "./assemblies.service.js";
@@ -10,6 +11,7 @@ import {
 } from "./assemblies.dto.js";
 
 @Controller("assemblies")
+@UseGuards(TenantAuthGuard)
 export class AssembliesController {
   constructor(private readonly assemblies: AssembliesService) {}
 

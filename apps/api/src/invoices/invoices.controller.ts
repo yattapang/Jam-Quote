@@ -1,11 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { InvoiceStatus } from "@jamquote/core";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { InvoicesService } from "./invoices.service.js";
 import { updateInvoiceSchema, type UpdateInvoiceInput } from "./invoices.dto.js";
 
 @Controller("invoices")
+@UseGuards(TenantAuthGuard)
 export class InvoicesController {
   constructor(private readonly invoices: InvoicesService) {}
 

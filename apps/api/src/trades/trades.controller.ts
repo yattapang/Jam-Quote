@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { TradesService, type TradeView } from "./trades.service.js";
 import { createTradeSchema, type CreateTradeInput } from "./trades.dto.js";
 
 @Controller("trades")
+@UseGuards(TenantAuthGuard)
 export class TradesController {
   constructor(private readonly trades: TradesService) {}
 

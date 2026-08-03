@@ -56,11 +56,10 @@ import { BillingModule } from "./billing/billing.module.js";
   ],
 })
 export class AppModule implements NestModule {
-  // Non-breaking auth bridge: if a request carries a valid Bearer JWT, this
-  // sets req.user/req.businessId; it never rejects, so existing
-  // x-business-id header requests are completely unaffected. See
-  // @BusinessId() in ./common/business-id.decorator.ts for how the two
-  // auth paths are reconciled.
+  // Best-effort auth bridge: if a request carries a valid Bearer JWT, this
+  // sets req.user for optional-auth routes; it never rejects and never sets
+  // req.businessId (that's TenantAuthGuard's job — see auth/tenant-auth.guard.ts
+  // and auth/auth-context.middleware.ts for why the two are kept separate).
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(AuthContextMiddleware).forRoutes("*");
   }

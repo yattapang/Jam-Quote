@@ -1,10 +1,12 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { SyncService, type PullResult, type PushResult } from "./sync.service.js";
 import { pullSchema, pushSchema, type PullInput, type PushInput } from "./sync.dto.js";
 
 @Controller("sync")
+@UseGuards(TenantAuthGuard)
 export class SyncController {
   constructor(private readonly sync: SyncService) {}
 

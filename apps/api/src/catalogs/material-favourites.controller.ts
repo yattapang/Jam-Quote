@@ -1,5 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import type { MaterialFavourite } from "@prisma/client";
+import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { MaterialFavouritesService } from "./material-favourites.service.js";
@@ -11,6 +12,7 @@ import {
 } from "./catalogs.dto.js";
 
 @Controller("catalogs/material-favourites")
+@UseGuards(TenantAuthGuard)
 export class MaterialFavouritesController {
   constructor(private readonly materialFavourites: MaterialFavouritesService) {}
 

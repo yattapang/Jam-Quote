@@ -12,10 +12,15 @@ export class PaymentsService {
     private readonly wipay: WiPayService,
   ) {}
 
-  /** Start a WiPay card payment for an invoice; returns the hosted checkout URL. */
-  async startCardPayment(invoiceId: string): Promise<{ paymentUrl: string }> {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
+  /**
+   * Start a WiPay card payment for an invoice; returns the hosted checkout
+   * URL. Scoped to businessId — findFirst (not findUnique by id alone) so a
+   * caller can never start (and thus fund a pending Payment row against) a
+   * payment on another tenant's invoice, even knowing its id.
+   */
+  async startCardPayment(businessId: string, invoiceId: string): Promise<{ paymentUrl: string }> {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, businessId },
       include: { client: true },
     });
     if (!invoice) throw new NotFoundException("Invoice not found");
@@ -99,14 +104,20 @@ export class PaymentsService {
     });
   }
 
-  /** Record a manual (non-card) payment: cash, bank transfer, Lynk. */
+  /**
+   * Record a manual (non-card) payment: cash, bank transfer, Lynk. Scoped to
+   * businessId for the same reason as startCardPayment above — otherwise
+   * any caller could mark ANY tenant's invoice as paid by amountCents of
+   * their choosing.
+   */
   async recordManualPayment(input: {
+    businessId: string;
     invoiceId: string;
     amountCents: number;
     method: PaymentMethod;
   }): Promise<void> {
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: input.invoiceId },
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: input.invoiceId, businessId: input.businessId },
     });
     if (!invoice) throw new NotFoundException("Invoice not found");
 
