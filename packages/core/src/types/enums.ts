@@ -115,7 +115,7 @@ export const AdminCapability = {
   MANAGE_PRICING: "MANAGE_PRICING",
   /** View the subscription & revenue (financials) screen. */
   VIEW_FINANCIALS: "VIEW_FINANCIALS",
-  /** Edit jurisdiction rule-packs (feature not yet built — reserved). */
+  /** Edit jurisdiction rule-packs (tax/statutory overrides via the console). */
   MANAGE_RULEPACK: "MANAGE_RULEPACK",
   /** Manage admin users and their capabilities. */
   MANAGE_ADMINS: "MANAGE_ADMINS",
