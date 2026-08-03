@@ -12,6 +12,7 @@ import { ClientsModule } from "./clients/clients.module.js";
 import { TradesModule } from "./trades/trades.module.js";
 import { JobsModule } from "./jobs/jobs.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
+import { InvoicesModule } from "./invoices/invoices.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
 import { AssembliesModule } from "./assemblies/assemblies.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
@@ -21,8 +22,8 @@ import { BillingModule } from "./billing/billing.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
- * deliver them. Still TODO: InvoicingModule, DocumentsModule (PDF),
- * MessagingModule (whatsapp/email), ReportsModule.
+ * deliver them. Still TODO: DocumentsModule (PDF), MessagingModule
+ * (whatsapp/email), ReportsModule.
  */
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { BillingModule } from "./billing/billing.module.js";
     TradesModule,
     JobsModule,
     QuotesModule,
+    InvoicesModule,
     CatalogsModule,
     AssembliesModule,
     PaymentsModule,
