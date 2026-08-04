@@ -72,6 +72,24 @@ after a usage-limit pause. Read this first on resume.
 > tenant's custom trades into the global master list.
 > NEXT → mobile M3 (offline-first), or #19 first (small, security-adjacent).
 
+> #6 TENANT AUTH SHIPPED & VERIFIED LIVE (2026-08-03). The tenant API accepted a
+> raw `x-business-id` header as identity — GET /api/invoices with any business id
+> and no token returned 200 with that tenant's data. New TenantAuthGuard now
+> protects every @BusinessId() controller, re-reading the user from the DB rather
+> than trusting token claims (so deletion/suspension bite immediately, not after
+> a 30-day token expires). Header alone -> 401; admin (no businessId) -> 403;
+> suspended business -> 403. Verified post-deploy: /invoices /quotes /clients
+> /jobs /trades /business/current /billing/status /catalogs/material-favourites
+> all 401 with the header; /health + /billing/plans still 200; web /quotes
+> /invoices /settings now 307 to /login instead of rendering empty.
+> Same pass closed PATCH /business/:id (was an unauthenticated cross-tenant
+> write) and the payments invoice IDOR. Web: forced login + 401/403 surfaced.
+> Mobile: signed-out users no longer shown fixture data as if real.
+> Also fixed #20/#21 (WiPay: cross-tenant credit via non-unique invoice number;
+> callback verification failing OPEN when WIPAY_API_KEY unset).
+> 283 tests green (145 api / 64 web / 57 core / 27 mobile).
+> NEXT → materials Option B Phase 1 (#26), then #24 password reset, #3 seed cleanup.
+
 ## LOCKED build order (next up)
 1. **Admin-ops console UI** — backend done + deployed; rebuild the UI fresh (a
    partial attempt is stashed): tenant actions + type-to-confirm delete,
