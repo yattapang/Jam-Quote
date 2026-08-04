@@ -115,7 +115,12 @@ Vercel's Next.js framework preset handles it once you set the Root Directory.
 3. Environment variables (Project Settings → Environment Variables):
    - `NEXT_PUBLIC_API_BASE_URL` = `https://jamquote-api.onrender.com/api`
      (the Render URL from step 3, with `/api` appended)
-4. Deploy. Note the resulting URL, e.g. `https://jamquote.vercel.app`.
+4. Deploy. **Live production URL: `https://jam-quote-web.vercel.app`**
+   (recorded explicitly because it is not derivable from the repo — there is no
+   `vercel.json` and no checked-in `.vercel/project.json`, and `WEB_ORIGIN` is
+   `sync: false` in render.yaml, so the domain exists only in the dashboards.
+   Note it is `jam-quote-web`, not `jamquote` or `jam-quote` — those are a
+   dead domain and an unrelated third party's site respectively.)
 
 The web build consumes `@jamquote/core` from TypeScript source via tsconfig
 paths, so Vercel does **not** need `packages/core` prebuilt — no extra step
@@ -177,7 +182,7 @@ browser/file manager you use). Use the `production` profile
 | Where | Var | Example |
 |---|---|---|
 | Render (API) | `DATABASE_URL` | `postgresql://user:pass@ep-xxx.neon.tech/jamquote?sslmode=require` |
-| Render (API) | `WEB_ORIGIN` | `https://jamquote.vercel.app` |
+| Render (API) | `WEB_ORIGIN` | `https://jam-quote-web.vercel.app` |
 | Render (API) | `NODE_ENV` | `production` |
 | Vercel (Web) | `NEXT_PUBLIC_API_BASE_URL` | `https://jamquote-api.onrender.com/api` |
 | EAS (Mobile) | `EXPO_PUBLIC_API_BASE_URL` | `https://jamquote-api.onrender.com/api` |
