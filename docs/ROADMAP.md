@@ -114,6 +114,22 @@ after a usage-limit pause. Read this first on resume.
 - Admin permissions: granular capabilities (tenants/suppliers/pricing/
   financials/rulepack/manage-admins); yattapang = super-admin.
 - Subscription billing: manual (admin flips to Pro) until Phase-2 WiPay.
+- Material catalog (#26, Option B — applies to ALL material kinds, not just
+  lumber): categories are platform-curated ONLY; tenants add attribute VALUES
+  (species, gauge, bag size) which are stored as tenant-scoped options, never
+  free text. "Other" + free-text is the escape hatch; super-admin adds a
+  category when a real gap appears. Rationale: categories carry the attribute
+  schema, so tenant-invented ones fragment the shared catalog. Reversible later;
+  the opposite is not.
+- Units: controlled vocabulary (ea, bag, sheet, length, board-ft, sq-ft, cu-yd,
+  litre, kg, m, ft), tenant-extendable — but NO automatic conversions. Board-ft
+  ↔ linear-ft depends on profile and bags ↔ volume depends on product, so a
+  wrong conversion silently mis-prices a customer quote. Consistent units are
+  for search/reporting; the app does not do arithmetic it cannot verify.
+- Per-supplier pricing / price comparison: NOT part of #26. MaterialPriceEntry
+  is currently orphaned from tenant materials (seed + admin only). Needs its own
+  scoping — who keeps prices current, staleness UX, and whether it is a Pro
+  feature. Likely Pro differentiator for the JM market.
 
 ## Blocked on the user (external)
 - **WiPay MERCHANT account** → unblocks Phase-2 automated subscription billing +
