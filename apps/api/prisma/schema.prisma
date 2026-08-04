@@ -380,6 +380,9 @@ model MaterialFavourite {
   // free-form contractor input, not FK'd to any enum.
   category   String?
   specs      Json?
+  // Free-text notes the contractor can search on (e.g. "leftover from the
+  // Palisadoes job, slightly weathered") — additive, nullable, no backfill.
+  description String?
   updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 

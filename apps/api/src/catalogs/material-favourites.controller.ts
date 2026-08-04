@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { MaterialFavourite } from "@prisma/client";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
@@ -6,8 +6,10 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { MaterialFavouritesService } from "./material-favourites.service.js";
 import {
   createMaterialFavouriteSchema,
+  materialFavouriteQuerySchema,
   updateMaterialFavouriteSchema,
   type CreateMaterialFavouriteInput,
+  type MaterialFavouriteQuery,
   type UpdateMaterialFavouriteInput,
 } from "./catalogs.dto.js";
 
@@ -26,8 +28,12 @@ export class MaterialFavouritesController {
   }
 
   @Get()
-  findAll(@BusinessId() businessId: string): Promise<MaterialFavourite[]> {
-    return this.materialFavourites.findAll(businessId);
+  findAll(
+    @BusinessId() businessId: string,
+    @Query(new ZodValidationPipe(materialFavouriteQuerySchema))
+    query: MaterialFavouriteQuery,
+  ): Promise<MaterialFavourite[]> {
+    return this.materialFavourites.findAll(businessId, query);
   }
 
   @Get(":id")

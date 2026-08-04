@@ -22,10 +22,36 @@ export const createMaterialFavouriteSchema = z.object({
   // free-form key->value map of that category's spec values.
   category: z.string().optional(),
   specs: z.record(z.string(), z.string()).optional(),
+  // Free-text, searchable (see MaterialFavouritesService.findAll). No
+  // .min(1) — an empty string is a valid value used to clear a previously
+  // set description, distinct from `undefined` (leave unchanged on PATCH).
+  description: z.string().max(500).optional(),
 });
 export type CreateMaterialFavouriteInput = z.infer<typeof createMaterialFavouriteSchema>;
 export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial();
 export type UpdateMaterialFavouriteInput = z.infer<typeof updateMaterialFavouriteSchema>;
+
+/** Max rows GET /catalogs/material-favourites?limit= can return in one call. */
+export const MATERIAL_FAVOURITE_QUERY_MAX_LIMIT = 200;
+
+export const materialFavouriteQuerySchema = z.object({
+  // Case-insensitive search across name, description, and the values inside
+  // the `specs` JSON (see MaterialFavouritesService.findAll for how the
+  // specs match is done). Blank/whitespace-only is treated as "no filter".
+  q: z.string().trim().min(1).optional(),
+  // Exact match on the existing free-text category string.
+  category: z.string().trim().min(1).optional(),
+  // Coerced from the query string; capped (not rejected) at
+  // MATERIAL_FAVOURITE_QUERY_MAX_LIMIT so a caller asking for too much just
+  // gets the cap instead of a 400.
+  limit: z.coerce
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : Math.min(v, MATERIAL_FAVOURITE_QUERY_MAX_LIMIT))),
+});
+export type MaterialFavouriteQuery = z.infer<typeof materialFavouriteQuerySchema>;
 
 export const createEquipmentItemSchema = z.object({
   name: z.string().min(1),
