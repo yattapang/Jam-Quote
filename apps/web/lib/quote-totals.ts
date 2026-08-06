@@ -1,4 +1,4 @@
-import { computeTotals, LineCategory, type QuoteTotals } from "@jamquote/core";
+import { computeTotals, LineCategory, type QuoteTotals, type RateUnit } from "@jamquote/core";
 import type { Quote } from "./types";
 
 /** Wraps @jamquote/core's computeTotals — the only place quote math happens. */
@@ -92,6 +92,21 @@ export const CATEGORY_ACCENT: Record<LineCategory, string> = {
   [LineCategory.SUBCONTRACTOR]: "var(--jq-accent)",
   [LineCategory.OTHER]: "var(--jq-neutral-pill)",
 };
+
+/**
+ * How a line's quantity is denominated on the customer-facing document.
+ *
+ * Prefers the line's own `unitLabel` snapshot — how the MATERIAL is sold
+ * ("bag", "sheet", "length") — and falls back to rateUnit's label. rateUnit is
+ * the labour-time vocabulary (HOUR/DAY/…/UNIT), so before #26 a material sold
+ * by the bag printed as "unit" on the quote the customer reads.
+ *
+ * The snapshot is a plain string captured when the line was created, so a
+ * quote already sent does not change if the contractor later renames the unit.
+ */
+export function lineUnitLabel(line: { rateUnit: RateUnit; unitLabel?: string | null }): string {
+  return line.unitLabel?.trim() || RATE_UNIT_LABEL[line.rateUnit];
+}
 
 export const RATE_UNIT_LABEL = {
   HOUR: "hour",

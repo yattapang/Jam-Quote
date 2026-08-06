@@ -88,6 +88,11 @@ interface DraftLine {
   description: string;
   quantity: string;
   rateUnit: RateUnit;
+  /** How the picked material is SOLD ("bag", "sheet"). rateUnit can't express
+   * that — it's the labour-time vocabulary — so without this a material sold by
+   * the bag printed as "unit" on the customer's quote. Snapshotted at pick
+   * time so a sent quote doesn't change if the unit is later renamed. */
+  unitLabel?: string;
   unitPriceDollars: string;
   gctTreatment: GctTreatment;
   /** Set only on a line dropped in from a job type ("+ Add job type"). The
@@ -155,6 +160,7 @@ function toLineInput(l: DraftLine) {
     description: l.description.trim(),
     quantity: Number(l.quantity),
     rateUnit: l.rateUnit,
+    ...(l.unitLabel ? { unitLabel: l.unitLabel } : {}),
     unitPriceCents: toCents(l.unitPriceDollars),
     gctTreatment: l.gctTreatment,
     // Assembly provenance rides along only for job-type lines; a plain line
@@ -175,6 +181,9 @@ export interface InitialQuoteLine {
   description: string;
   quantity: number;
   rateUnit: RateUnit;
+  /** Round-tripped on edit so a saved line keeps the unit the customer already
+   * saw on the quote. */
+  unitLabel?: string;
   unitPriceCents: number;
   gctTreatment: GctTreatment;
   /** Carried through on edit so a job-type line keeps its breakdown snapshot. */
@@ -208,6 +217,7 @@ function draftLineFromInitial(l: InitialQuoteLine, heading: Heading): DraftLine 
     description: l.description,
     quantity: String(l.quantity),
     rateUnit: l.rateUnit,
+    unitLabel: l.unitLabel,
     unitPriceDollars: fromCents(l.unitPriceCents),
     gctTreatment: l.gctTreatment,
     assemblyId: l.assemblyId,
@@ -533,6 +543,10 @@ export default function QuoteBuilder({
           ...l,
           description: materialLineDescription(fav),
           unitPriceDollars: String(fav.priceDollars),
+          // `fav.unit` is the resolved MaterialUnit label for 2a materials and
+          // the legacy free-text string for older ones; either way it is what
+          // the customer should see next to the quantity.
+          unitLabel: fav.unit,
           heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
           materialFavouriteId: fav.id,
         };
@@ -617,6 +631,7 @@ export default function QuoteBuilder({
               ...l,
               description: materialLineDescription(created),
               unitPriceDollars: String(created.priceDollars),
+              unitLabel: created.unit,
               materialFavouriteId: created.id,
             }
           : l,

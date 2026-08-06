@@ -7,6 +7,7 @@ import {
   RateUnit,
 } from "@jamquote/core";
 import {
+  lineUnitLabel,
   categorySubtotalCents,
   getQuoteTotals,
   groupLinesByCategory,
@@ -112,5 +113,30 @@ describe("groupLinesByHeading", () => {
   it("with no sections at all, behaves like groupLinesByCategory", () => {
     const groups = groupLinesByHeading(quote);
     expect(groups.map((g) => g.title)).toEqual(["Materials", "Labour"]);
+  });
+});
+
+describe("lineUnitLabel — a material sold by the bag must not print as 'unit'", () => {
+  it("prefers the line's own sold-by unit", () => {
+    // The #26 bug: rateUnit is the labour-time vocabulary, so before unitLabel
+    // existed a 42.5kg bag of cement printed as "unit" on the customer's quote.
+    expect(lineUnitLabel({ rateUnit: RateUnit.UNIT, unitLabel: "bag" })).toBe("bag");
+  });
+
+  it("falls back to the rateUnit label when there is no material unit", () => {
+    // Labour lines have no sold-by unit and must keep reading "day".
+    expect(lineUnitLabel({ rateUnit: RateUnit.DAY })).toBe("day");
+  });
+
+  it("treats an unset or blank unitLabel as absent", () => {
+    expect(lineUnitLabel({ rateUnit: RateUnit.HOUR, unitLabel: undefined })).toBe("hour");
+    expect(lineUnitLabel({ rateUnit: RateUnit.HOUR, unitLabel: "   " })).toBe("hour");
+    expect(lineUnitLabel({ rateUnit: RateUnit.HOUR, unitLabel: null })).toBe("hour");
+  });
+
+  it("does not let the material unit be overridden by rateUnit's own label", () => {
+    // A line can legitimately carry both — the material unit wins, since it is
+    // what the quantity is actually denominated in.
+    expect(lineUnitLabel({ rateUnit: RateUnit.DAY, unitLabel: "sheet" })).toBe("sheet");
   });
 });

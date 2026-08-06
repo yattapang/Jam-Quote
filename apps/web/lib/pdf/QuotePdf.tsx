@@ -12,7 +12,7 @@ import {
 } from "@react-pdf/renderer";
 import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
-import { getQuoteTotals, groupLinesByHeading, RATE_UNIT_LABEL, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
+import { getQuoteTotals, groupLinesByHeading, lineUnitLabel, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
 
 /**
  * Server-rendered branded quote PDF. Built-in Helvetica only (no custom/remote
@@ -252,7 +252,7 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
                   <View style={styles.row}>
                     <Text style={[styles.colDesc, styles.cell]}>{line.description}</Text>
                     <Text style={[styles.colQty, styles.cellMuted]}>
-                      {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]}
+                      {line.quantity} {lineUnitLabel(line)}
                     </Text>
                     <Text style={[styles.colGct, styles.cellMuted]}>
                       {GCT_TREATMENT_LABEL[line.gctTreatment]}

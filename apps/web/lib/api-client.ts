@@ -155,6 +155,9 @@ export interface ApiLineItem {
   description: string;
   quantity: number | string;
   rateUnit: QuoteLineItemInput["rateUnit"];
+  /** Display unit snapshot for how the material is sold ("bag", "sheet").
+   * Falls back to rateUnit's label when unset — see QuotePdf. */
+  unitLabel?: string | null;
   unitPriceCents: number;
   priceSource: QuoteLineItemInput["priceSource"];
   gctTreatment: QuoteLineItemInput["gctTreatment"];
@@ -434,6 +437,7 @@ function mapLine(l: ApiLineItem): Quote["lines"][number] {
     description: l.description,
     quantity: Number(l.quantity),
     rateUnit: l.rateUnit,
+    unitLabel: l.unitLabel ?? undefined,
     unitPriceCents: l.unitPriceCents,
     priceSource: l.priceSource,
     gctTreatment: l.gctTreatment,

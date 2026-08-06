@@ -306,6 +306,13 @@ model QuoteLineItem {
   description        String
   quantity           Decimal       @db.Decimal(12, 3)
   rateUnit           RateUnit      @default(UNIT)
+  // Display unit snapshot ("bag", "sheet", "length"). rateUnit is the
+  // labour-time vocabulary and cannot express how a material is SOLD, so
+  // without this a material sold by the bag printed as "UNIT" on the
+  // customer's quote (#26). A plain string, not a MaterialUnit FK, for the
+  // same reason as assemblyName/supplierId here: a sent quote must not change
+  // because the unit was later renamed or deleted.
+  unitLabel          String?
   unitPriceCents     Int
   priceSource        PriceSource   @default(MANUAL)
   supplierId         String?
@@ -692,6 +699,8 @@ model InvoiceLineItem {
   description        String
   quantity           Decimal         @db.Decimal(12, 3)
   rateUnit           RateUnit        @default(UNIT)
+  // Copied forward from the quote line — see QuoteLineItem.unitLabel.
+  unitLabel          String?
   unitPriceCents     Int
   priceSource        PriceSource     @default(MANUAL)
   // Plain snapshot reference (NOT a FK), same rationale as assemblyId below:

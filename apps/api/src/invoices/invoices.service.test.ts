@@ -38,7 +38,7 @@ function acceptedQuote(overrides: Partial<{ status: QuoteStatus }> = {}) {
     depositCents: 0,
     terms: "Net 30",
     lineItems: [
-      { ...line, id: "li1", sectionId: null, sort: 0, markupPct: null, supplierId: null, overrideNote: null, assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
+      { ...line, id: "li1", sectionId: null, sort: 0, markupPct: null, supplierId: null, overrideNote: null, unitLabel: "bag", assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
     ],
     sections: [
       {
@@ -46,7 +46,7 @@ function acceptedQuote(overrides: Partial<{ status: QuoteStatus }> = {}) {
         title: "Foundation",
         sort: 0,
         lineItems: [
-          { ...line, id: "li2", sectionId: "s1", sort: 0, quantity: 5, markupPct: null, supplierId: null, overrideNote: null, assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
+          { ...line, id: "li2", sectionId: "s1", sort: 0, quantity: 5, markupPct: null, supplierId: null, overrideNote: null, unitLabel: null, assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
         ],
       },
     ],
@@ -149,6 +149,17 @@ describe("InvoicesService.convertFromQuote", () => {
     expect(invoice.subtotalCents).toBe(expected.subtotalCents);
     expect(invoice.gctCents).toBe(expected.gctCents);
     expect(invoice.totalCents).toBe(expected.totalCents);
+  });
+
+  it("carries each line's sold-by unit onto the invoice", async () => {
+    // The invoice is a customer-facing document too: a line quoted in bags
+    // must not silently become "unit" when the quote is converted. unitLabel
+    // is a snapshot, so it is copied rather than re-resolved from the
+    // material, which may have been renamed or deleted since.
+    const { svc, createdLineItems } = harness();
+    await svc.convertFromQuote("b1", "q1");
+
+    expect(createdLineItems.map((li) => li.unitLabel)).toEqual(["bag", undefined]);
   });
 
   it("rejects conversion when the quote is not ACCEPTED", async () => {

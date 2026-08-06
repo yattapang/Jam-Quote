@@ -22,6 +22,18 @@ export const quoteLineItemSchema = z.object({
   description: z.string().min(1),
   quantity: z.number().positive(),
   rateUnit: z.nativeEnum(RateUnit),
+  /**
+   * Display unit SNAPSHOT for how this line's material is sold ("bag",
+   * "sheet", "length"). rateUnit is the labour-time vocabulary
+   * (HOUR/DAY/WEEK/MONTH/JOB/UNIT) and cannot express these, so a material
+   * sold by the bag printed as "UNIT" on the customer's quote (#26).
+   *
+   * A plain string, not a MaterialUnit FK, for the same reason assemblyName
+   * and supplierId are snapshots here: a quote already sent to a customer must
+   * not change because the contractor later renamed or deleted the unit.
+   * Falls back to rateUnit's label when unset.
+   */
+  unitLabel: z.string().max(40).optional(),
   unitPriceCents: z.number().int().nonnegative(),
   priceSource: z.nativeEnum(PriceSource).default(PriceSource.MANUAL),
   supplierId: z.string().uuid().optional(),

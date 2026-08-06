@@ -22,6 +22,8 @@ export interface QuoteLineAssemblyComponent {
 
 export interface QuoteLine extends QuoteLineItemInput {
   id: string;
+  // NOTE: `unitLabel` (the sold-by display snapshot, e.g. "bag") is inherited
+  // from QuoteLineItemInput rather than redeclared — see the core validator.
   /** Set only on lines created from an assembly ("job type"). assemblyId is a
    * plain reference back to the source Assembly (not an FK — the snapshot
    * fields keep historical quotes stable even if the assembly later changes). */
