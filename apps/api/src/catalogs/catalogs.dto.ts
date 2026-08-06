@@ -12,20 +12,34 @@ export const updateLabourRateSchema = createLabourRateSchema.partial();
 export type UpdateLabourRateInput = z.infer<typeof updateLabourRateSchema>;
 
 export const createMaterialFavouriteSchema = z.object({
-  name: z.string().min(1),
-  unit: z.string().optional(),
+  // Optional as of 2a: when the material has a category, the name is COMPOSED
+  // from its includeInName attributes (MaterialSchemaService.normalizeForWrite)
+  // rather than typed. Supply a name together with nameCustom to pin one.
+  name: z.string().min(1).optional(),
+  nameCustom: z.boolean().optional(),
+  // Controlled vocabulary for how the material is sold. Validated against the
+  // rows this business may see — a curated unit or one of its own.
+  unitId: z.string().uuid().optional(),
   priceCents: z.number().int().nonnegative(),
   supplierId: z.string().uuid().optional(),
-  // Structured catalog fields (both optional/nullable — see MaterialFavourite
-  // in schema.prisma). category names the spec-field set from
-  // apps/web/lib/material-categories.ts (e.g. "Steel / Rebar"); specs is a
-  // free-form key->value map of that category's spec values.
-  category: z.string().optional(),
+  categoryDefId: z.string().uuid().optional(),
+  // Keyed by MaterialAttributeDef.key. Unknown keys are rejected; ENUM values
+  // outside the vocabulary are accepted and recorded as tenant options.
   specs: z.record(z.string(), z.string()).optional(),
   // Free-text, searchable (see MaterialFavouritesService.findAll). No
   // .min(1) — an empty string is a valid value used to clear a previously
   // set description, distinct from `undefined` (leave unchanged on PATCH).
   description: z.string().max(500).optional(),
+  // One-hop purchase conversion; only meaningful together. See #26 units
+  // decision — this is deliberately not a general conversion graph.
+  measureUnit: z.string().max(40).optional(),
+  coveragePerSellUnit: z.number().positive().optional(),
+  wastePct: z.number().min(0).max(100).optional(),
+  // LEGACY free-text fields, still accepted so pre-2a clients (the mobile app,
+  // any cached web bundle) keep working against this endpoint. Superseded by
+  // categoryDefId / unitId, which win when both are supplied.
+  category: z.string().optional(),
+  unit: z.string().optional(),
 });
 export type CreateMaterialFavouriteInput = z.infer<typeof createMaterialFavouriteSchema>;
 export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial();
@@ -39,8 +53,10 @@ export const materialFavouriteQuerySchema = z.object({
   // the `specs` JSON (see MaterialFavouritesService.findAll for how the
   // specs match is done). Blank/whitespace-only is treated as "no filter".
   q: z.string().trim().min(1).optional(),
-  // Exact match on the existing free-text category string.
+  // Exact match on the legacy free-text category string. Kept for pre-2a
+  // clients; new callers filter with categoryDefId.
   category: z.string().trim().min(1).optional(),
+  categoryDefId: z.string().uuid().optional(),
   // Coerced from the query string; capped (not rejected) at
   // MATERIAL_FAVOURITE_QUERY_MAX_LIMIT so a caller asking for too much just
   // gets the cap instead of a 400.

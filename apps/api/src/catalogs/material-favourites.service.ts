@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
 import type { MaterialFavourite } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { MaterialSchemaService } from "./material-schema.service.js";
 import type {
   CreateMaterialFavouriteInput,
   MaterialFavouriteQuery,
@@ -10,74 +10,75 @@ import type {
 
 @Injectable()
 export class MaterialFavouritesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly schema: MaterialSchemaService,
+  ) {}
 
-  create(
+  /**
+   * The name/specs/searchText triple is never taken from the client as-is:
+   * MaterialSchemaService validates the specs against the category's
+   * attributes, records any new vocabulary value, and COMPOSES the display
+   * name. That is what keeps names consistent enough for search and de-duping
+   * to work at all — see #26.
+   */
+  async create(
     businessId: string,
     input: CreateMaterialFavouriteInput,
   ): Promise<MaterialFavourite> {
-    return this.prisma.materialFavourite.create({ data: { ...input, businessId } });
+    if (input.unitId) await this.schema.assertUnitVisible(businessId, input.unitId);
+    const normalized = await this.schema.normalizeForWrite(businessId, input);
+    return this.prisma.materialFavourite.create({
+      data: {
+        ...input,
+        businessId,
+        name: normalized.name,
+        specs: normalized.specs ?? undefined,
+        searchText: normalized.searchText,
+      },
+    });
   }
 
   /**
-   * GET /catalogs/material-favourites?q=&category=&limit=
+   * GET /catalogs/material-favourites?q=&category=&categoryDefId=&limit=
    *
-   * `q` search-across-JSON approach: Prisma's query API has no portable way
-   * to do a case-insensitive `contains` over the *values* of an arbitrary
-   * JSON column (its JSON filters only support exact-value / path
-   * equality, not substring/insensitive matching). So when `q` is given we
-   * first resolve the matching ids with a raw, hand-written query — using
-   * Postgres's `jsonb_each_text` to unnest `specs` into key/value rows and
-   * ILIKE each value — and then re-fetch the full rows through the normal
-   * typed Prisma `findMany` below (which also applies `category`, ordering,
-   * and `limit`). That second round trip is deliberate: it keeps
-   * Decimal/Json field deserialization on Prisma's normal, well-tested
-   * path instead of hand-reconstructing a MaterialFavourite from a raw
-   * result set. This is the "raw SQL for correctness at scale" option
-   * rather than fetch-all-then-filter-in-JS, because the latter would
-   * require pulling every one of a tenant's (potentially thousands of)
-   * rows into memory on every search keystroke.
+   * `q` matches the denormalized `searchText` column (name + description +
+   * spec values, lowercased), which MaterialSchemaService maintains on every
+   * write and the 2a migration backfilled onto every existing row.
    *
-   * SQL injection: `businessId` and the ILIKE pattern are passed as bound
-   * parameters via Prisma.sql tagged-template interpolation, never
-   * string-concatenated into the query text — Prisma sends them to
-   * Postgres as separate parameters ($1, $2, ...), so `q` containing SQL
-   * metacharacters (quotes, `--`, `;`, etc.) is matched only as a literal
-   * substring and can never alter the query. See the
-   * "treats SQL metacharacters as a literal" test in
-   * material-favourites.service.test.ts.
+   * This replaced a raw `jsonb_each_text` + ILIKE query that unnested `specs`
+   * on every keystroke. The raw query was correct, but once `searchText`
+   * exists the two are independent implementations of "what does this
+   * material match?" and WILL drift — searchText is now the single source.
+   * name/description stay in the OR as a belt-and-braces fallback for any row
+   * whose searchText was somehow never populated, so a search can degrade but
+   * never silently return nothing.
+   *
+   * `q` is passed through Prisma's `contains`, which parameterizes it — a
+   * value containing SQL metacharacters is matched as a literal substring.
    */
   async findAll(
     businessId: string,
     filters: MaterialFavouriteQuery = {},
   ): Promise<MaterialFavourite[]> {
-    const { q, category, limit } = filters;
-
-    let idFilter: { id: { in: string[] } } | undefined;
-    if (q) {
-      const pattern = `%${q}%`;
-      const rows = await this.prisma.$queryRaw<{ id: string }[]>(Prisma.sql`
-        SELECT "id" FROM "MaterialFavourite"
-        WHERE "businessId" = ${businessId}
-          AND "deletedAt" IS NULL
-          AND (
-            "name" ILIKE ${pattern}
-            OR "description" ILIKE ${pattern}
-            OR EXISTS (
-              SELECT 1 FROM jsonb_each_text(COALESCE("specs", '{}'::jsonb)) AS spec(key, value)
-              WHERE spec.value ILIKE ${pattern}
-            )
-          )
-      `);
-      idFilter = { id: { in: rows.map((r) => r.id) } };
-    }
+    const { q, category, categoryDefId, limit } = filters;
+    const insensitive = { mode: "insensitive" } as const;
 
     return this.prisma.materialFavourite.findMany({
       where: {
         businessId,
         deletedAt: null,
         ...(category ? { category } : {}),
-        ...(idFilter ?? {}),
+        ...(categoryDefId ? { categoryDefId } : {}),
+        ...(q
+          ? {
+              OR: [
+                { searchText: { contains: q.toLowerCase() } },
+                { name: { contains: q, ...insensitive } },
+                { description: { contains: q, ...insensitive } },
+              ],
+            }
+          : {}),
       },
       orderBy: { name: "asc" },
       ...(limit !== undefined ? { take: limit } : {}),
@@ -92,13 +93,37 @@ export class MaterialFavouritesService {
     return fav;
   }
 
+  /**
+   * PATCH semantics: normalization runs against the MERGED state (existing row
+   * + supplied fields), not the patch alone. Changing only the price must not
+   * recompose the name from an empty spec set, and changing one spec must
+   * revalidate against the whole material.
+   */
   async update(
     businessId: string,
     id: string,
     input: UpdateMaterialFavouriteInput,
   ): Promise<MaterialFavourite> {
-    await this.findOne(businessId, id);
-    return this.prisma.materialFavourite.update({ where: { id }, data: input });
+    const existing = await this.findOne(businessId, id);
+    if (input.unitId) await this.schema.assertUnitVisible(businessId, input.unitId);
+
+    const normalized = await this.schema.normalizeForWrite(businessId, input, {
+      categoryDefId: existing.categoryDefId,
+      specs: (existing.specs as Record<string, string> | null) ?? null,
+      name: existing.name,
+      nameCustom: existing.nameCustom,
+      description: existing.description,
+    });
+
+    return this.prisma.materialFavourite.update({
+      where: { id },
+      data: {
+        ...input,
+        name: normalized.name,
+        specs: normalized.specs ?? undefined,
+        searchText: normalized.searchText,
+      },
+    });
   }
 
   /**

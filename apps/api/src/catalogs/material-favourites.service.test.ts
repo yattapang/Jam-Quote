@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { MaterialFavouritesService } from "./material-favourites.service.js";
+import type { MaterialSchemaService } from "./material-schema.service.js";
 
-function withPrisma(
-  materialFavourite: Partial<Record<string, unknown>> = {},
-  extra: { $queryRaw?: ReturnType<typeof vi.fn> } = {},
-) {
+/**
+ * Prisma is mocked throughout this file. MaterialSchemaService is stubbed too:
+ * what it decides (validation, name composition, vocabulary capture) is
+ * covered against a real Postgres in material-schema.service.test.ts — here we
+ * only care that MaterialFavouritesService routes writes THROUGH it and
+ * persists what it returns, rather than trusting client input.
+ */
+function withPrisma(materialFavourite: Partial<Record<string, unknown>> = {}) {
   const prisma = {
     materialFavourite: {
       create: vi.fn(),
@@ -15,81 +20,137 @@ function withPrisma(
       delete: vi.fn(),
       ...materialFavourite,
     },
-    $queryRaw: extra.$queryRaw ?? vi.fn().mockResolvedValue([]),
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { svc: new MaterialFavouritesService(prisma as any), prisma };
+  const schema = {
+    assertUnitVisible: vi.fn().mockResolvedValue(undefined),
+    normalizeForWrite: vi.fn().mockImplementation(
+      (_biz: string, input: { name?: string; specs?: Record<string, string> }) => ({
+        name: input.name ?? "composed name",
+        specs: input.specs ?? null,
+        searchText: (input.name ?? "composed name").toLowerCase(),
+      }),
+    ),
+  };
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    svc: new MaterialFavouritesService(prisma as any, schema as unknown as MaterialSchemaService),
+    prisma,
+    schema,
+  };
 }
 
 describe("MaterialFavouritesService.create", () => {
-  it("passes the optional category + specs straight through to prisma", async () => {
-    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
-    await svc.create("biz-1", {
-      name: "Rebar 1/2in",
-      priceCents: 25000,
-      category: "Steel / Rebar",
-      specs: { Diameter: "1/2in", Length: "20ft" },
+  it("persists the name/specs/searchText the schema service decided, not the raw input", async () => {
+    const { svc, prisma, schema } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    schema.normalizeForWrite.mockResolvedValue({
+      name: "Lumber 2x4 16ft Cedar Select",
+      specs: { dimension: "2x4", length: "16ft", species: "Cedar", grade: "Select" },
+      searchText: "lumber 2x4 16ft cedar select",
     });
+
+    await svc.create("biz-1", {
+      priceCents: 25000,
+      categoryDefId: "11111111-1111-1111-1111-111111111111",
+      specs: { dimension: "2x4" },
+    });
+
     expect(prisma.materialFavourite.create).toHaveBeenCalledWith({
-      data: {
-        name: "Rebar 1/2in",
-        priceCents: 25000,
-        category: "Steel / Rebar",
-        specs: { Diameter: "1/2in", Length: "20ft" },
+      data: expect.objectContaining({
         businessId: "biz-1",
-      },
+        name: "Lumber 2x4 16ft Cedar Select",
+        specs: { dimension: "2x4", length: "16ft", species: "Cedar", grade: "Select" },
+        searchText: "lumber 2x4 16ft cedar select",
+      }),
     });
   });
 
-  it("still works with no category/specs (backward compatible)", async () => {
+  it("checks a supplied unitId is visible to this business before writing", async () => {
+    const { svc, schema } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    await svc.create("biz-1", { priceCents: 1200, unitId: "22222222-2222-2222-2222-222222222222" });
+    // Ids are not capabilities: without this check a tenant could reference
+    // another tenant's private unit by guessing its id.
+    expect(schema.assertUnitVisible).toHaveBeenCalledWith("biz-1", "22222222-2222-2222-2222-222222222222");
+  });
+
+  it("does not call the unit check when no unitId is supplied", async () => {
+    const { svc, schema } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    await svc.create("biz-1", { name: "Cement", priceCents: 1200 });
+    expect(schema.assertUnitVisible).not.toHaveBeenCalled();
+  });
+
+  it("still accepts a bare name + price (pre-2a clients)", async () => {
     const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
     await svc.create("biz-1", { name: "Cement", priceCents: 1200 });
     expect(prisma.materialFavourite.create).toHaveBeenCalledWith({
-      data: { name: "Cement", priceCents: 1200, businessId: "biz-1" },
-    });
-  });
-
-  it("passes description straight through to prisma", async () => {
-    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
-    await svc.create("biz-1", {
-      name: "Cedar 2x4x8",
-      priceCents: 1500,
-      description: "Leftover from the Palisadoes job, slightly weathered",
-    });
-    expect(prisma.materialFavourite.create).toHaveBeenCalledWith({
-      data: {
-        name: "Cedar 2x4x8",
-        priceCents: 1500,
-        description: "Leftover from the Palisadoes job, slightly weathered",
-        businessId: "biz-1",
-      },
+      data: expect.objectContaining({ name: "Cement", priceCents: 1200, businessId: "biz-1" }),
     });
   });
 });
 
 describe("MaterialFavouritesService.update", () => {
-  it("passes category + specs through on update", async () => {
-    const { svc, prisma } = withPrisma({
-      findFirst: vi.fn().mockResolvedValue({ id: "mat-1", businessId: "biz-1" }),
+  const existing = {
+    id: "mat-1",
+    businessId: "biz-1",
+    categoryDefId: "cat-1",
+    specs: { dimension: "2x4" },
+    name: "Lumber 2x4",
+    nameCustom: false,
+    description: null,
+  };
+
+  it("normalizes against the MERGED row, not the patch alone", async () => {
+    const { svc, schema } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue(existing),
       update: vi.fn().mockResolvedValue({}),
     });
-    await svc.update("biz-1", "mat-1", { category: "Blocks", specs: { Size: "6in", Type: "Solid" } });
+
+    await svc.update("biz-1", "mat-1", { priceCents: 30000 });
+
+    // A price-only PATCH must still see the existing category/specs, or the
+    // name would be recomposed from nothing and the material would be renamed
+    // as a side effect of a price change.
+    expect(schema.normalizeForWrite).toHaveBeenCalledWith(
+      "biz-1",
+      { priceCents: 30000 },
+      expect.objectContaining({ categoryDefId: "cat-1", specs: { dimension: "2x4" }, name: "Lumber 2x4" }),
+    );
+  });
+
+  it("writes back the recomposed name and searchText", async () => {
+    const { svc, prisma, schema } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue(existing),
+      update: vi.fn().mockResolvedValue({}),
+    });
+    schema.normalizeForWrite.mockResolvedValue({
+      name: "Lumber 2x4 20ft",
+      specs: { dimension: "2x4", length: "20ft" },
+      searchText: "lumber 2x4 20ft",
+    });
+
+    await svc.update("biz-1", "mat-1", { specs: { dimension: "2x4", length: "20ft" } });
+
     expect(prisma.materialFavourite.update).toHaveBeenCalledWith({
       where: { id: "mat-1" },
-      data: { category: "Blocks", specs: { Size: "6in", Type: "Solid" } },
+      data: expect.objectContaining({ name: "Lumber 2x4 20ft", searchText: "lumber 2x4 20ft" }),
     });
   });
 
   it("allows clearing description with an empty string", async () => {
     const { svc, prisma } = withPrisma({
-      findFirst: vi.fn().mockResolvedValue({ id: "mat-1", businessId: "biz-1" }),
+      findFirst: vi.fn().mockResolvedValue(existing),
       update: vi.fn().mockResolvedValue({}),
     });
     await svc.update("biz-1", "mat-1", { description: "" });
     expect(prisma.materialFavourite.update).toHaveBeenCalledWith({
       where: { id: "mat-1" },
-      data: { description: "" },
+      data: expect.objectContaining({ description: "" }),
     });
+  });
+
+  it("refuses to update a row belonging to another business", async () => {
+    const { svc, prisma } = withPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
+    await expect(svc.update("biz-1", "mat-1", { priceCents: 1 })).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.materialFavourite.update).not.toHaveBeenCalled();
   });
 });
 
@@ -104,18 +165,16 @@ describe("MaterialFavouritesService.findOne", () => {
 });
 
 describe("MaterialFavouritesService.findAll", () => {
-  it("returns everything (backward compatible) when no params are given", async () => {
+  it("returns everything when no params are given", async () => {
     const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1");
     expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith({
       where: { businessId: "biz-1", deletedAt: null },
       orderBy: { name: "asc" },
     });
-    // No `q` given, so the JSON/description search path never runs.
-    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
-  it("excludes soft-deleted rows (deletedAt: null in the where clause)", async () => {
+  it("excludes soft-deleted rows", async () => {
     const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1");
     expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
@@ -123,16 +182,25 @@ describe("MaterialFavouritesService.findAll", () => {
     );
   });
 
-  it("filters by category with an exact match", async () => {
+  it("filters by the legacy free-text category", async () => {
     const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1", { category: "Steel / Rebar" });
-    expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith({
-      where: { businessId: "biz-1", deletedAt: null, category: "Steel / Rebar" },
-      orderBy: { name: "asc" },
-    });
+    expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ category: "Steel / Rebar" }),
+      }),
+    );
   });
 
-  it("applies and caps `limit` via Prisma `take`", async () => {
+  it("filters by categoryDefId", async () => {
+    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
+    await svc.findAll("biz-1", { categoryDefId: "cat-1" });
+    expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ categoryDefId: "cat-1" }) }),
+    );
+  });
+
+  it("applies `limit` via Prisma `take`", async () => {
     const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1", { limit: 5 });
     expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
@@ -140,65 +208,31 @@ describe("MaterialFavouritesService.findAll", () => {
     );
   });
 
-  it("resolves `q` matches via the raw search query, then re-fetches full rows by id", async () => {
-    const $queryRaw = vi.fn().mockResolvedValue([{ id: "mat-1" }, { id: "mat-2" }]);
-    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) }, { $queryRaw });
-    await svc.findAll("biz-1", { q: "cedar" });
-
-    expect($queryRaw).toHaveBeenCalledTimes(1);
-    expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith({
-      where: { businessId: "biz-1", deletedAt: null, id: { in: ["mat-1", "mat-2"] } },
-      orderBy: { name: "asc" },
-    });
-  });
-
-  // The service's Prisma layer is mocked in every test in this file (no live
-  // Postgres), so we can't execute the raw query and observe real ILIKE
-  // matching against name/description/specs. What we *can* verify at this
-  // level is that the raw query we hand to $queryRaw actually contains the
-  // clauses that would perform each of those matches (and, via ILIKE, that
-  // matching is case-insensitive) — Postgres's ILIKE semantics themselves
-  // are exercised by the migration + real DB, not by this unit suite.
-  it("the raw query matches on name via a case-insensitive ILIKE", async () => {
-    const $queryRaw = vi.fn().mockResolvedValue([]);
-    const { svc } = withPrisma({}, { $queryRaw });
+  it("searches the denormalized searchText, lowercased to match how it is stored", async () => {
+    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1", { q: "Cedar" });
-    const sqlArg = $queryRaw.mock.calls[0]![0];
-    expect(sqlArg.sql).toMatch(/"name"\s+ILIKE/);
-    expect(sqlArg.values).toContain("%Cedar%");
+    const where = prisma.materialFavourite.findMany.mock.calls[0]![0].where;
+    expect(where.OR).toContainEqual({ searchText: { contains: "cedar" } });
   });
 
-  it("the raw query matches on description via a case-insensitive ILIKE", async () => {
-    const $queryRaw = vi.fn().mockResolvedValue([]);
-    const { svc } = withPrisma({}, { $queryRaw });
+  it("also matches name/description case-insensitively as a fallback", async () => {
+    // Belt and braces: if a row ever lacks searchText, search degrades rather
+    // than silently returning nothing for a material that plainly matches.
+    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     await svc.findAll("biz-1", { q: "weathered" });
-    const sqlArg = $queryRaw.mock.calls[0]![0];
-    expect(sqlArg.sql).toMatch(/"description"\s+ILIKE/);
+    const where = prisma.materialFavourite.findMany.mock.calls[0]![0].where;
+    expect(where.OR).toContainEqual({ name: { contains: "weathered", mode: "insensitive" } });
+    expect(where.OR).toContainEqual({ description: { contains: "weathered", mode: "insensitive" } });
   });
 
-  it("the raw query matches on values inside the specs JSON via jsonb_each_text + ILIKE", async () => {
-    const $queryRaw = vi.fn().mockResolvedValue([]);
-    const { svc } = withPrisma({}, { $queryRaw });
-    await svc.findAll("biz-1", { q: "2x4" });
-    const sqlArg = $queryRaw.mock.calls[0]![0];
-    expect(sqlArg.sql).toMatch(/jsonb_each_text/);
-    expect(sqlArg.sql).toMatch(/spec\.value\s+ILIKE/);
-    expect(sqlArg.values).toContain("%2x4%");
-  });
-
-  it("a `q` containing SQL metacharacters is bound as a parameter, not concatenated into the query text", async () => {
-    const $queryRaw = vi.fn().mockResolvedValue([]);
-    const { svc } = withPrisma({}, { $queryRaw });
+  it("treats SQL metacharacters in `q` as literal text", async () => {
+    // No raw SQL is involved any more — Prisma parameterizes `contains` — so
+    // the string can only ever be matched, never executed.
+    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
     const malicious = "' OR 1=1 --";
     await svc.findAll("biz-1", { q: malicious });
-
-    expect($queryRaw).toHaveBeenCalledTimes(1);
-    const sqlArg = $queryRaw.mock.calls[0]![0];
-    // The malicious string must appear only as a bound value...
-    expect(sqlArg.values).toContain(`%${malicious}%`);
-    // ...and never spliced into the parameterised SQL text itself, which
-    // would be the injection.
-    expect(sqlArg.sql).not.toContain(malicious);
+    const where = prisma.materialFavourite.findMany.mock.calls[0]![0].where;
+    expect(where.OR).toContainEqual({ searchText: { contains: malicious.toLowerCase() } });
   });
 });
 

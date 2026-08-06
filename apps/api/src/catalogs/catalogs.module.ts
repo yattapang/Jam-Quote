@@ -6,6 +6,8 @@ import { LabourRatesController } from "./labour-rates.controller.js";
 import { LabourRatesService } from "./labour-rates.service.js";
 import { MaterialFavouritesController } from "./material-favourites.controller.js";
 import { MaterialFavouritesService } from "./material-favourites.service.js";
+import { MaterialSchemaController } from "./material-schema.controller.js";
+import { MaterialSchemaService } from "./material-schema.service.js";
 import { SuppliersController } from "./suppliers.controller.js";
 import { SuppliersService } from "./suppliers.service.js";
 
@@ -24,18 +26,21 @@ import { SuppliersService } from "./suppliers.service.js";
     EquipmentController,
     LabourRatesController,
     MaterialFavouritesController,
+    MaterialSchemaController,
     SuppliersController,
   ],
   providers: [
     EquipmentService,
     LabourRatesService,
     MaterialFavouritesService,
+    MaterialSchemaService,
     SuppliersService,
   ],
   exports: [
     EquipmentService,
     LabourRatesService,
     MaterialFavouritesService,
+    MaterialSchemaService,
     SuppliersService,
   ],
 })
