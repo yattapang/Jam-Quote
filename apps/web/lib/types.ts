@@ -91,6 +91,10 @@ export interface MaterialFavourite {
    * display/behave exactly as before. */
   category?: string;
   specs?: Record<string, string>;
+  /** Optional free-text notes (supplier, finish, etc.) — also searched by
+   * the API's GET /catalogs/material-favourites `q` param alongside name and
+   * specs values. */
+  description?: string;
 }
 
 /** A reusable labour rate a contractor keeps on hand for quoting (mirrors the

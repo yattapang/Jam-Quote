@@ -28,6 +28,8 @@ import {
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import JobSelectField from "@/components/forms/JobSelectField";
 import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
+import MaterialPickerField from "@/components/forms/MaterialPickerField";
+import { materialLineDescription } from "@/lib/material-display";
 import type { ClientOption, JobOption } from "@/components/forms/types";
 import type { Assembly, MaterialFavourite, QuoteLineAssemblyComponent } from "@/lib/types";
 import shared from "../../shared.module.css";
@@ -37,7 +39,6 @@ const DEFAULT_GCT_RATE = 15; // fallback only — real rate comes from the busin
 const DEFAULT_VALID_DAYS = 30;
 const DAY_MS = 86_400_000;
 const ADD_HEADING_VALUE = "__add_heading__";
-const ADD_MATERIAL_VALUE = "__add_material__";
 
 const rateUnitOptions = Object.values(RateUnit).map((v) => ({ value: v, label: v.charAt(0) + v.slice(1).toLowerCase() }));
 const gctOptions = [
@@ -79,20 +80,6 @@ function categoryForLabel(label: string): LineCategory | undefined {
   return (Object.entries(CATEGORY_LABEL) as [LineCategory, string][]).find(([, l]) => l === label)?.[0];
 }
 
-/** Display label for a saved-materials picker option — name, spec values
- * (if the material has a category with filled-in specs, e.g. "1/2in x
- * 20ft"), unit (if any), and last known price, so contractors can tell
- * variants and stale prices apart at a glance. Materials with no
- * category/specs (the pre-existing shape) render exactly as before:
- * "name (unit) — price". */
-function favouriteLabel(f: MaterialFavourite): string {
-  const price = `$${f.priceDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const specValues = f.specs ? Object.values(f.specs).filter(Boolean) : [];
-  const base = specValues.length > 0 ? `${f.name} ${specValues.join(" x ")}` : f.name;
-  const withUnit = f.unit ? `${base} (${f.unit})` : base;
-  return `${withUnit} — ${price}`;
-}
-
 interface DraftLine {
   key: string;
   heading: Heading;
@@ -109,6 +96,13 @@ interface DraftLine {
   assemblyName?: string;
   assemblyUnit?: string;
   assemblyComponents?: QuoteLineAssemblyComponent[];
+  /** Set when this line's description/price were populated from a picked or
+   * newly-created favourite (pickFavourite / createMaterialForLine) — the
+   * precise identity ★ Save-as-favourite (saveFavourite) uses to update
+   * that exact variant rather than guessing from text. Cleared as soon as
+   * the description is hand-edited (see patch()), since at that point the
+   * line no longer necessarily represents that favourite. */
+  materialFavouriteId?: string;
 }
 
 let counter = 0;
@@ -280,7 +274,6 @@ function initialValidDays(initial?: InitialQuote): number {
 function LineRows({
   lines,
   headingOptions,
-  favourites,
   favouriteCategories,
   materialFilters,
   savingFavKey,
@@ -304,10 +297,7 @@ function LineRows({
 }: {
   lines: DraftLine[];
   headingOptions: { value: string; label: string }[];
-  /** Full saved-materials list (not pre-filtered) — each line filters its own
-   * picker options locally from `materialFilters[line.key]`. */
-  favourites: MaterialFavourite[];
-  /** Distinct categories present across `favourites`, for the per-line
+  /** Distinct categories present across saved materials, for the per-line
    * category filter dropdown. Empty when no saved material has a category
    * yet, in which case the filter is hidden entirely (backward compatible). */
   favouriteCategories: string[];
@@ -325,7 +315,7 @@ function LineRows({
   onCommitNewHeading: (key: string) => void;
   onCancelNewHeading: () => void;
   onMaterialFilterChange: (key: string, value: string) => void;
-  onPickFavourite: (key: string, favouriteId: string) => void;
+  onPickFavourite: (key: string, favourite: MaterialFavourite) => void;
   onSaveFavourite: (key: string) => void;
   onOpenAddMaterial: (key: string) => void;
   onCancelAddMaterial: () => void;
@@ -336,8 +326,6 @@ function LineRows({
     <div className={styles.linesWrap}>
       {lines.map((l) => {
         const materialFilter = materialFilters[l.key] ?? "";
-        const lineFavourites = materialFilter ? favourites.filter((f) => f.category === materialFilter) : favourites;
-        const favouriteOptions = lineFavourites.map((f) => ({ value: f.id, label: favouriteLabel(f) }));
         return (
         <div key={l.key} className={styles.lineRow}>
           <div className={`${styles.fieldCell} ${styles.full}`}>
@@ -351,19 +339,10 @@ function LineRows({
                 style={{ marginBottom: 6 }}
               />
             )}
-            <Select
-              options={[
-                { value: "", label: favouriteOptions.length ? "Saved materials…" : "No saved materials" },
-                ...favouriteOptions,
-                { value: ADD_MATERIAL_VALUE, label: "+ Add material…" },
-              ]}
-              value=""
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!v) return;
-                if (v === ADD_MATERIAL_VALUE) onOpenAddMaterial(l.key);
-                else onPickFavourite(l.key, v);
-              }}
+            <MaterialPickerField
+              category={materialFilter || undefined}
+              onPick={(fav) => onPickFavourite(l.key, fav)}
+              onAddNew={() => onOpenAddMaterial(l.key)}
             />
           </div>
           <div className={`${styles.fieldCell} ${styles.full}`}>
@@ -527,30 +506,63 @@ export default function QuoteBuilder({
   const setMaterialFilter = (key: string, value: string) =>
     setMaterialFilters((f) => ({ ...f, [key]: value }));
 
-  /** Fills a line's description + unit price from a picked favourite. Only
-   * nudges the heading to Materials when the line is still on its untouched
-   * default heading — an already-customized heading is left alone. */
-  const pickFavourite = (key: string, favouriteId: string) => {
-    const fav = favourites.find((f) => f.id === favouriteId);
-    if (!fav) return;
+  /** Fills a line's description + unit price from a picked favourite (via
+   * the type-ahead MaterialPickerField, which fetches from the API directly
+   * rather than the locally-cached `favourites` array, so it hands back the
+   * full favourite object rather than just an id). The description is
+   * composed from the favourite's name + spec values (+ its own description,
+   * if set) via materialLineDescription — previously this used only
+   * `fav.name`, so a variant's Dimension/Length/Grade specs never made it
+   * onto the actual quote line, only into the picker's dropdown label. Also
+   * stamps materialFavouriteId so ★ Save-as-favourite can later update this
+   * exact variant precisely (see saveFavourite). Only nudges the heading to
+   * Materials when the line is still on its untouched default heading — an
+   * already-customized heading is left alone. */
+  const pickFavourite = (key: string, fav: MaterialFavourite) => {
     setLines((ls) =>
       ls.map((l) => {
         if (l.key !== key) return l;
         const isDefaultHeading = l.heading.kind === "category" && l.heading.category === LineCategory.MATERIAL;
         return {
           ...l,
-          description: fav.name,
+          description: materialLineDescription(fav),
           unitPriceDollars: String(fav.priceDollars),
           heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
+          materialFavouriteId: fav.id,
         };
       }),
     );
+    // Keep the locally-cached list in sync so favouriteCategories (and any
+    // other UI reading `favourites`) knows about a variant the type-ahead
+    // found that this business hadn't loaded into it yet.
+    setFavourites((favs) => (favs.some((f) => f.id === fav.id) ? favs : [...favs, fav]));
   };
 
-  /** Saves a line as a reusable favourite: last-price behaviour — updates the
-   * existing favourite (matched case-insensitively, trimmed) if one exists,
-   * otherwise creates a new one. Skips silently if there's nothing meaningful
-   * to save (blank description or zero price). */
+  /**
+   * Saves a line as a reusable favourite: last-price behaviour — updates an
+   * existing favourite's price if one exists, otherwise creates a new one.
+   * Skips silently if there's nothing meaningful to save (blank description
+   * or zero price).
+   *
+   * Identity match, in order:
+   *  1. `materialFavouriteId` — set when this line was populated by picking
+   *     or creating a favourite (see pickFavourite/createMaterialForLine) and
+   *     cleared the moment the description is hand-edited (see patch()). This
+   *     is exact: it can't confuse two variants that happen to share a name,
+   *     because it isn't looking at the name at all.
+   *  2. A fallback exact match on the *composed* description (name + specs +
+   *     description, via materialLineDescription) for lines typed or edited
+   *     freehand, which have no structured category/specs to compare against
+   *     the plain quote line — description text is genuinely all there is.
+   *     This replaces the old bug: matching on `name` alone,
+   *     case/whitespace-insensitively, ignoring specs and category entirely,
+   *     which silently clobbered one variant's price with another's the
+   *     moment two variants shared a name (e.g. "2x4" lumber in different
+   *     lengths/grades). Matching the full composed text is strictly
+   *     narrower — "2x4 x 16ft x Select" and "2x4 x 8ft x Select" no longer
+   *     collide — without needing a confirmation prompt for the common case
+   *     (re-saving the same picked material to update its price).
+   */
   const saveFavourite = async (key: string) => {
     const line = lines.find((l) => l.key === key);
     if (!line) return;
@@ -561,13 +573,16 @@ export default function QuoteBuilder({
     setSavingFavKey(key);
     setFavError("");
     try {
-      const existing = favourites.find((f) => f.name.trim().toLowerCase() === name.toLowerCase());
+      const existing = line.materialFavouriteId
+        ? favourites.find((f) => f.id === line.materialFavouriteId)
+        : favourites.find((f) => materialLineDescription(f) === name);
       if (existing) {
         const updated = await updateMaterialFavourite(existing.id, { priceCents });
         setFavourites((favs) => favs.map((f) => (f.id === existing.id ? updated : f)));
       } else {
         const created = await createMaterialFavourite({ name, priceCents });
         setFavourites((favs) => [...favs, created]);
+        setLines((ls) => ls.map((l) => (l.key === key ? { ...l, materialFavouriteId: created.id } : l)));
       }
     } catch {
       setFavError("Couldn't save the material — is the API running?");
@@ -577,13 +592,24 @@ export default function QuoteBuilder({
   };
 
   /** "+ Add material…" from a line's saved-materials picker: creates a new
-   * favourite, appends it to the local list, and applies its name/price to
-   * the line that opened the modal — all without navigating away. */
+   * favourite, appends it to the local list, and applies its composed
+   * description/price to the line that opened the modal — all without
+   * navigating away. Stamps materialFavouriteId for the same reason
+   * pickFavourite does (see saveFavourite). */
   const createMaterialForLine = async (key: string, values: MaterialFormValues) => {
     const created = await createMaterialFavourite(materialPayloadFromValues(values));
     setFavourites((favs) => [...favs, created]);
     setLines((ls) =>
-      ls.map((l) => (l.key === key ? { ...l, description: created.name, unitPriceDollars: String(created.priceDollars) } : l)),
+      ls.map((l) =>
+        l.key === key
+          ? {
+              ...l,
+              description: materialLineDescription(created),
+              unitPriceDollars: String(created.priceDollars),
+              materialFavouriteId: created.id,
+            }
+          : l,
+      ),
     );
     setAddingMaterialKey(null);
   };
@@ -634,7 +660,17 @@ export default function QuoteBuilder({
   const hasAssemblyLine = lines.some((l) => l.assemblyId);
 
   const patch = (key: string, p: Partial<DraftLine>) =>
-    setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.key !== key) return l;
+        // Hand-editing the description breaks the link to whichever
+        // favourite populated this line — otherwise ★ Save would silently
+        // update that favourite's price using this line's now-diverged text
+        // as if nothing had changed (see saveFavourite's identity match).
+        const editedDescription = "description" in p && p.description !== l.description && l.materialFavouriteId;
+        return { ...l, ...p, ...(editedDescription ? { materialFavouriteId: undefined } : {}) };
+      }),
+    );
   const removeLine = (key: string) =>
     setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== key) : ls));
 
@@ -797,7 +833,6 @@ export default function QuoteBuilder({
           <LineRows
             lines={lines}
             headingOptions={headingOptions}
-            favourites={favourites}
             favouriteCategories={favouriteCategories}
             materialFilters={materialFilters}
             savingFavKey={savingFavKey}

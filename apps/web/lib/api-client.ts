@@ -175,6 +175,7 @@ export interface ApiMaterialFavourite {
   supplierId?: string | null;
   category?: string | null;
   specs?: Record<string, string> | null;
+  description?: string | null;
 }
 export interface ApiLabourRate {
   id: string;
@@ -311,6 +312,7 @@ export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite
     supplierId: m.supplierId ?? undefined,
     category: m.category ?? undefined,
     specs: m.specs ?? undefined,
+    description: m.description ?? undefined,
   };
 }
 
@@ -531,6 +533,7 @@ export interface NewMaterialFavouriteInput {
   supplierId?: string;
   category?: string;
   specs?: Record<string, string>;
+  description?: string;
 }
 export async function createMaterialFavourite(
   input: NewMaterialFavouriteInput,
@@ -538,6 +541,31 @@ export async function createMaterialFavourite(
   return mapMaterialFavourite(
     await apiClient.post<ApiMaterialFavourite>("/catalogs/material-favourites", input),
   );
+}
+
+/** GET /api/catalogs/material-favourites (client-side, via the proxy) — same
+ * data as getMaterialFavourites (api-server.ts) but callable from a client
+ * component, and filterable: `q` matches case-insensitively across name,
+ * description and specs values (server-side — see the API contract), narrows
+ * further by `category`, and `limit` caps the result count. Powers the quote
+ * builder's type-ahead material picker (MaterialPickerField) and the
+ * materials-page search box, both of which query as the contractor types
+ * rather than filtering an already-loaded array — the point of a type-ahead
+ * once there are hundreds of saved variants. The response is still a plain
+ * array, just filtered. */
+export async function getMaterialFavouritesClient(params?: {
+  q?: string;
+  category?: string;
+  limit?: number;
+}): Promise<MaterialFavourite[]> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.category) qs.set("category", params.category);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return (
+    await apiClient.get<ApiMaterialFavourite[]>(`/catalogs/material-favourites${suffix}`)
+  ).map(mapMaterialFavourite);
 }
 
 export interface NewLabourRateInput {

@@ -8,6 +8,7 @@ import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import { modalStyles } from "@/components/ui/Modal";
 import type { NewAssemblyInput } from "@/lib/api-client";
+import { materialFavouriteLabel } from "@/lib/material-display";
 import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
 import styles from "./AssemblyForm.module.css";
 
@@ -104,10 +105,12 @@ export function assemblyPayloadFromValues(values: AssemblyFormValues): NewAssemb
   };
 }
 
-function materialLabel(m: MaterialFavourite): string {
-  const price = `$${m.priceDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  return m.unit ? `${m.name} (${m.unit}) — ${price}` : `${m.name} — ${price}`;
-}
+// Material option labels are composed by the shared materialFavouriteLabel
+// (lib/material-display.ts) — previously this had its own copy that ignored
+// specs entirely, so "2x4x8 cedar" and "2x4x16 mahogany" (same name,
+// different Dimension/Length specs) looked identical in this picker even
+// though the quote builder's picker told them apart. Both now render the
+// same variant name + unit + price.
 
 function labourLabel(r: LabourRate): string {
   const price = `$${r.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -137,7 +140,7 @@ function ComponentRow({
 }) {
   const materialOptions = [
     { value: "", label: materials.length ? "Select a material…" : "No saved materials" },
-    ...materials.map((m) => ({ value: m.id, label: materialLabel(m) })),
+    ...materials.map((m) => ({ value: m.id, label: materialFavouriteLabel(m) })),
   ];
   const labourOptions = [
     { value: "", label: labourRates.length ? "Select a labour rate…" : "No saved labour rates" },

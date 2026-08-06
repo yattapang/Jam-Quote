@@ -11,6 +11,7 @@ import {
   deleteMaterialFavourite,
   deleteQuote,
   finalizeInvoice,
+  getMaterialFavouritesClient,
   initialsOf,
   mapBusiness,
   mapClient,
@@ -192,6 +193,7 @@ const apiMaterialFavourite = {
   unit: "bag",
   priceCents: 115_000,
   supplierId: null,
+  description: "Portland type I, bagged",
 };
 
 // The API row shapes (ApiQuote/ApiClientRow/ApiBusiness) aren't exported;
@@ -279,7 +281,13 @@ describe("pure mappers", () => {
       priceCents: 115_000,
       priceDollars: 1150,
       supplierId: undefined,
+      description: "Portland type I, bagged",
     });
+  });
+
+  it("mapMaterialFavourite carries description through as undefined when the API omits it", () => {
+    const { description: _omit, ...withoutDescription } = apiMaterialFavourite;
+    expect(mapMaterialFavourite(withoutDescription as MapMaterialFavouriteArg).description).toBeUndefined();
   });
 
   it("mapQuote preserves section titles and flattens section lines into `lines`", () => {
@@ -481,14 +489,24 @@ describe("create (write path)", () => {
     });
   });
 
-  it("createMaterialFavourite POSTs the material body and maps the result", async () => {
+  it("createMaterialFavourite POSTs the material body (including description) and maps the result", async () => {
     const spy = stubFetch({ "/catalogs/material-favourites": apiMaterialFavourite });
-    const m = await createMaterialFavourite({ name: "Cement (grey, 94lb)", unit: "bag", priceCents: 115_000 });
+    const m = await createMaterialFavourite({
+      name: "Cement (grey, 94lb)",
+      unit: "bag",
+      priceCents: 115_000,
+      description: "Portland type I, bagged",
+    });
     expect(m.priceDollars).toBe(1150);
+    expect(m.description).toBe("Portland type I, bagged");
     const init = spy.mock.calls[0]?.[1] as RequestInit;
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
-    expect(JSON.parse(init.body as string)).toMatchObject({ name: "Cement (grey, 94lb)", priceCents: 115_000 });
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      name: "Cement (grey, 94lb)",
+      priceCents: 115_000,
+      description: "Portland type I, bagged",
+    });
   });
 
   it("createQuote POSTs the line items", async () => {
@@ -728,6 +746,55 @@ describe("getMaterialFavourites", () => {
     stubFetch(null);
     const favourites = await getMaterialFavourites();
     expect(favourites).toEqual([]);
+  });
+
+  it("sends no query string when called with no params (unfiltered — the existing pages' behaviour)", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    await getMaterialFavourites();
+    const [url] = spy.mock.calls[0] as [string];
+    expect(String(url)).toMatch(/\/catalogs\/material-favourites$/);
+  });
+
+  it("forwards q/category/limit as a query string (the type-ahead search contract)", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    await getMaterialFavourites({ q: "cement", category: "Cement", limit: 20 });
+    const [url] = spy.mock.calls[0] as [string];
+    const qs = new URL(String(url)).searchParams;
+    expect(qs.get("q")).toBe("cement");
+    expect(qs.get("category")).toBe("Cement");
+    expect(qs.get("limit")).toBe("20");
+  });
+});
+
+describe("getMaterialFavouritesClient", () => {
+  it("fetches with no query string when called with no params and maps rows", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    const favourites = await getMaterialFavouritesClient();
+    expect(favourites).toHaveLength(1);
+    expect(favourites[0]?.priceDollars).toBe(1150);
+    const [url] = spy.mock.calls[0] as [string];
+    expect(String(url)).toContain("/catalogs/material-favourites");
+    expect(String(url)).not.toContain("?");
+  });
+
+  it("forwards q/category/limit — what the materials type-ahead and search box rely on", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    await getMaterialFavouritesClient({ q: "2x4", category: "Lumber", limit: 20 });
+    const [url] = spy.mock.calls[0] as [string];
+    const qs = new URL(String(url)).searchParams;
+    expect(qs.get("q")).toBe("2x4");
+    expect(qs.get("category")).toBe("Lumber");
+    expect(qs.get("limit")).toBe("20");
+  });
+
+  it("omits params that weren't given rather than sending empty values", async () => {
+    const spy = stubFetch({ "/catalogs/material-favourites": [apiMaterialFavourite] });
+    await getMaterialFavouritesClient({ q: "cement" });
+    const [url] = spy.mock.calls[0] as [string];
+    const qs = new URL(String(url)).searchParams;
+    expect(qs.get("q")).toBe("cement");
+    expect(qs.has("category")).toBe(false);
+    expect(qs.has("limit")).toBe(false);
   });
 });
 

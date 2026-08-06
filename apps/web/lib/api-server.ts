@@ -162,12 +162,28 @@ export async function getBusiness(): Promise<Business> {
 }
 
 /** GET /api/catalogs/material-favourites — saved materials with their last
- * price. No fixture backs these, so an unreachable API returns an empty list. */
-export async function getMaterialFavourites(): Promise<MaterialFavourite[]> {
+ * price. Optional `q`/`category`/`limit` mirror the API's filter params (`q`
+ * matches case-insensitively across name, description and specs values) —
+ * omit them for the unfiltered full list, which is what every current page
+ * (materials, quote builder, assemblies) passes server-side; client
+ * components that need to filter as the user types use
+ * getMaterialFavouritesClient (api-client.ts) instead, since a browser must
+ * go through the same-origin proxy. No fixture backs these, so an
+ * unreachable API returns an empty list. */
+export async function getMaterialFavourites(params?: {
+  q?: string;
+  category?: string;
+  limit?: number;
+}): Promise<MaterialFavourite[]> {
   try {
-    return (await serverRequest<ApiMaterialFavourite[]>("/catalogs/material-favourites")).map(
-      mapMaterialFavourite,
-    );
+    const qs = new URLSearchParams();
+    if (params?.q) qs.set("q", params.q);
+    if (params?.category) qs.set("category", params.category);
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return (
+      await serverRequest<ApiMaterialFavourite[]>(`/catalogs/material-favourites${suffix}`)
+    ).map(mapMaterialFavourite);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getMaterialFavourites: API unreachable, using empty list");

@@ -34,3 +34,32 @@ export const MATERIAL_CATEGORIES: MaterialCategory[] = [
 export function specFieldsFor(category?: string | null): string[] {
   return MATERIAL_CATEGORIES.find((c) => c.name === category)?.specFields ?? [];
 }
+
+/**
+ * Reconciles a material form's spec values when the user switches category
+ * mid-edit. Two categories can share a field label (e.g. "Type" appears on
+ * Cement, Aggregate/Sand, Roofing, Electrical and Paint; "Diameter" appears
+ * on Steel/Rebar and Plumbing) — a value typed under a shared label carries
+ * over rather than vanishing just because the category changed. Anything
+ * typed under a label the new category doesn't ask for is dropped (there's
+ * nowhere to show it), and its label is reported in `dropped` so the caller
+ * can warn the contractor instead of silently discarding their input (see
+ * MaterialForm's category Select onChange).
+ */
+export function specsForCategoryChange(
+  previousSpecs: Record<string, string>,
+  previousCategory: string | undefined,
+  nextCategory: string | undefined,
+): { specs: Record<string, string>; dropped: string[] } {
+  const previousFields = specFieldsFor(previousCategory);
+  const nextFields = new Set(specFieldsFor(nextCategory));
+  const specs: Record<string, string> = {};
+  const dropped: string[] = [];
+  for (const field of previousFields) {
+    const value = previousSpecs[field]?.trim();
+    if (!value) continue;
+    if (nextFields.has(field)) specs[field] = value;
+    else dropped.push(field);
+  }
+  return { specs, dropped };
+}
