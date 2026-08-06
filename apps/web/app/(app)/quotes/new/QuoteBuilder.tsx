@@ -24,6 +24,7 @@ import {
   createMaterialFavourite,
   updateMaterialFavourite,
   ApiError,
+  type ApiMaterialCategory,
 } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import JobSelectField from "@/components/forms/JobSelectField";
@@ -34,6 +35,7 @@ import type { ClientOption, JobOption } from "@/components/forms/types";
 import type { Assembly, MaterialFavourite, QuoteLineAssemblyComponent } from "@/lib/types";
 import shared from "../../shared.module.css";
 import styles from "./QuoteBuilder.module.css";
+import { invalidateMaterialSchema } from "@/lib/use-material-schema";
 
 const DEFAULT_GCT_RATE = 15; // fallback only — real rate comes from the business's gctRatePct prop
 const DEFAULT_VALID_DAYS = 30;
@@ -319,7 +321,11 @@ function LineRows({
   onSaveFavourite: (key: string) => void;
   onOpenAddMaterial: (key: string) => void;
   onCancelAddMaterial: () => void;
-  onCreateMaterial: (key: string, values: MaterialFormValues) => Promise<void>;
+  onCreateMaterial: (
+    key: string,
+    values: MaterialFormValues,
+    category: ApiMaterialCategory | undefined,
+  ) => Promise<void>;
   onAddMaterialBusyChange: (busy: boolean) => void;
 }) {
   return (
@@ -413,7 +419,7 @@ function LineRows({
               <MaterialForm
                 submitLabel="Add material"
                 onCancel={onCancelAddMaterial}
-                onSubmit={(values) => onCreateMaterial(l.key, values)}
+                onSubmit={(values, category) => onCreateMaterial(l.key, values, category)}
                 onBusyChange={onAddMaterialBusyChange}
               />
             </Modal>
@@ -596,8 +602,13 @@ export default function QuoteBuilder({
    * description/price to the line that opened the modal — all without
    * navigating away. Stamps materialFavouriteId for the same reason
    * pickFavourite does (see saveFavourite). */
-  const createMaterialForLine = async (key: string, values: MaterialFormValues) => {
-    const created = await createMaterialFavourite(materialPayloadFromValues(values));
+  const createMaterialForLine = async (
+    key: string,
+    values: MaterialFormValues,
+    category: ApiMaterialCategory | undefined,
+  ) => {
+    const created = await createMaterialFavourite(materialPayloadFromValues(values, category));
+    invalidateMaterialSchema();
     setFavourites((favs) => [...favs, created]);
     setLines((ls) =>
       ls.map((l) =>

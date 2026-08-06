@@ -6,9 +6,9 @@ import type { MaterialSchemaService } from "./material-schema.service.js";
 /**
  * Prisma is mocked throughout this file. MaterialSchemaService is stubbed too:
  * what it decides (validation, name composition, vocabulary capture) is
- * covered against a real Postgres in material-schema.service.test.ts — here we
- * only care that MaterialFavouritesService routes writes THROUGH it and
- * persists what it returns, rather than trusting client input.
+ * covered in material-schema.test.ts — here we only care that
+ * MaterialFavouritesService routes writes THROUGH it and persists what it
+ * returns, rather than trusting client input.
  */
 function withPrisma(materialFavourite: Partial<Record<string, unknown>> = {}) {
   const prisma = {
@@ -160,6 +160,7 @@ describe("MaterialFavouritesService.findOne", () => {
     await expect(svc.findOne("biz-1", "missing")).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.materialFavourite.findFirst).toHaveBeenCalledWith({
       where: { id: "missing", businessId: "biz-1", deletedAt: null },
+      include: { unitRef: true },
     });
   });
 });
@@ -171,6 +172,8 @@ describe("MaterialFavouritesService.findAll", () => {
     expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith({
       where: { businessId: "biz-1", deletedAt: null },
       orderBy: { name: "asc" },
+      // The unit is a FK as of 2a; consumers render its label from here.
+      include: { unitRef: true },
     });
   });
 

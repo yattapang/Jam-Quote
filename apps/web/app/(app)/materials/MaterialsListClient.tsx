@@ -9,19 +9,32 @@ import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import EditMaterialButton from "./EditMaterialButton";
 import { getMaterialFavouritesClient } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
+import { useMaterialSchema } from "@/lib/use-material-schema";
 import type { MaterialFavourite } from "@/lib/types";
 import shared from "../shared.module.css";
 
 const UNCATEGORIZED = "Uncategorized";
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Compact "Diameter: 1/2in, Length: 20ft" summary of a material's specs, or
- * "" when it has none (older/uncategorized materials — unchanged display). */
-function specsSummary(specs?: Record<string, string>): string {
+/**
+ * Compact "Diameter: 1/2in, Length: 20ft" summary of a material's specs, or ""
+ * when it has none.
+ *
+ * As of Phase 2a specs are keyed by attribute KEY ("bagSize"), not by display
+ * label ("Bag size"), so the key is translated through the category's
+ * attributes. Without that the list would read "bagSize: 42.5kg". Pre-2a rows
+ * whose category is unknown fall back to the raw key, which is what they
+ * always showed.
+ */
+function specsSummary(
+  specs: Record<string, string> | undefined,
+  attributes: { key: string; label: string }[] | undefined,
+): string {
   if (!specs) return "";
+  const labelByKey = new Map((attributes ?? []).map((a) => [a.key, a.label]));
   return Object.entries(specs)
     .filter(([, value]) => value)
-    .map(([key, value]) => `${key}: ${value}`)
+    .map(([key, value]) => `${labelByKey.get(key) ?? key}: ${value}`)
     .join(", ");
 }
 
@@ -53,13 +66,45 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
   // newer one that already landed.
   const requestRef = useRef(0);
 
-  // Category chips always derive from the page's original full snapshot, not
-  // the currently-filtered `materials` state, so the chip row doesn't
-  // shrink/reflow as search results narrow.
+  const { schema } = useMaterialSchema();
+
+  /**
+   * Category chips always derive from the page's original full snapshot, not
+   * the currently-filtered `materials` state, so the chip row doesn't
+   * shrink/reflow as search results narrow.
+   *
+   * Two shapes coexist here. A Phase 2a material carries categoryDefId and no
+   * legacy `category` string, so keying chips off `category` alone would file
+   * every newly-created material under "Uncategorized". Chips are therefore
+   * keyed by categoryDefId when present (labelled from the schema) and fall
+   * back to the legacy string for pre-2a rows.
+   */
   const categories = useMemo(() => {
-    const present = new Set(initialMaterials.map((m) => m.category || UNCATEGORIZED));
-    return Array.from(present).sort();
-  }, [initialMaterials]);
+    const labelById = new Map((schema?.categories ?? []).map((c) => [c.id, c.label]));
+    const present = new Map<string, string>();
+    for (const m of initialMaterials) {
+      if (m.categoryDefId) {
+        // Until the schema loads, fall back to the legacy label so the chip is
+        // never blank; migrated rows retain it.
+        present.set(m.categoryDefId, labelById.get(m.categoryDefId) ?? m.category ?? "Category");
+      } else if (m.category) {
+        present.set(m.category, m.category);
+      } else {
+        present.set(UNCATEGORIZED, UNCATEGORIZED);
+      }
+    }
+    return Array.from(present, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
+  }, [initialMaterials, schema]);
+
+  /** A chip value is a categoryDefId when the schema knows it, otherwise a
+   * legacy category string — they go to different query params. */
+  const filterParams = useMemo(() => {
+    if (filter === "ALL") return {};
+    const isCategoryDefId = (schema?.categories ?? []).some((c) => c.id === filter);
+    return isCategoryDefId ? { categoryDefId: filter } : { category: filter };
+  }, [filter, schema]);
 
   useEffect(() => {
     // Nothing typed and no category filter: show the full snapshot the page
@@ -75,7 +120,7 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
     setSearchError("");
     getMaterialFavouritesClient({
       q: debouncedQuery || undefined,
-      category: filter === "ALL" ? undefined : filter,
+      ...filterParams,
     })
       .then((results) => {
         if (requestRef.current !== requestId) return;
@@ -87,7 +132,7 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
         setSearchError("Couldn't search materials — is the API running?");
         setSearching(false);
       });
-  }, [debouncedQuery, filter, initialMaterials]);
+  }, [debouncedQuery, filter, filterParams, initialMaterials]);
 
   return (
     <>
@@ -106,8 +151,12 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
             All
           </button>
           {categories.map((c) => (
-            <button key={c} className={filter === c ? shared.chipActive : shared.chip} onClick={() => setFilter(c)}>
-              {c}
+            <button
+              key={c.value}
+              className={filter === c.value ? shared.chipActive : shared.chip}
+              onClick={() => setFilter(c.value)}
+            >
+              {c.label}
             </button>
           ))}
         </div>
@@ -127,20 +176,29 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
         ) : (
           <div className={shared.list}>
             {materials.map((m) => {
-              const specs = specsSummary(m.specs);
+              const category = m.categoryDefId
+                ? schema?.categories.find((c) => c.id === m.categoryDefId)
+                : undefined;
+              const specs = specsSummary(m.specs, category?.attributes);
+              // unitId supersedes the legacy free-text unit; fall back to it so
+              // pre-2a rows keep rendering while the schema loads.
+              const unitLabel = m.unitId
+                ? (schema?.units.find((u) => u.id === m.unitId)?.label ?? m.unit)
+                : m.unit;
+              const categoryLabel = category?.label ?? m.category;
               return (
                 <div key={m.id} className={shared.row}>
                   <div className={shared.rowMain}>
                     <span className={shared.rowTitle}>
                       {m.name}
-                      {m.category && <StatusPill label={m.category} kind="info" />}
+                      {categoryLabel && <StatusPill label={categoryLabel} kind="info" />}
                     </span>
-                    {(specs || m.unit || m.description) && (
+                    {(specs || unitLabel || m.description) && (
                       <span className={shared.rowSub}>
                         {specs}
-                        {specs && m.unit ? " · " : ""}
-                        {m.unit}
-                        {(specs || m.unit) && m.description ? " · " : ""}
+                        {specs && unitLabel ? " · " : ""}
+                        {unitLabel}
+                        {(specs || unitLabel) && m.description ? " · " : ""}
                         {m.description}
                       </span>
                     )}

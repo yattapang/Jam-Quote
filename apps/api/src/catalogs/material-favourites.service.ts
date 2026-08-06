@@ -81,6 +81,10 @@ export class MaterialFavouritesService {
           : {}),
       },
       orderBy: { name: "asc" },
+      // The unit is a FK as of 2a; including it means every consumer can
+      // render "(bag)" without separately fetching the schema and joining by
+      // hand. Same reason findOne includes it.
+      include: { unitRef: true },
       ...(limit !== undefined ? { take: limit } : {}),
     });
   }
@@ -88,6 +92,7 @@ export class MaterialFavouritesService {
   async findOne(businessId: string, id: string): Promise<MaterialFavourite> {
     const fav = await this.prisma.materialFavourite.findFirst({
       where: { id, businessId, deletedAt: null },
+      include: { unitRef: true },
     });
     if (!fav) throw new NotFoundException("Material favourite not found");
     return fav;

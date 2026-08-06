@@ -277,7 +277,13 @@ describe("pure mappers", () => {
     expect(mapMaterialFavourite(apiMaterialFavourite as MapMaterialFavouriteArg)).toEqual({
       id: "mf-cement",
       name: "Cement (grey, 94lb)",
+      // A pre-2a row carries neither, so its quote line still composes a
+      // description from name + specs rather than trusting the name alone
+      // (see materialVariantName).
+      nameCustom: false,
+      categoryDefId: undefined,
       unit: "bag",
+      unitId: undefined,
       priceCents: 115_000,
       priceDollars: 1150,
       supplierId: undefined,

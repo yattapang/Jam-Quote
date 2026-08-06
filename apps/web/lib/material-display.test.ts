@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { materialFavouriteLabel, materialLineDescription, materialVariantName } from "./material-display";
+import {
+  composeMaterialNamePreview,
+  materialFavouriteLabel,
+  materialLineDescription,
+  materialVariantName,
+} from "./material-display";
 
 const lumber = {
   id: "mf-lumber-2x4-16-select",
@@ -73,5 +78,79 @@ describe("materialLineDescription — the fix for the invisible-specs bug", () =
 
   it("ignores a blank/whitespace-only description", () => {
     expect(materialLineDescription({ ...lumber, description: "   " })).toBe("Lumber 2x4 x 16ft x Select");
+  });
+});
+
+/**
+ * Phase 2a introduced a SECOND material shape. The server now composes the
+ * name from the category's attributes, so a 2a material's `name` already
+ * contains its spec values. Re-appending them here would print
+ * "Lumber 2x4 16ft Cedar Select 2x4 x 16ft x Select" on the document the
+ * customer reads — the mirror image of the Phase 1 bug this module fixed.
+ */
+describe("materialVariantName — the two material shapes", () => {
+  const composed = {
+    name: "Lumber 2x4 16ft Cedar Select",
+    categoryDefId: "cat-lumber",
+    nameCustom: false,
+    specs: { dimension: "2x4", length: "16ft", species: "Cedar", grade: "Select" },
+  };
+
+  it("uses a composed name verbatim instead of repeating its specs", () => {
+    expect(materialVariantName(composed)).toBe("Lumber 2x4 16ft Cedar Select");
+  });
+
+  it("still appends specs for a legacy material, which has no categoryDefId", () => {
+    // The Phase 1 behaviour must survive untouched for pre-2a rows, or their
+    // variant detail disappears from the quote again.
+    expect(materialVariantName(lumber)).toBe("Lumber 2x4 x 16ft x Select");
+  });
+
+  it("appends specs when the contractor pinned a custom name", () => {
+    // A pinned name may say nothing about the variant ("Grandpa's stock"), so
+    // the specs still have to be shown or the line is ambiguous.
+    expect(
+      materialVariantName({ ...composed, name: "Grandpa's stock", nameCustom: true }),
+    ).toBe("Grandpa's stock 2x4 x 16ft x Cedar x Select");
+  });
+
+  it("does not double up on the quote line either", () => {
+    expect(materialLineDescription(composed)).toBe("Lumber 2x4 16ft Cedar Select");
+  });
+
+  it("still appends the free-text description to a composed name", () => {
+    expect(materialLineDescription({ ...composed, description: "weathered" })).toBe(
+      "Lumber 2x4 16ft Cedar Select — weathered",
+    );
+  });
+});
+
+describe("composeMaterialNamePreview", () => {
+  const attrs = [
+    { key: "dimension", includeInName: true, nameOrder: 1 },
+    { key: "length", includeInName: true, nameOrder: 2 },
+    { key: "notes", includeInName: false, nameOrder: null },
+  ];
+
+  it("matches what the server will store", () => {
+    expect(composeMaterialNamePreview("Lumber", attrs, { dimension: "2x4", length: "16ft" })).toBe(
+      "Lumber 2x4 16ft",
+    );
+  });
+
+  it("orders by nameOrder, not by spec insertion order", () => {
+    expect(composeMaterialNamePreview("Lumber", attrs, { length: "16ft", dimension: "2x4" })).toBe(
+      "Lumber 2x4 16ft",
+    );
+  });
+
+  it("skips unset and non-name attributes", () => {
+    expect(composeMaterialNamePreview("Lumber", attrs, { dimension: "2x4", notes: "warped" })).toBe(
+      "Lumber 2x4",
+    );
+  });
+
+  it("falls back to the category label alone", () => {
+    expect(composeMaterialNamePreview("Lumber", attrs, {})).toBe("Lumber");
   });
 });

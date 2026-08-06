@@ -36,6 +36,23 @@
   color: var(--jq-text-muted);
 }
 
+/* Inline action inside a .hint (e.g. "Use the composed name instead"). Reads
+   as a link but is a real <button>, so it stays keyboard-reachable; type is
+   set to "button" at every call site so it never submits the form. */
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--jq-accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  opacity: 0.8;
+}
+
 .error {
   font-size: 11px;
   color: var(--jq-crit);

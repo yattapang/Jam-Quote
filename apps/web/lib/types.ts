@@ -86,10 +86,22 @@ export interface MaterialFavourite {
   /** Convenience for display/inputs — priceCents / 100. */
   priceDollars: number;
   supplierId?: string;
-  /** Structured catalog fields (see apps/web/lib/material-categories.ts).
-   * Both optional — older/unclassified materials simply omit them and
-   * display/behave exactly as before. */
+  /** Set once the material has been entered against the #26 Phase 2a attribute
+   * schema. Its presence means `name` was COMPOSED server-side and therefore
+   * already contains the spec values — see materialVariantName, which would
+   * otherwise render them a second time on the customer's quote line. */
+  categoryDefId?: string;
+  /** True when the contractor pinned the name by hand rather than letting it
+   * compose. A pinned name may say nothing about the variant, so specs are
+   * still appended for display. */
+  nameCustom?: boolean;
+  /** Controlled-vocabulary unit (MaterialUnit id), superseding free-text `unit`. */
+  unitId?: string;
+  /** LEGACY free-text category. Retained so pre-2a materials keep rendering;
+   * new writes set categoryDefId instead. */
   category?: string;
+  /** Keyed by MaterialAttributeDef.key as of 2a (pre-2a rows were keyed by
+   * display label; the migration rewrote them). */
   specs?: Record<string, string>;
   /** Optional free-text notes (supplier, finish, etc.) — also searched by
    * the API's GET /catalogs/material-favourites `q` param alongside name and

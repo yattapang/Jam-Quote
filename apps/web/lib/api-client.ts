@@ -170,12 +170,70 @@ export interface ApiLineItem {
 export interface ApiMaterialFavourite {
   id: string;
   name: string;
+  /** True when the contractor pinned the name rather than letting the server
+   * compose it from the category's attributes (#26 Phase 2a). */
+  nameCustom?: boolean | null;
+  /** LEGACY free-text unit, superseded by unitId. */
   unit?: string | null;
+  unitId?: string | null;
+  /** The resolved MaterialUnit, included by the API on reads so the unit can
+   * be rendered without a second lookup against the schema endpoint. */
+  unitRef?: { id: string; key: string; label: string } | null;
   priceCents: number;
   supplierId?: string | null;
+  /** LEGACY free-text category, superseded by categoryDefId. */
   category?: string | null;
+  categoryDefId?: string | null;
+  /** Keyed by MaterialAttributeDef.key as of 2a (was keyed by display label). */
   specs?: Record<string, string> | null;
   description?: string | null;
+  measureUnit?: string | null;
+  // Prisma Decimal arrives as a numeric string over JSON.
+  coveragePerSellUnit?: number | string | null;
+  wastePct?: number | string | null;
+}
+
+/**
+ * GET /catalogs/material-schema — the attribute tree this business may use:
+ * platform-curated rows plus its own additions (`custom: true`).
+ */
+export interface ApiMaterialAttributeOption {
+  id: string;
+  value: string;
+  label: string;
+  custom: boolean;
+}
+export interface ApiMaterialAttribute {
+  id: string;
+  key: string;
+  label: string;
+  kind: "ENUM" | "TEXT" | "NUMBER";
+  unit?: string | null;
+  required: boolean;
+  includeInName: boolean;
+  nameOrder: number | null;
+  sort: number;
+  custom: boolean;
+  options: ApiMaterialAttributeOption[];
+}
+export interface ApiMaterialCategory {
+  id: string;
+  key: string;
+  label: string;
+  sort: number;
+  custom: boolean;
+  attributes: ApiMaterialAttribute[];
+}
+export interface ApiMaterialUnit {
+  id: string;
+  key: string;
+  label: string;
+  sort: number;
+  custom: boolean;
+}
+export interface ApiMaterialSchema {
+  categories: ApiMaterialCategory[];
+  units: ApiMaterialUnit[];
 }
 export interface ApiLabourRate {
   id: string;
@@ -306,7 +364,16 @@ export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite
   return {
     id: m.id,
     name: m.name,
-    unit: m.unit ?? undefined,
+    // categoryDefId + nameCustom decide whether `name` already contains the
+    // spec values (see materialVariantName) — without them the quote line
+    // would render them twice.
+    nameCustom: m.nameCustom ?? false,
+    categoryDefId: m.categoryDefId ?? undefined,
+    // unitRef wins: it is the controlled-vocabulary label for 2a materials,
+    // whose legacy `unit` string is null. Falling back to `unit` keeps pre-2a
+    // rows rendering exactly as before.
+    unit: m.unitRef?.label ?? m.unit ?? undefined,
+    unitId: m.unitId ?? undefined,
     priceCents: m.priceCents,
     priceDollars: m.priceCents / 100,
     supplierId: m.supplierId ?? undefined,
@@ -527,13 +594,29 @@ export async function createJob(input: NewJobInput): Promise<{ id: string }> {
 }
 
 export interface NewMaterialFavouriteInput {
-  name: string;
-  unit?: string;
+  /** Optional as of 2a: the server composes it from the category's attributes
+   * unless nameCustom is set. Only send it to pin a name. */
+  name?: string;
+  nameCustom?: boolean;
+  unitId?: string;
   priceCents: number;
   supplierId?: string;
-  category?: string;
+  categoryDefId?: string;
+  /** Keyed by MaterialAttributeDef.key. */
   specs?: Record<string, string>;
   description?: string;
+  measureUnit?: string;
+  coveragePerSellUnit?: number;
+  wastePct?: number;
+  /** LEGACY free-text fields, still accepted by the API. Prefer
+   * categoryDefId/unitId, which win when both are sent. */
+  unit?: string;
+  category?: string;
+}
+
+/** The attribute tree for the current business (curated + own additions). */
+export async function fetchMaterialSchema(): Promise<ApiMaterialSchema> {
+  return apiClient.get<ApiMaterialSchema>("/catalogs/material-schema");
 }
 export async function createMaterialFavourite(
   input: NewMaterialFavouriteInput,
@@ -555,12 +638,15 @@ export async function createMaterialFavourite(
  * array, just filtered. */
 export async function getMaterialFavouritesClient(params?: {
   q?: string;
+  /** LEGACY free-text category filter, for pre-2a rows. */
   category?: string;
+  categoryDefId?: string;
   limit?: number;
 }): Promise<MaterialFavourite[]> {
   const qs = new URLSearchParams();
   if (params?.q) qs.set("q", params.q);
   if (params?.category) qs.set("category", params.category);
+  if (params?.categoryDefId) qs.set("categoryDefId", params.categoryDefId);
   if (params?.limit) qs.set("limit", String(params.limit));
   const suffix = qs.toString() ? `?${qs.toString()}` : "";
   return (

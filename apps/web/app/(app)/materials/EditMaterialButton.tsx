@@ -4,13 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { updateMaterialFavourite } from "@/lib/api-client";
+import { updateMaterialFavourite, type ApiMaterialCategory } from "@/lib/api-client";
 import MaterialForm, {
   materialFormValuesFromMaterial,
   materialPayloadFromValues,
   type MaterialFormValues,
 } from "@/components/forms/MaterialForm";
 import type { MaterialFavourite } from "@/lib/types";
+import { invalidateMaterialSchema } from "@/lib/use-material-schema";
 
 /** Per-row edit action on the materials catalog — mirrors EditLabourRateButton:
  * pre-fills the form (including category + specs) from the existing material
@@ -20,8 +21,9 @@ export default function EditMaterialButton({ material }: { material: MaterialFav
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(values: MaterialFormValues) {
-    await updateMaterialFavourite(material.id, materialPayloadFromValues(values));
+  async function handleSubmit(values: MaterialFormValues, category: ApiMaterialCategory | undefined) {
+    await updateMaterialFavourite(material.id, materialPayloadFromValues(values, category));
+    invalidateMaterialSchema();
     setOpen(false);
     router.refresh();
   }
