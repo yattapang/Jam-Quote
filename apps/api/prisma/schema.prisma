@@ -43,6 +43,17 @@ enum PriceSource {
   SCAN
 }
 
+// Kind of a MaterialAttributeDef. ENUM draws its values from
+// MaterialAttributeOption (a controlled vocabulary); TEXT is free input;
+// NUMBER is numeric input optionally qualified by MaterialAttributeDef.unit
+// (e.g. "ft"). Deliberately NOT reusing RateUnit — that is the labour-time
+// vocabulary (see MaterialUnit).
+enum MaterialAttributeKind {
+  ENUM
+  TEXT
+  NUMBER
+}
+
 enum QuoteStatus {
   DRAFT
   SENT
@@ -139,6 +150,11 @@ model Business {
   subscription Subscription?
   trades       Trade[]
   assemblies   Assembly[]
+
+  materialCategoryDefs     MaterialCategoryDef[]
+  materialAttributeDefs    MaterialAttributeDef[]
+  materialAttributeOptions MaterialAttributeOption[]
+  materialUnits            MaterialUnit[]
 }
 
 model User {
@@ -366,29 +382,171 @@ model LabourRate {
 }
 
 model MaterialFavourite {
-  id         String    @id @default(uuid())
-  businessId String
-  business   Business  @relation(fields: [businessId], references: [id])
-  name       String
-  unit       String?
-  priceCents Int
-  supplierId String?
-  // Structured catalog fields (additive — both nullable, no backfill).
-  // category names the spec-field set (see apps/web/lib/material-categories.ts,
-  // e.g. "Steel / Rebar"); specs is a small key->value map of that category's
-  // spec values (e.g. {"Diameter":"1/2in","Length":"20ft"}). Both are
-  // free-form contractor input, not FK'd to any enum.
-  category   String?
-  specs      Json?
+  id                  String               @id @default(uuid())
+  businessId          String
+  business            Business             @relation(fields: [businessId], references: [id])
+  // The display name shown on the quote line. As of Phase 2a this is
+  // COMPOSED from the category's includeInName attributes on write (see
+  // MaterialNameService) rather than typed — that consistency is what makes
+  // search and de-duping work. nameCustom pins it: when true the contractor
+  // has overridden the composed name and writes must not recompose it.
+  name                String
+  nameCustom          Boolean              @default(false)
+  // LEGACY free-string unit, superseded by unitId. Retained (not dropped) so
+  // the 2a migration is reversible and any value that failed to map to a
+  // curated/tenant MaterialUnit is still recoverable. Read unitId first and
+  // fall back to this; new writes set unitId.
+  unit                String?
+  unitId              String?
+  unitRef             MaterialUnit?        @relation(fields: [unitId], references: [id])
+  priceCents          Int
+  supplierId          String?
+  // LEGACY free-text category, superseded by categoryDefId. Retained for the
+  // same reason as `unit` above.
+  category            String?
+  categoryDefId       String?
+  categoryDef         MaterialCategoryDef? @relation(fields: [categoryDefId], references: [id])
+  // key -> value map keyed by MaterialAttributeDef.key (NOT by label, as it
+  // was pre-2a). Still jsonb so AssemblyComponent.materialFavouriteId keeps
+  // pointing at this single priced row, but now validated server-side against
+  // the category's attributes: unknown keys are rejected, and ENUM values
+  // must exist in MaterialAttributeOption.
+  specs               Json?
+  // Denormalized lowercase haystack (name + description + spec values),
+  // maintained on write. Phase 1 searched spec values live via
+  // jsonb_each_text — correct but unindexable; this is the indexed form.
+  searchText          String?
+  // One-hop purchase conversion, both optional and only meaningful together:
+  // "I measured N measureUnit; one sell unit covers coveragePerSellUnit of
+  // them." Deliberately NOT a general unit-conversion graph — see #26.
+  // Quantities round UP to whole sell units; wastePct is an optional default
+  // overage applied before rounding.
+  measureUnit         String?
+  coveragePerSellUnit Decimal?             @db.Decimal(12, 4)
+  wastePct            Decimal?             @db.Decimal(5, 2)
   // Free-text notes the contractor can search on (e.g. "leftover from the
   // Palisadoes job, slightly weathered") — additive, nullable, no backfill.
-  description String?
-  updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
-  deletedAt  DateTime? // soft-delete for offline sync
+  description         String?
+  updatedAt           DateTime             @default(now()) @updatedAt // delta-sync cursor
+  deletedAt           DateTime? // soft-delete for offline sync
 
   assemblyComponents AssemblyComponent[]
 
   @@index([businessId])
+  @@index([categoryDefId])
+  @@index([unitId])
+  // Search haystack. Plain btree, which Postgres can use for a prefix
+  // (`searchText LIKE 'cedar%'`) but NOT for the infix `%cedar%` the picker
+  // actually issues. Kept because it is nearly free and helps the common
+  // prefix case; a pg_trgm GIN index is the real fix for infix search and is
+  // deferred with the rest of attribute-based filtering to #26 Phase 3.
+  @@index([searchText])
+}
+
+// ---------------------------------------------------------------------------
+// Material attribute schema (typed attributes with controlled vocabularies)
+//
+// Replaces the old UI-only convention where MaterialFavourite.category was a
+// free string and .specs an untyped JSON blob validated as
+// z.record(string, string). The shape of a material is now DATA, editable
+// without a code deploy, following the same curated + tenant-extension
+// pattern as Trade: businessId NULL = platform-curated row visible to every
+// tenant; businessId set = that tenant's own addition.
+//
+// specs stays jsonb on MaterialFavourite rather than becoming a normalized
+// value table — that keeps AssemblyComponent.materialFavouriteId pointing at
+// the single priced row. What changes is that specs is now VALIDATED
+// server-side against the category's attributes.
+// ---------------------------------------------------------------------------
+
+model MaterialCategoryDef {
+  id         String    @id @default(uuid())
+  // NULL = platform-curated. onDelete: Cascade is REQUIRED, not cosmetic —
+  // Prisma would otherwise infer SET NULL for this optional relation, which
+  // on tenant deletion would promote that tenant's private categories into
+  // globally-visible curated ones. Same reasoning as Trade (see #19).
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  // Stable machine key ("lumber"); label is what the contractor sees.
+  key        String
+  label      String
+  sort       Int       @default(0)
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  attributes MaterialAttributeDef[]
+  materials  MaterialFavourite[]
+
+  @@index([businessId])
+  @@index([key])
+}
+
+model MaterialAttributeDef {
+  id            String                @id @default(uuid())
+  categoryId    String
+  category      MaterialCategoryDef   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // NULL = curated attribute. Set = an attribute THIS tenant added, possibly
+  // onto a curated category (a contractor who tracks, say, moisture content
+  // on Lumber shouldn't have to fork the whole category). Only that tenant
+  // sees it. Cascade required for the same reason as MaterialCategoryDef.
+  businessId    String?
+  business      Business?             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  key           String // stable machine key ("species"), matches a specs JSON key
+  label         String // "Species"
+  kind          MaterialAttributeKind @default(ENUM)
+  unit          String? // for NUMBER, e.g. "ft"
+  required      Boolean               @default(false)
+  // Whether this attribute participates in the composed display name, and in
+  // what order — see MaterialNameService. Lumber's dimension/length/species
+  // are includeInName; a "notes"-ish attribute would not be.
+  includeInName Boolean               @default(false)
+  nameOrder     Int?
+  sort          Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  deletedAt     DateTime?
+
+  options MaterialAttributeOption[]
+
+  @@index([categoryId])
+  @@index([businessId])
+}
+
+model MaterialAttributeOption {
+  id          String               @id @default(uuid())
+  attributeId String
+  attribute   MaterialAttributeDef @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  // NULL = curated option; set = a value this tenant added themselves.
+  // Cascade required for the same reason as MaterialCategoryDef.businessId.
+  businessId  String?
+  business    Business?            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  value       String // normalized comparison key (trimmed, case-folded)
+  label       String // what the contractor typed/sees ("Cedar")
+  sort        Int                  @default(0)
+  createdAt   DateTime             @default(now())
+  deletedAt   DateTime?
+
+  @@index([attributeId])
+  @@index([businessId])
+}
+
+// Controlled vocabulary for how a material is SOLD (ea, bag, sheet, length…).
+// Separate from RateUnit by design: RateUnit is labour-time
+// (HOUR/DAY/WEEK/MONTH/JOB/UNIT) and must stay independently extensible.
+model MaterialUnit {
+  id         String    @id @default(uuid())
+  // NULL = curated; set = tenant's own unit. Cascade required (see above).
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  key        String // "bag"
+  label      String // "Bag"
+  sort       Int       @default(0)
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  materials MaterialFavourite[]
+
+  @@index([businessId])
+  @@index([key])
 }
 
 // Curated master trade list (businessId null) + per-business custom trades
