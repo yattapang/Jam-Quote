@@ -155,6 +155,7 @@ model Business {
   materialAttributeDefs    MaterialAttributeDef[]
   materialAttributeOptions MaterialAttributeOption[]
   materialUnits            MaterialUnit[]
+  materialPriceEntries     MaterialPriceEntry[]
 }
 
 model User {
@@ -355,21 +356,52 @@ model Supplier {
   lineItems    QuoteLineItem[]
 }
 
+/// One observed price for one item at one supplier, at one point in time.
+///
+/// Two kinds of row live here (#26 Phase 2b):
+///   businessId NULL  = platform-curated lookup price (what prisma/seed.ts
+///                      writes), visible to every tenant as reference data.
+///   businessId set   = a price THIS contractor recorded themselves ("I paid
+///                      $2,450 a bag at Rapid True Value on Tuesday").
+///
+/// Rows are NOT de-duplicated per (supplier, material) and there is no unique
+/// constraint: repeated entries over time ARE the price history, which is the
+/// point — `fetchedAt` orders them and the comparison view takes the most
+/// recent per supplier. Recording a new price is an insert, never an update.
 model MaterialPriceEntry {
-  id         String      @id @default(uuid())
-  supplierId String
-  supplier   Supplier    @relation(fields: [supplierId], references: [id])
-  name       String
-  sku        String?
-  unit       String? // "42.5kg bag", "20ft length"
-  priceCents Int
-  source     PriceSource @default(LOOKUP)
-  sourceUrl  String?
-  fetchedAt  DateTime    @default(now())
-  createdAt  DateTime    @default(now())
+  id                  String             @id @default(uuid())
+  supplierId          String
+  supplier            Supplier           @relation(fields: [supplierId], references: [id])
+  /// NULL = platform-curated. Cascade is REQUIRED, not cosmetic, and matters
+  /// more here than anywhere else in the schema: under Prisma's inferred SET
+  /// NULL, deleting a tenant would turn that tenant's privately-recorded
+  /// supplier prices into curated rows visible to EVERY other contractor —
+  /// publishing what they pay their suppliers. Same class as #19, worse blast
+  /// radius.
+  businessId          String?
+  business            Business?          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// The tenant material this price is for. NULL on curated lookup rows, which
+  /// are catalogue-wide and belong to no tenant's material. Cascade: once the
+  /// material row is really gone, a price for it is orphaned data. (Materials
+  /// are soft-deleted in normal operation, so this rarely fires — see
+  /// MaterialFavouritesService.remove.)
+  materialFavouriteId String?
+  materialFavourite   MaterialFavourite? @relation(fields: [materialFavouriteId], references: [id], onDelete: Cascade)
+  name                String
+  sku                 String?
+  unit                String? // "42.5kg bag", "20ft length"
+  priceCents          Int
+  source              PriceSource        @default(LOOKUP)
+  sourceUrl           String?
+  /// Free-text note on the observation ("delivered price", "cash discount").
+  note                String?
+  fetchedAt           DateTime           @default(now())
+  createdAt           DateTime           @default(now())
 
   @@index([supplierId])
   @@index([name])
+  @@index([businessId])
+  @@index([materialFavouriteId])
 }
 
 model LabourRate {
@@ -407,6 +439,9 @@ model MaterialFavourite {
   unitId              String?
   unitRef             MaterialUnit?        @relation(fields: [unitId], references: [id])
   priceCents          Int
+  /// "My usual supplier" for this material — the default pick, not the price
+  /// comparison itself (that is MaterialPriceEntry). Dead from #14 until 2b,
+  /// when it finally got a writer; see [[#25]] item 7.
   supplierId          String?
   // LEGACY free-text category, superseded by categoryDefId. Retained for the
   // same reason as `unit` above.
@@ -437,7 +472,8 @@ model MaterialFavourite {
   updatedAt           DateTime             @default(now()) @updatedAt // delta-sync cursor
   deletedAt           DateTime? // soft-delete for offline sync
 
-  assemblyComponents AssemblyComponent[]
+  assemblyComponents   AssemblyComponent[]
+  materialPriceEntries MaterialPriceEntry[]
 
   @@index([businessId])
   @@index([categoryDefId])

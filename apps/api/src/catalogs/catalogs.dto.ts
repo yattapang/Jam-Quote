@@ -90,3 +90,25 @@ export const createSupplierSchema = z.object({
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 export const updateSupplierSchema = createSupplierSchema.partial();
 export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
+
+/**
+ * Recording an observed supplier price (#26 Phase 2b). Always an INSERT — a
+ * new observation never overwrites an old one, because the repeated rows are
+ * the price history (see MaterialPriceEntry in schema.prisma).
+ */
+export const createMaterialPriceEntrySchema = z.object({
+  supplierId: z.string().uuid(),
+  materialFavouriteId: z.string().uuid(),
+  priceCents: z.number().int().nonnegative(),
+  // Free-text qualifier on the observation ("delivered", "cash discount").
+  note: z.string().max(200).optional(),
+  // Defaults to now; accepted so a contractor can back-date a price they were
+  // quoted earlier in the week.
+  fetchedAt: z.coerce.date().optional(),
+});
+export type CreateMaterialPriceEntryInput = z.infer<typeof createMaterialPriceEntrySchema>;
+
+export const materialPriceEntryQuerySchema = z.object({
+  materialFavouriteId: z.string().uuid(),
+});
+export type MaterialPriceEntryQuery = z.infer<typeof materialPriceEntryQuerySchema>;

@@ -431,6 +431,33 @@ describe("AdminService.suppliers", () => {
 
     expect(suppliers[0]?.lastFetch).toBeNull();
   });
+
+  it("counts only the platform's curated price feed, not tenants' own prices", async () => {
+    // Since #26 Phase 2b contractors record their own prices in the SAME
+    // table. Unscoped, the admin console's "SKUS" column would silently become
+    // "curated + every tenant's private prices" and climb on its own, with no
+    // admin action and no visible cause.
+    const prisma = {
+      supplier: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: "sup-1", name: "H&L Hardware", parish: "Kingston", isPartner: true, _count: { priceEntries: 3 } },
+        ]),
+      },
+      materialPriceEntry: { findFirst: vi.fn().mockResolvedValue(null) },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+
+    await svc.suppliers();
+
+    expect(prisma.supplier.findMany.mock.calls[0]?.[0].include._count).toEqual({
+      select: { priceEntries: { where: { businessId: null } } },
+    });
+    expect(prisma.materialPriceEntry.findFirst.mock.calls[0]?.[0].where).toEqual({
+      supplierId: "sup-1",
+      businessId: null,
+    });
+  });
 });
 
 describe("AdminService.regulatory", () => {

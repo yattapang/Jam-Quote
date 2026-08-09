@@ -273,6 +273,31 @@ describe("material catalog Phase 2a migration", () => {
       expect(orphans).toHaveLength(0);
       await fresh.close();
     }, 120_000);
+
+    it("cascades a tenant's recorded supplier prices away with the tenant", async () => {
+      // The worst version of the #19 failure mode. Under SET NULL, deleting a
+      // business would flip businessId to NULL on its price entries — and
+      // businessId NULL means "platform-curated reference price", visible to
+      // every other contractor. Deleting a tenant would publish what they pay
+      // their suppliers.
+      const fresh = await freshDb();
+      await fresh.exec(LEGACY_FIXTURES.replace(/INSERT INTO "MaterialFavourite"[\s\S]*$/, ""));
+      await fresh.exec(`
+        INSERT INTO "Supplier" (id,name,"isPartner","createdAt","updatedAt")
+          VALUES ('sup-1','Rapid True Value',false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+        INSERT INTO "MaterialPriceEntry" (id,"supplierId","businessId",name,"priceCents",source,"fetchedAt","createdAt")
+          VALUES ('pe-own','sup-1','biz-1','Cement',245000,'MANUAL',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+                 ('pe-curated','sup-1',NULL,'Cement',250000,'LOOKUP',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+        DELETE FROM "Business" WHERE id = 'biz-1';
+      `);
+
+      const rows = (
+        await fresh.query<{ id: string }>(`SELECT id FROM "MaterialPriceEntry" ORDER BY id`)
+      ).rows;
+      // The tenant's own price is gone; the curated one is untouched.
+      expect(rows.map((r) => r.id)).toEqual(["pe-curated"]);
+      await fresh.close();
+    }, 120_000);
   });
 
   describe("migration/schema consistency", () => {

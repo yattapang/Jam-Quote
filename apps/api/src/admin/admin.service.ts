@@ -225,7 +225,12 @@ export class AdminService {
     const suppliers = await this.prisma.supplier.findMany({
       where: { deletedAt: null },
       include: {
-        _count: { select: { priceEntries: true } },
+        // businessId: null scopes this to the PLATFORM's curated price feed.
+        // Since #26 Phase 2b tenants record their own prices in this same
+        // table, so an unscoped count would report "curated SKUs + every
+        // contractor's private prices" under a column labelled SKUS — and it
+        // would climb as tenants use the feature, with no admin action.
+        _count: { select: { priceEntries: { where: { businessId: null } } } },
       },
       orderBy: { name: "asc" },
     });
@@ -233,7 +238,9 @@ export class AdminService {
     return Promise.all(
       suppliers.map(async (s) => {
         const latest = await this.prisma.materialPriceEntry.findFirst({
-          where: { supplierId: s.id },
+          // Same scoping: "last fetch" is about the platform's own feed
+          // freshness, not the last time some contractor typed in a price.
+          where: { supplierId: s.id, businessId: null },
           orderBy: { fetchedAt: "desc" },
           select: { fetchedAt: true },
         });

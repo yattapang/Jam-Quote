@@ -10,6 +10,8 @@ import { MaterialSchemaController } from "./material-schema.controller.js";
 import { MaterialSchemaService } from "./material-schema.service.js";
 import { SuppliersController } from "./suppliers.controller.js";
 import { SuppliersService } from "./suppliers.service.js";
+import { MaterialPricesController } from "./material-prices.controller.js";
+import { MaterialPricesService } from "./material-prices.service.js";
 
 /**
  * Catalogs: the labour rate book, material favourites, owned/rented equipment,
@@ -28,6 +30,7 @@ import { SuppliersService } from "./suppliers.service.js";
     MaterialFavouritesController,
     MaterialSchemaController,
     SuppliersController,
+    MaterialPricesController,
   ],
   providers: [
     EquipmentService,
@@ -35,6 +38,7 @@ import { SuppliersService } from "./suppliers.service.js";
     MaterialFavouritesService,
     MaterialSchemaService,
     SuppliersService,
+    MaterialPricesService,
   ],
   exports: [
     EquipmentService,
@@ -42,6 +46,7 @@ import { SuppliersService } from "./suppliers.service.js";
     MaterialFavouritesService,
     MaterialSchemaService,
     SuppliersService,
+    MaterialPricesService,
   ],
 })
 export class CatalogsModule {}
