@@ -1,0 +1,147 @@
+/* Supplier price comparison, shown under the material edit form. Colors come
+   only from --jq-* theme variables. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--jq-border);
+}
+
+.title {
+  font-size: 14px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+  background: var(--jq-surface-alt);
+}
+
+/* The cheapest row is the answer the contractor opened this panel for, so it
+   gets a border rather than only a badge. */
+.rowCheapest {
+  composes: row;
+  border-color: var(--jq-good);
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.supplier {
+  font-weight: 700;
+  font-size: 13.5px;
+  margin-right: 2px;
+}
+
+.badge {
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Own vs curated is the trust signal, so the two never share a colour: an
+   accent pill for a price this contractor recorded, a flat neutral one for a
+   catalogue lookup. */
+.badgeOwn {
+  composes: badge;
+  background: var(--jq-accent-soft);
+  color: var(--jq-accent);
+}
+
+.badgeReference {
+  composes: badge;
+  background: var(--jq-neutral-pill-soft);
+  color: var(--jq-neutral-pill);
+}
+
+.badgeCheapest {
+  composes: badge;
+  background: var(--jq-good-soft);
+  color: var(--jq-good);
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--jq-text-muted);
+}
+
+.note {
+  font-size: 12px;
+  color: var(--jq-text);
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.price {
+  margin-right: auto;
+}
+
+.remove {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--jq-crit);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.remove:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.recordForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+}
+
+.recordFields {
+  display: grid;
+  grid-template-columns: 1fr 110px;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .recordFields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.recordActions {
+  display: flex;
+  justify-content: flex-end;
+}

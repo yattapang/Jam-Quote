@@ -1214,3 +1214,70 @@ export async function getTradesClient(): Promise<Trade[]> {
 export async function createTrade(name: string): Promise<Trade> {
   return apiClient.post<Trade>("/trades", { name });
 }
+
+// --- Supplier price comparison (#26 Phase 2b) --------------------------------
+
+/** A row of the global supplier directory (GET /catalogs/suppliers). Distinct
+ * from AdminSupplier, which carries the staff console's feed stats — this is
+ * just enough to fill a picker. */
+export interface ApiSupplier {
+  id: string;
+  name: string;
+  parish: string | null;
+  website: string | null;
+  isPartner: boolean;
+}
+
+/** One supplier's most recent observed price for a material (the API's
+ * SupplierPriceView). No mapper: cents stay integer cents and `fetchedAt` stays
+ * ISO precisely so the client can render it relative to now — see
+ * lib/relative-time.ts. */
+export interface ApiSupplierPrice {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  /** The supplier's parish. */
+  location: string | null;
+  priceCents: number;
+  note: string | null;
+  fetchedAt: string;
+  /** true = a price this contractor recorded; false = a platform-curated
+   * reference price. The UI must keep them apart — "what I actually paid"
+   * carries more weight than a catalogue lookup. */
+  own: boolean;
+}
+
+export interface NewMaterialPriceInput {
+  supplierId: string;
+  materialFavouriteId: string;
+  priceCents: number;
+  note?: string;
+  /** ISO. Omit for now; send it to back-date a price quoted earlier. */
+  fetchedAt?: string;
+}
+
+/** GET /catalogs/suppliers (client-side, via the proxy) — the shared supplier
+ * directory, alphabetical. Not business-scoped: suppliers are global. */
+export async function getSuppliersClient(): Promise<ApiSupplier[]> {
+  return apiClient.get<ApiSupplier[]>("/catalogs/suppliers");
+}
+
+/** GET /catalogs/material-prices — one row per supplier (their latest
+ * observation), already sorted cheapest-first by the API. */
+export async function getMaterialPrices(materialFavouriteId: string): Promise<ApiSupplierPrice[]> {
+  const qs = new URLSearchParams({ materialFavouriteId });
+  return apiClient.get<ApiSupplierPrice[]>(`/catalogs/material-prices?${qs.toString()}`);
+}
+
+/** POST /catalogs/material-prices — always an insert, never an upsert: this is
+ * price history. The response is the raw entry row rather than a comparison
+ * row, so callers re-read the comparison instead of splicing the result in. */
+export async function createMaterialPrice(input: NewMaterialPriceInput): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>("/catalogs/material-prices", input);
+}
+
+/** DELETE /catalogs/material-prices/:id — only your own observations; the API
+ * answers 403 for a platform-curated row. */
+export async function deleteMaterialPrice(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/catalogs/material-prices/${id}`);
+}

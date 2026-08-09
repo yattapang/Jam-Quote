@@ -24,6 +24,7 @@ import {
   type EffectiveRulePack,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
+import { relativeTime } from "@/lib/relative-time";
 import styles from "./console.module.css";
 
 type Screen =
@@ -77,16 +78,6 @@ const td: CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(-
 const inputStyle: CSSProperties = { height: 36, padding: "0 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", width: "100%" };
 const planTone: Record<string, string> = { Free: "muted", Starter: "info", Core: "accent", Pro: "good" };
 
-function relTime(iso: string | null): string {
-  if (!iso) return "—";
-  const ms = Date.now() - new Date(iso).getTime();
-  if (Number.isNaN(ms)) return "—";
-  const m = Math.floor(ms / 60000);
-  if (m < 60) return `${Math.max(1, m)}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
 /** Compact one-line rendering of an audit entry's free-form `details` payload
  * (shape varies by action — e.g. a tenant delete's confirmName, a plan
  * change's before/after). Never throws on odd shapes. */
@@ -103,9 +94,9 @@ function detailsPreview(details: unknown): string {
 function freshnessOf(iso: string | null): { key: "fresh" | "cached" | "stale"; label: string } {
   if (!iso) return { key: "stale", label: "No data" };
   const h = (Date.now() - new Date(iso).getTime()) / 3600000;
-  if (h < 6) return { key: "fresh", label: `Fresh · ${relTime(iso)}` };
-  if (h < 30) return { key: "cached", label: `Cached · ${relTime(iso)}` };
-  return { key: "stale", label: `Stale · ${relTime(iso)}` };
+  if (h < 6) return { key: "fresh", label: `Fresh · ${relativeTime(iso)}` };
+  if (h < 30) return { key: "cached", label: `Cached · ${relativeTime(iso)}` };
+  return { key: "stale", label: `Stale · ${relativeTime(iso)}` };
 }
 
 type TenantRow = [string, string, string, string, string, string, number | string, number, number];
@@ -564,7 +555,7 @@ export default function AdminConsole({
     ["Old Harbour Plumbing", "St. Catherine", "Free", "902-556-103", "churned", "34d ago", "—", 24, 3],
   ];
   const tenantsRaw: TenantRow[] = data.tenants.length
-    ? data.tenants.map((t): TenantRow => [t.name, t.parish ?? "—", t.plan, t.trn ?? "—", t.status, relTime(t.createdAt), "—", t.quoteCount, t.quoteCount])
+    ? data.tenants.map((t): TenantRow => [t.name, t.parish ?? "—", t.plan, t.trn ?? "—", t.status, relativeTime(t.createdAt), "—", t.quoteCount, t.quoteCount])
     : tenantsMock;
   // Real business ids, index-aligned with tenantsRaw — null for the
   // design-mock rows (no real business behind them, so no plan toggle).
@@ -590,7 +581,7 @@ export default function AdminConsole({
   const suppliersRaw: SupplierRow[] = data.suppliers.length
     ? data.suppliers.map((s): SupplierRow => {
         const f = freshnessOf(s.lastFetch);
-        return [s.name, s.parish ?? "—", s.isPartner, f.key, f.label, s.lastFetch ? relTime(s.lastFetch) : "—", s.skuCount];
+        return [s.name, s.parish ?? "—", s.isPartner, f.key, f.label, s.lastFetch ? relativeTime(s.lastFetch) : "—", s.skuCount];
       })
     : suppliersMock;
   // Real supplier ids, index-aligned with suppliersRaw — null for the
@@ -1430,7 +1421,7 @@ export default function AdminConsole({
                     ) : (
                       auditEntries.map((a) => (
                         <tr key={a.id} className={styles.rowHover}>
-                          <td style={{ ...td, padding: "12px 16px", color: "var(--muted)", whiteSpace: "nowrap" }} title={a.createdAt}>{relTime(a.createdAt)}</td>
+                          <td style={{ ...td, padding: "12px 16px", color: "var(--muted)", whiteSpace: "nowrap" }} title={a.createdAt}>{relativeTime(a.createdAt)}</td>
                           <td style={{ ...td, padding: "12px 16px" }}>{a.actorEmail}</td>
                           <td style={{ ...td, padding: "12px 16px", fontWeight: 600 }}>{a.action}</td>
                           <td style={{ ...td, padding: "12px 16px", color: "var(--muted)" }}>{a.targetType}{a.targetId ? ` · ${a.targetId}` : ""}</td>

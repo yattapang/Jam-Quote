@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -20,6 +20,10 @@ export interface MaterialFormValues {
   nameCustom: boolean;
   /** MaterialUnit id; "" means no unit. */
   unitId: string;
+  /** "My usual supplier" — the Supplier whose price currently populates
+   * priceDollars. Set by applying a row from the price comparison; "" means
+   * none. Not the price comparison itself, which lives in MaterialPriceEntry. */
+  supplierId: string;
   priceDollars: string;
   /** MaterialCategoryDef id; "" means no category. */
   categoryDefId: string;
@@ -33,6 +37,7 @@ export const emptyMaterialForm: MaterialFormValues = {
   name: "",
   nameCustom: false,
   unitId: "",
+  supplierId: "",
   priceDollars: "",
   categoryDefId: "",
   specs: {},
@@ -47,6 +52,7 @@ export function materialFormValuesFromMaterial(m: MaterialFavourite): MaterialFo
     // their names were hand-typed and already shown to customers.
     nameCustom: m.nameCustom ?? true,
     unitId: m.unitId ?? "",
+    supplierId: m.supplierId ?? "",
     priceDollars: String(m.priceDollars),
     categoryDefId: m.categoryDefId ?? "",
     specs: m.specs ?? {},
@@ -76,10 +82,25 @@ export function materialPayloadFromValues(
       : {}),
     ...(values.categoryDefId ? { categoryDefId: values.categoryDefId } : {}),
     ...(values.unitId ? { unitId: values.unitId } : {}),
+    ...(values.supplierId ? { supplierId: values.supplierId } : {}),
     priceCents: Math.round((Number(values.priceDollars) || 0) * 100),
     specs: Object.keys(specs).length ? specs : undefined,
     description: values.description.trim() || undefined,
   };
+}
+
+/**
+ * A price handed to the form from outside it (the edit flow's supplier price
+ * comparison). Wrapped in an object rather than passed as a bare string so the
+ * form keys off identity: picking the SAME supplier price twice — after
+ * typing over it — still applies, which a plain value comparison would swallow.
+ */
+export interface AppliedPrice {
+  priceDollars: string;
+  /** The supplier that price came from — recorded as this material's usual
+   * supplier, so "where do I buy this" survives the edit rather than being
+   * thrown away with the row that was clicked. */
+  supplierId: string;
 }
 
 /**
@@ -96,12 +117,17 @@ export default function MaterialForm({
   onCancel,
   onSubmit,
   onBusyChange,
+  appliedPrice,
 }: {
   initial?: MaterialFormValues;
   submitLabel?: string;
   onCancel: () => void;
   onSubmit: (values: MaterialFormValues, category: ApiMaterialCategory | undefined) => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
+  /** Optional — only the edit flow supplies it (EditMaterialButton). The add
+   * flows leave it undefined and behave exactly as before: a material has to
+   * exist before it can have supplier prices to compare. */
+  appliedPrice?: AppliedPrice;
 }) {
   const { schema, loading, failed } = useMaterialSchema();
   const [values, setValues] = useState<MaterialFormValues>(initial);
@@ -114,6 +140,18 @@ export default function MaterialForm({
     () => schema?.categories.find((c) => c.id === values.categoryDefId),
     [schema, values.categoryDefId],
   );
+
+  // Only price and supplier move — the contractor's name, category and specs
+  // are theirs, and a supplier row has nothing to say about them.
+  useEffect(() => {
+    if (appliedPrice) {
+      setValues((v) => ({
+        ...v,
+        priceDollars: appliedPrice.priceDollars,
+        supplierId: appliedPrice.supplierId,
+      }));
+    }
+  }, [appliedPrice]);
 
   const set = <K extends keyof MaterialFormValues>(key: K, value: MaterialFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));

@@ -4,14 +4,18 @@ import {
   createInvoiceFromQuote,
   createJob,
   createMaterialFavourite,
+  createMaterialPrice,
   createQuote,
   deleteClient,
   deleteInvoice,
   deleteJob,
   deleteMaterialFavourite,
+  deleteMaterialPrice,
   deleteQuote,
   finalizeInvoice,
   getMaterialFavouritesClient,
+  getMaterialPrices,
+  getSuppliersClient,
   initialsOf,
   mapBusiness,
   mapClient,
@@ -818,5 +822,74 @@ describe("getJobs", () => {
     stubFetch(null);
     const jobs = await getJobs();
     expect(jobs).toEqual([]);
+  });
+});
+
+describe("supplier price comparison (#26 Phase 2b)", () => {
+  const apiSupplierPrice = {
+    id: "mpe-hl-cement",
+    supplierId: "sup-hl-true-value",
+    supplierName: "H&L True Value",
+    location: "Kingston",
+    priceCents: 115_000,
+    note: "cash price",
+    fetchedAt: "2026-08-08T09:15:00.000Z",
+    own: true,
+  };
+
+  it("getMaterialPrices sends the material id as a query param", async () => {
+    const spy = stubFetch({ "/catalogs/material-prices": [apiSupplierPrice] });
+    const rows = await getMaterialPrices("mf-cement");
+    expect(rows).toHaveLength(1);
+    // No mapper: cents stay integer cents and fetchedAt stays ISO so the panel
+    // can render it relative to now.
+    expect(rows[0]?.priceCents).toBe(115_000);
+    expect(rows[0]?.fetchedAt).toBe("2026-08-08T09:15:00.000Z");
+    expect(rows[0]?.own).toBe(true);
+    const [url] = spy.mock.calls[0] as [string];
+    expect(new URL(String(url)).searchParams.get("materialFavouriteId")).toBe("mf-cement");
+  });
+
+  it("createMaterialPrice POSTs integer cents, never dollars", async () => {
+    const spy = stubFetch({ "/catalogs/material-prices": { id: "mpe-new" } });
+    const r = await createMaterialPrice({
+      supplierId: "sup-hl-true-value",
+      materialFavouriteId: "mf-cement",
+      priceCents: 122_500,
+      note: "delivered",
+    });
+    expect(r.id).toBe("mpe-new");
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      supplierId: "sup-hl-true-value",
+      materialFavouriteId: "mf-cement",
+      priceCents: 122_500,
+      note: "delivered",
+    });
+  });
+
+  it("deleteMaterialPrice sends DELETE to /catalogs/material-prices/:id", async () => {
+    const spy = vi.fn(async (_url: string | URL, _init?: RequestInit) => {
+      return { ok: true, status: 200, text: async () => "" } as unknown as Response;
+    });
+    vi.stubGlobal("fetch", spy);
+    await deleteMaterialPrice("mpe-hl-cement");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/catalogs/material-prices/mpe-hl-cement");
+    expect(init.method).toBe("DELETE");
+  });
+
+  it("getSuppliersClient reads the global directory (no business scoping)", async () => {
+    const spy = stubFetch({
+      "/catalogs/suppliers": [
+        { id: "sup-hl-true-value", name: "H&L True Value", parish: "Kingston", website: null, isPartner: true },
+      ],
+    });
+    const suppliers = await getSuppliersClient();
+    expect(suppliers[0]?.name).toBe("H&L True Value");
+    expect(suppliers[0]?.parish).toBe("Kingston");
+    const [url] = spy.mock.calls[0] as [string];
+    expect(String(url)).toContain("/catalogs/suppliers");
   });
 });
