@@ -4,12 +4,30 @@ import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { InvoicesService } from "./invoices.service.js";
-import { updateInvoiceSchema, type UpdateInvoiceInput } from "./invoices.dto.js";
+import {
+  createInvoiceSchema,
+  updateInvoiceSchema,
+  type CreateInvoiceInput,
+  type UpdateInvoiceInput,
+} from "./invoices.dto.js";
 
 @Controller("invoices")
 @UseGuards(TenantAuthGuard)
 export class InvoicesController {
   constructor(private readonly invoices: InvoicesService) {}
+
+  /**
+   * Create an invoice from scratch. Distinct from from-quote below: not every
+   * invoice starts as an estimate, and a call-out or repeat job has nothing to
+   * convert from.
+   */
+  @Post()
+  create(
+    @BusinessId() businessId: string,
+    @Body(new ZodValidationPipe(createInvoiceSchema)) body: CreateInvoiceInput,
+  ) {
+    return this.invoices.create(businessId, body);
+  }
 
   /** Convert an ACCEPTED quote into a new DRAFT invoice. */
   @Post("from-quote/:quoteId")

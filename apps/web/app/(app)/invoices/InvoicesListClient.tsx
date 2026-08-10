@@ -9,13 +9,19 @@ import { invoiceStatusPill, INVOICE_STATUS_FILTERS } from "@/lib/status";
 import type { Invoice } from "@/lib/api-client";
 import type { InvoiceStatus } from "@jamquote/core";
 import shared from "../shared.module.css";
+import NewInvoiceButton from "./NewInvoiceButton";
+import type { ClientOption } from "@/components/forms/types";
 
 export default function InvoicesListClient({
   invoices,
   clientNames,
+  clients,
 }: {
   invoices: Invoice[];
   clientNames: Record<string, string>;
+  /** For the New invoice picker — InvoiceBuilder has no client field, so the
+   * client is chosen at creation time. */
+  clients: ClientOption[];
 }) {
   const router = useRouter();
   const [filter, setFilter] = useState<InvoiceStatus | "ALL">("ALL");
@@ -28,6 +34,9 @@ export default function InvoicesListClient({
           <span className={shared.eyebrow}>Billing</span>
           <h1 className={shared.title}>Invoices</h1>
           <span className={shared.subtitle}>{invoices.length} invoices in your book</span>
+        </div>
+        <div className={shared.headerActions}>
+          <NewInvoiceButton clients={clients} />
         </div>
       </header>
 

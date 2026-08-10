@@ -63,3 +63,31 @@ export const updateInvoiceSchema = z.object({
   lineItems: z.array(invoiceLineItemInputSchema).optional(),
 });
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
+
+/**
+ * Create an invoice from scratch — not from a quote (#27 follow-on).
+ *
+ * Deliberately does NOT accept `quoteId`: an invoice that came from a quote is
+ * created through POST /invoices/from-quote/:quoteId, which deep-copies the
+ * quote's lines and keeps the two linked. Letting a caller assert that link on
+ * a hand-built invoice would claim a provenance the data does not have, and
+ * `finalize` uses quoteId to flip the source quote to INVOICED.
+ *
+ * Nor does it accept a `number` or `status`: the number is reserved
+ * server-side so it cannot collide or skip, and every invoice starts DRAFT so
+ * it can be reviewed before being finalized.
+ */
+export const createInvoiceSchema = z.object({
+  clientId: z.string().min(1).optional(),
+  dueDate: z.coerce.date().optional(),
+  terms: z.string().optional(),
+  // Defaults are applied from the business's own settings when omitted — see
+  // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
+  gctRatePct: z.number().min(0).max(100).optional(),
+  discountPct: z.number().min(0).max(100).default(0),
+  depositCents: z.number().int().nonnegative().default(0),
+  detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
+  sections: z.array(invoiceSectionInputSchema).default([]),
+  lineItems: z.array(invoiceLineItemInputSchema).default([]),
+});
+export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;

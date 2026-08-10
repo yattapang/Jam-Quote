@@ -10,6 +10,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
 import type {
+  CreateInvoiceInput,
   InvoiceLineItemInput,
   InvoiceSectionInput,
   UpdateInvoiceInput,
@@ -130,6 +131,70 @@ export class InvoicesService {
     for (const [idx, li] of lineItems.entries()) {
       await tx.invoiceLineItem.create({ data: lineItemCreateData(invoiceId, li, idx) });
     }
+  }
+
+  /**
+   * Create an invoice from scratch, with no source quote.
+   *
+   * Not every invoice starts life as an estimate — a contractor doing a
+   * call-out, a repeat job, or billing for materials already supplied has
+   * nothing to convert from. Before this, the only way to raise an invoice was
+   * to first invent a quote for work already agreed.
+   *
+   * quoteId is left null on purpose: it records that this invoice CAME FROM a
+   * quote, and `finalize` uses it to flip that quote to INVOICED. A hand-built
+   * invoice has no such quote, and faking the link would flip an unrelated
+   * one.
+   *
+   * The GCT rate falls back to the business's own configured default rather
+   * than a hardcoded 15 — the rate is jurisdiction-derived (see the rule-pack)
+   * and hardcoding it here would silently diverge from every other document.
+   */
+  async create(businessId: string, input: CreateInvoiceInput): Promise<InvoiceWithLines> {
+    const business = await this.businessService.findById(businessId);
+
+    // Reserved outside the transaction: reserveInvoiceNumber runs its own
+    // $transaction, and nesting interactive transactions isn't safe (same
+    // reasoning as convertFromQuote).
+    const number = await this.businessService.reserveInvoiceNumber(businessId);
+
+    const gctRatePct = input.gctRatePct ?? Number(business.defaultGctRate);
+    const allLines = [...input.lineItems, ...input.sections.flatMap((sec) => sec.lineItems)];
+    const totals = computeTotals({
+      lines: allLines.map((li) => ({
+        quantity: li.quantity,
+        unitPriceCents: li.unitPriceCents,
+        markupPct: li.markupPct,
+        gctTreatment: li.gctTreatment,
+      })),
+      gctRatePct,
+      discountPct: input.discountPct,
+      depositCents: input.depositCents,
+    });
+
+    const invoiceId = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.create({
+        data: {
+          businessId,
+          clientId: input.clientId,
+          number,
+          status: InvoiceStatus.DRAFT,
+          detailLevel: input.detailLevel,
+          gctRate: gctRatePct,
+          discountPct: input.discountPct,
+          depositCents: input.depositCents,
+          terms: input.terms,
+          dueDate: input.dueDate,
+          subtotalCents: totals.subtotalCents,
+          gctCents: totals.gctCents,
+          totalCents: totals.totalCents,
+        },
+      });
+      await this.persistLines(tx, invoice.id, input.sections, input.lineItems);
+      return invoice.id;
+    });
+
+    return this.findOne(businessId, invoiceId);
   }
 
   /**

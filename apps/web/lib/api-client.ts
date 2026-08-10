@@ -1323,3 +1323,24 @@ export async function deleteLogo(): Promise<void> {
 export function logoUrl(version?: string): string {
   return `/api/proxy/business/logo${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
+
+/**
+ * Create an invoice from scratch (no source quote).
+ *
+ * Deliberately has no `quoteId`: that field records that an invoice CAME FROM
+ * a quote and is what `finalize` uses to flip the source quote to INVOICED.
+ * Use createInvoiceFromQuote for that path — asserting the link here would
+ * claim a provenance the data does not have.
+ */
+export interface NewInvoiceInput {
+  clientId?: string;
+  /** ISO date (yyyy-mm-dd is accepted; the API coerces). */
+  dueDate?: string;
+  terms?: string;
+  gctRatePct?: number;
+  discountPct?: number;
+  depositCents?: number;
+}
+export async function createInvoice(input: NewInvoiceInput): Promise<Invoice> {
+  return mapInvoice(await apiClient.post<ApiInvoice>("/invoices", input));
+}

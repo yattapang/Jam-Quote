@@ -6,5 +6,11 @@ export const metadata = { title: "Invoices · JamQuote" };
 export default async function InvoicesPage() {
   const [invoices, clients] = await Promise.all([getInvoices(), getClients()]);
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
-  return <InvoicesListClient invoices={invoices} clientNames={clientNames} />;
+  return (
+    <InvoicesListClient
+      invoices={invoices}
+      clientNames={clientNames}
+      clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+    />
+  );
 }

@@ -58,6 +58,8 @@ function acceptedQuote(overrides: Partial<{ status: QuoteStatus }> = {}) {
 function harness(quote = acceptedQuote()) {
   const businessService = {
     reserveInvoiceNumber: vi.fn().mockResolvedValue("INV-0001"),
+    // create() reads the business's own GCT rate rather than hardcoding one.
+    findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
   };
   const createdLineItems: any[] = [];
   const createdSections: any[] = [];
@@ -116,6 +118,72 @@ function harness(quote = acceptedQuote()) {
   const svc = new InvoicesService(prisma as any, businessService as any);
   return { svc, prisma, businessService, tx, createdInvoiceData: () => createdInvoiceData, createdLineItems };
 }
+
+describe("InvoicesService.create — an invoice with no source quote", () => {
+  it("starts DRAFT, reserves a number, and leaves quoteId unset", async () => {
+    const { svc, businessService, createdInvoiceData } = harness();
+
+    await svc.create("b1", {
+      clientId: "cl1",
+      discountPct: 0,
+      depositCents: 0,
+      sections: [],
+      lineItems: [{ ...line, sort: 0 }],
+    });
+
+    expect(businessService.reserveInvoiceNumber).toHaveBeenCalledWith("b1");
+    const data = createdInvoiceData();
+    expect(data.status).toBe(InvoiceStatus.DRAFT);
+    expect(data.number).toBe("INV-0001");
+    // quoteId records that this invoice CAME FROM a quote, and finalize() uses
+    // it to flip that quote to INVOICED. A hand-built invoice has none, and
+    // faking the link would flip an unrelated quote.
+    expect(data.quoteId).toBeUndefined();
+  });
+
+  it("falls back to the business's own GCT rate rather than a hardcoded 15", async () => {
+    // The rate is jurisdiction-derived via the rule-pack; hardcoding it here
+    // would silently diverge from every other document the tenant produces.
+    const { svc, createdInvoiceData } = harness();
+    await svc.create("b1", { discountPct: 0, depositCents: 0, sections: [], lineItems: [] });
+    expect(createdInvoiceData().gctRate).toBe(15);
+  });
+
+  it("honours an explicit GCT rate when one is supplied", async () => {
+    const { svc, createdInvoiceData } = harness();
+    await svc.create("b1", {
+      gctRatePct: 0,
+      discountPct: 0,
+      depositCents: 0,
+      sections: [],
+      lineItems: [],
+    });
+    expect(createdInvoiceData().gctRate).toBe(0);
+  });
+
+  it("computes totals across both loose lines and section lines", async () => {
+    const { svc, createdInvoiceData } = harness();
+    await svc.create("b1", {
+      discountPct: 0,
+      depositCents: 0,
+      lineItems: [{ ...line, sort: 0 }],
+      sections: [{ title: "Foundation", sort: 0, lineItems: [{ ...line, quantity: 5, sort: 0 }] }],
+    });
+
+    const expected = computeTotals({
+      lines: [
+        { quantity: 10, unitPriceCents: 120_000, gctTreatment: GctTreatment.STANDARD },
+        { quantity: 5, unitPriceCents: 120_000, gctTreatment: GctTreatment.STANDARD },
+      ],
+      gctRatePct: 15,
+      discountPct: 0,
+      depositCents: 0,
+    });
+    const data = createdInvoiceData();
+    expect(data.subtotalCents).toBe(expected.subtotalCents);
+    expect(data.totalCents).toBe(expected.totalCents);
+  });
+});
 
 describe("InvoicesService.convertFromQuote", () => {
   it("copies sections + line items from an ACCEPTED quote, computes totals, and starts DRAFT", async () => {
