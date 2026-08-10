@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { PARISHES } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
@@ -8,15 +9,24 @@ import Select from "@/components/ui/Select";
 import fieldStyles from "@/components/ui/Field.module.css";
 import {
   createMaterialPrice,
+  createSupplier,
   deleteMaterialPrice,
   getMaterialPrices,
   getSuppliersClient,
   type ApiSupplier,
   type ApiSupplierPrice,
 } from "@/lib/api-client";
+import {
+  ADD_NEW_OPTION_VALUE,
+  compareSuppliersByName,
+  isAddNewOption,
+  mergeCatalogRow,
+} from "@/lib/catalog-options";
 import { relativeTime } from "@/lib/relative-time";
 import { cheapestPriceCents, priceDollarsToCents } from "@/lib/supplier-prices";
 import styles from "./SupplierPricePanel.module.css";
+
+const parishOptions = [{ value: "", label: "Parish (optional)" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 
 /**
  * "What does everyone else charge for this?" — the supplier price comparison
@@ -51,6 +61,13 @@ export default function SupplierPricePanel({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [newSupplierParish, setNewSupplierParish] = useState("");
+  const [addingBusy, setAddingBusy] = useState(false);
+  const [addError, setAddError] = useState("");
+  const [addNote, setAddNote] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -71,19 +88,17 @@ export default function SupplierPricePanel({
 
   // The directory is fetched separately so a failure here only costs the
   // record-a-price form, not the comparison above it.
-  useEffect(() => {
-    let cancelled = false;
-    getSuppliersClient()
-      .then((rows) => {
-        if (!cancelled) setSuppliers(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setSuppliers([]);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const loadSuppliers = useCallback(async () => {
+    try {
+      setSuppliers(await getSuppliersClient());
+    } catch {
+      setSuppliers([]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSuppliers();
+  }, [loadSuppliers]);
 
   async function remove(id: string) {
     setRemovingId(id);
@@ -95,6 +110,41 @@ export default function SupplierPricePanel({
       setError("Couldn't remove that price — is the API running?");
     } finally {
       setRemovingId("");
+    }
+  }
+
+  /**
+   * Quick-add for a merchant that isn't in the list yet. Suppliers are
+   * tenant-owned, so this is the only way one comes into existence — a
+   * contractor being quoted a price by a shop we've never heard of must not be
+   * stuck. The create is idempotent: a name already in the directory returns
+   * that row, which is a plain success (select it, no duplicate, no error).
+   */
+  async function addSupplier() {
+    const name = newSupplierName.trim();
+    if (!name) return setAddError("Give the supplier a name.");
+    if (addingBusy) return;
+    setAddingBusy(true);
+    setAddError("");
+    try {
+      const created = await createSupplier({
+        name,
+        parish: newSupplierParish || undefined,
+      });
+      const alreadyKnown = suppliers.some((s) => s.id === created.id);
+      setSuppliers((prev) => mergeCatalogRow(prev, created, compareSuppliersByName));
+      setSupplierId(created.id);
+      setAddingSupplier(false);
+      setNewSupplierName("");
+      setNewSupplierParish("");
+      setAddNote(alreadyKnown ? `Already in your list — selected ${created.name}.` : "");
+      // Re-read rather than trusting the splice: the row the API stored is the
+      // canonical one, and another tab may have added suppliers since.
+      void loadSuppliers();
+    } catch {
+      setAddError("Couldn't add that supplier — is the API running?");
+    } finally {
+      setAddingBusy(false);
     }
   }
 
@@ -196,15 +246,27 @@ export default function SupplierPricePanel({
           <Select
             label="Record a price at"
             options={[
-              { value: "", label: suppliers.length ? "Pick a supplier" : "No suppliers available" },
+              { value: "", label: suppliers.length ? "Pick a supplier" : "No suppliers yet" },
               ...suppliers.map((s) => ({
                 value: s.id,
                 label: s.parish ? `${s.name} — ${s.parish}` : s.name,
               })),
+              // Hidden while the quick-add is open: re-picking the sentinel
+              // changes no state, so there'd be no re-render to pull the native
+              // <select> back off it. The option is never disabled with the
+              // list — an empty directory is exactly when it's needed.
+              ...(addingSupplier
+                ? []
+                : [{ value: ADD_NEW_OPTION_VALUE, label: "+ Add supplier…" }]),
             ]}
             value={supplierId}
-            onChange={(e) => setSupplierId(e.target.value)}
-            disabled={suppliers.length === 0}
+            onChange={(e) => {
+              setAddNote("");
+              // The sentinel is never stored, so the controlled select snaps
+              // back to whatever was really chosen.
+              if (isAddNewOption(e.target.value)) setAddingSupplier(true);
+              else setSupplierId(e.target.value);
+            }}
           />
           <Input
             label="Price $"
@@ -215,6 +277,55 @@ export default function SupplierPricePanel({
             onChange={(e) => setPriceDollars(e.target.value)}
           />
         </div>
+        {addingSupplier && (
+          <div className={styles.addSupplier}>
+            <Input
+              label="Supplier name"
+              placeholder="e.g. Rapid True Value"
+              value={newSupplierName}
+              onChange={(e) => setNewSupplierName(e.target.value)}
+              // Inside the record-a-price <form>: without this, Enter would
+              // submit a price for a supplier that doesn't exist yet.
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void addSupplier();
+                } else if (e.key === "Escape") {
+                  setAddingSupplier(false);
+                }
+              }}
+              autoFocus
+            />
+            <Select
+              label="Parish"
+              options={parishOptions}
+              value={newSupplierParish}
+              onChange={(e) => setNewSupplierParish(e.target.value)}
+            />
+            <div className={styles.addSupplierActions}>
+              <Button
+                variant="secondary"
+                size="sm"
+                type="button"
+                onClick={() => void addSupplier()}
+                disabled={addingBusy}
+              >
+                {addingBusy ? "Adding…" : "Add supplier"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => setAddingSupplier(false)}
+                disabled={addingBusy}
+              >
+                Cancel
+              </Button>
+            </div>
+            {addError && <span className={styles.addSupplierError}>{addError}</span>}
+          </div>
+        )}
+        {addNote && <span className={fieldStyles.hint}>{addNote}</span>}
         <Input
           label="Note"
           value={note}

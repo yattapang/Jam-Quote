@@ -39,7 +39,7 @@ describe("AdminService.promoteAdmin", () => {
           email: "staff@jamquote.com",
           fullName: "New Staff",
           isSuperAdmin: false,
-          adminCapabilities: ["MANAGE_SUPPLIERS"],
+          adminCapabilities: ["MANAGE_PRICING"],
           createdAt: new Date("2026-07-30T00:00:00.000Z"),
         }),
       },
@@ -47,15 +47,15 @@ describe("AdminService.promoteAdmin", () => {
     const { svc, record } = make(prisma);
 
     const result = await svc.promoteAdmin(
-      { email: "Staff@JamQuote.com", capabilities: ["MANAGE_SUPPLIERS"] },
+      { email: "Staff@JamQuote.com", capabilities: ["MANAGE_PRICING"] },
       SUPER,
     );
 
-    expect(result.capabilities).toEqual(["MANAGE_SUPPLIERS"]);
+    expect(result.capabilities).toEqual(["MANAGE_PRICING"]);
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: "u-9" },
-        data: expect.objectContaining({ role: "ADMIN", adminCapabilities: ["MANAGE_SUPPLIERS"] }),
+        data: expect.objectContaining({ role: "ADMIN", adminCapabilities: ["MANAGE_PRICING"] }),
       }),
     );
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.promote", targetId: "u-9" }));

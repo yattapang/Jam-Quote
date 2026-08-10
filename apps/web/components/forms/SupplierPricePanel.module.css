@@ -145,3 +145,36 @@
   display: flex;
   justify-content: flex-end;
 }
+
+/* Quick-add for a merchant not in the directory yet. Inline rather than a
+   modal — this panel already sits inside the material edit dialog. */
+.addSupplier {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+  background: var(--jq-surface-alt);
+}
+
+.addSupplierActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Spans the grid so a long message wraps under both fields rather than
+   squeezing the parish column. */
+.addSupplierError {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--jq-crit);
+}
+
+@media (max-width: 560px) {
+  .addSupplier {
+    grid-template-columns: 1fr;
+  }
+}

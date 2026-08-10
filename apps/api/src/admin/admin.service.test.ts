@@ -248,6 +248,8 @@ describe("AdminService.hardDeleteTenant", () => {
       equipmentItem: { deleteMany },
       connection: { deleteMany },
       subscription: { deleteMany },
+      materialPriceEntry: { deleteMany },
+      supplier: { deleteMany },
       user: { deleteMany },
       business: { delete: vi.fn().mockResolvedValue({}) },
     };
@@ -270,64 +272,58 @@ describe("AdminService.hardDeleteTenant", () => {
       expect.objectContaining({ action: "tenant.delete", targetId: "biz-1" }),
     );
   });
-});
 
-describe("AdminService supplier CRUD", () => {
-  it("creates a supplier and audits the action", async () => {
-    const record = vi.fn();
-    const prisma = {
-      supplier: { create: vi.fn().mockResolvedValue({ id: "sup-1", name: "H&L Hardware" }) },
+  it("clears the tenant's suppliers (and their price entries) before the business row", async () => {
+    // Supplier.businessId cascades in the DB, but leaving it to that would
+    // delete suppliers as a side effect of the Business delete — and
+    // MaterialPriceEntry.supplierId is ON DELETE RESTRICT, which aborts
+    // immediately instead of deferring to the end of the statement. The
+    // explicit order in deleteBusinessCascade is what keeps a hard delete
+    // from failing on any tenant that has recorded a price.
+    const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const priceEntryDelete = vi.fn().mockResolvedValue({ count: 0 });
+    const supplierDelete = vi.fn().mockResolvedValue({ count: 0 });
+    const businessDelete = vi.fn().mockResolvedValue({});
+    const tx = {
+      messageLog: { deleteMany },
+      invoice: { deleteMany },
+      attachment: { deleteMany },
+      quote: { deleteMany },
+      job: { deleteMany },
+      client: { deleteMany },
+      labourRate: { deleteMany },
+      materialFavourite: { deleteMany },
+      equipmentItem: { deleteMany },
+      connection: { deleteMany },
+      subscription: { deleteMany },
+      materialPriceEntry: { deleteMany: priceEntryDelete },
+      supplier: { deleteMany: supplierDelete },
+      user: { deleteMany },
+      business: { delete: businessDelete },
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
-
-    const result = await svc.createSupplier({ name: "H&L Hardware" }, "admin-1");
-
-    expect(result).toEqual({ id: "sup-1", name: "H&L Hardware" });
-    expect(prisma.supplier.create).toHaveBeenCalledWith({
-      data: { name: "H&L Hardware", website: undefined, parish: undefined, isPartner: false },
-    });
-    expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "supplier.create", targetId: "sup-1" }),
-    );
-  });
-
-  it("soft-deletes a supplier via deletedAt and audits the action", async () => {
-    const record = vi.fn();
     const prisma = {
-      supplier: {
-        findUnique: vi.fn().mockResolvedValue({ id: "sup-1", name: "H&L", deletedAt: null }),
-        update: vi.fn().mockResolvedValue({ id: "sup-1", name: "H&L", deletedAt: new Date() }),
+      business: {
+        findUnique: vi.fn().mockResolvedValue({ id: "biz-1", name: "Blackwood Construction" }),
       },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
-
-    await svc.deleteSupplier("sup-1", "admin-1");
-
-    expect(prisma.supplier.update).toHaveBeenCalledWith({
-      where: { id: "sup-1" },
-      data: { deletedAt: expect.any(Date) },
-    });
-    expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "supplier.delete", targetId: "sup-1" }),
-    );
-  });
-
-  it("throws NotFound when deleting a supplier that's already soft-deleted", async () => {
-    const prisma = {
-      supplier: {
-        findUnique: vi.fn().mockResolvedValue({ id: "sup-1", name: "H&L", deletedAt: new Date() }),
-      },
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
 
-    await expect(svc.deleteSupplier("sup-1", "admin-1")).rejects.toBeInstanceOf(
-      NotFoundException,
+    await svc.hardDeleteTenant("biz-1", "Blackwood Construction", "admin-1");
+
+    expect(supplierDelete).toHaveBeenCalledWith({ where: { businessId: "biz-1" } });
+    expect(priceEntryDelete.mock.invocationCallOrder[0]).toBeLessThan(
+      supplierDelete.mock.invocationCallOrder[0]!,
+    );
+    expect(supplierDelete.mock.invocationCallOrder[0]).toBeLessThan(
+      businessDelete.mock.invocationCallOrder[0]!,
     );
   });
 });
+
+// Supplier CRUD used to be tested here. Suppliers are tenant-owned now and
+// the admin service has no supplier surface — see suppliers.service.test.ts.
 
 describe("AdminService.financials", () => {
   it("computes free/pro counts, MRR, and upcoming renewals within 60 days", async () => {
@@ -368,95 +364,6 @@ describe("AdminService.financials", () => {
     expect(financials.upcomingRenewals).toEqual([
       { businessId: "biz-1", businessName: "Pro Co", plan: "pro", renewsAt: soon },
     ]);
-  });
-});
-
-describe("AdminService.suppliers", () => {
-  it("maps sku counts and the latest fetchedAt per supplier", async () => {
-    const fetchedAt = new Date("2026-07-10T12:00:00.000Z");
-    const prisma = {
-      supplier: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            id: "sup-1",
-            name: "H&L Hardware",
-            parish: "Kingston",
-            isPartner: true,
-            _count: { priceEntries: 3 },
-          },
-        ]),
-      },
-      materialPriceEntry: {
-        findFirst: vi.fn().mockResolvedValue({ fetchedAt }),
-      },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
-
-    const suppliers = await svc.suppliers();
-
-    expect(suppliers).toEqual([
-      {
-        id: "sup-1",
-        name: "H&L Hardware",
-        parish: "Kingston",
-        isPartner: true,
-        skuCount: 3,
-        lastFetch: fetchedAt.toISOString(),
-      },
-    ]);
-  });
-
-  it("returns lastFetch null when a supplier has no price entries", async () => {
-    const prisma = {
-      supplier: {
-        findMany: vi.fn().mockResolvedValue([
-          {
-            id: "sup-2",
-            name: "No Prices Yet",
-            parish: null,
-            isPartner: false,
-            _count: { priceEntries: 0 },
-          },
-        ]),
-      },
-      materialPriceEntry: {
-        findFirst: vi.fn().mockResolvedValue(null),
-      },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
-
-    const suppliers = await svc.suppliers();
-
-    expect(suppliers[0]?.lastFetch).toBeNull();
-  });
-
-  it("counts only the platform's curated price feed, not tenants' own prices", async () => {
-    // Since #26 Phase 2b contractors record their own prices in the SAME
-    // table. Unscoped, the admin console's "SKUS" column would silently become
-    // "curated + every tenant's private prices" and climb on its own, with no
-    // admin action and no visible cause.
-    const prisma = {
-      supplier: {
-        findMany: vi.fn().mockResolvedValue([
-          { id: "sup-1", name: "H&L Hardware", parish: "Kingston", isPartner: true, _count: { priceEntries: 3 } },
-        ]),
-      },
-      materialPriceEntry: { findFirst: vi.fn().mockResolvedValue(null) },
-    };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
-
-    await svc.suppliers();
-
-    expect(prisma.supplier.findMany.mock.calls[0]?.[0].include._count).toEqual({
-      select: { priceEntries: { where: { businessId: null } } },
-    });
-    expect(prisma.materialPriceEntry.findFirst.mock.calls[0]?.[0].where).toEqual({
-      supplierId: "sup-1",
-      businessId: null,
-    });
   });
 });
 

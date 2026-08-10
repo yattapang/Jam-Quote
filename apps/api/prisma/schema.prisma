@@ -156,6 +156,7 @@ model Business {
   materialAttributeOptions MaterialAttributeOption[]
   materialUnits            MaterialUnit[]
   materialPriceEntries     MaterialPriceEntry[]
+  suppliers                Supplier[]
 }
 
 model User {
@@ -343,17 +344,33 @@ model QuoteLineItem {
 // Catalogs & pricing
 // ---------------------------------------------------------------------------
 model Supplier {
-  id        String    @id @default(uuid())
-  name      String
-  website   String?
-  parish    String?
-  isPartner Boolean   @default(false)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @default(now()) @updatedAt // delta-sync cursor
-  deletedAt DateTime? // soft-delete for offline sync
+  id         String    @id @default(uuid())
+  // The owning tenant. Suppliers are TENANT-ONLY: there is no curated global
+  // directory, and SuppliersService never returns a row a business does not
+  // own. Nullable only because pre-existing rows have no owner to assign and
+  // are FK-referenced by MaterialPriceEntry/QuoteLineItem — a NULL row is
+  // legacy platform data that no tenant can see or touch, NOT a shared entry.
+  //
+  // onDelete: Cascade is REQUIRED, not cosmetic. Prisma would otherwise infer
+  // SET NULL for this optional relation, so deleting a tenant would strand
+  // their private merchant list as ownerless rows that outlive the tenant and
+  // nobody can reach to clean up — and the moment anything treats NULL as
+  // "visible to all" (as the sibling catalog tables do) that becomes a
+  // cross-tenant leak. Same reasoning as MaterialCategoryDef (see #19).
+  businessId String?
+  business   Business? @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  name       String
+  website    String?
+  parish     String?
+  isPartner  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
+  deletedAt  DateTime? // soft-delete for offline sync
 
   priceEntries MaterialPriceEntry[]
   lineItems    QuoteLineItem[]
+
+  @@index([businessId])
 }
 
 /// One observed price for one item at one supplier, at one point in time.

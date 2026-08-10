@@ -22,6 +22,7 @@ import type { Prisma } from "@prisma/client";
  *   Job (-> Client)
  *   Client
  *   LabourRate, MaterialFavourite, EquipmentItem, Connection, Subscription
+ *   MaterialPriceEntry, then Supplier (see step 8 — RESTRICT between them)
  *   User (businessId is nullable, but still an FK; cascades to
  *     PasswordResetToken)
  *   Business
@@ -58,10 +59,20 @@ export async function deleteBusinessCascade(
   await tx.connection.deleteMany({ where: { businessId } });
   await tx.subscription.deleteMany({ where: { businessId } });
 
-  // 8. User.businessId is nullable but still an FK — delete users of this
+  // 8. Suppliers are tenant-owned. Supplier.businessId IS onDelete: Cascade,
+  //    but relying on that would delete them as a side effect of step 9 — and
+  //    MaterialPriceEntry.supplierId is ON DELETE RESTRICT, which fires
+  //    immediately rather than deferring to the end of the statement. Any
+  //    price entry still pointing at this tenant's supplier would abort the
+  //    whole hard delete with an opaque FK error. So: entries first, then the
+  //    suppliers, explicitly and in that order.
+  await tx.materialPriceEntry.deleteMany({ where: { businessId } });
+  await tx.supplier.deleteMany({ where: { businessId } });
+
+  // 9. User.businessId is nullable but still an FK — delete users of this
   //    business before the business itself. PasswordResetToken cascades.
   await tx.user.deleteMany({ where: { businessId } });
 
-  // 9. Finally, the business row.
+  // 10. Finally, the business row.
   await tx.business.delete({ where: { id: businessId } });
 }

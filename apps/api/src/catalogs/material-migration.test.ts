@@ -298,6 +298,26 @@ describe("material catalog Phase 2a migration", () => {
       expect(rows.map((r) => r.id)).toEqual(["pe-curated"]);
       await fresh.close();
     }, 120_000);
+
+    it("cascades a tenant's own suppliers away with the tenant", async () => {
+      // Suppliers are tenant-owned as of 20260806210000_tenant_suppliers.
+      // Under SET NULL a deleted tenant's private merchant list would survive
+      // as ownerless rows nobody can reach — and NULL is what the sibling
+      // catalog tables treat as "visible to everyone" (#19 again). The legacy
+      // NULL-owner row must be left exactly where it is.
+      const fresh = await freshDb();
+      await fresh.exec(LEGACY_FIXTURES.replace(/INSERT INTO "MaterialFavourite"[\s\S]*$/, ""));
+      await fresh.exec(`
+        INSERT INTO "Supplier" (id,name,"businessId","isPartner","createdAt","updatedAt")
+          VALUES ('sup-own','Corner Hardware','biz-1',false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP),
+                 ('sup-legacy','H&L True Value',NULL,false,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
+        DELETE FROM "Business" WHERE id = 'biz-1';
+      `);
+
+      const rows = (await fresh.query<{ id: string }>(`SELECT id FROM "Supplier" ORDER BY id`)).rows;
+      expect(rows.map((r) => r.id)).toEqual(["sup-legacy"]);
+      await fresh.close();
+    }, 120_000);
   });
 
   describe("migration/schema consistency", () => {

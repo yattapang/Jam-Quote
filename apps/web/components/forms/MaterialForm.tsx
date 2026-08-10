@@ -6,10 +6,24 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { modalStyles } from "@/components/ui/Modal";
+import {
+  ADD_NEW_OPTION_VALUE,
+  compareCatalogRows,
+  isAddNewOption,
+  mergeCatalogRow,
+  persistableOptionValue,
+} from "@/lib/catalog-options";
 import { composeMaterialNamePreview } from "@/lib/material-display";
-import { useMaterialSchema } from "@/lib/use-material-schema";
-import type { ApiMaterialCategory, NewMaterialFavouriteInput } from "@/lib/api-client";
+import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
+import {
+  createMaterialCategory,
+  createMaterialUnit,
+  type ApiMaterialCategory,
+  type ApiMaterialUnit,
+  type NewMaterialFavouriteInput,
+} from "@/lib/api-client";
 import type { MaterialFavourite } from "@/lib/types";
+import styles from "./MaterialForm.module.css";
 
 export interface MaterialFormValues {
   /** Only meaningful when nameCustom is true — otherwise the server composes
@@ -80,8 +94,13 @@ export function materialPayloadFromValues(
     ...(values.nameCustom && values.name.trim()
       ? { name: values.name.trim(), nameCustom: true }
       : {}),
-    ...(values.categoryDefId ? { categoryDefId: values.categoryDefId } : {}),
-    ...(values.unitId ? { unitId: values.unitId } : {}),
+    // persistableOptionValue, not the raw field: the "+ Add new…" sentinel is
+    // an instruction to the picker, never an id, and must not survive as one
+    // if it ever reaches here from a stale draft or a future caller.
+    ...(persistableOptionValue(values.categoryDefId)
+      ? { categoryDefId: values.categoryDefId }
+      : {}),
+    ...(persistableOptionValue(values.unitId) ? { unitId: values.unitId } : {}),
     ...(values.supplierId ? { supplierId: values.supplierId } : {}),
     priceCents: Math.round((Number(values.priceDollars) || 0) * 100),
     specs: Object.keys(specs).length ? specs : undefined,
@@ -136,9 +155,41 @@ export default function MaterialForm({
   const [droppedWarning, setDroppedWarning] = useState("");
   const listId = useId();
 
+  // Rows created from the "+ Add new…" options this session. The schema cache
+  // is invalidated on every successful create, but that only takes effect on
+  // the NEXT mount — this form is usually inside a modal that is about to be
+  // submitted and closed, so the new row is spliced in locally to appear at
+  // once rather than after a refetch the contractor never waits for.
+  const [addedCategories, setAddedCategories] = useState<ApiMaterialCategory[]>([]);
+  const [addedUnits, setAddedUnits] = useState<ApiMaterialUnit[]>([]);
+  const [addingCategory, setAddingCategory] = useState(false);
+  const [addingUnit, setAddingUnit] = useState(false);
+  // Explains a create that selected an existing row instead of adding one —
+  // without it the contractor types a label, sees the list not grow, and has
+  // no way to tell whether it worked.
+  const [categoryNote, setCategoryNote] = useState("");
+  const [unitNote, setUnitNote] = useState("");
+
+  const categories = useMemo(
+    () =>
+      addedCategories.reduce<ApiMaterialCategory[]>(
+        (rows, row) => mergeCatalogRow(rows, row, compareCatalogRows),
+        schema?.categories ?? [],
+      ),
+    [schema, addedCategories],
+  );
+  const units = useMemo(
+    () =>
+      addedUnits.reduce<ApiMaterialUnit[]>(
+        (rows, row) => mergeCatalogRow(rows, row, compareCatalogRows),
+        schema?.units ?? [],
+      ),
+    [schema, addedUnits],
+  );
+
   const category = useMemo(
-    () => schema?.categories.find((c) => c.id === values.categoryDefId),
-    [schema, values.categoryDefId],
+    () => categories.find((c) => c.id === values.categoryDefId),
+    [categories, values.categoryDefId],
   );
 
   // Only price and supplier move — the contractor's name, category and specs
@@ -169,9 +220,12 @@ export default function MaterialForm({
    * categories share (e.g. "length" on Lumber and Roofing) and reports the
    * rest, rather than silently discarding input the contractor typed — the
    * defect fixed in Phase 1, preserved here against the new key-based shape.
+   *
+   * Takes the row as well as its id so a just-created category can be applied
+   * before it has reached `categories` — looking it up would find nothing and
+   * clear every spec on the way in.
    */
-  function changeCategory(nextId: string) {
-    const next = schema?.categories.find((c) => c.id === nextId);
+  function applyCategory(nextId: string, next: ApiMaterialCategory | undefined) {
     const nextKeys = new Set((next?.attributes ?? []).map((a) => a.key));
     const carried: Record<string, string> = {};
     const dropped: string[] = [];
@@ -191,6 +245,46 @@ export default function MaterialForm({
     setValues((v) => ({ ...v, categoryDefId: nextId, specs: carried }));
   }
 
+  function changeCategory(nextId: string) {
+    setCategoryNote("");
+    // The sentinel opens the inline row and is never written to state, so the
+    // controlled <select> snaps straight back to the real selection.
+    if (isAddNewOption(nextId)) return setAddingCategory(true);
+    applyCategory(nextId, categories.find((c) => c.id === nextId));
+  }
+
+  function changeUnit(nextId: string) {
+    setUnitNote("");
+    if (isAddNewOption(nextId)) return setAddingUnit(true);
+    set("unitId", nextId);
+  }
+
+  /**
+   * Both creates are idempotent server-side, so a label matching something the
+   * contractor (or the platform) already has comes back as that EXISTING row.
+   * That is a success, not a clash: select it, say so quietly, and let
+   * mergeCatalogRow drop the duplicate.
+   */
+  async function addCategory(label: string) {
+    const created = await createMaterialCategory(label);
+    invalidateMaterialSchema();
+    const alreadyKnown = categories.some((c) => c.id === created.id);
+    setAddedCategories((prev) => mergeCatalogRow(prev, created, compareCatalogRows));
+    applyCategory(created.id, created);
+    setAddingCategory(false);
+    setCategoryNote(alreadyKnown ? `Already on your list — selected ${created.label}.` : "");
+  }
+
+  async function addUnit(label: string) {
+    const created = await createMaterialUnit(label);
+    invalidateMaterialSchema();
+    const alreadyKnown = units.some((u) => u.id === created.id);
+    setAddedUnits((prev) => mergeCatalogRow(prev, created, compareCatalogRows));
+    set("unitId", created.id);
+    setAddingUnit(false);
+    setUnitNote(alreadyKnown ? `Already on your list — selected ${created.label}.` : "");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!effectiveName.trim()) {
@@ -204,7 +298,17 @@ export default function MaterialForm({
     onBusyChange?.(true);
     setError("");
     try {
-      await onSubmit(values, category);
+      // Second guard, after materialPayloadFromValues': every caller's onSubmit
+      // receives ids that are ids, whether or not it routes through the payload
+      // builder (the quote builder also reads these values directly).
+      await onSubmit(
+        {
+          ...values,
+          categoryDefId: persistableOptionValue(values.categoryDefId),
+          unitId: persistableOptionValue(values.unitId),
+        },
+        category,
+      );
     } catch {
       setError("Couldn't save — is the API running?");
       setSaving(false);
@@ -218,15 +322,31 @@ export default function MaterialForm({
         label="Category"
         options={[
           { value: "", label: loading ? "Loading…" : "No category" },
-          ...(schema?.categories ?? []).map((c) => ({
+          ...categories.map((c) => ({
             value: c.id,
             label: c.custom ? `${c.label} (yours)` : c.label,
           })),
+          // Dropped while the row is open: re-picking the sentinel would change
+          // nothing in state, so React would have no re-render with which to
+          // pull the native <select> back off it.
+          ...(addingCategory
+            ? []
+            : [{ value: ADD_NEW_OPTION_VALUE, label: "+ Add new category…" }]),
         ]}
         value={values.categoryDefId}
         onChange={(e) => changeCategory(e.target.value)}
         disabled={loading}
       />
+      {addingCategory && (
+        <InlineAddRow
+          label="New category"
+          placeholder="e.g. Rebar"
+          errorText="Couldn't add that category — is the API running?"
+          onAdd={addCategory}
+          onCancel={() => setAddingCategory(false)}
+        />
+      )}
+      {categoryNote && <span className={fieldStyles.hint}>{categoryNote}</span>}
       {droppedWarning && <span className={fieldStyles.hint}>{droppedWarning}</span>}
       {failed && (
         <span className={fieldStyles.hint}>
@@ -303,13 +423,14 @@ export default function MaterialForm({
           label="Sold by"
           options={[
             { value: "", label: "No unit" },
-            ...(schema?.units ?? []).map((u) => ({
+            ...units.map((u) => ({
               value: u.id,
               label: u.custom ? `${u.label} (yours)` : u.label,
             })),
+            ...(addingUnit ? [] : [{ value: ADD_NEW_OPTION_VALUE, label: "+ Add new unit…" }]),
           ]}
           value={values.unitId}
-          onChange={(e) => set("unitId", e.target.value)}
+          onChange={(e) => changeUnit(e.target.value)}
           disabled={loading}
         />
         <Input
@@ -319,6 +440,16 @@ export default function MaterialForm({
           onChange={(e) => set("priceDollars", e.target.value)}
         />
       </div>
+      {addingUnit && (
+        <InlineAddRow
+          label="New unit"
+          placeholder="e.g. per pallet"
+          errorText="Couldn't add that unit — is the API running?"
+          onAdd={addUnit}
+          onCancel={() => setAddingUnit(false)}
+        />
+      )}
+      {unitNote && <span className={fieldStyles.hint}>{unitNote}</span>}
 
       <label className={fieldStyles.field}>
         <span className={fieldStyles.label}>Description</span>
@@ -341,5 +472,73 @@ export default function MaterialForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The label prompt behind a "+ Add new…" option. Owns its own text/busy/error
+ * so the surrounding form only has to say what to create and what to call the
+ * failure — the two pickers here and the supplier one in SupplierPricePanel
+ * are otherwise the same interaction.
+ */
+function InlineAddRow({
+  label,
+  placeholder,
+  errorText,
+  onAdd,
+  onCancel,
+}: {
+  label: string;
+  placeholder: string;
+  /** Shown when onAdd rejects; the caller words it for its own catalogue. */
+  errorText: string;
+  onAdd: (label: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function add() {
+    const trimmed = text.trim();
+    if (!trimmed) return setError("Type a name first.");
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await onAdd(trimmed);
+    } catch {
+      setError(errorText);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className={styles.addRow}>
+      <Input
+        label={label}
+        placeholder={placeholder}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        // This row lives inside the material <form>: without the preventDefault
+        // an Enter here would submit the half-filled material instead.
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void add();
+          } else if (e.key === "Escape") {
+            onCancel();
+          }
+        }}
+        error={error || undefined}
+        autoFocus
+      />
+      <Button variant="secondary" size="sm" type="button" onClick={() => void add()} disabled={busy}>
+        {busy ? "Adding…" : "Add"}
+      </Button>
+      <Button variant="ghost" size="sm" type="button" onClick={onCancel} disabled={busy}>
+        Cancel
+      </Button>
+    </div>
   );
 }

@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
-import type { MaterialAttributeKind } from "@prisma/client";
+import type { MaterialAttributeKind, MaterialUnit, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import type { CreateMaterialCategoryInput, CreateMaterialUnitInput } from "./catalogs.dto.js";
 import {
   buildSearchText,
   composeMaterialName,
   normalizeOptionValue,
+  slugifyKey,
   type AttributeShape,
 } from "./material-schema.js";
 
@@ -53,6 +55,76 @@ export interface NormalizedMaterial {
 }
 
 /**
+ * Sort weight given to anything a tenant adds, so its own vocabulary lands
+ * after the curated rows in every picker instead of interleaving with them.
+ * Same value normalizeForWrite gives a tenant-added ENUM option.
+ */
+const TENANT_SORT = 900;
+
+/** A category with the attribute/option tree the views need. */
+type CategoryWithAttributes = Prisma.MaterialCategoryDefGetPayload<{
+  include: { attributes: { include: { options: true } } };
+}>;
+
+/**
+ * Include for a category's attribute tree, filtered and ordered exactly as the
+ * pickers expect it. Takes businessId because the filter IS the visibility
+ * rule — curated rows plus this tenant's own, never another tenant's.
+ */
+function attributeTreeInclude(businessId: string) {
+  const visible = { OR: [{ businessId: null }, { businessId }], deletedAt: null };
+  return {
+    attributes: {
+      where: visible,
+      orderBy: [{ sort: "asc" }, { label: "asc" }],
+      include: {
+        options: { where: visible, orderBy: [{ sort: "asc" }, { label: "asc" }] },
+      },
+    },
+  } satisfies Prisma.MaterialCategoryDefInclude;
+}
+
+/** Row -> view. `custom` is how the client tells its own additions (editable,
+ * and spliceable into its cached schema) from curated rows it may not touch. */
+function toCategoryView(category: CategoryWithAttributes): CategoryView {
+  return {
+    id: category.id,
+    key: category.key,
+    label: category.label,
+    sort: category.sort,
+    custom: category.businessId !== null,
+    attributes: category.attributes.map((a) => ({
+      id: a.id,
+      key: a.key,
+      label: a.label,
+      kind: a.kind as AttributeShape["kind"],
+      unit: a.unit,
+      required: a.required,
+      includeInName: a.includeInName,
+      nameOrder: a.nameOrder,
+      sort: a.sort,
+      custom: a.businessId !== null,
+      options: a.options.map((o) => ({
+        id: o.id,
+        value: o.value,
+        label: o.label,
+        custom: o.businessId !== null,
+      })),
+    })),
+  };
+}
+
+function toUnitView(unit: MaterialUnit): UnitView {
+  return {
+    id: unit.id,
+    key: unit.key,
+    label: unit.label,
+    sort: unit.sort,
+    custom: unit.businessId !== null,
+  };
+}
+
+/**
  * Owns the material attribute schema: what categories exist, what attributes
  * each asks for, what values those attributes allow, and how a material write
  * is validated and normalized against all of that.
@@ -76,18 +148,7 @@ export class MaterialSchemaService {
       this.prisma.materialCategoryDef.findMany({
         where: { ...visible, deletedAt: null },
         orderBy: [{ sort: "asc" }, { label: "asc" }],
-        include: {
-          attributes: {
-            where: { ...visible, deletedAt: null },
-            orderBy: [{ sort: "asc" }, { label: "asc" }],
-            include: {
-              options: {
-                where: { ...visible, deletedAt: null },
-                orderBy: [{ sort: "asc" }, { label: "asc" }],
-              },
-            },
-          },
-        },
+        include: attributeTreeInclude(businessId),
       }),
       this.prisma.materialUnit.findMany({
         where: { ...visible, deletedAt: null },
@@ -95,40 +156,75 @@ export class MaterialSchemaService {
       }),
     ]);
 
-    return {
-      categories: categories.map((c) => ({
-        id: c.id,
-        key: c.key,
-        label: c.label,
-        sort: c.sort,
-        custom: c.businessId !== null,
-        attributes: c.attributes.map((a) => ({
-          id: a.id,
-          key: a.key,
-          label: a.label,
-          kind: a.kind as AttributeShape["kind"],
-          unit: a.unit,
-          required: a.required,
-          includeInName: a.includeInName,
-          nameOrder: a.nameOrder,
-          sort: a.sort,
-          custom: a.businessId !== null,
-          options: a.options.map((o) => ({
-            id: o.id,
-            value: o.value,
-            label: o.label,
-            custom: o.businessId !== null,
-          })),
-        })),
-      })),
-      units: units.map((u) => ({
-        id: u.id,
-        key: u.key,
-        label: u.label,
-        sort: u.sort,
-        custom: u.businessId !== null,
-      })),
-    };
+    return { categories: categories.map(toCategoryView), units: units.map(toUnitView) };
+  }
+
+  /**
+   * Adds a category this tenant needs and the curated list doesn't have.
+   *
+   * Idempotent, exactly as TradesService.create: when a curated category — or
+   * one this tenant already added — matches `label` case-insensitively, THAT
+   * row is returned rather than a shadowing duplicate being created. Two
+   * "Rebar" entries in one picker is a worse outcome than not creating the row
+   * the client asked for.
+   *
+   * The new category has no attributes. That is expected, not a gap: a bare
+   * category already names and groups the material, specs are optional, and
+   * defining attributes is a Phase 3 admin-console capability.
+   */
+  async createCategory(
+    businessId: string,
+    input: CreateMaterialCategoryInput,
+  ): Promise<CategoryView> {
+    const label = input.label.trim();
+    const include = attributeTreeInclude(businessId);
+
+    const existing = await this.prisma.materialCategoryDef.findFirst({
+      where: {
+        label: { equals: label, mode: "insensitive" },
+        deletedAt: null,
+        OR: [{ businessId: null }, { businessId }],
+      },
+      include,
+    });
+    if (existing) return toCategoryView(existing);
+
+    // The key is derived, never client-supplied: it ends up inside stored
+    // specs and must not be chosen to collide with a curated category's.
+    const key = slugifyKey(label);
+    if (!key) throw new BadRequestException("A category name needs at least one letter or number");
+
+    const created = await this.prisma.materialCategoryDef.create({
+      data: { businessId, key, label, sort: TENANT_SORT },
+      include,
+    });
+    this.logger.log(`business ${businessId} added category "${label}" (${key})`);
+    return toCategoryView(created);
+  }
+
+  /** How a material is SOLD, tenant's own. Same idempotent rules as
+   * createCategory — a unit is vocabulary, and duplicating it defeats the
+   * point of having a controlled one. */
+  async createUnit(businessId: string, input: CreateMaterialUnitInput): Promise<UnitView> {
+    const label = input.label.trim();
+
+    const existing = await this.prisma.materialUnit.findFirst({
+      where: {
+        label: { equals: label, mode: "insensitive" },
+        deletedAt: null,
+        OR: [{ businessId: null }, { businessId }],
+      },
+    });
+    if (existing) return toUnitView(existing);
+
+    const key = slugifyKey(label);
+    if (!key) throw new BadRequestException("A unit name needs at least one letter or number");
+
+    const created = await this.prisma.materialUnit.create({
+      data: { businessId, key, label, sort: TENANT_SORT },
+    });
+    this.logger.log(`business ${businessId} added unit "${label}" (${key})`);
+    return toUnitView(created);
   }
 
   /**

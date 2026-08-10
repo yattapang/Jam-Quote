@@ -1,0 +1,22 @@
+/* The inline "+ Add new…" row that drops in under the Category / Sold-by
+   selects. Deliberately not a modal: MaterialForm is itself rendered inside
+   one (AddMaterialButton, EditMaterialButton, the quote builder), and stacking
+   a second dialog over a half-filled form is how contractors lose input. */
+
+.addRow {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: end;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+  background: var(--jq-surface-alt);
+}
+
+@media (max-width: 480px) {
+  .addRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}

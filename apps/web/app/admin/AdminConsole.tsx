@@ -10,9 +10,6 @@ import {
   suspendTenant,
   restoreTenant,
   hardDeleteTenant,
-  createSupplier,
-  updateSupplier,
-  deleteSupplier,
   promoteAdmin,
   updateAdmin,
   revokeAdmin,
@@ -30,7 +27,6 @@ import styles from "./console.module.css";
 type Screen =
   | "overview"
   | "tenants"
-  | "suppliers"
   | "regulatory"
   | "rulepack"
   | "pricing"
@@ -91,16 +87,8 @@ function detailsPreview(details: unknown): string {
     return String(details);
   }
 }
-function freshnessOf(iso: string | null): { key: "fresh" | "cached" | "stale"; label: string } {
-  if (!iso) return { key: "stale", label: "No data" };
-  const h = (Date.now() - new Date(iso).getTime()) / 3600000;
-  if (h < 6) return { key: "fresh", label: `Fresh · ${relativeTime(iso)}` };
-  if (h < 30) return { key: "cached", label: `Cached · ${relativeTime(iso)}` };
-  return { key: "stale", label: `Stale · ${relativeTime(iso)}` };
-}
 
 type TenantRow = [string, string, string, string, string, string, number | string, number, number];
-type SupplierRow = [string, string, boolean, string, string, string, number];
 type RegRow = [string, string, string, string, string];
 
 const jm = getJurisdiction("JM");
@@ -119,7 +107,6 @@ export default function AdminConsole({
   const me = data.me;
   const can = (cap: string) => me.isSuperAdmin || me.capabilities.includes(cap);
   const canManageTenants = can("MANAGE_TENANTS");
-  const canManageSuppliers = can("MANAGE_SUPPLIERS");
   const canManagePricing = can("MANAGE_PRICING");
   const canViewFinancials = can("VIEW_FINANCIALS");
   const canManageAdmins = can("MANAGE_ADMINS");
@@ -335,87 +322,6 @@ export default function AdminConsole({
     }
   }
 
-  // --- Suppliers: add / edit / soft-remove (POST/PATCH/DELETE /admin/suppliers) ---
-  const [supplierForm, setSupplierForm] = useState({ name: "", website: "", parish: "", isPartner: false });
-  const [supplierCreating, setSupplierCreating] = useState(false);
-  const [supplierCreateError, setSupplierCreateError] = useState("");
-  const [supplierCreateOk, setSupplierCreateOk] = useState(false);
-
-  async function submitNewSupplier(e: FormEvent) {
-    e.preventDefault();
-    if (!supplierForm.name.trim()) return;
-    setSupplierCreating(true);
-    setSupplierCreateError("");
-    setSupplierCreateOk(false);
-    try {
-      await createSupplier({
-        name: supplierForm.name.trim(),
-        website: supplierForm.website.trim() || undefined,
-        parish: supplierForm.parish.trim() || undefined,
-        isPartner: supplierForm.isPartner,
-      });
-      setSupplierForm({ name: "", website: "", parish: "", isPartner: false });
-      setSupplierCreateOk(true);
-      router.refresh();
-    } catch (err) {
-      setSupplierCreateError(err instanceof ApiError ? err.message : "Couldn't add supplier");
-    } finally {
-      setSupplierCreating(false);
-    }
-  }
-
-  const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null);
-  const [supplierEditForm, setSupplierEditForm] = useState({ name: "", website: "", parish: "", isPartner: false });
-  const [supplierEditBusy, setSupplierEditBusy] = useState(false);
-  const [supplierEditError, setSupplierEditError] = useState("");
-  const [supplierRemoveBusy, setSupplierRemoveBusy] = useState<Record<string, boolean>>({});
-  const [supplierRemoveError, setSupplierRemoveError] = useState<Record<string, string>>({});
-
-  function startEditSupplier(id: string, name: string, parish: string, isPartner: boolean) {
-    setEditingSupplierId(id);
-    // The admin-supplier read shape doesn't echo `website`, so the edit form
-    // starts blank for it — only fields the operator actually changes here
-    // are sent (all fields are optional on PATCH).
-    setSupplierEditForm({ name, website: "", parish, isPartner });
-    setSupplierEditError("");
-  }
-  function cancelEditSupplier() {
-    setEditingSupplierId(null);
-    setSupplierEditError("");
-  }
-  async function saveSupplierEdit(id: string) {
-    setSupplierEditBusy(true);
-    setSupplierEditError("");
-    try {
-      await updateSupplier(id, {
-        name: supplierEditForm.name.trim() || undefined,
-        website: supplierEditForm.website.trim() || undefined,
-        parish: supplierEditForm.parish.trim() || undefined,
-        isPartner: supplierEditForm.isPartner,
-      });
-      setEditingSupplierId(null);
-      router.refresh();
-    } catch (err) {
-      setSupplierEditError(err instanceof ApiError ? err.message : "Couldn't save changes");
-    } finally {
-      setSupplierEditBusy(false);
-    }
-  }
-  async function removeSupplier(id: string) {
-    setSupplierRemoveBusy((b) => ({ ...b, [id]: true }));
-    setSupplierRemoveError((e) => ({ ...e, [id]: "" }));
-    try {
-      await deleteSupplier(id);
-      router.refresh();
-    } catch (err) {
-      setSupplierRemoveError((e) => ({
-        ...e,
-        [id]: err instanceof ApiError ? err.message : "Couldn't remove",
-      }));
-    } finally {
-      setSupplierRemoveBusy((b) => ({ ...b, [id]: false }));
-    }
-  }
 
   // --- Admins: promote by email / edit capabilities / revoke (MANAGE_ADMINS) ---
   const [promoteEmail, setPromoteEmail] = useState("");
@@ -503,7 +409,6 @@ export default function AdminConsole({
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
     tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
-    suppliers: ["Supplier price index", "Live material pricing feeds & scrape health"],
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
     pricing: ["Pricing", "Free-tier limit & Pro pricing for the whole platform"],
@@ -568,39 +473,6 @@ export default function AdminConsole({
   const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
   const tenantFilters = [["All", "1,284", true], ["Active", cnt("active")], ["Trial", cnt("trial")], ["Past due", cnt("past_due")], ["Churned", cnt("churned")]];
 
-  const suppliersMock: SupplierRow[] = [
-    ["ARC Systems", "Steel & Rebar", true, "stale", "Stale · 26h", "HTTP 200 · 0 new · retry queued", 412],
-    ["Caribbean Cement", "Cement", true, "fresh", "Fresh · 1h ago", "HTTP 200 · 24 updated", 96],
-    ["Tank-Weld Metals", "Steel & Roofing", true, "fresh", "Fresh · 40m ago", "HTTP 200 · 61 updated", 540],
-    ["Rapid True Value", "Hardware", true, "fresh", "Fresh · 2h ago", "HTTP 200 · 12 updated", 1280],
-    ["Rite Rate Electrical", "Electrical", false, "cached", "Cached · 9h ago", "HTTP 429 · using cache", 333],
-    ["General Paints JA", "Paint & Coatings", false, "fresh", "Fresh · 3h ago", "HTTP 200 · 8 updated", 214],
-    ["Bathrooms & More", "Fixtures", false, "cached", "Cached · 14h ago", "HTTP 200 · 0 new", 187],
-    ["Kingston Timber", "Lumber", false, "stale", "Stale · 2d ago", "Timeout · 3 fails", 158],
-  ];
-  const suppliersRaw: SupplierRow[] = data.suppliers.length
-    ? data.suppliers.map((s): SupplierRow => {
-        const f = freshnessOf(s.lastFetch);
-        return [s.name, s.parish ?? "—", s.isPartner, f.key, f.label, s.lastFetch ? relativeTime(s.lastFetch) : "—", s.skuCount];
-      })
-    : suppliersMock;
-  // Real supplier ids, index-aligned with suppliersRaw — null for the
-  // design-mock rows (no real supplier behind them, so no edit/remove).
-  const supplierIds: (string | null)[] = data.suppliers.length ? data.suppliers.map((s) => s.id) : suppliersMock.map(() => null);
-  const freshTone: Record<string, string> = { fresh: "good", cached: "warn", stale: "critical" };
-  const supplierStats = data.suppliers.length
-    ? [
-        { label: "Feeds tracked", value: String(suppliersRaw.length), color: "var(--text)" },
-        { label: "Fresh (< 6h)", value: String(suppliersRaw.filter((s) => s[3] === "fresh").length), color: "var(--good)" },
-        { label: "Cached", value: String(suppliersRaw.filter((s) => s[3] === "cached").length), color: "var(--warn)" },
-        { label: "Stale", value: String(suppliersRaw.filter((s) => s[3] === "stale").length), color: "var(--critical)" },
-      ]
-    : [
-        { label: "Feeds tracked", value: "37", color: "var(--text)" },
-        { label: "Fresh (< 6h)", value: "29", color: "var(--good)" },
-        { label: "Cached", value: "6", color: "var(--warn)" },
-        { label: "Stale", value: "2", color: "var(--critical)" },
-      ];
 
   const regMap: Record<string, [string, string]> = { needs: ["Needs review", "warn"], monitoring: ["Monitoring", "info"], applied: ["Applied", "good"] };
   const regMock: RegRow[] = [
@@ -690,10 +562,6 @@ export default function AdminConsole({
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
             <span>Tenants</span>
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{ov ? ov.businesses.toLocaleString() : "1,284"}</span>
-          </button>
-          <button className={styles.navBtn} onClick={() => setScreen("suppliers")} style={navBtn("suppliers")}>
-            <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 9l1-5h16l1 5" /><path d="M4 9v11h16V9" /><path d="M9 20v-6h6v6" /></svg>
-            <span>Supplier index</span>
           </button>
           {canViewFinancials && (
             <button className={styles.navBtn} onClick={() => setScreen("financials")} style={navBtn("financials")}>
@@ -936,169 +804,6 @@ export default function AdminConsole({
             </div>
           )}
 
-          {/* SUPPLIERS */}
-          {screen === "suppliers" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1240, margin: "0 auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 18 }}>
-                {supplierStats.map((s) => (
-                  <div key={s.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "15px 16px", boxShadow: "var(--shadow)" }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 8 }}>{s.label}</div>
-                    <div style={{ ...archivo, fontWeight: 700, fontSize: 23, letterSpacing: "-.02em", color: s.color }}>{s.value}</div>
-                  </div>
-                ))}
-              </div>
-
-              {canManageSuppliers && (
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
-                <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 12 }}>+ Add supplier</div>
-                <form onSubmit={submitNewSupplier} style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr auto auto", gap: 10, alignItems: "end" }}>
-                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-                    Name
-                    <input
-                      required
-                      value={supplierForm.name}
-                      onChange={(e) => setSupplierForm((f) => ({ ...f, name: e.target.value }))}
-                      style={inputStyle}
-                    />
-                  </label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-                    Website
-                    <input
-                      value={supplierForm.website}
-                      onChange={(e) => setSupplierForm((f) => ({ ...f, website: e.target.value }))}
-                      placeholder="https://…"
-                      style={inputStyle}
-                    />
-                  </label>
-                  <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-                    Parish
-                    <input
-                      value={supplierForm.parish}
-                      onChange={(e) => setSupplierForm((f) => ({ ...f, parish: e.target.value }))}
-                      style={inputStyle}
-                    />
-                  </label>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--text)", height: 36, whiteSpace: "nowrap" }}>
-                    <input
-                      type="checkbox"
-                      checked={supplierForm.isPartner}
-                      onChange={(e) => setSupplierForm((f) => ({ ...f, isPartner: e.target.checked }))}
-                    />
-                    Partner
-                  </label>
-                  <button
-                    type="submit"
-                    disabled={supplierCreating || !supplierForm.name.trim()}
-                    style={{ height: 36, padding: "0 16px", border: "none", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: supplierCreating ? "default" : "pointer", fontFamily: "inherit", opacity: supplierCreating || !supplierForm.name.trim() ? 0.6 : 1, whiteSpace: "nowrap" }}
-                  >
-                    {supplierCreating ? "Adding…" : "+ Add supplier"}
-                  </button>
-                </form>
-                {supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--critical)", marginTop: 10 }}>{supplierCreateError}</div>}
-                {supplierCreateOk && !supplierCreateError && <div style={{ fontSize: 12.5, color: "var(--good)", marginTop: 10 }}>Supplier added ✓</div>}
-              </div>
-              )}
-
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                  <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th}>SUPPLIER</th><th style={th}>PARISH</th><th style={{ ...th, textAlign: "right" }}>SKUS</th><th style={th}>PRICE FRESHNESS</th><th style={th}>LAST FETCH</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
-                  </tr></thead>
-                  <tbody>
-                    {suppliersRaw.map((s, i) => {
-                      const tone = freshTone[s[3]]!;
-                      const id = supplierIds[i];
-                      if (id && editingSupplierId === id) {
-                        return (
-                          <tr key={i} style={{ background: "var(--surface-alt)" }}>
-                            <td colSpan={6} style={{ padding: "14px 16px" }}>
-                              <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1.3fr 1fr auto auto auto", gap: 10, alignItems: "center" }}>
-                                <input
-                                  value={supplierEditForm.name}
-                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, name: e.target.value }))}
-                                  placeholder="Name"
-                                  style={inputStyle}
-                                />
-                                <input
-                                  value={supplierEditForm.website}
-                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, website: e.target.value }))}
-                                  placeholder="Website"
-                                  style={inputStyle}
-                                />
-                                <input
-                                  value={supplierEditForm.parish}
-                                  onChange={(e) => setSupplierEditForm((f) => ({ ...f, parish: e.target.value }))}
-                                  placeholder="Parish"
-                                  style={inputStyle}
-                                />
-                                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }}>
-                                  <input
-                                    type="checkbox"
-                                    checked={supplierEditForm.isPartner}
-                                    onChange={(e) => setSupplierEditForm((f) => ({ ...f, isPartner: e.target.checked }))}
-                                  />
-                                  Partner
-                                </label>
-                                <button
-                                  disabled={supplierEditBusy}
-                                  onClick={() => saveSupplierEdit(id)}
-                                  style={{ height: 32, padding: "0 13px", border: "none", borderRadius: 8, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 12.5, cursor: supplierEditBusy ? "default" : "pointer", fontFamily: "inherit", opacity: supplierEditBusy ? 0.6 : 1 }}
-                                >
-                                  {supplierEditBusy ? "Saving…" : "Save"}
-                                </button>
-                                <button
-                                  onClick={cancelEditSupplier}
-                                  style={{ height: 32, padding: "0 13px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--text)", fontWeight: 600, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                              {supplierEditError && <div style={{ fontSize: 12, color: "var(--critical)", marginTop: 8 }}>{supplierEditError}</div>}
-                            </td>
-                          </tr>
-                        );
-                      }
-                      const removeBusy = id ? !!supplierRemoveBusy[id] : false;
-                      const removeErr = id ? supplierRemoveError[id] : "";
-                      return (
-                        <tr key={i} className={styles.rowHover}>
-                          <td style={{ ...td, padding: "13px 16px" }}><div style={{ display: "flex", alignItems: "center", gap: 9 }}><span style={{ fontWeight: 600 }}>{s[0]}</span>{s[2] && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700, color: "var(--accent)", background: "color-mix(in srgb,var(--accent) 14%,transparent)", border: "1px solid color-mix(in srgb,var(--accent) 32%,transparent)", padding: "2px 7px", borderRadius: 999 }}>★ PARTNER</span>}</div></td>
-                          <td style={{ ...td, padding: "13px 16px", color: "var(--muted)" }}>{s[1]}</td>
-                          <td style={{ ...td, padding: "13px 16px", textAlign: "right", ...archivo, fontVariantNumeric: "tabular-nums" }}>{s[6].toLocaleString("en-US")}</td>
-                          <td style={{ ...td, padding: "13px 16px" }}><span style={pill(tone)}><span style={dot(tone, { marginTop: 0, ...(s[3] === "stale" ? { animation: "admin-pulse 1.4s infinite" } : {}) })} />{s[4]}</span></td>
-                          <td style={{ ...td, padding: "13px 16px", color: "var(--muted)", fontSize: 12.5 }}>{s[5]}</td>
-                          <td style={{ ...td, padding: "13px 16px", textAlign: "right" }}>
-                            {id && canManageSuppliers ? (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-                                <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                                  <button
-                                    onClick={() => startEditSupplier(id, s[0], s[1] === "—" ? "" : s[1], s[2])}
-                                    style={{ height: 27, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    disabled={removeBusy}
-                                    onClick={() => removeSupplier(id)}
-                                    style={{ height: 27, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: removeBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid color-mix(in srgb, var(--critical) 45%, var(--border))", background: "color-mix(in srgb, var(--critical) 10%, transparent)", color: "var(--critical)", opacity: removeBusy ? 0.6 : 1 }}
-                                  >
-                                    {removeBusy ? "…" : "Remove"}
-                                  </button>
-                                </div>
-                                {removeErr && <span style={{ fontSize: 10.5, color: "var(--critical)" }}>{removeErr}</span>}
-                              </div>
-                            ) : (
-                              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
 
           {/* REGULATORY */}
           {screen === "regulatory" && (

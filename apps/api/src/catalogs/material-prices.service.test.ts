@@ -141,6 +141,16 @@ describe("MaterialPricesService.create", () => {
     expect(prisma.materialPriceEntry.create).not.toHaveBeenCalled();
   });
 
+  it("scopes the supplier lookup to this business", async () => {
+    // Suppliers are tenant-private, so naming another tenant's supplier by id
+    // would leak its name and parish back through the comparison view.
+    const { svc, prisma } = harness();
+    await svc.create("biz-1", { supplierId: SUPPLIER_A.id, materialFavouriteId: "mat-1", priceCents: 1 });
+    expect(prisma.supplier.findFirst).toHaveBeenCalledWith({
+      where: { id: SUPPLIER_A.id, businessId: "biz-1", deletedAt: null },
+    });
+  });
+
   it("rejects a retired supplier", async () => {
     const { svc, prisma } = harness({ supplier: { findFirst: vi.fn().mockResolvedValue(null) } });
     await expect(

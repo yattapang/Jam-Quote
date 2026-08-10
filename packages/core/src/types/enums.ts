@@ -106,11 +106,15 @@ export type QuoteDetailLevel = (typeof QuoteDetailLevel)[keyof typeof QuoteDetai
  * strings (User.adminCapabilities String[]) rather than a Prisma enum so
  * adding a capability never needs a DB enum migration.
  */
+// NOTE: removing a member here does NOT migrate User.adminCapabilities, which
+// is a plain String[]. A revoked capability simply stops matching anything —
+// harmless, but the stale string lingers on existing admin rows.
+// MANAGE_SUPPLIERS was removed when suppliers became tenant-owned (#31): it
+// guarded a platform supplier directory that no longer exists, and leaving it
+// listed would offer admins a permission that grants nothing.
 export const AdminCapability = {
   /** Suspend / restore / hard-delete tenants and change their plan. */
   MANAGE_TENANTS: "MANAGE_TENANTS",
-  /** Create / edit / soft-delete platform suppliers. */
-  MANAGE_SUPPLIERS: "MANAGE_SUPPLIERS",
   /** Edit platform subscription pricing. */
   MANAGE_PRICING: "MANAGE_PRICING",
   /** View the subscription & revenue (financials) screen. */
@@ -129,7 +133,6 @@ export const ADMIN_CAPABILITIES: AdminCapability[] = Object.values(AdminCapabili
 /** Human-readable label + description for each capability, for admin UIs. */
 export const ADMIN_CAPABILITY_META: Record<AdminCapability, { label: string; description: string }> = {
   MANAGE_TENANTS: { label: "Manage tenants", description: "Suspend, restore, delete businesses and change their plan" },
-  MANAGE_SUPPLIERS: { label: "Manage suppliers", description: "Add, edit and remove platform suppliers" },
   MANAGE_PRICING: { label: "Manage pricing", description: "Edit subscription plan pricing" },
   VIEW_FINANCIALS: { label: "View financials", description: "See subscription revenue and renewals" },
   MANAGE_RULEPACK: { label: "Manage rule-packs", description: "Edit jurisdiction tax/regulatory rules" },

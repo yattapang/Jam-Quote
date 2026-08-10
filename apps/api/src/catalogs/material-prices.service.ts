@@ -97,10 +97,12 @@ export class MaterialPricesService {
     });
     if (!material) throw new NotFoundException("Material not found");
 
-    // Supplier is a global directory, but a retired one must not gain new
-    // prices.
+    // The supplier must be this tenant's own and not retired. Suppliers are
+    // tenant-private now, so an unscoped lookup here would let a caller name
+    // another tenant's supplier by id and then read its name and parish back
+    // out of the comparison view — ids are not capabilities.
     const supplier = await this.prisma.supplier.findFirst({
-      where: { id: input.supplierId, deletedAt: null },
+      where: { id: input.supplierId, businessId, deletedAt: null },
     });
     if (!supplier) throw new NotFoundException("Supplier not found");
 

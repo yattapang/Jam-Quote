@@ -17,20 +17,9 @@ export const hardDeleteTenantSchema = z.object({
 });
 export type HardDeleteTenantInput = z.infer<typeof hardDeleteTenantSchema>;
 
-export const createSupplierSchema = z.object({
-  name: z.string().min(1),
-  website: z.string().url().optional(),
-  parish: z.string().min(1).optional(),
-  isPartner: z.boolean().optional(),
-});
-export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
-
-export const updateSupplierSchema = createSupplierSchema
-  .partial()
-  .refine((v) => Object.keys(v).length > 0, {
-    message: "At least one field must be provided",
-  });
-export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
+// The supplier schemas used to live here, for the admin supplier CRUD.
+// Suppliers are tenant-owned now — catalogs.dto.ts owns those schemas and the
+// staff console has no supplier surface at all.
 
 /** Body for POST /admin/admins — promote an EXISTING user (by email) to an
  * internal admin with the given capabilities. isSuperAdmin may only be set by

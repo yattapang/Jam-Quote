@@ -622,6 +622,22 @@ export interface NewMaterialFavouriteInput {
 export async function fetchMaterialSchema(): Promise<ApiMaterialSchema> {
   return apiClient.get<ApiMaterialSchema>("/catalogs/material-schema");
 }
+
+/** POST /catalogs/material-schema/categories — idempotent, like createTrade:
+ * a label already matching one of the curated categories or this business's
+ * own returns that row (so the response can come back `custom: false`) rather
+ * than creating a second one. Callers must invalidateMaterialSchema() after,
+ * or the new row is missing from the picker until a page reload. */
+export async function createMaterialCategory(label: string): Promise<ApiMaterialCategory> {
+  return apiClient.post<ApiMaterialCategory>("/catalogs/material-schema/categories", { label });
+}
+
+/** POST /catalogs/material-schema/units — same idempotency as
+ * createMaterialCategory. */
+export async function createMaterialUnit(label: string): Promise<ApiMaterialUnit> {
+  return apiClient.post<ApiMaterialUnit>("/catalogs/material-schema/units", { label });
+}
+
 export async function createMaterialFavourite(
   input: NewMaterialFavouriteInput,
 ): Promise<MaterialFavourite> {
@@ -1165,31 +1181,6 @@ export async function hardDeleteTenant(businessId: string, confirmName: string):
   await apiClient.delete<unknown>(`/admin/tenants/${businessId}`, { confirmName });
 }
 
-// --- Admin suppliers (create / update / soft delete) -------------------------
-
-export interface NewSupplierInput {
-  name: string;
-  website?: string;
-  parish?: string;
-  isPartner?: boolean;
-}
-export type UpdateSupplierInput = Partial<NewSupplierInput>;
-
-/** POST /admin/suppliers — ADMIN only. */
-export async function createSupplier(input: NewSupplierInput): Promise<AdminSupplier> {
-  return apiClient.post<AdminSupplier>("/admin/suppliers", input);
-}
-
-/** PATCH /admin/suppliers/:id — ADMIN only, all fields optional. */
-export async function updateSupplier(id: string, input: UpdateSupplierInput): Promise<AdminSupplier> {
-  return apiClient.patch<AdminSupplier>(`/admin/suppliers/${id}`, input);
-}
-
-/** DELETE /admin/suppliers/:id — ADMIN only, soft delete. */
-export async function deleteSupplier(id: string): Promise<void> {
-  await apiClient.delete<unknown>(`/admin/suppliers/${id}`);
-}
-
 // --- Trades (curated master list + per-business custom trades) --------------
 
 /** A trade the business can pick for its profile / labour library — either a
@@ -1217,9 +1208,9 @@ export async function createTrade(name: string): Promise<Trade> {
 
 // --- Supplier price comparison (#26 Phase 2b) --------------------------------
 
-/** A row of the global supplier directory (GET /catalogs/suppliers). Distinct
- * from AdminSupplier, which carries the staff console's feed stats — this is
- * just enough to fill a picker. */
+/** A row of this business's supplier directory (GET /catalogs/suppliers) —
+ * just enough to fill a picker. Suppliers are tenant-owned: a contractor's
+ * merchants are their own list, not a platform-curated one. */
 export interface ApiSupplier {
   id: string;
   name: string;
@@ -1256,10 +1247,22 @@ export interface NewMaterialPriceInput {
   fetchedAt?: string;
 }
 
-/** GET /catalogs/suppliers (client-side, via the proxy) — the shared supplier
- * directory, alphabetical. Not business-scoped: suppliers are global. */
+export interface NewSupplierInput {
+  name: string;
+  parish?: string;
+  website?: string;
+}
+
+/** GET /catalogs/suppliers (client-side, via the proxy) — this business's
+ * supplier directory, alphabetical. */
 export async function getSuppliersClient(): Promise<ApiSupplier[]> {
   return apiClient.get<ApiSupplier[]>("/catalogs/suppliers");
+}
+
+/** POST /catalogs/suppliers — idempotent, like createTrade: a name already in
+ * this business's directory returns that row rather than a second copy. */
+export async function createSupplier(input: NewSupplierInput): Promise<ApiSupplier> {
+  return apiClient.post<ApiSupplier>("/catalogs/suppliers", input);
 }
 
 /** GET /catalogs/material-prices — one row per supplier (their latest

@@ -1,16 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { UserRole, type Business, type Supplier } from "@prisma/client";
+import { UserRole, type Business } from "@prisma/client";
 import { supportedJurisdictions } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
 import type { UpdatePricingInput } from "../billing/billing.dto.js";
-import type {
-  CreateSupplierInput,
-  PromoteAdminInput,
-  SetTenantPlanInput,
-  UpdateAdminInput,
-  UpdateSupplierInput,
-} from "./admin.dto.js";
+import type { PromoteAdminInput, SetTenantPlanInput, UpdateAdminInput } from "./admin.dto.js";
 
 /** The acting admin's authorization, from AdminGuard's req.adminContext.
  * Passed into admin-management methods so they can enforce super-admin-only
@@ -49,15 +43,6 @@ export interface AdminTenant {
   createdAt: Date;
   quoteCount: number;
   suspended: boolean;
-}
-
-export interface AdminSupplier {
-  id: string;
-  name: string;
-  parish: string | null;
-  isPartner: boolean;
-  skuCount: number;
-  lastFetch: string | null;
 }
 
 export interface AdminRegulatoryUpdate {
@@ -105,7 +90,10 @@ export class AdminService {
     const [businesses, activeSubscriptions, suppliersTracked] = await Promise.all([
       this.prisma.business.count({ where: { deletedAt: null } }),
       this.prisma.subscription.count({ where: { status: "active" } }),
-      this.prisma.supplier.count(),
+      // Suppliers are tenant-owned now, so this is the sum across every
+      // contractor's own list rather than a curated feed — retired ones must
+      // not inflate it.
+      this.prisma.supplier.count({ where: { deletedAt: null } }),
     ]);
 
     return {
@@ -221,113 +209,11 @@ export class AdminService {
     return { deleted: true, businessId: id };
   }
 
-  async suppliers(): Promise<AdminSupplier[]> {
-    const suppliers = await this.prisma.supplier.findMany({
-      where: { deletedAt: null },
-      include: {
-        // businessId: null scopes this to the PLATFORM's curated price feed.
-        // Since #26 Phase 2b tenants record their own prices in this same
-        // table, so an unscoped count would report "curated SKUs + every
-        // contractor's private prices" under a column labelled SKUS — and it
-        // would climb as tenants use the feature, with no admin action.
-        _count: { select: { priceEntries: { where: { businessId: null } } } },
-      },
-      orderBy: { name: "asc" },
-    });
-
-    return Promise.all(
-      suppliers.map(async (s) => {
-        const latest = await this.prisma.materialPriceEntry.findFirst({
-          // Same scoping: "last fetch" is about the platform's own feed
-          // freshness, not the last time some contractor typed in a price.
-          where: { supplierId: s.id, businessId: null },
-          orderBy: { fetchedAt: "desc" },
-          select: { fetchedAt: true },
-        });
-
-        return {
-          id: s.id,
-          name: s.name,
-          parish: s.parish,
-          isPartner: s.isPartner,
-          skuCount: s._count.priceEntries,
-          lastFetch: latest ? latest.fetchedAt.toISOString() : null,
-        };
-      }),
-    );
-  }
-
-  /**
-   * POST /admin/suppliers — Supplier is platform-level, not business-scoped,
-   * so this is intentionally not tied to any tenant.
-   */
-  async createSupplier(input: CreateSupplierInput, actorUserId: string): Promise<Supplier> {
-    const supplier = await this.prisma.supplier.create({
-      data: {
-        name: input.name,
-        website: input.website,
-        parish: input.parish,
-        isPartner: input.isPartner ?? false,
-      },
-    });
-
-    await this.audit.record({
-      actorUserId,
-      action: "supplier.create",
-      targetType: "Supplier",
-      targetId: supplier.id,
-      details: { ...input },
-    });
-
-    return supplier;
-  }
-
-  async updateSupplier(
-    id: string,
-    input: UpdateSupplierInput,
-    actorUserId: string,
-  ): Promise<Supplier> {
-    const existing = await this.prisma.supplier.findUnique({ where: { id } });
-    if (!existing || existing.deletedAt) throw new NotFoundException("Supplier not found");
-
-    const supplier = await this.prisma.supplier.update({ where: { id }, data: input });
-
-    await this.audit.record({
-      actorUserId,
-      action: "supplier.update",
-      targetType: "Supplier",
-      targetId: id,
-      details: { ...input },
-    });
-
-    return supplier;
-  }
-
-  /**
-   * DELETE /admin/suppliers/:id — SOFT delete only. MaterialPriceEntry and
-   * QuoteLineItem both reference Supplier (no cascade), so a hard delete
-   * would FK-fail the moment any tenant had ever used this supplier on a
-   * quote line item.
-   */
-  async deleteSupplier(id: string, actorUserId: string): Promise<Supplier> {
-    const existing = await this.prisma.supplier.findUnique({ where: { id } });
-    if (!existing || existing.deletedAt) throw new NotFoundException("Supplier not found");
-
-    const supplier = await this.prisma.supplier.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
-
-    await this.audit.record({
-      actorUserId,
-      action: "supplier.delete",
-      targetType: "Supplier",
-      targetId: id,
-      details: { name: existing.name },
-    });
-
-    return supplier;
-  }
+  // Supplier management deliberately does NOT live here. Suppliers are
+  // tenant-owned — each contractor keeps their own merchant list via
+  // SuppliersService — and there is no curated directory for staff to
+  // administer, so an admin CRUD surface over that table would only be a way
+  // to reach into tenants' private data.
 
   regulatory(): Promise<AdminRegulatoryUpdate[]> {
     return this.prisma.regulatoryUpdate.findMany({

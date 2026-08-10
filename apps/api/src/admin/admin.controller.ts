@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
-import type { AuditLog, Business, Subscription, Supplier } from "@prisma/client";
+import type { AuditLog, Business, Subscription } from "@prisma/client";
 import { AdminCapability } from "@jamquote/core";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { RequireCapability } from "../auth/require-capability.decorator.js";
@@ -14,24 +14,19 @@ import {
   type AdminFinancials,
   type AdminOverview,
   type AdminRegulatoryUpdate,
-  type AdminSupplier,
   type AdminTenant,
   type AdminUser,
 } from "./admin.service.js";
 import { AuditService } from "./audit.service.js";
 import {
-  createSupplierSchema,
   hardDeleteTenantSchema,
   promoteAdminSchema,
   setTenantPlanSchema,
   updateAdminSchema,
-  updateSupplierSchema,
-  type CreateSupplierInput,
   type HardDeleteTenantInput,
   type PromoteAdminInput,
   type SetTenantPlanInput,
   type UpdateAdminInput,
-  type UpdateSupplierInput,
 } from "./admin.dto.js";
 
 /**
@@ -90,37 +85,9 @@ export class AdminController {
     return this.admin.hardDeleteTenant(id, body.confirmName, req.user!.sub);
   }
 
-  @Get("suppliers")
-  suppliers(): Promise<AdminSupplier[]> {
-    return this.admin.suppliers();
-  }
-
-  /** Supplier is platform-level (not business-scoped). */
-  @Post("suppliers")
-  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
-  createSupplier(
-    @Body(new ZodValidationPipe(createSupplierSchema)) body: CreateSupplierInput,
-    @Req() req: Request,
-  ): Promise<Supplier> {
-    return this.admin.createSupplier(body, req.user!.sub);
-  }
-
-  @Patch("suppliers/:id")
-  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
-  updateSupplier(
-    @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateSupplierSchema)) body: UpdateSupplierInput,
-    @Req() req: Request,
-  ): Promise<Supplier> {
-    return this.admin.updateSupplier(id, body, req.user!.sub);
-  }
-
-  /** SOFT delete only — Supplier is FK-referenced by material prices/quote lines. */
-  @Delete("suppliers/:id")
-  @RequireCapability(AdminCapability.MANAGE_SUPPLIERS)
-  deleteSupplier(@Param("id") id: string, @Req() req: Request): Promise<Supplier> {
-    return this.admin.deleteSupplier(id, req.user!.sub);
-  }
+  // No supplier routes here by design. Suppliers are tenant-owned (each
+  // contractor keeps their own merchant list, see SuppliersController); there
+  // is no curated directory for the console to manage.
 
   @Get("regulatory")
   regulatory(): Promise<AdminRegulatoryUpdate[]> {

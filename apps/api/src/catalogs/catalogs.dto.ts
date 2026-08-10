@@ -69,6 +69,25 @@ export const materialFavouriteQuerySchema = z.object({
 });
 export type MaterialFavouriteQuery = z.infer<typeof materialFavouriteQuerySchema>;
 
+/**
+ * A tenant extending the material vocabulary with its own category or unit
+ * (#26). Only a label is accepted — the machine `key` is slugified from it
+ * server-side (slugifyKey), because a client-chosen key would end up in
+ * stored specs and could collide with a curated one.
+ *
+ * The 60-char cap is a display constraint: these labels render in the picker
+ * chips and the composed material name.
+ */
+export const createMaterialCategorySchema = z.object({
+  label: z.string().trim().min(1).max(60),
+});
+export type CreateMaterialCategoryInput = z.infer<typeof createMaterialCategorySchema>;
+
+export const createMaterialUnitSchema = z.object({
+  label: z.string().trim().min(1).max(60),
+});
+export type CreateMaterialUnitInput = z.infer<typeof createMaterialUnitSchema>;
+
 export const createEquipmentItemSchema = z.object({
   name: z.string().min(1),
   owned: z.boolean().default(false),
@@ -81,11 +100,17 @@ export type CreateEquipmentItemInput = z.infer<typeof createEquipmentItemSchema>
 export const updateEquipmentItemSchema = createEquipmentItemSchema.partial();
 export type UpdateEquipmentItemInput = z.infer<typeof updateEquipmentItemSchema>;
 
+/**
+ * A contractor adding one of their own merchants. `isPartner` is deliberately
+ * NOT accepted: it is a platform designation ("a JamQuote partner merchant"),
+ * and since suppliers became tenant-owned there is no admin path that grants
+ * it — so allowing it here would let a tenant self-certify. The column stays
+ * on the model for the legacy platform rows that predate tenant ownership.
+ */
 export const createSupplierSchema = z.object({
   name: z.string().min(1),
   website: z.string().url().optional(),
   parish: z.enum(PARISHES).optional(),
-  isPartner: z.boolean().default(false),
 });
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 export const updateSupplierSchema = createSupplierSchema.partial();

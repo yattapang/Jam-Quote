@@ -3,9 +3,12 @@ import {
   createClient,
   createInvoiceFromQuote,
   createJob,
+  createMaterialCategory,
   createMaterialFavourite,
   createMaterialPrice,
+  createMaterialUnit,
   createQuote,
+  createSupplier,
   deleteClient,
   deleteInvoice,
   deleteJob,
@@ -880,7 +883,7 @@ describe("supplier price comparison (#26 Phase 2b)", () => {
     expect(init.method).toBe("DELETE");
   });
 
-  it("getSuppliersClient reads the global directory (no business scoping)", async () => {
+  it("getSuppliersClient reads this business's directory", async () => {
     const spy = stubFetch({
       "/catalogs/suppliers": [
         { id: "sup-hl-true-value", name: "H&L True Value", parish: "Kingston", website: null, isPartner: true },
@@ -891,5 +894,83 @@ describe("supplier price comparison (#26 Phase 2b)", () => {
     expect(suppliers[0]?.parish).toBe("Kingston");
     const [url] = spy.mock.calls[0] as [string];
     expect(String(url)).toContain("/catalogs/suppliers");
+  });
+
+  it("createSupplier POSTs the quick-add fields and omits an unset parish", async () => {
+    const spy = stubFetch({
+      "/catalogs/suppliers": { id: "sup-new", name: "Rapid True Value", parish: null, website: null, isPartner: false },
+    });
+    const created = await createSupplier({ name: "Rapid True Value" });
+    expect(created.id).toBe("sup-new");
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Rapid True Value" });
+  });
+
+  it("createSupplier sends the parish when the quick-add supplied one", async () => {
+    const spy = stubFetch({
+      "/catalogs/suppliers": { id: "sup-new", name: "Rapid", parish: "St. Ann", website: null, isPartner: false },
+    });
+    await createSupplier({ name: "Rapid", parish: "St. Ann" });
+    const init = spy.mock.calls[0]?.[1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({ parish: "St. Ann" });
+  });
+});
+
+describe("tenant-added material schema rows (#26 categories & units)", () => {
+  it("createMaterialCategory POSTs the label to the schema endpoint", async () => {
+    const spy = stubFetch({
+      "/catalogs/material-schema/categories": {
+        id: "cat-rebar",
+        key: "rebar",
+        label: "Rebar",
+        sort: 99,
+        custom: true,
+        attributes: [],
+      },
+    });
+    const created = await createMaterialCategory("Rebar");
+    expect(created.id).toBe("cat-rebar");
+    expect(created.custom).toBe(true);
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/catalogs/material-schema/categories");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ label: "Rebar" });
+  });
+
+  it("createMaterialCategory returns the existing row when the label already matched", async () => {
+    // The endpoint is idempotent, so the response can be a curated row the
+    // caller must select rather than treat as a clash.
+    stubFetch({
+      "/catalogs/material-schema/categories": {
+        id: "cat-lumber",
+        key: "lumber",
+        label: "Lumber",
+        sort: 10,
+        custom: false,
+        attributes: [],
+      },
+    });
+    const created = await createMaterialCategory("lumber");
+    expect(created.id).toBe("cat-lumber");
+    expect(created.custom).toBe(false);
+  });
+
+  it("createMaterialUnit POSTs the label to the units endpoint", async () => {
+    const spy = stubFetch({
+      "/catalogs/material-schema/units": {
+        id: "unit-pallet",
+        key: "pallet",
+        label: "per pallet",
+        sort: 99,
+        custom: true,
+      },
+    });
+    const created = await createMaterialUnit("per pallet");
+    expect(created.label).toBe("per pallet");
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/catalogs/material-schema/units");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ label: "per pallet" });
   });
 });
