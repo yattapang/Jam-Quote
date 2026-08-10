@@ -196,9 +196,6 @@ export default function SupplierPricePanel({
               <li key={p.id} className={isCheapest ? styles.rowCheapest : styles.row}>
                 <div className={styles.rowTop}>
                   <span className={styles.supplier}>{p.supplierName}</span>
-                  <span className={p.own ? styles.badgeOwn : styles.badgeReference}>
-                    {p.own ? "Your price" : "Reference"}
-                  </span>
                   {isCheapest && <span className={styles.badgeCheapest}>Cheapest</span>}
                 </div>
                 <span className={styles.meta} title={p.fetchedAt}>
@@ -222,18 +219,14 @@ export default function SupplierPricePanel({
                   >
                     {inUse ? "In use" : "Use this price"}
                   </Button>
-                  {/* Curated rows belong to the platform — the API answers 403
-                      — so the control only exists on your own entries. */}
-                  {p.own && (
-                    <button
-                      type="button"
-                      className={styles.remove}
-                      onClick={() => void remove(p.id)}
-                      disabled={removingId === p.id}
-                    >
-                      {removingId === p.id ? "Removing…" : "Remove"}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={styles.remove}
+                    onClick={() => void remove(p.id)}
+                    disabled={removingId === p.id}
+                  >
+                    {removingId === p.id ? "Removing…" : "Remove"}
+                  </button>
                 </div>
               </li>
             );

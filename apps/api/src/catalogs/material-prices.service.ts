@@ -15,10 +15,6 @@ export interface SupplierPriceView {
    * formatting is the client's job (web and mobile render it differently), and
    * a server-rendered relative time is wrong the moment it is cached. */
   fetchedAt: string;
-  /** false = platform-curated reference price; true = this contractor's own
-   * recorded price. The UI must distinguish them — "what I actually paid"
-   * carries more weight than a catalogue lookup. */
-  own: boolean;
 }
 
 @Injectable()
@@ -26,14 +22,16 @@ export class MaterialPricesService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Price comparison for one of this business's materials.
+   * Price comparison for one of this business's materials — ONLY prices this
+   * contractor recorded themselves.
    *
-   * Combines two sources:
-   *  - This tenant's OWN entries, linked by materialFavouriteId (exact).
-   *  - Platform-curated lookup rows (businessId NULL), which are catalogue-wide
-   *    and carry no materialFavouriteId, so they can only be matched by NAME.
-   *    That match is best-effort by nature — it is reference data, and it is
-   *    labelled `own: false` so the contractor can see which is which.
+   * There is deliberately no platform-curated reference price. An earlier
+   * version unioned in catalogue-wide rows (businessId NULL) matched by name
+   * and labelled them "Reference". Once suppliers became tenant-owned (#31)
+   * there was no admin path left to maintain either those rows or the
+   * suppliers they point at, so the feed could only go stale while still
+   * presenting itself as authoritative. A price a contractor cannot trace to
+   * a merchant they deal with is worse than no price.
    *
    * Returns the most recent entry per supplier: the comparison answers "what
    * does each supplier charge", not "every price ever seen". The full history
@@ -49,14 +47,12 @@ export class MaterialPricesService {
 
     const entries = await this.prisma.materialPriceEntry.findMany({
       where: {
-        OR: [
-          { businessId, materialFavouriteId },
-          // Curated reference rows, matched on name.
-          { businessId: null, name: { equals: material.name, mode: "insensitive" } },
-        ],
-        // A soft-deleted supplier is one an admin has retired; showing its
-        // price as a live option would send a contractor to a dead merchant.
-        // SuppliersService.findAll does NOT filter this, so it must be done here.
+        businessId,
+        materialFavouriteId,
+        // A retired supplier is one this contractor stopped using; offering
+        // its price would quietly resurrect it. This service reads
+        // MaterialPriceEntry directly rather than through SuppliersService, so
+        // it needs its own filter.
         supplier: { deletedAt: null },
       },
       include: { supplier: true },
@@ -76,7 +72,6 @@ export class MaterialPricesService {
         priceCents: e.priceCents,
         note: e.note,
         fetchedAt: e.fetchedAt.toISOString(),
-        own: e.businessId !== null,
       });
     }
 
@@ -133,8 +128,7 @@ export class MaterialPricesService {
   async remove(businessId: string, id: string): Promise<void> {
     const entry = await this.prisma.materialPriceEntry.findUnique({ where: { id } });
     if (!entry) throw new NotFoundException("Price entry not found");
-    // Curated rows (businessId null) belong to the platform, not to whoever
-    // asks. Only an admin may remove those.
+    // Ids are not capabilities — re-check ownership before deleting.
     if (entry.businessId !== businessId) {
       throw new ForbiddenException("Cannot delete a price entry you did not record");
     }

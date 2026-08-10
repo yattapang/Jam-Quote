@@ -45,15 +45,17 @@ describe("MaterialPricesService.findForMaterial", () => {
     expect(prisma.materialPriceEntry.findMany).not.toHaveBeenCalled();
   });
 
-  it("scopes the query to this business's own entries plus curated rows", async () => {
+  it("returns only prices this business recorded — no curated reference rows", async () => {
+    // The curated feed was dropped with #31: once suppliers became tenant-owned
+    // there was no admin path to keep either the prices or their suppliers
+    // current, so "Reference" could only ever mean "stale and untraceable".
     const { svc, prisma } = harness();
     await svc.findForMaterial("biz-1", "mat-1");
 
     const where = prisma.materialPriceEntry.findMany.mock.calls[0]?.[0].where;
-    expect(where.OR).toEqual([
-      { businessId: "biz-1", materialFavouriteId: "mat-1" },
-      { businessId: null, name: { equals: MATERIAL.name, mode: "insensitive" } },
-    ]);
+    expect(where.OR).toBeUndefined();
+    expect(where.businessId).toBe("biz-1");
+    expect(where.materialFavouriteId).toBe("mat-1");
   });
 
   it("excludes retired suppliers", async () => {
@@ -92,19 +94,6 @@ describe("MaterialPricesService.findForMaterial", () => {
     expect((await svc.findForMaterial("biz-1", "mat-1")).map((r) => r.id)).toEqual(["b", "a"]);
   });
 
-  it("flags own prices apart from curated reference prices", async () => {
-    const { svc } = harness({
-      materialPriceEntry: {
-        findMany: vi.fn().mockResolvedValue([
-          entry({ id: "mine", supplierId: "sup-a", supplier: SUPPLIER_A, businessId: "biz-1" }),
-          entry({ id: "curated", supplierId: "sup-b", supplier: SUPPLIER_B, businessId: null }),
-        ]),
-      },
-    });
-    const rows = await svc.findForMaterial("biz-1", "mat-1");
-    expect(rows.find((r) => r.id === "mine")?.own).toBe(true);
-    expect(rows.find((r) => r.id === "curated")?.own).toBe(false);
-  });
 
   it("returns fetchedAt as an ISO string, not a pre-rendered relative time", async () => {
     // Formatting belongs to the client — web and mobile render it differently,

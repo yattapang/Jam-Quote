@@ -62,21 +62,6 @@
   white-space: nowrap;
 }
 
-/* Own vs curated is the trust signal, so the two never share a colour: an
-   accent pill for a price this contractor recorded, a flat neutral one for a
-   catalogue lookup. */
-.badgeOwn {
-  composes: badge;
-  background: var(--jq-accent-soft);
-  color: var(--jq-accent);
-}
-
-.badgeReference {
-  composes: badge;
-  background: var(--jq-neutral-pill-soft);
-  color: var(--jq-neutral-pill);
-}
-
 .badgeCheapest {
   composes: badge;
   background: var(--jq-good-soft);

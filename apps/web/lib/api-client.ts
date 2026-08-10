@@ -1232,10 +1232,6 @@ export interface ApiSupplierPrice {
   priceCents: number;
   note: string | null;
   fetchedAt: string;
-  /** true = a price this contractor recorded; false = a platform-curated
-   * reference price. The UI must keep them apart — "what I actually paid"
-   * carries more weight than a catalogue lookup. */
-  own: boolean;
 }
 
 export interface NewMaterialPriceInput {

@@ -837,7 +837,6 @@ describe("supplier price comparison (#26 Phase 2b)", () => {
     priceCents: 115_000,
     note: "cash price",
     fetchedAt: "2026-08-08T09:15:00.000Z",
-    own: true,
   };
 
   it("getMaterialPrices sends the material id as a query param", async () => {
@@ -848,7 +847,6 @@ describe("supplier price comparison (#26 Phase 2b)", () => {
     // can render it relative to now.
     expect(rows[0]?.priceCents).toBe(115_000);
     expect(rows[0]?.fetchedAt).toBe("2026-08-08T09:15:00.000Z");
-    expect(rows[0]?.own).toBe(true);
     const [url] = spy.mock.calls[0] as [string];
     expect(new URL(String(url)).searchParams.get("materialFavouriteId")).toBe("mf-cement");
   });
