@@ -6,6 +6,8 @@ export const createBusinessSchema = z.object({
   trn: trnSchema.optional(),
   logoUrl: z.string().url().optional(),
   addressLine: z.string().optional(),
+  // Free text: no authoritative town list exists to validate against.
+  town: z.string().max(80).optional(),
   parish: z.enum(PARISHES).optional(),
   tradeType: z.string().optional(),
   defaultGctRate: z.number().min(0).max(100).optional(),

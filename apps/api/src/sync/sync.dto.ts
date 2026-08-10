@@ -16,6 +16,7 @@ const clientDataSchema = z.object({
   whatsapp: z.string().nullish(),
   email: z.string().nullish(),
   addressLine: z.string().nullish(),
+  town: z.string().nullish(),
   parish: z.string().nullish(),
   notes: z.string().nullish(),
 });
@@ -24,6 +25,7 @@ const jobDataSchema = z.object({
   name: z.string().min(1),
   clientId: z.string().uuid().nullish(),
   addressLine: z.string().nullish(),
+  town: z.string().nullish(),
   parish: z.string().nullish(),
   stage: z.string().optional(),
   progressPct: z.number().int().min(0).max(100).optional(),

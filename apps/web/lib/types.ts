@@ -71,6 +71,9 @@ export interface Client {
   /** Computed `firstName + " " + lastName` — kept for existing display usages. */
   name: string;
   initials: string;
+  /** Town/city. Free text and separate from `parish`, which is the
+   * jurisdiction region the rule-pack keys off — a parish is not a town. */
+  town: string;
   parish: Parish;
   phone: string;
   address: string;
@@ -204,6 +207,7 @@ export interface Business {
   id: string;
   name: string;
   trn: string;
+  town: string;
   parish: Parish;
   tradeType: string;
   addressLine: string;

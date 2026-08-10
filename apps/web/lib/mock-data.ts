@@ -50,6 +50,7 @@ export const fixtureBusiness: Business = {
   id: "seed-business-blackwood",
   name: businessProfile.name,
   trn: businessProfile.trn,
+  town: "",
   parish: businessProfile.parish,
   tradeType: businessProfile.tradeType,
   addressLine: "12 Barbican Road, Kingston 8",
@@ -77,6 +78,9 @@ export const clients: Client[] = demoClients.map((c) => {
     lastName,
     name: c.name,
     initials: c.initials,
+    // Demo fixtures predate the town field; blank rather than invented, so the
+    // fallback never shows an address the contractor did not enter.
+    town: "",
     parish: c.parish as Client["parish"],
     phone: c.phone,
     address: c.addressLine,
@@ -159,6 +163,7 @@ export interface JobDetail {
   clientId: string;
   clientName: string;
   addressLine: string;
+  town: string;
   parish: string;
   stage: string;
   progressPct: number;
@@ -175,6 +180,8 @@ export function findJobDetail(id: string): JobDetail | undefined {
     clientId: j.clientId,
     clientName: findDemoClient(j.clientId)?.name ?? "Unknown",
     addressLine: j.addressLine,
+    // Demo fixtures predate the town field; blank rather than invented.
+    town: "",
     parish: j.parish,
     stage: j.stage,
     progressPct: j.progressPct,

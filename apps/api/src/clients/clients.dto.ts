@@ -7,6 +7,7 @@ const clientContactFields = {
   whatsapp: z.string().optional(),
   email: z.string().email().optional(),
   addressLine: z.string().optional(),
+  town: z.string().max(80).optional(),
   parish: z.enum(PARISHES).optional(),
   notes: z.string().optional(),
 };

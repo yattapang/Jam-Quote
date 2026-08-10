@@ -441,7 +441,11 @@ export default function AdminConsole({
     { label: "Total businesses", value: ov ? ov.businesses.toLocaleString() : "1,284", delta: "+42", sub: "this month", tone: "good" },
     { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "892", delta: "+18", sub: "net new", tone: "good" },
     { label: "MRR", value: money(2418540), delta: "+4.7%", sub: "MoM", tone: "good" },
-    { label: "Suppliers tracked", value: ov ? String(ov.suppliersTracked) : "37", delta: "feeds", sub: "tracked", tone: "warn" },
+    // "feeds" was accurate when suppliers were a curated platform directory
+    // with price feeds. They are tenant-owned now (#31), so this counts the
+    // sum of every contractor's own merchant list — a usage metric, not a
+    // directory the platform maintains.
+    { label: "Suppliers added", value: ov ? String(ov.suppliersTracked) : "37", delta: "all tenants", sub: "merchant lists", tone: "info" },
     { label: "Jurisdictions live", value: ov ? String(ov.jurisdictionsLive) : "3", delta: jm.countryCode, sub: "", tone: "info" },
   ];
   const rv: [string, number][] = [["J", 1.28], ["F", 1.35], ["M", 1.42], ["A", 1.55], ["M", 1.63], ["J", 1.74], ["J", 1.88], ["A", 1.97], ["S", 2.08], ["O", 2.19], ["N", 2.31], ["D", 2.42]];

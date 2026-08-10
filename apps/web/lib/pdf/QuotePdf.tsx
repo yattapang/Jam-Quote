@@ -13,6 +13,7 @@ import {
 import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
 import { getQuoteTotals, groupLinesByHeading, lineUnitLabel, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
+import { formatAddress } from "@/lib/format-address";
 
 /**
  * Server-rendered branded quote PDF. Built-in Helvetica only (no custom/remote
@@ -217,8 +218,7 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
             <Text style={styles.businessName}>{business.name}</Text>
             <Text style={styles.muted}>TRN {business.trn || "—"}</Text>
             <Text style={styles.muted}>
-              {business.addressLine ? `${business.addressLine}, ` : ""}
-              {business.parish}
+              {formatAddress([business.addressLine, business.town, business.parish])}
             </Text>
           </View>
           <View>
@@ -232,7 +232,11 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
         <View style={styles.billTo}>
           <Text style={styles.sectionLabel}>Bill to</Text>
           <Text style={styles.billToName}>{client?.name ?? "Unknown client"}</Text>
-          {client?.address ? <Text style={styles.muted}>{client.address}</Text> : null}
+          {/* Street, town and parish on one line — the client's town never
+              reached the customer's copy before #30. */}
+          {formatAddress([client?.address, client?.town, client?.parish]) ? (
+            <Text style={styles.muted}>{formatAddress([client?.address, client?.town, client?.parish])}</Text>
+          ) : null}
           {client?.phone ? <Text style={styles.muted}>{client.phone}</Text> : null}
         </View>
 

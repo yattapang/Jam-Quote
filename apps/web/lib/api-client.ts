@@ -130,6 +130,7 @@ export interface ApiClientRow {
   name?: string;
   phone?: string | null;
   email?: string | null;
+  town?: string | null;
   parish?: string | null;
   addressLine?: string | null;
 }
@@ -138,6 +139,7 @@ export interface ApiJob {
   clientId?: string | null;
   name: string;
   addressLine?: string | null;
+  town?: string | null;
   parish?: string | null;
   stage: string;
   progressPct: number;
@@ -274,6 +276,7 @@ export interface ApiBusiness {
   currency?: string;
   trn?: string | null;
   addressLine?: string | null;
+  town?: string | null;
   parish?: string | null;
   tradeType?: string | null;
   // Prisma Decimal comes over JSON as a numeric string, e.g. "15.00".
@@ -356,6 +359,7 @@ export function mapClient(c: ApiClientRow): Client {
     lastName: c.lastName,
     name,
     initials: initialsOf(name),
+    town: c.town ?? "",
     parish: (c.parish ?? "") as Client["parish"],
     phone: c.phone ?? "",
     address: c.addressLine ?? "",
@@ -560,6 +564,7 @@ export function mapBusiness(b: ApiBusiness): Business {
     id: b.id,
     name: b.name,
     trn: b.trn ?? "",
+    town: b.town ?? "",
     parish: (b.parish ?? "") as Business["parish"],
     tradeType: b.tradeType ?? "",
     addressLine: b.addressLine ?? "",
@@ -580,6 +585,7 @@ export interface NewClientInput {
   lastName?: string;
   phone?: string;
   email?: string;
+  town?: string;
   parish?: string;
   addressLine?: string;
 }
@@ -591,6 +597,7 @@ export interface NewJobInput {
   name: string;
   clientId?: string;
   addressLine?: string;
+  town?: string;
   parish?: string;
 }
 export async function createJob(input: NewJobInput): Promise<{ id: string }> {
@@ -805,6 +812,7 @@ export interface UpdateBusinessInput {
   name?: string;
   trn?: string;
   addressLine?: string;
+  town?: string;
   parish?: string;
   tradeType?: string;
   defaultGctRatePct?: number;

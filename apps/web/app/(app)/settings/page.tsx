@@ -4,6 +4,7 @@ import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib
 import EditBusinessButton from "./EditBusinessButton";
 import BillingCard from "./BillingCard";
 import shared from "../shared.module.css";
+import { formatAddress } from "@/lib/format-address";
 
 export const metadata = { title: "Settings · JamQuote" };
 
@@ -40,7 +41,7 @@ export default async function SettingsPage() {
           </div>
           <div className={shared.totalRowMuted}>
             <span>Parish</span>
-            <span>{business.parish || "—"}</span>
+            <span>{formatAddress([business.town, business.parish]) || "—"}</span>
           </div>
           <div className={shared.totalRowMuted}>
             <span>Trade type</span>

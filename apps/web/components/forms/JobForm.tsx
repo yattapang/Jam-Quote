@@ -16,20 +16,22 @@ const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map
 export interface JobFormValues {
   name: string;
   clientId: string;
+  town: string;
   parish: string;
   address: string;
 }
 
-export const emptyJobForm: JobFormValues = { name: "", clientId: "", parish: "", address: "" };
+export const emptyJobForm: JobFormValues = { name: "", clientId: "", town: "", parish: "", address: "" };
 
 export function jobFormValuesFromJob(job: JobDetail): JobFormValues {
-  return { name: job.name, clientId: job.clientId, parish: job.parish, address: job.addressLine };
+  return { name: job.name, clientId: job.clientId, town: job.town, parish: job.parish, address: job.addressLine };
 }
 
 export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
   return {
     name: values.name.trim(),
     clientId: values.clientId || undefined,
+    town: values.town.trim() || undefined,
     parish: values.parish || undefined,
     addressLine: values.address.trim() || undefined,
   };
@@ -104,6 +106,7 @@ export default function JobForm({
       />
       <div className={modalStyles.row2}>
         <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} />
+        <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" />
         <Select label="Parish" options={parishOptions} value={values.parish} onChange={(e) => set("parish", e.target.value)} />
       </div>
       {error && <span className={modalStyles.error}>{error}</span>}

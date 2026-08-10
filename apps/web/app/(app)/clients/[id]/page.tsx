@@ -8,6 +8,7 @@ import { quoteStatusPill } from "@/lib/status";
 import { getClient, getQuotes } from "@/lib/api-server";
 import EditClientButton from "./EditClientButton";
 import shared from "../../shared.module.css";
+import { formatAddress } from "@/lib/format-address";
 
 export const metadata = { title: "Client · JamQuote" };
 
@@ -85,7 +86,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Parish</span>
-                <span>{client.parish || "—"}</span>
+                <span>{formatAddress([client.town, client.parish]) || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Phone</span>

@@ -31,6 +31,7 @@ export default function EditBusinessButton({
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(business.name);
   const [trn, setTrn] = useState(business.trn);
+  const [town, setTown] = useState<string>(business.town);
   const [parish, setParish] = useState<string>(business.parish);
   const [tradeType, setTradeType] = useState(business.tradeType);
   const [addressLine, setAddressLine] = useState(business.addressLine);
@@ -51,6 +52,7 @@ export default function EditBusinessButton({
       await updateBusiness(business.id, {
         name: name.trim(),
         trn: trn.trim() || undefined,
+        town: town.trim() || undefined,
         parish: parish || undefined,
         tradeType: tradeType.trim() || undefined,
         addressLine: addressLine.trim() || undefined,
@@ -76,6 +78,7 @@ export default function EditBusinessButton({
             <Input label="Business name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             <div className={modalStyles.row2}>
               <Input label="TRN" value={trn} onChange={(e) => setTrn(e.target.value)} placeholder="102-458-963" />
+              <Input label="Town / city" value={town} onChange={(e) => setTown(e.target.value)} placeholder="e.g. Ocho Rios" />
               <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
             </div>
             <div className={modalStyles.row2}>

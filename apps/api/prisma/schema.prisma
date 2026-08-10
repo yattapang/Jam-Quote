@@ -126,6 +126,11 @@ model Business {
   trn            String? // taxpayer id (TRN in JM), validated per jurisdiction
   logoUrl        String?
   addressLine    String?
+  /// Town or city. Distinct from `parish`, which is the JURISDICTION region
+  /// (14 of them in JM) wired to the rule-pack via getJurisdiction — a parish
+  /// is not a town. Free text: there is no authoritative town list to validate
+  /// against, and inventing a controlled vocabulary would fight the contractor.
+  town           String?
   parish         String? // administrative region (label per jurisdiction)
   tradeType      String?
   defaultGctRate Decimal    @default(15.0) @db.Decimal(5, 2) // resolved tax rate; default from rule-pack
@@ -209,6 +214,7 @@ model Client {
   whatsapp    String?
   email       String?
   addressLine String?
+  town        String? // town/city — see Business.town
   parish      String?
   notes       String?
   createdAt   DateTime  @default(now())
@@ -230,6 +236,7 @@ model Job {
   client      Client?   @relation(fields: [clientId], references: [id])
   name        String
   addressLine String?
+  town        String? // town/city — see Business.town
   parish      String?
   stage       String    @default("Quoted")
   progressPct Int       @default(0)

@@ -226,6 +226,9 @@ describe("pure mappers", () => {
       lastName: "Reid",
       name: "Basil Reid",
       initials: "BR",
+      // Unset on this fixture — a pre-#30 row has no town, and the mapper
+      // normalizes null to "" rather than leaving it undefined.
+      town: "",
       parish: "St. Catherine",
       phone: "876 402 8811",
       address: "Lot 14 Bloxburgh Dr, Spanish Town",
@@ -271,6 +274,7 @@ describe("pure mappers", () => {
       id: "seed-business-blackwood",
       name: "Blackwood Construction & Masonry",
       trn: "102-458-963",
+      town: "",
       parish: "St. Catherine",
       tradeType: "General contractor & masonry",
       addressLine: "12 Barbican Road, Kingston 8",

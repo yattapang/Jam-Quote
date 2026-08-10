@@ -5,6 +5,7 @@ export const createJobSchema = z.object({
   clientId: z.string().min(1).optional(),
   name: z.string().min(1),
   addressLine: z.string().optional(),
+  town: z.string().max(80).optional(),
   parish: z.enum(PARISHES).optional(),
   stage: z.string().min(1).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),

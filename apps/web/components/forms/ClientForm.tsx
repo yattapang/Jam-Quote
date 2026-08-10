@@ -16,6 +16,7 @@ export interface ClientFormValues {
   lastName: string;
   phone: string;
   email: string;
+  town: string;
   parish: string;
   address: string;
 }
@@ -25,6 +26,7 @@ export const emptyClientForm: ClientFormValues = {
   lastName: "",
   phone: "",
   email: "",
+  town: "",
   parish: "",
   address: "",
 };
@@ -35,6 +37,7 @@ export function clientFormValuesFromClient(client: Client): ClientFormValues {
     lastName: client.lastName,
     phone: client.phone,
     email: client.email ?? "",
+    town: client.town,
     parish: client.parish,
     address: client.address,
   };
@@ -46,6 +49,7 @@ export function clientPayloadFromValues(values: ClientFormValues): NewClientInpu
     lastName: values.lastName.trim() || undefined,
     phone: values.phone.trim() || undefined,
     email: values.email.trim() || undefined,
+    town: values.town.trim() || undefined,
     parish: values.parish || undefined,
     addressLine: values.address.trim() || undefined,
   };
@@ -109,6 +113,7 @@ export default function ClientForm({
           placeholder="client@example.com"
         />
       </div>
+      <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" />
       <Select label="Parish" options={parishOptions} value={values.parish} onChange={(e) => set("parish", e.target.value)} />
       <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} />
       {error && <span className={modalStyles.error}>{error}</span>}

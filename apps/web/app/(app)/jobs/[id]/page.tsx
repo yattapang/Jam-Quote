@@ -8,6 +8,7 @@ import { quoteStatusPill } from "@/lib/status";
 import { getJob, getClients, getQuotes } from "@/lib/api-server";
 import EditJobButton from "./EditJobButton";
 import shared from "../../shared.module.css";
+import { formatAddress } from "@/lib/format-address";
 
 export const metadata = { title: "Job · JamQuote" };
 
@@ -91,7 +92,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Parish</span>
-                <span>{job.parish || "—"}</span>
+                <span>{formatAddress([job.town, job.parish]) || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Stage</span>
