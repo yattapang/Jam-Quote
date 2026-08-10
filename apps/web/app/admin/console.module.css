@@ -103,3 +103,119 @@
 .slidein {
   animation: admin-slidein 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
 }
+
+/* ---------------------------------------------------------------------------
+   Responsive shell.
+
+   The console's layout used to live in inline styles on the shell div and the
+   <aside> (a hardcoded 246px, flex: none). Inline styles beat any stylesheet
+   rule that isn't !important, so no media query could reach them and the nav
+   was unconditional — on a ~390px phone it took 246px and left ~144px for the
+   screen itself. These classes exist so the breakpoint below can do its job.
+
+   Desktop is deliberately unchanged; everything mobile-specific is inside the
+   media query.
+--------------------------------------------------------------------------- */
+.shell {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.aside {
+  width: 246px;
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Hidden on desktop; becomes the mobile header. */
+.topbar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    padding: 0 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 40;
+  }
+
+  .hamburger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    width: 38px;
+    height: 38px;
+    padding: 9px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    flex: none;
+  }
+  .hamburger span {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: var(--text);
+    border-radius: 2px;
+  }
+
+  /* Off-canvas drawer driven by `left` rather than transform, matching the
+     tenant sidebar — transform-based sliding proved unreliable across
+     rendering engines there. */
+  .aside {
+    position: fixed;
+    top: 0;
+    left: -300px; /* width + room for the shadow, fully off-screen */
+    height: 100vh;
+    height: 100dvh;
+    z-index: 60;
+    transition: left 0.24s ease;
+  }
+  .aside.asideOpen {
+    left: 0;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 50;
+  }
+
+  /* padding-top clears the fixed top bar. overflow-x matters because .shell
+     clips overflow so the two columns can scroll independently — on a phone
+     that turns a wide table into content you simply cannot reach, so let the
+     main column scroll sideways instead of hiding what spills out. */
+  .main {
+    padding-top: 52px;
+    overflow-x: auto;
+  }
+}

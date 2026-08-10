@@ -105,6 +105,11 @@ export default function AdminConsole({
   // implicitly holds every capability — the API enforces the same; this only
   // gates what the console offers. See @jamquote/core AdminCapability.
   const me = data.me;
+  // Mobile nav drawer. Closed by default and closed again on every navigation,
+  // or it would sit open over the screen the admin just chose.
+  const [navOpen, setNavOpen] = useState(false);
+  const closeNav = () => setNavOpen(false);
+
   const can = (cap: string) => me.isSuperAdmin || me.capabilities.includes(cap);
   const canManageTenants = can("MANAGE_TENANTS");
   const canManagePricing = can("MANAGE_PRICING");
@@ -120,6 +125,12 @@ export default function AdminConsole({
       .join("") || "A";
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [screen, setScreen] = useState<Screen>("overview");
+  /** Navigate. On mobile this also dismisses the drawer — every nav control
+   * goes through here so no call site can forget. */
+  const go = (next: Screen) => {
+    setScreen(next);
+    setNavOpen(false);
+  };
   const [tenantId, setTenantId] = useState<number | null>(null);
   const [diffOpen, setDiffOpen] = useState(false);
   const [published, setPublished] = useState(false);
@@ -540,9 +551,27 @@ export default function AdminConsole({
   const iconStroke = { fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
   return (
-    <div className={`${styles.root} ${styles.scr}`} data-theme={theme} style={{ display: "flex", height: "100vh", width: "100%", background: "var(--bg)", color: "var(--text)", overflow: "hidden" }}>
+    <div className={`${styles.root} ${styles.scr} ${styles.shell}`} data-theme={theme}>
+      {/* Mobile header — hidden on desktop via CSS. */}
+      <header className={styles.topbar}>
+        <button
+          type="button"
+          className={styles.hamburger}
+          aria-label="Open navigation menu"
+          aria-expanded={navOpen}
+          onClick={() => setNavOpen(true)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 15 }}>JamQuote staff</div>
+      </header>
+
+      {navOpen && <div className={styles.backdrop} onClick={closeNav} aria-hidden="true" />}
+
       {/* SIDEBAR */}
-      <aside style={{ width: 246, flex: "none", background: "var(--surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", height: "100%" }}>
+      <aside className={`${styles.aside} ${navOpen ? styles.asideOpen : ""}`}>
         <div style={{ padding: "18px 18px 14px", display: "flex", alignItems: "center", gap: 11, borderBottom: "1px solid var(--border)" }}>
           <div style={{ width: 34, height: 34, flex: "none", borderRadius: 9, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--surface)" }}>
             <svg width="19" height="19" viewBox="0 0 24 24" {...iconStroke} strokeWidth={2.4}><path d="M4 20V7l8-4 8 4v13" /><path d="M9 20v-6h6v6" /></svg>
@@ -554,42 +583,42 @@ export default function AdminConsole({
         </div>
         <nav className={styles.scr} style={{ flex: 1, overflowY: "auto", padding: "16px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".09em", color: "var(--muted)", padding: "6px 10px 8px" }}>MONITOR</div>
-          <button className={styles.navBtn} onClick={() => setScreen("overview")} style={navBtn("overview")}>
+          <button className={styles.navBtn} onClick={() => go("overview")} style={navBtn("overview")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
             <span>Platform overview</span>
           </button>
-          <button className={styles.navBtn} onClick={() => setScreen("tenants")} style={navBtn("tenants")}>
+          <button className={styles.navBtn} onClick={() => go("tenants")} style={navBtn("tenants")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
             <span>Tenants</span>
             <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{ov ? ov.businesses.toLocaleString() : "1,284"}</span>
           </button>
           {canViewFinancials && (
-            <button className={styles.navBtn} onClick={() => setScreen("financials")} style={navBtn("financials")}>
+            <button className={styles.navBtn} onClick={() => go("financials")} style={navBtn("financials")}>
               <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></svg>
               <span>Financials</span>
             </button>
           )}
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".09em", color: "var(--muted)", padding: "16px 10px 8px" }}>GOVERN</div>
-          <button className={styles.navBtn} onClick={() => setScreen("regulatory")} style={navBtn("regulatory")}>
+          <button className={styles.navBtn} onClick={() => go("regulatory")} style={navBtn("regulatory")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M9 12l2 2 4-4" /></svg>
             <span>Regulatory queue</span>
             <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--warn)", background: "color-mix(in srgb,var(--warn) 16%,transparent)", borderRadius: 6, padding: "1px 7px" }}>3</span>
           </button>
-          <button className={styles.navBtn} onClick={() => setScreen("rulepack")} style={navBtn("rulepack")}>
+          <button className={styles.navBtn} onClick={() => go("rulepack")} style={navBtn("rulepack")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M4 4h11l5 5v11H4z" /><path d="M15 4v5h5" /><path d="M8 13h6M8 17h4" /></svg>
             <span>Rule-pack verify</span>
             <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", marginLeft: "auto" }} />
           </button>
-          <button className={styles.navBtn} onClick={() => setScreen("pricing")} style={navBtn("pricing")}>
+          <button className={styles.navBtn} onClick={() => go("pricing")} style={navBtn("pricing")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9 9.5c0-1.4 1.3-2.5 3-2.5s3 1 3 2.2c0 2.8-6 1.3-6 4.1 0 1.2 1.3 2.2 3 2.2s3-1.1 3-2.5" /></svg>
             <span>Pricing</span>
           </button>
-          <button className={styles.navBtn} onClick={() => setScreen("activity")} style={navBtn("activity")}>
+          <button className={styles.navBtn} onClick={() => go("activity")} style={navBtn("activity")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></svg>
             <span>Activity log</span>
           </button>
           {canManageAdmins && (
-            <button className={styles.navBtn} onClick={() => setScreen("admins")} style={navBtn("admins")}>
+            <button className={styles.navBtn} onClick={() => go("admins")} style={navBtn("admins")}>
               <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20a5.5 5.5 0 0 1 11 0" /><path d="M17 8h5M19.5 5.5v5" /></svg>
               <span>Admins</span>
             </button>
@@ -615,7 +644,7 @@ export default function AdminConsole({
       </aside>
 
       {/* MAIN */}
-      <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", height: "100%" }}>
+      <main className={styles.main}>
         <header style={{ flex: "none", height: 60, borderBottom: "1px solid var(--border)", background: "color-mix(in srgb,var(--surface) 70%,transparent)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 16, padding: "0 24px" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, letterSpacing: "-.01em", lineHeight: 1.1 }}>{screenTitle}</div>
@@ -680,7 +709,7 @@ export default function AdminConsole({
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Recent signups</div>
-                    <a className={styles.link} href="#" onClick={(e) => { e.preventDefault(); setScreen("tenants"); }} style={{ fontSize: 12, fontWeight: 600 }}>View all</a>
+                    <a className={styles.link} href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }} style={{ fontSize: 12, fontWeight: 600 }}>View all</a>
                   </div>
                   {signups.map((g) => (
                     <div key={g[0]} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: "1px solid var(--border)" }}>
@@ -830,7 +859,7 @@ export default function AdminConsole({
                         <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontWeight: 600, color: "var(--info)" }}>{r[1]}</span>·<span>Effective {r[2]}</span>·<span>Flagged {r[3]}</span></div>
                       </div>
                       <span style={pill(st)}>{sl}</span>
-                      <button onClick={() => { setScreen("rulepack"); if (r[0].includes("GCT")) setDiffOpen(true); }} style={{ height: 32, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: isNeeds ? "none" : "1px solid var(--border)", background: isNeeds ? "var(--accent)" : "var(--surface)", color: isNeeds ? "#fff" : "var(--text)" }}>{isNeeds ? "Review diff" : "View"}</button>
+                      <button onClick={() => { go("rulepack"); if (r[0].includes("GCT")) setDiffOpen(true); }} style={{ height: 32, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: isNeeds ? "none" : "1px solid var(--border)", background: isNeeds ? "var(--accent)" : "var(--surface)", color: isNeeds ? "#fff" : "var(--text)" }}>{isNeeds ? "Review diff" : "View"}</button>
                     </div>
                   );
                 })}
