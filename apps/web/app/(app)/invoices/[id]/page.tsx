@@ -13,6 +13,7 @@ import {
 import { getInvoice, getClients } from "@/lib/api-server";
 import InvoiceActions from "./InvoiceActions";
 import shared from "../../shared.module.css";
+import buttonStyles from "@/components/ui/Button.module.css";
 
 export const metadata = { title: "Invoice · JamQuote" };
 
@@ -51,6 +52,15 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           <span className={shared.subtitle}>{client?.name ?? "Unknown client"}</span>
         </div>
         <div className={shared.headerActions}>
+          {/* Plain <a>, not a Link: this is a file download from a route
+              handler, so client-side navigation would fight it. Matches how
+              the quote PDF is exposed. */}
+          <a
+            href={`/invoices/${invoice.id}/pdf`}
+            className={`${buttonStyles.base} ${buttonStyles.secondary} ${buttonStyles.sm}`}
+          >
+            Download PDF
+          </a>
           <InvoiceActions id={invoice.id} status={invoice.status} />
         </div>
       </header>
