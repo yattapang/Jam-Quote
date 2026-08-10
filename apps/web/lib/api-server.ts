@@ -408,3 +408,29 @@ export async function getAdminData(): Promise<AdminData> {
   // Cap the audit feed the console renders, even if the API ever returns more.
   return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack };
 }
+
+/**
+ * Fetches the tenant's logo as raw bytes for embedding in a PDF (#27).
+ *
+ * Separate from serverRequest because that one assumes a JSON body. Returns
+ * null on ANY failure — a missing or unreachable logo must never stop a quote
+ * from rendering, so the document falls back to the business name as text.
+ */
+export async function getLogoBytes(): Promise<{ data: Buffer; contentType: string } | null> {
+  try {
+    const token = cookies().get(TOKEN_COOKIE)?.value;
+    if (!token) return null;
+    const res = await fetch(`${API_BASE_URL}/business/logo`, {
+      headers: { authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+    // 404 is the normal "no logo set" case, not an error worth logging.
+    if (!res.ok) return null;
+    return {
+      data: Buffer.from(await res.arrayBuffer()),
+      contentType: res.headers.get("content-type") ?? "image/png",
+    };
+  } catch {
+    return null;
+  }
+}

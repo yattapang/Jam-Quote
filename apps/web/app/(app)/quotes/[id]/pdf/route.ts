@@ -1,5 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { getQuote, getClients, getBusiness } from "@/lib/api-server";
+import { getQuote, getClients, getBusiness, getLogoBytes } from "@/lib/api-server";
 import QuotePdf from "@/lib/pdf/QuotePdf";
 
 // @react-pdf/renderer needs Node's Buffer/streams — not available on the edge
@@ -13,10 +13,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     return new Response("Quote not found", { status: 404 });
   }
 
-  const [clients, business] = await Promise.all([getClients(), getBusiness()]);
+  // getLogoBytes resolves null rather than throwing, so a missing or
+  // unreachable logo degrades to the text header instead of failing the quote.
+  const [clients, business, logo] = await Promise.all([getClients(), getBusiness(), getLogoBytes()]);
   const client = clients.find((c) => c.id === quote.clientId);
 
-  const buffer = await renderToBuffer(QuotePdf({ quote, client, business }));
+  const buffer = await renderToBuffer(QuotePdf({ quote, client, business, logo: logo ?? undefined }));
 
   return new Response(new Uint8Array(buffer), {
     headers: {

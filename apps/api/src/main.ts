@@ -1,10 +1,21 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
+import { json, urlencoded } from "express";
 import { AppModule } from "./app.module.js";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // bodyParser: false so the limits below apply — Nest's built-in parser caps
+  // JSON at 100kb, which a base64 logo upload (#27) exceeds.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // 4mb covers a 2MB logo after base64 inflation (~4/3). normalizeLogo
+  // enforces the real 2MB cap on the DECODED bytes; this only bounds the
+  // request body.
+  app.use(json({ limit: "4mb" }));
+  // Required, not incidental: the WiPay webhook posts form-encoded and reads
+  // req.body (payments.controller). Dropping this would leave that body empty
+  // and fail payment callbacks silently.
+  app.use(urlencoded({ extended: true, limit: "1mb" }));
   // The API sits behind Render's load balancer, which terminates TLS and
   // proxies every request. Without this, express (and therefore the
   // throttler guard, which keys on req.ip) sees the proxy's IP for every

@@ -1,4 +1,5 @@
-import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, Patch, Post, Res, UseGuards } from "@nestjs/common";
+import type { Response } from "express";
 import type { Business } from "@prisma/client";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
@@ -7,9 +8,12 @@ import { BusinessService } from "./business.service.js";
 import {
   createBusinessSchema,
   updateBusinessSchema,
+  uploadLogoSchema,
   type CreateBusinessInput,
   type UpdateBusinessInput,
+  type UploadLogoInput,
 } from "./business.dto.js";
+import { normalizeLogo } from "./logo-image.js";
 
 /**
  * Every route here is tenant-scoped and behind TenantAuthGuard.
@@ -41,6 +45,61 @@ export class BusinessController {
   @Get("current")
   current(@BusinessId() businessId: string): Promise<Business> {
     return this.business.findById(businessId);
+  }
+
+
+  // --- Logo (#27) ----------------------------------------------------------
+  // Routes are declared BEFORE @Get(":id") on purpose: Nest matches in
+  // declaration order, so "logo" would otherwise be swallowed as an :id.
+
+  /**
+   * Metadata only — no bytes. Lets the settings screen show "you have a logo,
+   * 800x240" without pulling the image down twice.
+   */
+  @Get("logo/meta")
+  logoMeta(@BusinessId() businessId: string) {
+    return this.business.getLogoMeta(businessId);
+  }
+
+  /**
+   * Serves the raw image for the caller's own business.
+   *
+   * The response headers are the real defence, and each is load-bearing:
+   *  - Content-Type is the SNIFFED type, never anything the uploader claimed.
+   *  - nosniff stops a browser second-guessing that type and executing the
+   *    bytes as HTML, which is the whole polyglot-file attack.
+   *  - inline + a fixed filename keeps a crafted name out of the download UI.
+   *  - private caching because this is one tenant's asset, not shared content.
+   */
+  @Get("logo")
+  async logo(@BusinessId() businessId: string, @Res() res: Response): Promise<void> {
+    const row = await this.business.getLogo(businessId);
+    if (!row) throw new NotFoundException("No logo set");
+    res.setHeader("Content-Type", row.contentType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", 'inline; filename="logo"');
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.end(Buffer.from(row.bytes));
+  }
+
+  /**
+   * Upload or replace. The bytes go through normalizeLogo before they are
+   * stored: format sniffed from the file itself, size and dimensions bounded,
+   * and Exif/text metadata stripped — a phone photo of a shop sign otherwise
+   * carries GPS coordinates into every quote PDF the contractor sends.
+   */
+  @Post("logo")
+  async uploadLogo(
+    @BusinessId() businessId: string,
+    @Body(new ZodValidationPipe(uploadLogoSchema)) body: UploadLogoInput,
+  ) {
+    const normalized = normalizeLogo(Buffer.from(body.base64, "base64"));
+    return this.business.setLogo(businessId, normalized);
+  }
+
+  @Delete("logo")
+  async removeLogo(@BusinessId() businessId: string): Promise<void> {
+    await this.business.removeLogo(businessId);
   }
 
   /**

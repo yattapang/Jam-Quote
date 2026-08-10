@@ -4,11 +4,13 @@ import {
   Page as RpPage,
   View as RpView,
   Text as RpText,
+  Image as RpImage,
   StyleSheet,
   type DocumentProps,
   type PageProps,
   type ViewProps,
   type TextProps,
+  type ImageProps,
 } from "@react-pdf/renderer";
 import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
@@ -33,6 +35,7 @@ const Document = RpDocument as unknown as ComponentType<PropsWithChildren<Docume
 const Page = RpPage as unknown as ComponentType<PropsWithChildren<PageProps>>;
 const View = RpView as unknown as ComponentType<PropsWithChildren<ViewProps>>;
 const Text = RpText as unknown as ComponentType<PropsWithChildren<TextProps>>;
+const Image = RpImage as unknown as ComponentType<ImageProps>;
 const COLOR = {
   text: "#26221C",
   textMuted: "#6B6357",
@@ -52,6 +55,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 22,
+  },
+  // Bounded in both directions so a tall or very wide logo cannot push the
+  // rest of the header off the page. objectFit keeps the aspect ratio.
+  logo: {
+    maxWidth: 180,
+    maxHeight: 56,
+    marginBottom: 6,
+    objectFit: "contain",
   },
   businessName: {
     fontSize: 16,
@@ -198,9 +209,13 @@ interface QuotePdfProps {
   quote: Quote;
   client?: Client;
   business: Business;
+  /** The tenant's logo, when they have one. Omitted -> the header falls back
+   * to the business name as text, which is how every quote looked before #27
+   * and how they still look for a contractor who hasn't uploaded one. */
+  logo?: { data: Buffer; contentType: string };
 }
 
-export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
+export default function QuotePdf({ quote, client, business, logo }: QuotePdfProps) {
   const totals = getQuoteTotals(quote);
   const groups = groupLinesByHeading(quote);
   const detailed = quote.detailLevel === QuoteDetailLevel.DETAILED;
@@ -215,6 +230,11 @@ export default function QuotePdf({ quote, client, business }: QuotePdfProps) {
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
           <View>
+            {/* The logo replaces the name as the visual header, but the name
+                still prints beneath it: a logo is often a wordmark that a
+                customer cannot search for, and the business name is what
+                appears on a cheque. */}
+            {logo ? <Image style={styles.logo} src={logo.data} /> : null}
             <Text style={styles.businessName}>{business.name}</Text>
             <Text style={styles.muted}>TRN {business.trn || "—"}</Text>
             <Text style={styles.muted}>

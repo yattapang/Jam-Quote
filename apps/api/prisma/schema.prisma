@@ -162,6 +162,29 @@ model Business {
   materialUnits            MaterialUnit[]
   materialPriceEntries     MaterialPriceEntry[]
   suppliers                Supplier[]
+  logo                     BusinessLogo?
+}
+
+/// A tenant's logo for their quote and invoice documents (#27).
+///
+/// Bytes live in Postgres rather than object storage: the deployment is
+/// Render + Neon with no bucket configured, and one small row per tenant beats
+/// taking on a storage vendor for a single feature. It is a SEPARATE table
+/// from Business on purpose — Business is read on nearly every page, and
+/// carrying a megabyte of image bytes into every one of those reads would be a
+/// steady, invisible cost.
+///
+/// contentType is derived from the file's own magic bytes on upload, never
+/// from what the client claimed (see logo-image.ts), and only PNG and JPEG get
+/// that far — SVG is refused because it can carry scripts.
+model BusinessLogo {
+  businessId  String   @id
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contentType String
+  bytes       Bytes
+  width       Int
+  height      Int
+  updatedAt   DateTime @updatedAt
 }
 
 model User {

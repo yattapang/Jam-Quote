@@ -2,6 +2,7 @@ import Card from "@/components/ui/Card";
 import { businessProfile } from "@/lib/mock-data";
 import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
+import BrandingSection from "./BrandingSection";
 import BillingCard from "./BillingCard";
 import shared from "../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
@@ -28,6 +29,8 @@ export default async function SettingsPage() {
         </div>
       </header>
 
+      <BrandingSection />
+
       <Card>
         <div className={shared.statLabel}>Business profile</div>
         <div className={shared.list}>
@@ -40,7 +43,7 @@ export default async function SettingsPage() {
             <span>{business.trn || "—"}</span>
           </div>
           <div className={shared.totalRowMuted}>
-            <span>Parish</span>
+            <span>Town / parish</span>
             <span>{formatAddress([business.town, business.parish]) || "—"}</span>
           </div>
           <div className={shared.totalRowMuted}>

@@ -1288,3 +1288,38 @@ export async function createMaterialPrice(input: NewMaterialPriceInput): Promise
 export async function deleteMaterialPrice(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/material-prices/${id}`);
 }
+
+// --- Tenant logo (#27) ------------------------------------------------------
+
+export interface ApiLogoMeta {
+  contentType: string;
+  width: number;
+  height: number;
+  updatedAt: string;
+}
+
+/** Metadata only, or null when no logo is set — deliberately does not pull the
+ * image bytes just to answer "is there one?". */
+export async function getLogoMeta(): Promise<ApiLogoMeta | null> {
+  return apiClient.get<ApiLogoMeta | null>("/business/logo/meta");
+}
+
+/**
+ * Uploads a logo as base64. The server sniffs the real format from the bytes
+ * and rejects anything that is not PNG or JPEG, so no content-type is sent —
+ * a client-declared type is exactly what an SVG would abuse.
+ */
+export async function uploadLogo(base64: string): Promise<ApiLogoMeta> {
+  return apiClient.post<ApiLogoMeta>("/business/logo", { base64 });
+}
+
+export async function deleteLogo(): Promise<void> {
+  await apiClient.delete<void>("/business/logo");
+}
+
+/** Same-origin proxy URL for rendering the logo in the browser. `v` busts the
+ * 5-minute private cache after a replace, so the contractor sees the new logo
+ * immediately rather than the old one. */
+export function logoUrl(version?: string): string {
+  return `/api/proxy/business/logo${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+}

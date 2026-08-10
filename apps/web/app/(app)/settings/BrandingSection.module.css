@@ -1,0 +1,51 @@
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.blurb {
+  font-size: 13px;
+  color: var(--jq-text-muted);
+  margin-bottom: 14px;
+}
+
+.previewWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+/* Sized to roughly how the logo prints on a document rather than as a small
+   avatar — the question this setting answers is "will this look right on the
+   quote my customer receives". */
+.preview {
+  max-width: 320px;
+  max-height: 120px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  align-self: flex-start;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 8px;
+  background: var(--jq-surface);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* The native file input is replaced by a Button for visual consistency; it
+   stays in the DOM (not display:none) so it remains reachable. */
+.fileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}

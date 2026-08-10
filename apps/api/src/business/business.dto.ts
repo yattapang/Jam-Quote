@@ -19,3 +19,22 @@ export type CreateBusinessInput = z.infer<typeof createBusinessSchema>;
 
 export const updateBusinessSchema = createBusinessSchema.partial();
 export type UpdateBusinessInput = z.infer<typeof updateBusinessSchema>;
+
+/**
+ * Logo upload (#27). The image arrives base64-encoded in JSON rather than as
+ * multipart: the API validates everything else with Zod through
+ * ZodValidationPipe, and one multipart route would mean wiring an upload
+ * middleware for a single endpoint.
+ *
+ * There is deliberately NO contentType field. The format is sniffed from the
+ * file's own magic bytes (see logo-image.ts) — a client-declared type is
+ * attacker-controlled and is exactly how an SVG or a polyglot gets waved
+ * through as "image/png".
+ */
+export const uploadLogoSchema = z.object({
+  // Base64 of the raw file. The decoded-size cap lives in normalizeLogo, which
+  // sees the real bytes; capping the encoded string here only bounds the
+  // request body (base64 inflates by ~4/3).
+  base64: z.string().min(1).max(4 * 1024 * 1024),
+});
+export type UploadLogoInput = z.infer<typeof uploadLogoSchema>;
