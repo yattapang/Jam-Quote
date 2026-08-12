@@ -242,6 +242,41 @@ describe("pure mappers", () => {
     expect(mapClient(withoutEmail as MapClientArg).email).toBeUndefined();
   });
 
+  it("mapInvoice maps recorded payments, renaming providerRef to reference", () => {
+    // providerRef is named for its WiPay origin but is reused as the manual
+    // reference (cheque no., bank ref) — the view type calls it what it is.
+    const withPayments = {
+      ...apiInvoice,
+      paidCents: 60_000,
+      payments: [
+        {
+          id: "pay-1",
+          amountCents: 60_000,
+          method: "CASH",
+          providerRef: "cheque 00412",
+          status: "completed",
+          paidAt: "2026-08-01T10:00:00.000Z",
+        },
+      ],
+    };
+    const inv = mapInvoice(withPayments as MapInvoiceArg);
+    expect(inv.payments).toEqual([
+      {
+        id: "pay-1",
+        amountCents: 60_000,
+        method: "CASH",
+        reference: "cheque 00412",
+        paidAt: "2026-08-01T10:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("mapInvoice yields an empty payments array when the API omits them", () => {
+    // List reads don't include payments; the panel maps over this directly, so
+    // undefined would throw rather than render an empty history.
+    expect(mapInvoice(apiInvoice as MapInvoiceArg).payments).toEqual([]);
+  });
+
   it("mapQuote carries the denormalized total and maps lines", () => {
     const q = mapQuote(apiQuote as MapQuoteArg, "Retaining wall, Spanish Town");
     expect(q.num).toBe("QT-0142");

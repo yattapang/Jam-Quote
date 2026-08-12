@@ -14,6 +14,7 @@ import { getInvoice, getClients } from "@/lib/api-server";
 import InvoiceActions from "./InvoiceActions";
 import shared from "../../shared.module.css";
 import buttonStyles from "@/components/ui/Button.module.css";
+import PaymentsPanel from "./PaymentsPanel";
 
 export const metadata = { title: "Invoice · JamQuote" };
 
@@ -170,6 +171,15 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                 <MoneyText cents={balanceDueCents} weight={700} />
               </div>
             </div>
+          </Card>
+
+          <Card>
+            <PaymentsPanel
+              invoiceId={invoice.id}
+              status={invoice.status}
+              balanceDueCents={balanceDueCents}
+              payments={invoice.payments}
+            />
           </Card>
 
           <Card>

@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineAssemblyComponent } from "./types";
-import type { AssemblyComponentKind, InvoiceStatus, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { AssemblyComponentKind, InvoiceStatus, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -306,6 +306,17 @@ export interface ApiQuote {
 /** Invoice line items share the exact persistence shape as quote line items
  * (both come from the same `quoteLineItemSchema`-shaped table columns). */
 export type ApiInvoiceLineItem = ApiLineItem;
+export interface ApiPayment {
+  id: string;
+  amountCents: number;
+  method: PaymentMethod;
+  /** Cheque number / bank reference / wallet transaction id. Named for its
+   * WiPay origin; reused for manual references. */
+  providerRef?: string | null;
+  status: string;
+  paidAt: string;
+}
+
 export interface ApiInvoiceSection {
   title: string;
   lineItems: ApiInvoiceLineItem[];
@@ -327,6 +338,8 @@ export interface ApiInvoice {
   gctCents: number;
   totalCents: number;
   paidCents: number;
+  /** Recorded payments, newest first. Present on detail reads (#32). */
+  payments?: ApiPayment[] | null;
   createdAt: string;
   updatedAt: string;
   detailLevel?: QuoteDetailLevel | null;
@@ -493,6 +506,16 @@ export interface InvoiceSection {
   title: string;
   lines: InvoiceLineItem[];
 }
+/** A recorded payment against an invoice (#32). */
+export interface InvoicePayment {
+  id: string;
+  amountCents: number;
+  method: PaymentMethod;
+  reference?: string;
+  /** ISO — formatted by the client, same reasoning as supplier prices. */
+  paidAt: string;
+}
+
 export interface Invoice {
   id: string;
   businessId: string;
@@ -515,6 +538,8 @@ export interface Invoice {
   totalCents: number;
   /** Sum of recorded payments against this invoice. */
   paidCents: number;
+  /** What that sum is made of, newest first. Detail reads only. */
+  payments: InvoicePayment[];
   /** Per-invoice presentation setting, carried from the source quote. */
   detailLevel?: QuoteDetailLevel;
   createdAt: string;
@@ -552,6 +577,13 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     gctCents: i.gctCents,
     totalCents: i.totalCents,
     paidCents: i.paidCents,
+    payments: (i.payments ?? []).map((p) => ({
+      id: p.id,
+      amountCents: p.amountCents,
+      method: p.method,
+      reference: p.providerRef ?? undefined,
+      paidAt: p.paidAt,
+    })),
     detailLevel: i.detailLevel ?? undefined,
     createdAt: i.createdAt,
     createdLabel: dateLabel(i.createdAt, "Created "),
@@ -1343,4 +1375,26 @@ export interface NewInvoiceInput {
 }
 export async function createInvoice(input: NewInvoiceInput): Promise<Invoice> {
   return mapInvoice(await apiClient.post<ApiInvoice>("/invoices", input));
+}
+
+// --- Payments (#32) ---------------------------------------------------------
+
+export interface RecordPaymentInput {
+  /** Integer cents, never dollars — converted once at the form boundary. */
+  amountCents: number;
+  method: PaymentMethod;
+  reference?: string;
+  /** ISO date; omitted means "now". */
+  paidAt?: string;
+}
+
+/**
+ * Records a payment taken outside the app (cash, bank transfer, wallet).
+ * The API adds it to the invoice atomically and re-derives PAID/PARTIAL.
+ */
+export async function recordManualPayment(
+  invoiceId: string,
+  input: RecordPaymentInput,
+): Promise<void> {
+  await apiClient.post<void>(`/payments/invoices/${invoiceId}/manual`, input);
 }
