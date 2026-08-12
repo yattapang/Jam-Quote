@@ -32,6 +32,14 @@ const INVOICE_DETAIL_INCLUDE = {
     orderBy: { sort: "asc" as const },
     include: { lineItems: { orderBy: { sort: "asc" as const } } },
   },
+  // Payment history. Without this the client can show a paidCents TOTAL but
+  // not what it is made of, so a contractor could see "$40,000 paid" with no
+  // way to check which payments that represents — or to spot a duplicate.
+  // Newest first: the question is almost always "did the latest one land?".
+  payments: {
+    where: { deletedAt: null },
+    orderBy: { paidAt: "desc" as const },
+  },
 } satisfies Prisma.InvoiceInclude;
 
 type InvoiceWithLines = Prisma.InvoiceGetPayload<{ include: typeof INVOICE_DETAIL_INCLUDE }>;

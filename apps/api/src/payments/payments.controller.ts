@@ -1,9 +1,10 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
-import { PaymentMethod } from "@jamquote/core";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
+import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { PaymentsService } from "./payments.service.js";
+import { recordManualPaymentSchema, type RecordManualPaymentInput } from "./payments.dto.js";
 
 @Controller("payments")
 export class PaymentsController {
@@ -44,13 +45,8 @@ export class PaymentsController {
   recordManual(
     @Param("invoiceId") invoiceId: string,
     @BusinessId() businessId: string,
-    @Body() body: { amountCents: number; method: PaymentMethod },
+    @Body(new ZodValidationPipe(recordManualPaymentSchema)) body: RecordManualPaymentInput,
   ): Promise<void> {
-    return this.payments.recordManualPayment({
-      businessId,
-      invoiceId,
-      amountCents: body.amountCents,
-      method: body.method,
-    });
+    return this.payments.recordManualPayment({ businessId, invoiceId, ...body });
   }
 }

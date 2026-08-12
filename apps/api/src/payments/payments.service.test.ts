@@ -119,17 +119,27 @@ describe("PaymentsService.handleWiPayCallback", () => {
 });
 
 describe("PaymentsService.recordManualPayment", () => {
-  it("records a cash payment and marks the invoice partial", async () => {
-    const invoice = { id: "i1", number: "INV-0007", totalCents: 100_000, paidCents: 0 };
+  /** tx mock whose invoice.update returns the post-increment figures, the way
+   * a real atomic increment does. */
+  function paymentHarness(opts: { totalCents: number; paidAfter: number }) {
     const tx = {
       payment: { create: vi.fn().mockResolvedValue({}) },
-      invoice: { update: vi.fn().mockResolvedValue({}) },
+      invoice: {
+        update: vi
+          .fn()
+          .mockResolvedValue({ paidCents: opts.paidAfter, totalCents: opts.totalCents }),
+      },
     };
     const prisma = {
-      invoice: { findFirst: vi.fn().mockResolvedValue(invoice) },
+      invoice: { findFirst: vi.fn().mockResolvedValue({ id: "i1" }) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), prisma, tx };
+  }
+
+  it("records a cash payment and marks the invoice partial", async () => {
+    const { svc, prisma, tx } = paymentHarness({ totalCents: 100_000, paidAfter: 50_000 });
 
     await svc.recordManualPayment({
       businessId: "biz-1",
@@ -140,12 +150,74 @@ describe("PaymentsService.recordManualPayment", () => {
 
     expect(prisma.invoice.findFirst).toHaveBeenCalledWith({
       where: { id: "i1", businessId: "biz-1" },
+      select: { id: true },
     });
     expect(tx.invoice.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ paidCents: 50_000, status: "PARTIAL" }),
-      }),
+      expect.objectContaining({ data: { paidCents: { increment: 50_000 } } }),
     );
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "PARTIAL" } }),
+    );
+  });
+
+  it("adds to paidCents atomically rather than overwriting it", async () => {
+    // The old version computed `invoice.paidCents + amount` from a row read
+    // BEFORE the transaction opened. Two payments recorded at once — the
+    // contractor on a phone and the office on a laptop, or a WiPay callback
+    // landing mid-entry — would each start from the same stale figure and the
+    // second write would erase the first, on money a real customer owes.
+    const { svc, tx } = paymentHarness({ totalCents: 100_000, paidAfter: 30_000 });
+
+    await svc.recordManualPayment({
+      businessId: "biz-1",
+      invoiceId: "i1",
+      amountCents: 20_000,
+      method: PaymentMethod.CASH,
+    });
+
+    const incrementCall = tx.invoice.update.mock.calls.find(
+      (c) => (c[0] as { data: Record<string, unknown> }).data.paidCents,
+    );
+    expect(incrementCall).toBeTruthy();
+    // An increment instruction, never a computed absolute value.
+    expect((incrementCall?.[0] as { data: { paidCents: unknown } }).data.paidCents).toEqual({
+      increment: 20_000,
+    });
+  });
+
+  it("marks the invoice PAID off the post-increment total, not a prediction", async () => {
+    const { svc, tx } = paymentHarness({ totalCents: 100_000, paidAfter: 100_000 });
+
+    await svc.recordManualPayment({
+      businessId: "biz-1",
+      invoiceId: "i1",
+      amountCents: 60_000,
+      method: PaymentMethod.BANK_TRANSFER,
+    });
+
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "PAID" } }),
+    );
+  });
+
+  it("stores the reference and the date the payment actually happened", async () => {
+    // A payment taken on site last week has to be recordable with its real
+    // date, or the customer's statement and the contractor's book disagree.
+    const { svc, tx } = paymentHarness({ totalCents: 100_000, paidAfter: 10_000 });
+    const paidAt = new Date("2026-08-01T10:00:00Z");
+
+    await svc.recordManualPayment({
+      businessId: "biz-1",
+      invoiceId: "i1",
+      amountCents: 10_000,
+      method: PaymentMethod.CASH,
+      reference: "cheque 00412",
+      paidAt,
+    });
+
+    expect(tx.payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ providerRef: "cheque 00412", paidAt }),
+    });
   });
 
   it("throws NotFound (not the other tenant's invoice) when the invoice belongs to a different business", async () => {
