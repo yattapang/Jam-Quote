@@ -1398,3 +1398,12 @@ export async function recordManualPayment(
 ): Promise<void> {
   await apiClient.post<void>(`/payments/invoices/${invoiceId}/manual`, input);
 }
+
+/**
+ * Void a recorded payment. Soft-delete server-side, so what was corrected
+ * stays answerable. Does NOT refund a card payment — it corrects this ledger
+ * only.
+ */
+export async function voidPayment(paymentId: string): Promise<void> {
+  await apiClient.delete<void>(`/payments/${paymentId}`);
+}

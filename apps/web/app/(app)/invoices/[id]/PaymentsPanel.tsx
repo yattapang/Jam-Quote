@@ -9,7 +9,7 @@ import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import MoneyText from "@/components/ui/MoneyText";
 import fieldStyles from "@/components/ui/Field.module.css";
-import { recordManualPayment, type InvoicePayment } from "@/lib/api-client";
+import { recordManualPayment, voidPayment, type InvoicePayment } from "@/lib/api-client";
 import styles from "./PaymentsPanel.module.css";
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -59,6 +59,7 @@ export default function PaymentsPanel({
   const [paidAt, setPaidAt] = useState(todayLocal());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [voidingId, setVoidingId] = useState("");
 
   // A DRAFT invoice hasn't been issued to anyone yet, so there is nothing to
   // have been paid against. The API would accept it; offering it invites
@@ -103,6 +104,28 @@ export default function PaymentsPanel({
     }
   }
 
+  async function removePayment(p: InvoicePayment) {
+    // Confirmed because it moves money on the customer's statement, and for a
+    // card payment the wording has to be honest: this corrects the book, it
+    // does not send anybody their money back.
+    const warning =
+      p.method === PaymentMethod.CARD
+        ? "Void this card payment? This corrects your records only — it does NOT refund the customer."
+        : "Void this payment? It will be removed from the invoice balance.";
+    if (!window.confirm(warning)) return;
+
+    setVoidingId(p.id);
+    setError("");
+    try {
+      await voidPayment(p.id);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't void that payment.");
+    } finally {
+      setVoidingId("");
+    }
+  }
+
   const overpaying = Math.round((Number(amountDollars) || 0) * 100) > balanceDueCents;
 
   return (
@@ -137,11 +160,23 @@ export default function PaymentsPanel({
                   {p.reference ? ` · ${p.reference}` : ""}
                 </span>
               </div>
-              <MoneyText cents={p.amountCents} tone="good" weight={600} />
+              <div className={styles.rowEnd}>
+                <MoneyText cents={p.amountCents} tone="good" weight={600} />
+                <button
+                  type="button"
+                  className={styles.void}
+                  onClick={() => void removePayment(p)}
+                  disabled={voidingId === p.id}
+                >
+                  {voidingId === p.id ? "Voiding…" : "Void"}
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      {error && !open && <span className={fieldStyles.error}>{error}</span>}
 
       {open && (
         <Modal title="Record payment" onClose={() => (saving ? undefined : setOpen(false))}>

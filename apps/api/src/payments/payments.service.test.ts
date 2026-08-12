@@ -286,3 +286,89 @@ describe("PaymentsService.startCardPayment", () => {
     );
   });
 });
+
+describe("PaymentsService.voidPayment", () => {
+  function voidHarness(opts: {
+    payment?: { id: string; amountCents: number; invoiceId: string } | null;
+    paidAfter?: number;
+    totalCents?: number;
+  }) {
+    const tx = {
+      payment: { update: vi.fn().mockResolvedValue({}) },
+      invoice: {
+        update: vi.fn().mockResolvedValue({
+          paidCents: opts.paidAfter ?? 0,
+          totalCents: opts.totalCents ?? 100_000,
+        }),
+      },
+    };
+    const prisma = {
+      payment: { findFirst: vi.fn().mockResolvedValue(opts.payment ?? null) },
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), prisma, tx };
+  }
+
+  const PAYMENT = { id: "pay-1", amountCents: 40_000, invoiceId: "i1" };
+
+  it("scopes the lookup through the invoice's business — Payment has no businessId", async () => {
+    const { svc, prisma } = voidHarness({ payment: PAYMENT, paidAfter: 10_000 });
+    await svc.voidPayment("biz-1", "pay-1");
+    expect(prisma.payment.findFirst).toHaveBeenCalledWith({
+      where: { id: "pay-1", deletedAt: null, invoice: { businessId: "biz-1" } },
+      select: { id: true, amountCents: true, invoiceId: true },
+    });
+  });
+
+  it("soft-deletes rather than removing the row", async () => {
+    // The surviving row is the record of what was corrected, and the tombstone
+    // an offline client needs.
+    const { svc, tx } = voidHarness({ payment: PAYMENT, paidAfter: 10_000 });
+    await svc.voidPayment("biz-1", "pay-1");
+    expect(tx.payment.update).toHaveBeenCalledWith({
+      where: { id: "pay-1" },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it("takes the amount back off the invoice atomically", async () => {
+    const { svc, tx } = voidHarness({ payment: PAYMENT, paidAfter: 10_000 });
+    await svc.voidPayment("biz-1", "pay-1");
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { paidCents: { decrement: 40_000 } } }),
+    );
+  });
+
+  it("returns a fully-voided invoice to INVOICED, never to DRAFT", async () => {
+    // DRAFT would make an invoice the customer has already received editable
+    // again — and a draft could not have had a payment in the first place.
+    const { svc, tx } = voidHarness({ payment: PAYMENT, paidAfter: 0 });
+    await svc.voidPayment("biz-1", "pay-1");
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "INVOICED" } }),
+    );
+  });
+
+  it("drops a PAID invoice back to PARTIAL when only one of several payments is voided", async () => {
+    const { svc, tx } = voidHarness({ payment: PAYMENT, paidAfter: 60_000, totalCents: 100_000 });
+    await svc.voidPayment("biz-1", "pay-1");
+    expect(tx.invoice.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: "PARTIAL" } }),
+    );
+  });
+
+  it("refuses another tenant's payment", async () => {
+    const { svc, tx } = voidHarness({ payment: null });
+    await expect(svc.voidPayment("biz-1", "pay-x")).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses to void the same payment twice", async () => {
+    // findFirst filters deletedAt: null, so an already-voided payment is not
+    // found — decrementing a second time would understate what was paid.
+    const { svc, tx } = voidHarness({ payment: null });
+    await expect(svc.voidPayment("biz-1", "pay-1")).rejects.toBeInstanceOf(NotFoundException);
+    expect(tx.payment.update).not.toHaveBeenCalled();
+  });
+});

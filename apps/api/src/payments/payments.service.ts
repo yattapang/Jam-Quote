@@ -3,6 +3,19 @@ import { PaymentMethod, InvoiceStatus } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { WiPayService } from "./wipay.service.js";
 
+/**
+ * The invoice status implied by how much has been paid.
+ *
+ * Voiding never returns an invoice to DRAFT: a draft has not been issued, so
+ * it could not have had a payment in the first place, and sending one back
+ * there would make an already-sent invoice editable again.
+ */
+function statusForPaid(paidCents: number, totalCents: number): InvoiceStatus {
+  if (paidCents >= totalCents) return InvoiceStatus.PAID;
+  if (paidCents > 0) return InvoiceStatus.PARTIAL;
+  return InvoiceStatus.INVOICED;
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -166,13 +179,60 @@ export class PaymentsService {
       // prediction made before it.
       await tx.invoice.update({
         where: { id: invoice.id },
-        data: {
-          status:
-            updated.paidCents >= updated.totalCents
-              ? InvoiceStatus.PAID
-              : InvoiceStatus.PARTIAL,
-        },
+        data: { status: statusForPaid(updated.paidCents, updated.totalCents) },
       });
     });
   }
+
+  /**
+   * Void a recorded payment and take its amount back off the invoice.
+   *
+   * This exists because there was no correction path at all: a contractor who
+   * typed $500,000 instead of $50,000 could not undo it, and since paidCents
+   * is incremented atomically it cannot be edited back by hand either. A wrong
+   * payment with no undo is worse than no payment feature.
+   *
+   * SOFT delete, not hard. The row survives with deletedAt set, so what was
+   * voided and when stays answerable — this IS the audit trail for the action.
+   * (The AuditLog in src/admin is keyed on an admin actorUserId and records
+   * platform-staff actions; a tenant correcting their own book does not belong
+   * in it.) It also gives offline clients a tombstone to observe, which is why
+   * Payment carries deletedAt and an updatedAt sync cursor.
+   *
+   * Voiding a CARD payment does not refund anybody — it only corrects this
+   * ledger. The UI says so; the service deliberately does not refuse, because
+   * refusing would leave a mis-recorded card payment permanently wrong.
+   */
+  async voidPayment(businessId: string, paymentId: string): Promise<void> {
+    const payment = await this.prisma.payment.findFirst({
+      // The tenant check goes through the invoice — Payment has no businessId
+      // of its own, and an id is not a capability.
+      where: { id: paymentId, deletedAt: null, invoice: { businessId } },
+      select: { id: true, amountCents: true, invoiceId: true },
+    });
+    // Also covers an already-voided payment: re-voiding must not decrement a
+    // second time, which would understate what the customer has paid.
+    if (!payment) throw new NotFoundException("Payment not found");
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: { deletedAt: new Date() },
+      });
+
+      // Mirror of recordManualPayment: atomic, then re-read inside the
+      // transaction rather than predicting the result.
+      const updated = await tx.invoice.update({
+        where: { id: payment.invoiceId },
+        data: { paidCents: { decrement: payment.amountCents } },
+        select: { paidCents: true, totalCents: true },
+      });
+
+      await tx.invoice.update({
+        where: { id: payment.invoiceId },
+        data: { status: statusForPaid(updated.paidCents, updated.totalCents) },
+      });
+    });
+  }
+
 }

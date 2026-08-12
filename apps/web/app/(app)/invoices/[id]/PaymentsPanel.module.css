@@ -53,3 +53,32 @@
   font-size: 11px;
   color: var(--jq-text-muted);
 }
+
+.rowEnd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+/* Understated on purpose: voiding is a correction, not a primary action, and
+   it should not compete with Record payment for attention. */
+.void {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11px;
+  color: var(--jq-text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.void:hover:not(:disabled) {
+  color: var(--jq-crit);
+}
+
+.void:disabled {
+  cursor: default;
+  opacity: 0.6;
+}

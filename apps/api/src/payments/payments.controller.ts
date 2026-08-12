@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Param, Post, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
@@ -49,4 +49,18 @@ export class PaymentsController {
   ): Promise<void> {
     return this.payments.recordManualPayment({ businessId, invoiceId, ...body });
   }
+
+  /**
+   * Void a recorded payment. Soft-delete — the row survives so what was
+   * corrected stays answerable.
+   */
+  @Delete(":paymentId")
+  @UseGuards(TenantAuthGuard)
+  voidPayment(
+    @Param("paymentId") paymentId: string,
+    @BusinessId() businessId: string,
+  ): Promise<void> {
+    return this.payments.voidPayment(businessId, paymentId);
+  }
+
 }
