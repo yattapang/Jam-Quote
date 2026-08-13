@@ -12,6 +12,7 @@ import {
 } from "@/lib/quote-totals";
 import { getInvoice, getClients } from "@/lib/api-server";
 import InvoiceActions from "./InvoiceActions";
+import EmailInvoiceButton from "./EmailInvoiceButton";
 import shared from "../../shared.module.css";
 import buttonStyles from "@/components/ui/Button.module.css";
 import PaymentsPanel from "./PaymentsPanel";
@@ -62,6 +63,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           >
             Download PDF
           </a>
+          <EmailInvoiceButton invoiceId={invoice.id} clientEmail={client?.email} />
           <InvoiceActions id={invoice.id} status={invoice.status} />
         </div>
       </header>

@@ -15,7 +15,12 @@ import {
 import { computeTotals, formatJmd, QuoteDetailLevel } from "@jamquote/core";
 import type { Business, Client } from "@/lib/types";
 import type { Invoice } from "@/lib/api-client";
-import { groupLinesByHeading, lineUnitLabel, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
+import {
+  groupLinesByHeading,
+  invoiceBalanceCents,
+  lineUnitLabel,
+  GCT_TREATMENT_LABEL,
+} from "@/lib/quote-totals";
 import { formatAddress } from "@/lib/format-address";
 
 /**
@@ -182,9 +187,9 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
   const detailed = invoice.detailLevel === QuoteDetailLevel.DETAILED;
 
   const paidCents = invoice.paidCents ?? 0;
-  // Clamped at zero: an overpayment is a credit to sort out separately, not a
-  // negative "amount due" printed on a customer's invoice.
-  const balanceCents = Math.max(0, totals.totalCents - paidCents);
+  // Shared with the invoice email (#34) so the figure the covering message
+  // asks for is by construction the figure printed below.
+  const balanceCents = invoiceBalanceCents(totals.totalCents, paidCents);
   const settled = balanceCents === 0;
 
   const amountByLineId = new Map<string, number>();

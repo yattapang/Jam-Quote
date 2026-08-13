@@ -16,6 +16,21 @@ export function getQuoteTotals(quote: Pick<Quote, "lines" | "gctRatePct" | "disc
   });
 }
 
+/**
+ * What is still owed on an invoice: the total less payments already recorded.
+ *
+ * Lives here, beside getQuoteTotals, so the PDF and the covering email can
+ * never quote two different figures. A customer who has already paid half and
+ * then reads "please pay $180,000" in the email body while the attached PDF
+ * says $90,000 has been given two invoices, not one.
+ *
+ * Clamped at zero: an overpayment is a credit to settle separately, not a
+ * negative "amount due" put in front of a customer.
+ */
+export function invoiceBalanceCents(totalCents: number, paidCents: number): number {
+  return Math.max(0, totalCents - paidCents);
+}
+
 /** Sum of afterMarkup cents for lines in one category — for the by-section subtotal rows. */
 export function categorySubtotalCents(quote: Quote, totals: QuoteTotals, category: LineCategory): number {
   return quote.lines.reduce((sum, line, i) => {
