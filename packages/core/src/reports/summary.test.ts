@@ -519,4 +519,49 @@ describe("computeReportsSummary", () => {
       expect(s.jobs.topClientsByJobs).toHaveLength(10);
     });
   });
+
+  // The headline revenue figures and the monthly buckets come from separate
+  // passes, and those passes disagree about what a "month" is: the headline
+  // filters absolute timestamps against the range, while the buckets key off
+  // the Jamaica-local calendar month. The two views must still reconcile, or
+  // the chart will visibly fail to add up to the totals printed right above
+  // it — the kind of discrepancy that makes a contractor stop trusting the
+  // whole page. The case that exercises it is a range whose boundaries are
+  // NOT Jamaica-midnight, so an instant can sit inside the range while
+  // belonging to a neighbouring calendar month.
+  describe("salesByMonth reconciles with the headline revenue totals", () => {
+    it("sums to the same figures across an awkward, non-midnight range", () => {
+      const range: ReportsRange = {
+        // UTC midnight, i.e. 7pm Jamaica the previous evening, so the first
+        // and last buckets are partial months.
+        fromIso: "2026-06-01T00:00:00.000Z",
+        toIso: "2026-09-01T00:00:00.000Z",
+      };
+      const invoices = [
+        invoice({ totalCents: 250_000, createdAt: "2026-06-01T02:00:00.000Z" }), // 31 May 9pm JA
+        invoice({ totalCents: 400_000, createdAt: "2026-06-15T12:00:00.000Z" }),
+        invoice({ totalCents: 125_000, createdAt: "2026-07-31T23:30:00.000Z" }), // 31 Jul 6:30pm JA
+        invoice({ totalCents: 900_000, createdAt: "2026-08-31T23:00:00.000Z" }), // 31 Aug 6pm JA
+        // Excluded on status, so it must be absent from both views alike.
+        invoice({ status: InvoiceStatus.DRAFT, totalCents: 777_000, createdAt: "2026-07-02T12:00:00.000Z" }),
+      ];
+      const payments = [
+        payment({ amountCents: 100_000, paidAt: "2026-06-02T12:00:00.000Z" }),
+        payment({ amountCents: 50_000, paidAt: "2026-07-31T23:45:00.000Z" }),
+        payment({ amountCents: 325_000, paidAt: "2026-08-20T12:00:00.000Z" }),
+      ];
+
+      const s = computeReportsSummary({ ...EMPTY_INPUT, invoices, payments }, range, NOW);
+
+      const bucketedInvoiced = s.salesByMonth.reduce((sum, m) => sum + m.invoicedCents, 0);
+      const bucketedCollected = s.salesByMonth.reduce((sum, m) => sum + m.collectedCents, 0);
+
+      expect(bucketedInvoiced).toBe(s.revenue.invoicedCents);
+      expect(bucketedCollected).toBe(s.revenue.collectedCents);
+      // Pinned outright as well, so a change that breaks BOTH sides in the
+      // same direction still fails rather than staying self-consistently wrong.
+      expect(s.revenue.invoicedCents).toBe(1_675_000);
+      expect(s.revenue.collectedCents).toBe(475_000);
+    });
+  });
 });
