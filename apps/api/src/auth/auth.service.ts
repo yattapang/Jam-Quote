@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  type OnModuleInit,
+} from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "node:crypto";
@@ -6,7 +13,14 @@ import { Resend } from "resend";
 import { EntityType, UserRole, type Business, type User } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { RulePackService } from "../rulepack/rulepack.service.js";
-import type { ForgotPasswordInput, LoginInput, RegisterInput, ResetPasswordInput } from "./auth.dto.js";
+import { isEmailConfigured } from "../common/email-config.util.js";
+import type {
+  ChangePasswordInput,
+  ForgotPasswordInput,
+  LoginInput,
+  RegisterInput,
+  ResetPasswordInput,
+} from "./auth.dto.js";
 
 const BCRYPT_COST = 10;
 const TOKEN_EXPIRY = "30d";
@@ -60,7 +74,7 @@ function toSafeBusiness(business: Business): SafeBusiness {
 }
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
@@ -68,6 +82,21 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly rulePack: RulePackService,
   ) {}
+
+  onModuleInit(): void {
+    // Surfaced at boot so a misconfigured deploy shows up in the Render log
+    // immediately, rather than only when some contractor happens to try a
+    // password reset and silently never receives it (see sendResetEmail).
+    // Unlike auth.module.ts's JWT_SECRET check and wipay.service.ts's live-key
+    // check, this deliberately does NOT refuse to boot: undeliverable email is
+    // degraded functionality, not a security hole, and taking the whole API
+    // down over it would be worse than the bug it reports.
+    if (process.env.NODE_ENV === "production" && !isEmailConfigured()) {
+      this.logger.error(
+        "RESEND_API_KEY is not set — password reset emails will NOT be delivered. Users who click \"Forgot password?\" will see a success message and receive nothing. Set RESEND_API_KEY in the environment (e.g. Render config).",
+      );
+    }
+  }
 
   async register(input: RegisterInput): Promise<AuthResult> {
     const email = input.email.trim().toLowerCase();
@@ -220,12 +249,62 @@ export class AuthService {
     return { ok: true };
   }
 
+  /**
+   * Changes the password of the signed-in user. `userId` MUST come from the
+   * verified token (see AuthController) — never from the request body, which
+   * would let any authenticated user rewrite anyone else's password.
+   */
+  async changePassword(userId: string, input: ChangePasswordInput): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException("User not found");
+    }
+
+    // Re-verifying the current password is the entire point of this endpoint.
+    // Without it, a stolen token or an unattended signed-in phone converts a
+    // temporary session into a permanent account takeover.
+    const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+    if (!valid) {
+      // 400, not 401: the caller's token IS valid. The web client treats any
+      // 401 as an expired session and bounces to /login (see api-client.ts's
+      // request()), which would throw the user out of the app over a typo.
+      throw new BadRequestException("Current password is incorrect");
+    }
+
+    if (input.currentPassword === input.newPassword) {
+      throw new BadRequestException("Your new password must be different from your current one.");
+    }
+
+    const passwordHash = await bcrypt.hash(input.newPassword, BCRYPT_COST);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: user.id }, data: { passwordHash } }),
+      // Any reset link already in the user's inbox would otherwise still be
+      // able to overwrite the password they just deliberately chose — same
+      // invalidation resetPassword performs for the same reason.
+      this.prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    return { ok: true };
+  }
+
   private async sendResetEmail(user: User, rawToken: string): Promise<void> {
     const apiKey = process.env.RESEND_API_KEY;
     if (!apiKey) {
-      this.logger.warn(
-        `RESEND_API_KEY is not set — skipping password reset email for user ${user.id}.`,
-      );
+      const message = `RESEND_API_KEY is not set — skipping password reset email for user ${user.id}.`;
+      // In production this is a silent total failure of account recovery: the
+      // caller gets the same neutral { ok: true } either way (deliberately —
+      // see forgotPassword), so this log line is the only signal that exists.
+      // Error level so it stands out from routine warn noise in the deploy log.
+      // In dev it stays a warning: no key is the normal local state.
+      if (process.env.NODE_ENV === "production") {
+        this.logger.error(message);
+      } else {
+        this.logger.warn(message);
+      }
       return;
     }
 

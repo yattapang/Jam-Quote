@@ -1,0 +1,32 @@
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.blurb {
+  font-size: 13px;
+  color: var(--jq-text-muted);
+  margin-bottom: 14px;
+}
+
+/* Narrower than the card: three stacked password inputs stretched to a full
+   settings-width card read as a data-entry grid rather than one short task. */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.success {
+  font-size: 11px;
+  color: var(--jq-good);
+}

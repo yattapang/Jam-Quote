@@ -2,6 +2,7 @@ import Card from "@/components/ui/Card";
 import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import BrandingSection from "./BrandingSection";
+import SecuritySection from "./SecuritySection";
 import BillingCard from "./BillingCard";
 import shared from "../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
@@ -84,6 +85,8 @@ export default async function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      <SecuritySection />
 
       <BillingCard status={billingStatus} plans={billingPlans} />
     </div>

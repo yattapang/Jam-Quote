@@ -258,6 +258,89 @@ describe("AuthService.forgotPassword", () => {
   });
 });
 
+describe("AuthService.changePassword", () => {
+  function makePrisma(found: unknown = user) {
+    return {
+      user: { findUnique: vi.fn().mockResolvedValue(found), update: vi.fn().mockResolvedValue({}) },
+      passwordResetToken: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      $transaction: vi.fn(async (ops: unknown[]) => ops),
+    };
+  }
+
+  it("rejects a wrong current password and writes nothing", async () => {
+    const prisma = makePrisma();
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
+
+    await expect(
+      svc.changePassword("u1", { currentPassword: "not-my-password", newPassword: "NewPass123!" }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("stores a NEW hash when the current password is correct", async () => {
+    const prisma = makePrisma();
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
+
+    const result = await svc.changePassword("u1", {
+      currentPassword: "Blackwood123!",
+      newPassword: "NewPass123!",
+    });
+
+    expect(result).toEqual({ ok: true });
+    const updateArgs = prisma.user.update.mock.calls[0]![0];
+    expect(updateArgs.data.passwordHash).toBe("hashed:NewPass123!");
+    // The point of the endpoint: the stored hash must actually have changed.
+    expect(updateArgs.data.passwordHash).not.toBe(user.passwordHash);
+    // A reset link already sitting in the user's inbox must not be able to
+    // overwrite the password they just chose.
+    expect(prisma.passwordResetToken.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "u1", usedAt: null } }),
+    );
+  });
+
+  it("takes the user id from the caller (the verified token), not the body", async () => {
+    const prisma = makePrisma();
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
+
+    // A body carrying someone else's id must have no effect: the id is a
+    // separate argument the controller fills from req.user.sub.
+    await svc.changePassword("u1", {
+      currentPassword: "Blackwood123!",
+      newPassword: "NewPass123!",
+      ...({ userId: "victim-user", sub: "victim-user" } as Record<string, string>),
+    });
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { id: "u1" } });
+    expect(prisma.user.update.mock.calls[0]![0].where).toEqual({ id: "u1" });
+  });
+
+  it("rejects a new password identical to the current one", async () => {
+    const prisma = makePrisma();
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
+
+    await expect(
+      svc.changePassword("u1", {
+        currentPassword: "Blackwood123!",
+        newPassword: "Blackwood123!",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("throws Unauthorized when the token's user no longer exists", async () => {
+    const prisma = makePrisma(null);
+    const svc = new AuthService(prisma as any, makeJwt() as any, makeRulePack() as any);
+
+    await expect(
+      svc.changePassword("deleted-user", {
+        currentPassword: "Blackwood123!",
+        newPassword: "NewPass123!",
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+});
+
 describe("AuthService.resetPassword", () => {
   const rawToken = "a".repeat(64);
   const tokenHash = createHash("sha256").update(rawToken).digest("hex");

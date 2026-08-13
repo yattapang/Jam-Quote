@@ -1369,6 +1369,20 @@ export function logoUrl(version?: string): string {
   return `/api/proxy/business/logo${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
 
+// --- Account security -------------------------------------------------------
+
+/**
+ * Changes the signed-in user's own password. There is no user id in the
+ * payload by design — the API takes it from the JWT the proxy attaches, so
+ * this can only ever act on the caller's own account.
+ */
+export async function changePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ ok: true }> {
+  return apiClient.post<{ ok: true }>("/auth/change-password", input);
+}
+
 /**
  * Create an invoice from scratch (no source quote).
  *
