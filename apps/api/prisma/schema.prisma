@@ -111,6 +111,18 @@ enum QuoteDetailLevel {
   DETAILED
 }
 
+// Where the physical work stands — hand-set by the contractor, never derived
+// from quotes/invoices (nothing in the system knows whether the blocks are
+// laid). Deliberately no INVOICED/PAID member: that is Invoice.status, and
+// holding the same fact in two places guarantees they eventually disagree.
+enum JobStage {
+  QUOTED
+  WON
+  IN_PROGRESS
+  COMPLETE
+  CANCELLED
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy & identity
 // ---------------------------------------------------------------------------
@@ -261,7 +273,9 @@ model Job {
   addressLine String?
   town        String? // town/city — see Business.town
   parish      String?
-  stage       String    @default("Quoted")
+  stage       JobStage  @default(QUOTED)
+  // 0–100, hand-set alongside stage. Only rendered where it means something —
+  // see jobStageTracksProgress in packages/core.
   progressPct Int       @default(0)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

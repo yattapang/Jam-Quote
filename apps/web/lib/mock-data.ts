@@ -16,6 +16,7 @@ import {
   InvoiceStatus,
   PaymentMethod,
 } from "@jamquote/core";
+import type { JobStage } from "@jamquote/core";
 import type { Business, BusinessProfile, Client, Invoice, Quote } from "./types";
 
 // Demo identity, module-local: it only seeds `fixtureBusiness` below. It used
@@ -126,7 +127,7 @@ export interface JobSummary {
   clientName: string;
   addressLine: string;
   parish: string;
-  stage: string;
+  stage: JobStage;
   progressPct: number;
   quoteCount: number;
   valueCents: number;
@@ -156,7 +157,7 @@ export interface JobDetail {
   addressLine: string;
   town: string;
   parish: string;
-  stage: string;
+  stage: JobStage;
   progressPct: number;
 }
 

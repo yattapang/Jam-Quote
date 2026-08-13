@@ -11,6 +11,7 @@ import { computeTotals, type QuoteTotals } from "../quote/totals.js";
 import type { Cents } from "../tax/money.js";
 import {
   GctTreatment,
+  JobStage,
   LineCategory,
   PriceSource,
   QuoteStatus,
@@ -45,7 +46,7 @@ export interface DemoJob {
   name: string; // one canonical label rendered by BOTH surfaces
   addressLine: string;
   parish: string;
-  stage: string;
+  stage: JobStage;
   progressPct: number;
 }
 
@@ -79,14 +80,19 @@ export const demoClients: DemoClient[] = [
   { id: "cl-trevor-dixon", name: "Trevor Dixon", initials: "TD", parish: "St. Catherine", phone: "876 771 5523", addressLine: "Linstead, St. Catherine" },
 ];
 
+// Stages moved from free text to JobStage (#36) using the same mapping the
+// 20260813120000_job_stage_enum migration applies to real rows: "Awaiting
+// approval" is a quote nobody has answered yet (QUOTED), and "Invoiced" is
+// billing state, so it becomes WON. progressPct is left exactly as it was —
+// on a QUOTED job it simply stops being rendered (jobStageTracksProgress).
 export const demoJobs: DemoJob[] = [
-  { id: "job-0142", clientId: "cl-basil-reid", name: "Retaining wall, Spanish Town", addressLine: "Lot 14 Bloxburgh Dr, Spanish Town", parish: "St. Catherine", stage: "In progress", progressPct: 62 },
-  { id: "job-0141", clientId: "cl-paulette-wright", name: "Bathroom remodel, Portmore", addressLine: "22 Passage Fort Dr, Portmore", parish: "St. Catherine", stage: "Quoted", progressPct: 20 },
-  { id: "job-0140", clientId: "cl-devon-facey", name: "Fence & gate, St. Catherine", addressLine: "8 Angels, St. Andrew", parish: "St. Andrew", stage: "Awaiting approval", progressPct: 40 },
-  { id: "job-0139", clientId: "cl-marva-grant", name: "Kitchen tiling, Kingston 6", addressLine: "14 Hope Rd, Kingston 6", parish: "Kingston", stage: "Complete", progressPct: 100 },
-  { id: "job-0138", clientId: "cl-errol-campbell", name: "Carport extension, Mandeville", addressLine: "Mandeville, Manchester", parish: "Manchester", stage: "Invoiced", progressPct: 90 },
-  { id: "job-0137", clientId: "cl-shauna-bailey", name: "Perimeter block wall, Old Harbour", addressLine: "Old Harbour, St. Catherine", parish: "St. Catherine", stage: "Quoted", progressPct: 15 },
-  { id: "job-0136", clientId: "cl-trevor-dixon", name: "Roof repair, Linstead", addressLine: "Linstead, St. Catherine", parish: "St. Catherine", stage: "Complete", progressPct: 100 },
+  { id: "job-0142", clientId: "cl-basil-reid", name: "Retaining wall, Spanish Town", addressLine: "Lot 14 Bloxburgh Dr, Spanish Town", parish: "St. Catherine", stage: JobStage.IN_PROGRESS, progressPct: 62 },
+  { id: "job-0141", clientId: "cl-paulette-wright", name: "Bathroom remodel, Portmore", addressLine: "22 Passage Fort Dr, Portmore", parish: "St. Catherine", stage: JobStage.QUOTED, progressPct: 20 },
+  { id: "job-0140", clientId: "cl-devon-facey", name: "Fence & gate, St. Catherine", addressLine: "8 Angels, St. Andrew", parish: "St. Andrew", stage: JobStage.QUOTED, progressPct: 40 },
+  { id: "job-0139", clientId: "cl-marva-grant", name: "Kitchen tiling, Kingston 6", addressLine: "14 Hope Rd, Kingston 6", parish: "Kingston", stage: JobStage.COMPLETE, progressPct: 100 },
+  { id: "job-0138", clientId: "cl-errol-campbell", name: "Carport extension, Mandeville", addressLine: "Mandeville, Manchester", parish: "Manchester", stage: JobStage.WON, progressPct: 90 },
+  { id: "job-0137", clientId: "cl-shauna-bailey", name: "Perimeter block wall, Old Harbour", addressLine: "Old Harbour, St. Catherine", parish: "St. Catherine", stage: JobStage.QUOTED, progressPct: 15 },
+  { id: "job-0136", clientId: "cl-trevor-dixon", name: "Roof repair, Linstead", addressLine: "Linstead, St. Catherine", parish: "St. Catherine", stage: JobStage.COMPLETE, progressPct: 100 },
 ];
 
 export const demoQuotes: DemoQuote[] = [

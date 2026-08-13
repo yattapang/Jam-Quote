@@ -66,7 +66,7 @@ import {
   getQuote,
   getQuotes,
 } from "./api-server";
-import { GctTreatment, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
+import { GctTreatment, JobStage, LineCategory, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // --- fetch mock ------------------------------------------------------------
 
@@ -114,7 +114,8 @@ const apiJob = {
   name: "Retaining wall, Spanish Town",
   addressLine: "Lot 14 Bloxburgh Dr, Spanish Town",
   parish: "St. Catherine",
-  stage: "In progress",
+  // The wire carries the enum as of #36, not the label the screens render.
+  stage: JobStage.IN_PROGRESS,
   progressPct: 62,
 };
 const apiQuote = {
@@ -443,6 +444,8 @@ describe("getJob", () => {
     expect(j?.clientId).toBe("cl-basil-reid");
     expect(j?.clientName).toBe("Basil Reid");
     expect(j?.parish).toBe("St. Catherine");
+    expect(j?.stage).toBe(JobStage.IN_PROGRESS);
+    expect(j?.progressPct).toBe(62);
   });
 
   it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
@@ -538,6 +541,15 @@ describe("create (write path)", () => {
     expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
       name: "New wall",
       clientId: "cl-basil-reid",
+    });
+  });
+
+  it("createJob carries the stage and progress the form set", async () => {
+    const spy = stubFetch({ "/jobs": { id: "job-new" } });
+    await createJob({ name: "New wall", stage: JobStage.WON, progressPct: 10 });
+    expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
+      stage: "WON",
+      progressPct: 10,
     });
   });
 
@@ -645,6 +657,15 @@ describe("update (write path)", () => {
     expect(init.method).toBe("PATCH");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
+  });
+
+  it("updateJob can PATCH the stage on its own", async () => {
+    // Before #36 nothing could set this at all — the field rendered on three
+    // screens and no writer existed.
+    const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
+    await updateJob("job-0142", { stage: JobStage.COMPLETE, progressPct: 100 });
+    const [, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({ stage: "COMPLETE", progressPct: 100 });
   });
 
   it("updateBusiness PATCHes the business body to /business/:id, renaming defaultGctRatePct to defaultGctRate", async () => {
@@ -858,6 +879,10 @@ describe("getJobs", () => {
     expect(jobs[0]?.clientName).toBe("Basil Reid");
     expect(jobs[0]?.quoteCount).toBe(1);
     expect(jobs[0]?.valueCents).toBe(18_354_000);
+    // The list row is where a manager reads progress, so both fields have to
+    // survive the mapping — not just the detail fetch.
+    expect(jobs[0]?.stage).toBe(JobStage.IN_PROGRESS);
+    expect(jobs[0]?.progressPct).toBe(62);
   });
 
   it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {

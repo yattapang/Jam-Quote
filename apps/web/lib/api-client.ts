@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineAssemblyComponent } from "./types";
-import type { AssemblyComponentKind, InvoiceStatus, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { AssemblyComponentKind, InvoiceStatus, JobStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -141,7 +141,7 @@ export interface ApiJob {
   addressLine?: string | null;
   town?: string | null;
   parish?: string | null;
-  stage: string;
+  stage: JobStage;
   progressPct: number;
 }
 export interface ApiLineAssemblyComponent {
@@ -631,6 +631,10 @@ export interface NewJobInput {
   addressLine?: string;
   town?: string;
   parish?: string;
+  /** Hand-set workflow stage. Omitted on create means the API's QUOTED default. */
+  stage?: JobStage;
+  /** 0–100, hand-set alongside stage — never derived from quotes or invoices. */
+  progressPct?: number;
 }
 export async function createJob(input: NewJobInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/jobs", input);

@@ -79,6 +79,9 @@ export class SyncService {
       whatsapp: d.whatsapp ?? null,
       email: d.email ?? null,
       addressLine: d.addressLine ?? null,
+      // #30 added `town` to the DTO but not here, so an offline client's town
+      // edit was accepted with outcome "applied" and silently thrown away.
+      town: d.town ?? null,
       parish: d.parish ?? null,
       notes: d.notes ?? null,
       deletedAt: null,
@@ -106,15 +109,26 @@ export class SyncService {
       name: d.name,
       clientId: d.clientId ?? null,
       addressLine: d.addressLine ?? null,
+      // #30 added `town` to the DTO but not here, so an offline client's town
+      // edit was accepted with outcome "applied" and silently thrown away.
+      town: d.town ?? null,
       parish: d.parish ?? null,
-      stage: d.stage ?? "Quoted",
-      progressPct: d.progressPct ?? 0,
       deletedAt: null,
+    };
+    // stage/progressPct are optional, not nullish, and are written separately:
+    // an omitted one means the device had nothing to say about it, NOT that
+    // the job reverted to QUOTED/0. Folding them into `fields` would let a
+    // client on an older build wipe a stage the contractor set on the web
+    // every time it pushed that job (#36). On create, Prisma's own column
+    // defaults supply QUOTED/0.
+    const workflow = {
+      ...(d.stage !== undefined ? { stage: d.stage } : {}),
+      ...(d.progressPct !== undefined ? { progressPct: d.progressPct } : {}),
     };
     await this.prisma.job.upsert({
       where: { id: change.id },
-      create: { id: change.id, businessId, ...fields },
-      update: fields,
+      create: { id: change.id, businessId, ...fields, ...workflow },
+      update: { ...fields, ...workflow },
     });
     return "applied";
   }

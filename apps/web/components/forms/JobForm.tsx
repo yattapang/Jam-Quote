@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PARISHES } from "@jamquote/core";
+import { JobStage, JOB_STAGES, JOB_STAGE_LABELS, PARISHES, jobStageTracksProgress } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -12,6 +12,9 @@ import type { JobDetail } from "@/lib/mock-data";
 import type { ClientOption } from "./types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
+// No blank option: every job is at some stage, and a new one starts at QUOTED
+// (the same default the column carries).
+const stageOptions = JOB_STAGES.map((s) => ({ value: s, label: JOB_STAGE_LABELS[s] }));
 
 export interface JobFormValues {
   name: string;
@@ -19,12 +22,43 @@ export interface JobFormValues {
   town: string;
   parish: string;
   address: string;
+  stage: JobStage;
+  /** Kept as the raw input string so the field can be emptied while typing;
+   * `jobPayloadFromValues` is what turns it back into a number. */
+  progressPct: string;
 }
 
-export const emptyJobForm: JobFormValues = { name: "", clientId: "", town: "", parish: "", address: "" };
+export const emptyJobForm: JobFormValues = {
+  name: "",
+  clientId: "",
+  town: "",
+  parish: "",
+  address: "",
+  stage: JobStage.QUOTED,
+  progressPct: "0",
+};
 
 export function jobFormValuesFromJob(job: JobDetail): JobFormValues {
-  return { name: job.name, clientId: job.clientId, town: job.town, parish: job.parish, address: job.addressLine };
+  return {
+    name: job.name,
+    clientId: job.clientId,
+    town: job.town,
+    parish: job.parish,
+    address: job.addressLine,
+    stage: job.stage,
+    progressPct: String(job.progressPct),
+  };
+}
+
+/** 0–100, integers only — the API rejects anything else (jobs.dto.ts), so a
+ * typo is clamped here rather than surfacing as a 400 on save. An emptied
+ * field means "leave it alone", not 0. */
+function progressFromInput(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(100, Math.max(0, Math.round(n)));
 }
 
 export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
@@ -34,6 +68,8 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
     town: values.town.trim() || undefined,
     parish: values.parish || undefined,
     addressLine: values.address.trim() || undefined,
+    stage: values.stage,
+    progressPct: progressFromInput(values.progressPct),
   };
 }
 
@@ -108,6 +144,32 @@ export default function JobForm({
         <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} />
         <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" />
         <Select label="Parish" options={parishOptions} value={values.parish} onChange={(e) => set("parish", e.target.value)} />
+      </div>
+      <div className={modalStyles.row2}>
+        <Select
+          label="Stage"
+          options={stageOptions}
+          value={values.stage}
+          onChange={(e) => set("stage", e.target.value as JobStage)}
+        />
+        <Input
+          label="Progress"
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          inputMode="numeric"
+          value={values.progressPct}
+          onChange={(e) => set("progressPct", e.target.value)}
+          // Says where the number will and won't appear, so nobody types 40%
+          // against a quoted job and assumes the list is broken when it
+          // doesn't show up (jobStageTracksProgress).
+          hint={
+            jobStageTracksProgress(values.stage)
+              ? "% of the work done — shown on the jobs list"
+              : `Kept, but not shown while the job is ${JOB_STAGE_LABELS[values.stage].toLowerCase()}`
+          }
+        />
       </div>
       {error && <span className={modalStyles.error}>{error}</span>}
       <div className={modalStyles.actions}>

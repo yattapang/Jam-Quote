@@ -98,6 +98,52 @@ export const QuoteDetailLevel = {
 export type QuoteDetailLevel = (typeof QuoteDetailLevel)[keyof typeof QuoteDetailLevel];
 
 /**
+ * Where the physical work stands. HAND-SET by the contractor, never derived:
+ * the app can see quotes and invoices, but nothing in it knows whether the
+ * blocks are actually laid — inferring IN_PROGRESS from a document would be
+ * inventing knowledge the system does not have.
+ *
+ * Deliberately has no INVOICED or PAID member. That is billing state, it
+ * already lives on Invoice.status, and modelling the same fact in two places
+ * guarantees the two eventually disagree.
+ */
+export const JobStage = {
+  QUOTED: "QUOTED",
+  WON: "WON",
+  IN_PROGRESS: "IN_PROGRESS",
+  COMPLETE: "COMPLETE",
+  CANCELLED: "CANCELLED",
+} as const;
+export type JobStage = (typeof JobStage)[keyof typeof JobStage];
+
+/** Every stage in workflow order — drives the stage picker. */
+export const JOB_STAGES: JobStage[] = Object.values(JobStage);
+
+/** The one label map. Web list, web detail and mobile all read it, so the
+ * same stage can never read three different ways to the same contractor. */
+export const JOB_STAGE_LABELS: Record<JobStage, string> = {
+  QUOTED: "Quoted",
+  WON: "Won",
+  IN_PROGRESS: "In progress",
+  COMPLETE: "Complete",
+  CANCELLED: "Cancelled",
+};
+
+/**
+ * Whether Job.progressPct says anything at this stage — the read-side rule for
+ * every surface that renders it.
+ *
+ * Only live work has a meaningful "how far along". QUOTED has no committed
+ * work to be a fraction of, COMPLETE is done by definition (and a stale 62%
+ * on it would contradict the stage), and a CANCELLED job showing "40%" reads
+ * as a bug rather than as history. The stored number is never cleared — it is
+ * simply not shown where it would mislead.
+ */
+export function jobStageTracksProgress(stage: JobStage): boolean {
+  return stage === JobStage.WON || stage === JobStage.IN_PROGRESS;
+}
+
+/**
  * Granular capabilities a JamQuote staff admin can be granted. A super-admin
  * (User.isSuperAdmin) implicitly holds all of them and is the only one who
  * can grant/revoke super-admin or manage other admins. Regular admins are

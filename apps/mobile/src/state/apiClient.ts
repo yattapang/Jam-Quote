@@ -19,6 +19,7 @@
  */
 import Constants from "expo-constants";
 import { QuoteStatus } from "@jamquote/core";
+import type { JobStage } from "@jamquote/core";
 import {
   STAGE_KIND,
   STATUS_PILL,
@@ -192,7 +193,7 @@ interface ApiJob {
   clientId?: string | null;
   name: string;
   addressLine?: string | null;
-  stage: string;
+  stage: JobStage;
   progressPct: number;
 }
 
@@ -239,6 +240,9 @@ export function mapJobRow(j: ApiJob, clientName: string, valueCents: number): Jo
     stage: j.stage,
     pct: j.progressPct,
     valueCents,
+    // Still coalesced: STAGE_KIND is exhaustive over JobStage, but this row
+    // comes off the wire, so a server that learns a sixth stage before this
+    // build does renders grey rather than crashing the list.
     kind: STAGE_KIND[j.stage] ?? "neutral",
   };
 }

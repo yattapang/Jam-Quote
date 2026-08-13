@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { JobStage } from "@jamquote/core";
 
 /** Pull everything changed since this server cursor (ISO). Omit for a full sync. */
 export const pullSchema = z.object({
@@ -27,7 +28,11 @@ const jobDataSchema = z.object({
   addressLine: z.string().nullish(),
   town: z.string().nullish(),
   parish: z.string().nullish(),
-  stage: z.string().optional(),
+  // Same enum the REST DTO takes (#36). A device that still sends the old free
+  // text now gets a 400 instead of writing a value the column can no longer
+  // hold — and the stage it sends survives the round-trip rather than being
+  // quietly rewritten to the default.
+  stage: z.nativeEnum(JobStage).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),
 });
 

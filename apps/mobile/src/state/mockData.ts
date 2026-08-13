@@ -14,6 +14,7 @@ import {
   QuoteStatus,
   RateUnit,
 } from "@jamquote/core";
+import type { JobStage } from "@jamquote/core";
 import type { StatusKind } from "../components/StatusPill";
 
 /** A quote line item as edited on-device, before it's persisted via the API. */
@@ -127,12 +128,16 @@ export const clientRows: ClientRow[] = demoClients.map((c) => ({
   quoteCount: demoClientQuoteCount(c.id),
 }));
 
-export const STAGE_KIND: Record<string, StatusKind> = {
-  "In progress": "info",
-  Quoted: "neutral",
-  "Awaiting approval": "info",
-  Complete: "good",
-  Invoiced: "accent",
+/** Colours only — the labels come from JOB_STAGE_LABELS in @jamquote/core, so
+ * mobile and web cannot name the same stage differently (#36). Keyed by the
+ * enum now that Job.stage is one, which also makes a missing case a type
+ * error rather than a silently grey pill. */
+export const STAGE_KIND: Record<JobStage, StatusKind> = {
+  QUOTED: "neutral",
+  WON: "info",
+  IN_PROGRESS: "info",
+  COMPLETE: "good",
+  CANCELLED: "neutral",
 };
 
 export interface JobRow {
@@ -140,7 +145,9 @@ export interface JobRow {
   name: string;
   clientName: string;
   address: string;
-  stage: string;
+  /** The stage itself, not its label: the screen needs the value to decide
+   * whether the progress bar means anything (jobStageTracksProgress). */
+  stage: JobStage;
   pct: number;
   valueCents: number;
   kind: StatusKind;

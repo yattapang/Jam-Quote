@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { jobStageTracksProgress } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
+import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import { jobStagePill } from "@/lib/status";
 import { getJobs, getClients } from "@/lib/api-server";
 import AddJobButton from "./AddJobButton";
 import shared from "../shared.module.css";
@@ -28,34 +31,47 @@ export default async function JobsPage() {
           {jobs.length === 0 && (
             <div className={shared.empty}>No jobs yet — add one to get started.</div>
           )}
-          {jobs.map((job) => (
-            <div key={job.id} className={shared.row}>
-              <div className={shared.rowMain}>
-                <Link
-                  href={`/jobs/${job.id}`}
-                  className={shared.rowTitle}
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  {job.name}
-                </Link>
-                <span className={shared.rowSub}>
-                  {job.clientName} · {job.addressLine}
-                </span>
-                <span className={shared.rowSub}>{job.stage}</span>
+          {jobs.map((job) => {
+            const pill = jobStagePill(job.stage);
+            return (
+              <div key={job.id} className={shared.row}>
+                <div className={shared.rowMain}>
+                  {/* Title + stage pill, the same row shape the quotes and
+                      invoices lists use — the stage used to be plain grey text
+                      here, which read as an afterthought rather than status. */}
+                  <span className={shared.rowTitle}>
+                    <Link href={`/jobs/${job.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                      {job.name}
+                    </Link>
+                    <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
+                  </span>
+                  <span className={shared.rowSub}>
+                    {job.clientName} · {job.addressLine}
+                  </span>
+                  {/* Progress belongs on the LIST: someone checking several
+                      jobs should not have to open each one. Muted text in the
+                      existing sub-line rather than a bar — no other list screen
+                      draws one, and an empty track at 0% reads as broken when 0
+                      is simply where every job starts. Hidden at stages where
+                      the number would mislead (jobStageTracksProgress). */}
+                  {jobStageTracksProgress(job.stage) && (
+                    <span className={shared.rowSub}>{job.progressPct}% complete</span>
+                  )}
+                </div>
+                <div className={shared.rowRight}>
+                  <MoneyText cents={job.valueCents} />
+                  <span className={shared.rowSub}>
+                    {job.quoteCount} {job.quoteCount === 1 ? "quote" : "quotes"}
+                  </span>
+                  <DeleteRowButton
+                    kind="job"
+                    id={job.id}
+                    confirmMessage={`Delete ${job.name}? This can't be undone.`}
+                  />
+                </div>
               </div>
-              <div className={shared.rowRight}>
-                <MoneyText cents={job.valueCents} />
-                <span className={shared.rowSub}>
-                  {job.quoteCount} {job.quoteCount === 1 ? "quote" : "quotes"}
-                </span>
-                <DeleteRowButton
-                  kind="job"
-                  id={job.id}
-                  confirmMessage={`Delete ${job.name}? This can't be undone.`}
-                />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>

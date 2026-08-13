@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { JobStage } from "@jamquote/core";
 import { SyncService } from "./sync.service.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { PushInput } from "./sync.dto.js";
@@ -48,7 +49,7 @@ const jobData = {
   clientId: CLIENT_ID,
   addressLine: "12 Hope Rd",
   parish: "Kingston",
-  stage: "Quoted",
+  stage: JobStage.QUOTED,
   progressPct: 0,
 };
 
@@ -303,6 +304,55 @@ describe("SyncService.push — jobs (mirror)", () => {
       }),
     );
     expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "applied" }]);
+  });
+
+  it("writes the stage and progress the device sent", async () => {
+    const prisma = makePrisma();
+    prisma.job.findUnique.mockResolvedValue(null);
+    const svc = makeService(prisma);
+
+    await svc.push(BUSINESS_ID, {
+      clients: [],
+      jobs: [
+        {
+          id: JOB_ID,
+          op: "upsert",
+          updatedAt: "2026-03-01T00:00:00.000Z",
+          data: { ...jobData, stage: JobStage.IN_PROGRESS, progressPct: 62 },
+        },
+      ],
+    });
+
+    expect(prisma.job.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ stage: JobStage.IN_PROGRESS, progressPct: 62 }),
+        update: expect.objectContaining({ stage: JobStage.IN_PROGRESS, progressPct: 62 }),
+      }),
+    );
+  });
+
+  it("leaves stage and progress alone when the device omits them", async () => {
+    // The round-trip that used to lose work: a client that pushes a job
+    // without these fields must not reset the stage a contractor set on the
+    // web back to QUOTED/0. They are optional (not nullish) in the DTO
+    // precisely because omission means "no opinion", not "cleared".
+    const prisma = makePrisma();
+    prisma.job.findUnique.mockResolvedValue(null);
+    const svc = makeService(prisma);
+    const { stage: _stage, progressPct: _pct, ...withoutWorkflow } = jobData;
+
+    await svc.push(BUSINESS_ID, {
+      clients: [],
+      jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: withoutWorkflow }],
+    });
+
+    const args = prisma.job.upsert.mock.calls[0]?.[0] as { create: object; update: object };
+    expect(args.update).not.toHaveProperty("stage");
+    expect(args.update).not.toHaveProperty("progressPct");
+    // Nor on create — the column defaults (QUOTED/0) are the single source of
+    // that default, rather than a second copy of it here.
+    expect(args.create).not.toHaveProperty("stage");
+    expect(args.create).not.toHaveProperty("progressPct");
   });
 
   it("LWW conflict on jobs: existing.updatedAt newer than change.updatedAt -> server_kept, upsert NOT called", async () => {
