@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { formatJmd, LineCategory, QuoteDetailLevel, type GctTreatment, type RateUnit } from "@jamquote/core";
+import { formatJmd, LineCategory, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -31,9 +31,10 @@ import {
   labourLine,
   newLine,
   patchLine,
-  rateUnitOptions,
   removeLineByKey,
-  soldByUnitOptions,
+  applyUnitChoice,
+  unitOptions,
+  unitValue,
   toCents,
   valueToHeading,
   type DraftLine,
@@ -57,7 +58,6 @@ import styles from "./LineItemsEditor.module.css";
  */
 export type UnitField = "rate" | "soldBy";
 
-const UNIT_CELL_LABEL: Record<UnitField, string> = { rate: "Unit", soldBy: "Sold by" };
 
 /** The editor row markup for one line item. Each line's Heading cell is
  * either the built-in/custom-heading Select, or — while the user is naming
@@ -70,7 +70,6 @@ function LineRows({
   headingOptions,
   favouriteCategories,
   materialFilters,
-  unitField,
   unitOptionsFor,
   unitsLoading,
   savingFavKey,
@@ -91,7 +90,7 @@ function LineRows({
   onCancelAddMaterial,
   onCreateMaterial,
   onAddMaterialBusyChange,
-  onSoldByChange,
+  onUnitChange,
 }: {
   lines: DraftLine[];
   headingOptions: SelectOption[];
@@ -101,7 +100,6 @@ function LineRows({
   favouriteCategories: string[];
   /** Selected category filter per line key ("" / absent = all categories). */
   materialFilters: Record<string, string>;
-  unitField: UnitField;
   /** Sold-by options for one line — per line, because a line whose saved unit
    * is no longer in the vocabulary still has to show it. */
   unitOptionsFor: (line: DraftLine) => SelectOption[];
@@ -128,7 +126,7 @@ function LineRows({
     category: ApiMaterialCategory | undefined,
   ) => Promise<void>;
   onAddMaterialBusyChange: (busy: boolean) => void;
-  onSoldByChange: (key: string, value: string) => void;
+  onUnitChange: (key: string, value: string) => void;
 }) {
   return (
     <div className={styles.linesWrap}>
@@ -189,18 +187,14 @@ function LineRows({
             <Input type="number" placeholder="Qty" value={l.quantity} onChange={(e) => onPatch(l.key, { quantity: e.target.value })} />
           </div>
           <div className={styles.fieldCell}>
-            <span className={styles.mobileLabel}>{UNIT_CELL_LABEL[unitField]}</span>
-            {unitField === "rate" ? (
-              <Select options={rateUnitOptions} value={l.rateUnit} onChange={(e) => onPatch(l.key, { rateUnit: e.target.value as RateUnit })} />
-            ) : (
-              <Select
-                aria-label="Sold by"
-                options={unitOptionsFor(l)}
-                value={l.unitLabel ?? ""}
-                onChange={(e) => onSoldByChange(l.key, e.target.value)}
-                disabled={unitsLoading}
-              />
-            )}
+            <span className={styles.mobileLabel}>Unit</span>
+            <Select
+              aria-label="Unit"
+              options={unitOptionsFor(l)}
+              value={unitValue(l)}
+              onChange={(e) => onUnitChange(l.key, e.target.value)}
+              disabled={unitsLoading}
+            />
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Unit price ($)</span>
@@ -263,7 +257,6 @@ export default function LineItemsEditor({
   labourRates,
   detailLevel,
   onDetailLevelChange,
-  unitField = "rate",
 }: {
   /** The word this document calls itself, for the picker/detail-level labels. */
   documentNoun: "quote" | "invoice";
@@ -282,7 +275,6 @@ export default function LineItemsEditor({
   labourRates?: LabourRate[];
   detailLevel: QuoteDetailLevel;
   onDetailLevelChange: (level: QuoteDetailLevel) => void;
-  unitField?: UnitField;
 }) {
   const [customHeadings, setCustomHeadings] = useState<string[]>(initialCustomHeadings);
   const [addingHeadingKey, setAddingHeadingKey] = useState<string | null>(null);
@@ -314,8 +306,7 @@ export default function LineItemsEditor({
   // Only the sold-by cell needs the vocabulary; the rate-unit cell is a fixed
   // enum, so a screen showing that one pays for no request it didn't make
   // before.
-  const soldBy = unitField === "soldBy";
-  const { schema, loading: unitsLoading } = useMaterialSchema(soldBy);
+  const { schema, loading: unitsLoading } = useMaterialSchema();
   // A unit created from a line's "+ Add new unit…" is spliced in locally: the
   // schema cache is invalidated on create, but that only takes effect on the
   // next mount, and the contractor is mid-document.
@@ -342,9 +333,9 @@ export default function LineItemsEditor({
   const patch = (key: string, p: Partial<DraftLine>) => onLinesChange((ls) => patchLine(ls, key, p));
   const removeLine = (key: string) => onLinesChange((ls) => removeLineByKey(ls, key));
 
-  const onSoldByChange = (key: string, value: string) => {
+  const onUnitChange = (key: string, value: string) => {
     if (isAddNewOption(value)) return setAddingUnitKey(key);
-    patch(key, { unitLabel: value || undefined });
+    patch(key, applyUnitChoice(value));
   };
 
   /** Creates a tenant unit from a line's "+ Add new unit…" prompt and applies
@@ -607,8 +598,7 @@ export default function LineItemsEditor({
           headingOptions={headingOptions}
           favouriteCategories={favouriteCategories}
           materialFilters={materialFilters}
-          unitField={unitField}
-          unitOptionsFor={(l) => soldByUnitOptions(l, units)}
+          unitOptionsFor={(l) => unitOptions(l, units)}
           unitsLoading={unitsLoading}
           savingFavKey={savingFavKey}
           addingHeadingKey={addingHeadingKey}
@@ -628,7 +618,7 @@ export default function LineItemsEditor({
           onCancelAddMaterial={() => setAddingMaterialKey(null)}
           onCreateMaterial={createMaterialForLine}
           onAddMaterialBusyChange={setAddingMaterialBusy}
-          onSoldByChange={onSoldByChange}
+          onUnitChange={onUnitChange}
         />
       </Card>
       {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}

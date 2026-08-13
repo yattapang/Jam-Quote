@@ -304,20 +304,57 @@ export interface SelectOption {
  * deleted — so a line carrying a label the current vocabulary no longer has
  * keeps an option of its own rather than silently blanking to the fallback.
  */
-export function soldByUnitOptions(
+/**
+ * Every unit a line could be measured in, in ONE list.
+ *
+ * A quote or invoice carries both kinds of line, so splitting these into two
+ * mutually exclusive pickers was wrong in both directions: with only the
+ * material vocabulary a labour line could not be set to "day", and with only
+ * the time vocabulary a bag of cement printed as "unit".
+ *
+ * The two are stored differently — rateUnit is an enum column, unitLabel a
+ * free-text snapshot — so `unitValue`/`applyUnitChoice` below route the
+ * chosen option to the right field. The contractor just picks a unit.
+ */
+export function unitOptions(
   line: Pick<DraftLine, "rateUnit" | "unitLabel">,
   units: readonly { label: string; custom?: boolean }[],
 ): SelectOption[] {
   const snapshot = line.unitLabel?.trim();
+  // A snapshot the vocabulary no longer offers (renamed or deleted since) keeps
+  // its own option rather than silently blanking a sent document's unit.
   const orphaned = !!snapshot && !units.some((u) => u.label === snapshot);
   return [
-    // Naming the fallback rather than calling it "none" keeps the dropdown
-    // honest: an unset unit still prints rateUnit's label on the document.
-    { value: "", label: `Default (${RATE_UNIT_LABEL[line.rateUnit]})` },
+    ...Object.values(RateUnit).map((v) => ({
+      value: `${RATE_UNIT_PREFIX}${v}`,
+      label: RATE_UNIT_LABEL[v],
+    })),
     ...(orphaned && snapshot ? [{ value: snapshot, label: snapshot }] : []),
     ...units.map((u) => ({ value: u.label, label: u.custom ? `${u.label} (yours)` : u.label })),
     { value: ADD_NEW_OPTION_VALUE, label: "+ Add new unit…" },
   ];
+}
+
+/** Marks the time-vocabulary options so they cannot collide with a material
+ * unit a contractor happened to name "Day". */
+export const RATE_UNIT_PREFIX = "rate:";
+
+/** What the picker should show as selected: the sold-by snapshot when set,
+ * otherwise the line's rate unit. */
+export function unitValue(line: Pick<DraftLine, "rateUnit" | "unitLabel">): string {
+  return line.unitLabel?.trim() || `${RATE_UNIT_PREFIX}${line.rateUnit}`;
+}
+
+/**
+ * Turns a picked option back into the fields it belongs in. Choosing a time
+ * unit CLEARS unitLabel — otherwise a line switched from "bag" to "day" would
+ * keep printing "bag", since unitLabel wins on the document.
+ */
+export function applyUnitChoice(value: string): Partial<DraftLine> {
+  if (value.startsWith(RATE_UNIT_PREFIX)) {
+    return { rateUnit: value.slice(RATE_UNIT_PREFIX.length) as RateUnit, unitLabel: undefined };
+  }
+  return { unitLabel: value };
 }
 
 /** A draft line as the API takes it. A custom heading has no category of its

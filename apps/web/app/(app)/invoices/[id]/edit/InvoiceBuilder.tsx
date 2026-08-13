@@ -157,7 +157,6 @@ export default function InvoiceBuilder({
         labourRates={labourRates}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
-        unitField="soldBy"
       />
 
       <div className={shared.grid2}>

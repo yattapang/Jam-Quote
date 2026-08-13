@@ -23,7 +23,9 @@ import {
   patchLine,
   removeLineByKey,
   savableLines,
-  soldByUnitOptions,
+  applyUnitChoice,
+  unitOptions,
+  unitValue,
   toCents,
   valueToHeading,
   type DraftLine,
@@ -426,43 +428,67 @@ describe("lineToInvoiceLineInput", () => {
   });
 });
 
-describe("soldByUnitOptions", () => {
-  const units = [
-    { label: "bag" },
-    { label: "sheet" },
-    { label: "per pallet", custom: true },
-  ];
+describe("unitOptions — one list for both vocabularies", () => {
+  const units = [{ label: "bag" }, { label: "sheet" }, { label: "drum", custom: true }];
 
-  it("offers the vocabulary, marks the tenant's own rows, and ends with the add-new row", () => {
-    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT }, units);
-    expect(options.map((o) => o.label)).toEqual([
-      "Default (unit)",
-      "bag",
-      "sheet",
-      "per pallet (yours)",
-      "+ Add new unit…",
-    ]);
+  it("offers the time units so a labour line can still be set to a day", () => {
+    // The regression this replaces: with only the material vocabulary, a
+    // labour line on an invoice could not be moved off whatever rateUnit it
+    // happened to carry.
+    const labels = unitOptions({ rateUnit: RateUnit.UNIT }, units).map((o) => o.label);
+    expect(labels).toContain("day");
+    expect(labels).toContain("hour");
   });
 
-  it("names the fallback after the line's own rateUnit, since that is what an unset unit prints", () => {
-    expect(soldByUnitOptions({ rateUnit: RateUnit.HOUR }, units)[0]).toEqual({
-      value: "",
-      label: "Default (hour)",
-    });
+  it("offers the material units alongside them", () => {
+    const labels = unitOptions({ rateUnit: RateUnit.UNIT }, units).map((o) => o.label);
+    expect(labels).toContain("bag");
+    expect(labels).toContain("sheet");
   });
 
-  it("keeps a snapshot label the vocabulary no longer has, rather than blanking the line's unit", () => {
-    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "drum" }, units);
-    expect(options.map((o) => o.value)).toContain("drum");
+  it("marks a tenant's own unit as theirs", () => {
+    const opt = unitOptions({ rateUnit: RateUnit.UNIT }, units).find((o) => o.value === "drum");
+    expect(opt?.label).toBe("drum (yours)");
   });
 
-  it("does not duplicate a snapshot the vocabulary still has", () => {
-    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "bag" }, units);
-    expect(options.filter((o) => o.value === "bag")).toHaveLength(1);
+  it("keeps a snapshot label the vocabulary no longer has", () => {
+    // A unit renamed or deleted since the line was written must not silently
+    // blank the unit on a document already sent.
+    const opts = unitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "keg" }, units);
+    expect(opts.some((o) => o.value === "keg")).toBe(true);
   });
 
-  it("treats a blank snapshot as no unit at all", () => {
-    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "   " }, units);
-    expect(options.map((o) => o.value)).toEqual(["", "bag", "sheet", "per pallet", "__add__"]);
+  it("does not duplicate a snapshot the vocabulary still offers", () => {
+    const opts = unitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "bag" }, units);
+    expect(opts.filter((o) => o.value === "bag")).toHaveLength(1);
+  });
+});
+
+describe("unitValue / applyUnitChoice — routing to the right field", () => {
+  it("shows the sold-by snapshot when the line has one", () => {
+    expect(unitValue({ rateUnit: RateUnit.DAY, unitLabel: "bag" })).toBe("bag");
+  });
+
+  it("falls back to the rate unit when it does not", () => {
+    expect(unitValue({ rateUnit: RateUnit.DAY })).toBe("rate:DAY");
+  });
+
+  it("treats a blank snapshot as absent", () => {
+    expect(unitValue({ rateUnit: RateUnit.HOUR, unitLabel: "   " })).toBe("rate:HOUR");
+  });
+
+  it("routes a material unit to unitLabel", () => {
+    expect(applyUnitChoice("bag")).toEqual({ unitLabel: "bag" });
+  });
+
+  it("routes a time unit to rateUnit AND clears the snapshot", () => {
+    // Without the clear, a line switched from "bag" to "day" would keep
+    // printing "bag" — unitLabel wins on the document.
+    expect(applyUnitChoice("rate:DAY")).toEqual({ rateUnit: RateUnit.DAY, unitLabel: undefined });
+  });
+
+  it("round-trips: what unitValue shows is what applyUnitChoice accepts", () => {
+    const line = { rateUnit: RateUnit.WEEK };
+    expect(applyUnitChoice(unitValue(line))).toEqual({ rateUnit: RateUnit.WEEK, unitLabel: undefined });
   });
 });
