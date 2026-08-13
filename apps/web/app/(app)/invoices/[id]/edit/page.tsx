@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { InvoiceStatus } from "@jamquote/core";
-import { getInvoice } from "@/lib/api-server";
+import { getAssemblies, getInvoice, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
 import InvoiceBuilder from "./InvoiceBuilder";
 
 export const metadata = { title: "Edit invoice · JamQuote" };
@@ -15,10 +15,22 @@ export default async function EditInvoicePage({ params }: { params: { id: string
     redirect(`/invoices/${invoice.id}`);
   }
 
+  // The same three catalogs the quote builder's page fetches, since the line
+  // editor is now shared. No clients/jobs (this screen has no client field) and
+  // no business (an invoice carries its own gctRatePct).
+  const [favourites, assemblies, labourRates] = await Promise.all([
+    getMaterialFavourites(),
+    getAssemblies(),
+    getLabourRates(),
+  ]);
+
   return (
     <InvoiceBuilder
       invoiceId={invoice.id}
       invoiceNumber={invoice.num}
+      favourites={favourites}
+      assemblies={assemblies}
+      labourRates={labourRates}
       initial={{
         dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : undefined,
         terms: invoice.terms,
@@ -36,6 +48,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             description: l.description,
             quantity: l.quantity,
             rateUnit: l.rateUnit,
+            unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
             assemblyId: l.assemblyId,
@@ -50,6 +63,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             description: l.description,
             quantity: l.quantity,
             rateUnit: l.rateUnit,
+            unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
             assemblyId: l.assemblyId,

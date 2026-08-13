@@ -480,8 +480,12 @@ export default function MaterialForm({
  * so the surrounding form only has to say what to create and what to call the
  * failure — the two pickers here and the supplier one in SupplierPricePanel
  * are otherwise the same interaction.
+ *
+ * Exported for the shared line editor's own "+ Add new unit…" prompt, which
+ * creates against the same MaterialUnit vocabulary this form's unit picker
+ * reads.
  */
-function InlineAddRow({
+export function InlineAddRow({
   label,
   placeholder,
   errorText,

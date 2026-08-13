@@ -3,58 +3,31 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  computeTotals,
-  formatJmd,
-  GctTreatment,
-  LineCategory,
-  QuoteDetailLevel,
-  RateUnit,
-} from "@jamquote/core";
+import { computeTotals, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import Modal from "@/components/ui/Modal";
 import MoneyText from "@/components/ui/MoneyText";
-import {
-  createQuote,
-  updateQuote,
-  createMaterialFavourite,
-  updateMaterialFavourite,
-  ApiError,
-  type ApiMaterialCategory,
-} from "@/lib/api-client";
+import { createQuote, updateQuote, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import JobSelectField from "@/components/forms/JobSelectField";
-import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
-import MaterialPickerField from "@/components/forms/MaterialPickerField";
-import { materialLineDescription } from "@/lib/material-display";
 import type { ClientOption, JobOption } from "@/components/forms/types";
 import type { Assembly, MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
-import styles from "./QuoteBuilder.module.css";
+import LineItemsEditor from "../../LineItemsEditor";
 import {
-  ADD_HEADING_VALUE,
-  assemblyLine,
-  categoryHeadingOptions,
   customHeadingsFromInitial,
   fromCents,
-  gctOptions,
   groupLinesIntoSections,
-  headingToValue,
   lineToLineInput,
   linesFromInitial,
-  newLine,
-  rateUnitOptions,
+  savableLines,
   toCents,
-  valueToHeading,
   type DraftLine,
   type InitialLine,
   type InitialLines,
   type InitialSection,
 } from "@/lib/line-editor";
-import { invalidateMaterialSchema } from "@/lib/use-material-schema";
 
 const DEFAULT_GCT_RATE = 15; // fallback only — real rate comes from the business's gctRatePct prop
 const DEFAULT_VALID_DAYS = 30;
@@ -88,170 +61,6 @@ function initialValidDays(initial?: InitialQuote): number {
   const end = new Date(initial.validUntil);
   const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
   return days > 0 ? days : DEFAULT_VALID_DAYS;
-}
-
-/** The editor row markup for one line item. Each line's Heading cell is
- * either the built-in/custom-heading Select, or — while the user is naming
- * a brand-new heading for that line — an inline text input. Desktop keeps
- * the original fixed multi-column grid (QuoteBuilder.module.css `.lineRow`);
- * at <=767px the same markup reflows into a stacked card with small field
- * labels, so nothing overflows a phone viewport. */
-function LineRows({
-  lines,
-  headingOptions,
-  favouriteCategories,
-  materialFilters,
-  savingFavKey,
-  addingHeadingKey,
-  newHeadingText,
-  addingMaterialKey,
-  addingMaterialBusy,
-  onPatch,
-  onRemove,
-  onHeadingChange,
-  onNewHeadingTextChange,
-  onCommitNewHeading,
-  onCancelNewHeading,
-  onMaterialFilterChange,
-  onPickFavourite,
-  onSaveFavourite,
-  onOpenAddMaterial,
-  onCancelAddMaterial,
-  onCreateMaterial,
-  onAddMaterialBusyChange,
-}: {
-  lines: DraftLine[];
-  headingOptions: { value: string; label: string }[];
-  /** Distinct categories present across saved materials, for the per-line
-   * category filter dropdown. Empty when no saved material has a category
-   * yet, in which case the filter is hidden entirely (backward compatible). */
-  favouriteCategories: string[];
-  /** Selected category filter per line key ("" / absent = all categories). */
-  materialFilters: Record<string, string>;
-  savingFavKey: string | null;
-  addingHeadingKey: string | null;
-  newHeadingText: string;
-  addingMaterialKey: string | null;
-  addingMaterialBusy: boolean;
-  onPatch: (key: string, p: Partial<DraftLine>) => void;
-  onRemove: (key: string) => void;
-  onHeadingChange: (key: string, value: string) => void;
-  onNewHeadingTextChange: (value: string) => void;
-  onCommitNewHeading: (key: string) => void;
-  onCancelNewHeading: () => void;
-  onMaterialFilterChange: (key: string, value: string) => void;
-  onPickFavourite: (key: string, favourite: MaterialFavourite) => void;
-  onSaveFavourite: (key: string) => void;
-  onOpenAddMaterial: (key: string) => void;
-  onCancelAddMaterial: () => void;
-  onCreateMaterial: (
-    key: string,
-    values: MaterialFormValues,
-    category: ApiMaterialCategory | undefined,
-  ) => Promise<void>;
-  onAddMaterialBusyChange: (busy: boolean) => void;
-}) {
-  return (
-    <div className={styles.linesWrap}>
-      {lines.map((l) => {
-        const materialFilter = materialFilters[l.key] ?? "";
-        return (
-        <div key={l.key} className={styles.lineRow}>
-          <div className={`${styles.fieldCell} ${styles.full}`}>
-            <span className={styles.mobileLabel}>Saved material</span>
-            {favouriteCategories.length > 0 && (
-              <Select
-                aria-label="Filter saved materials by category"
-                options={[{ value: "", label: "All categories" }, ...favouriteCategories.map((c) => ({ value: c, label: c }))]}
-                value={materialFilter}
-                onChange={(e) => onMaterialFilterChange(l.key, e.target.value)}
-                style={{ marginBottom: 6 }}
-              />
-            )}
-            <MaterialPickerField
-              category={materialFilter || undefined}
-              onPick={(fav) => onPickFavourite(l.key, fav)}
-              onAddNew={() => onOpenAddMaterial(l.key)}
-            />
-          </div>
-          <div className={`${styles.fieldCell} ${styles.full}`}>
-            <span className={styles.mobileLabel}>Heading</span>
-            {addingHeadingKey === l.key ? (
-              <Input
-                autoFocus
-                placeholder="New heading name"
-                value={newHeadingText}
-                onChange={(e) => onNewHeadingTextChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    onCommitNewHeading(l.key);
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    onCancelNewHeading();
-                  }
-                }}
-                onBlur={() => onCommitNewHeading(l.key)}
-              />
-            ) : (
-              <Select
-                options={headingOptions}
-                value={headingToValue(l.heading)}
-                onChange={(e) => onHeadingChange(l.key, e.target.value)}
-              />
-            )}
-          </div>
-          <div className={`${styles.fieldCell} ${styles.full}`}>
-            <span className={styles.mobileLabel}>Description</span>
-            <Input placeholder="Description" value={l.description} onChange={(e) => onPatch(l.key, { description: e.target.value })} />
-          </div>
-          <div className={styles.fieldCell}>
-            <span className={styles.mobileLabel}>Qty</span>
-            <Input type="number" placeholder="Qty" value={l.quantity} onChange={(e) => onPatch(l.key, { quantity: e.target.value })} />
-          </div>
-          <div className={styles.fieldCell}>
-            <span className={styles.mobileLabel}>Unit</span>
-            <Select options={rateUnitOptions} value={l.rateUnit} onChange={(e) => onPatch(l.key, { rateUnit: e.target.value as RateUnit })} />
-          </div>
-          <div className={styles.fieldCell}>
-            <span className={styles.mobileLabel}>Unit price ($)</span>
-            <Input type="number" placeholder="Unit $" value={l.unitPriceDollars} onChange={(e) => onPatch(l.key, { unitPriceDollars: e.target.value })} />
-          </div>
-          <div className={styles.fieldCell}>
-            <span className={styles.mobileLabel}>GCT</span>
-            <Select options={gctOptions} value={l.gctTreatment} onChange={(e) => onPatch(l.key, { gctTreatment: e.target.value as GctTreatment })} />
-          </div>
-          <div className={styles.actionsCell}>
-            <button
-              type="button"
-              aria-label="Save as favourite material"
-              title="Save this line's description & price for reuse"
-              onClick={() => onSaveFavourite(l.key)}
-              disabled={savingFavKey === l.key || !l.description.trim() || toCents(l.unitPriceDollars) === 0}
-              className={styles.saveFavButton}
-            >
-              {savingFavKey === l.key ? "…" : "★"}
-            </button>
-            <button type="button" aria-label="Remove line" onClick={() => onRemove(l.key)} className={styles.removeButton}>
-              ×
-            </button>
-          </div>
-
-          {addingMaterialKey === l.key && (
-            <Modal title="Add material" onClose={() => (addingMaterialBusy ? undefined : onCancelAddMaterial())}>
-              <MaterialForm
-                submitLabel="Add material"
-                onCancel={onCancelAddMaterial}
-                onSubmit={(values, category) => onCreateMaterial(l.key, values, category)}
-                onBusyChange={onAddMaterialBusyChange}
-              />
-            </Modal>
-          )}
-        </div>
-        );
-      })}
-    </div>
-  );
 }
 
 export default function QuoteBuilder({
@@ -289,196 +98,25 @@ export default function QuoteBuilder({
   const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
   const [validDays, setValidDays] = useState(String(initialValidDays(initial)));
   const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
-  const [customHeadings, setCustomHeadings] = useState<string[]>(() => customHeadingsFromInitial(initial));
-  const [addingHeadingKey, setAddingHeadingKey] = useState<string | null>(null);
-  const [newHeadingText, setNewHeadingText] = useState("");
+  // Only read on the line editor's first render, to seed its heading dropdown.
+  const initialCustomHeadings = useMemo(() => customHeadingsFromInitial(initial), [initial]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Set when save() fails with the API's 402 FREE_LIMIT_REACHED response, so
   // the error banner can add an "Upgrade to Pro" link to /settings.
   const [limitReached, setLimitReached] = useState(false);
-  // Local copies of the clients/jobs/saved-materials lists — seeded from
-  // props, then kept in sync locally when the user creates a new one inline
-  // ("+ Add new client…" / "+ Add new job…" / "+ Add material…") so it
-  // appears immediately in the picker without navigating away or losing the
-  // in-progress quote.
+  // Local copies of the clients/jobs lists — seeded from props, then kept in
+  // sync locally when the user creates a new one inline ("+ Add new client…" /
+  // "+ Add new job…") so it appears immediately in the picker without
+  // navigating away or losing the in-progress quote.
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [jobs, setJobs] = useState<JobOption[]>(initialJobs);
-  const [favourites, setFavourites] = useState<MaterialFavourite[]>(initialFavourites);
-  const [savingFavKey, setSavingFavKey] = useState<string | null>(null);
-  const [favError, setFavError] = useState("");
-  const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
-  const [addingMaterialBusy, setAddingMaterialBusy] = useState(false);
-  // Per-line saved-material category filter ("" = all categories). Keyed by
-  // line key so each line's picker narrows independently.
-  const [materialFilters, setMaterialFilters] = useState<Record<string, string>>({});
   // Per-quote presentation setting: SUMMARY (each job-type line as one priced
   // row) vs DETAILED (expand its component snapshot on the quote/PDF). Display
   // only — never affects totals.
   const [detailLevel, setDetailLevel] = useState<QuoteDetailLevel>(
     initial?.detailLevel ?? QuoteDetailLevel.SUMMARY,
   );
-  // "+ Add job type" picker: the assembly being previewed and the quantity to
-  // add. Null id = the modal is closed.
-  const [jobTypeId, setJobTypeId] = useState<string>("");
-  const [jobTypeQty, setJobTypeQty] = useState("1");
-  const [addingJobType, setAddingJobType] = useState(false);
-
-  /** Distinct categories present across saved materials, for the per-line
-   * filter dropdown. Empty (and the filter hidden) until any material has a
-   * category — existing businesses with only flat, uncategorized materials
-   * see no change here. */
-  const favouriteCategories = useMemo(
-    () => Array.from(new Set(favourites.map((f) => f.category).filter((c): c is string => !!c))).sort(),
-    [favourites],
-  );
-  const setMaterialFilter = (key: string, value: string) =>
-    setMaterialFilters((f) => ({ ...f, [key]: value }));
-
-  /** Fills a line's description + unit price from a picked favourite (via
-   * the type-ahead MaterialPickerField, which fetches from the API directly
-   * rather than the locally-cached `favourites` array, so it hands back the
-   * full favourite object rather than just an id). The description is
-   * composed from the favourite's name + spec values (+ its own description,
-   * if set) via materialLineDescription — previously this used only
-   * `fav.name`, so a variant's Dimension/Length/Grade specs never made it
-   * onto the actual quote line, only into the picker's dropdown label. Also
-   * stamps materialFavouriteId so ★ Save-as-favourite can later update this
-   * exact variant precisely (see saveFavourite). Only nudges the heading to
-   * Materials when the line is still on its untouched default heading — an
-   * already-customized heading is left alone. */
-  const pickFavourite = (key: string, fav: MaterialFavourite) => {
-    setLines((ls) =>
-      ls.map((l) => {
-        if (l.key !== key) return l;
-        const isDefaultHeading = l.heading.kind === "category" && l.heading.category === LineCategory.MATERIAL;
-        return {
-          ...l,
-          description: materialLineDescription(fav),
-          unitPriceDollars: String(fav.priceDollars),
-          // `fav.unit` is the resolved MaterialUnit label for 2a materials and
-          // the legacy free-text string for older ones; either way it is what
-          // the customer should see next to the quantity.
-          unitLabel: fav.unit,
-          heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
-          materialFavouriteId: fav.id,
-        };
-      }),
-    );
-    // Keep the locally-cached list in sync so favouriteCategories (and any
-    // other UI reading `favourites`) knows about a variant the type-ahead
-    // found that this business hadn't loaded into it yet.
-    setFavourites((favs) => (favs.some((f) => f.id === fav.id) ? favs : [...favs, fav]));
-  };
-
-  /**
-   * Saves a line as a reusable favourite: last-price behaviour — updates an
-   * existing favourite's price if one exists, otherwise creates a new one.
-   * Skips silently if there's nothing meaningful to save (blank description
-   * or zero price).
-   *
-   * Identity match, in order:
-   *  1. `materialFavouriteId` — set when this line was populated by picking
-   *     or creating a favourite (see pickFavourite/createMaterialForLine) and
-   *     cleared the moment the description is hand-edited (see patch()). This
-   *     is exact: it can't confuse two variants that happen to share a name,
-   *     because it isn't looking at the name at all.
-   *  2. A fallback exact match on the *composed* description (name + specs +
-   *     description, via materialLineDescription) for lines typed or edited
-   *     freehand, which have no structured category/specs to compare against
-   *     the plain quote line — description text is genuinely all there is.
-   *     This replaces the old bug: matching on `name` alone,
-   *     case/whitespace-insensitively, ignoring specs and category entirely,
-   *     which silently clobbered one variant's price with another's the
-   *     moment two variants shared a name (e.g. "2x4" lumber in different
-   *     lengths/grades). Matching the full composed text is strictly
-   *     narrower — "2x4 x 16ft x Select" and "2x4 x 8ft x Select" no longer
-   *     collide — without needing a confirmation prompt for the common case
-   *     (re-saving the same picked material to update its price).
-   */
-  const saveFavourite = async (key: string) => {
-    const line = lines.find((l) => l.key === key);
-    if (!line) return;
-    const name = line.description.trim();
-    const priceCents = toCents(line.unitPriceDollars);
-    if (!name || priceCents === 0) return;
-
-    setSavingFavKey(key);
-    setFavError("");
-    try {
-      const existing = line.materialFavouriteId
-        ? favourites.find((f) => f.id === line.materialFavouriteId)
-        : favourites.find((f) => materialLineDescription(f) === name);
-      if (existing) {
-        const updated = await updateMaterialFavourite(existing.id, { priceCents });
-        setFavourites((favs) => favs.map((f) => (f.id === existing.id ? updated : f)));
-      } else {
-        const created = await createMaterialFavourite({ name, priceCents });
-        setFavourites((favs) => [...favs, created]);
-        setLines((ls) => ls.map((l) => (l.key === key ? { ...l, materialFavouriteId: created.id } : l)));
-      }
-    } catch {
-      setFavError("Couldn't save the material — is the API running?");
-    } finally {
-      setSavingFavKey(null);
-    }
-  };
-
-  /** "+ Add material…" from a line's saved-materials picker: creates a new
-   * favourite, appends it to the local list, and applies its composed
-   * description/price to the line that opened the modal — all without
-   * navigating away. Stamps materialFavouriteId for the same reason
-   * pickFavourite does (see saveFavourite). */
-  const createMaterialForLine = async (
-    key: string,
-    values: MaterialFormValues,
-    category: ApiMaterialCategory | undefined,
-  ) => {
-    const created = await createMaterialFavourite(materialPayloadFromValues(values, category));
-    invalidateMaterialSchema();
-    setFavourites((favs) => [...favs, created]);
-    setLines((ls) =>
-      ls.map((l) =>
-        l.key === key
-          ? {
-              ...l,
-              description: materialLineDescription(created),
-              unitPriceDollars: String(created.priceDollars),
-              unitLabel: created.unit,
-              materialFavouriteId: created.id,
-            }
-          : l,
-      ),
-    );
-    setAddingMaterialKey(null);
-  };
-
-  const selectedAssembly = assemblies.find((a) => a.id === jobTypeId);
-
-  const openJobTypePicker = () => {
-    setJobTypeId(assemblies[0]?.id ?? "");
-    setJobTypeQty("1");
-    setAddingJobType(true);
-  };
-  /** Drops the picked job type onto the quote as a new line, pre-filled from
-   * the assembly's computed unit cost (still editable) and carrying its
-   * component snapshot for DETAILED rendering. */
-  const confirmAddJobType = () => {
-    if (!selectedAssembly) return;
-    const qty = Number(jobTypeQty) > 0 ? Number(jobTypeQty) : 1;
-    setLines((ls) => [...ls, assemblyLine(selectedAssembly, qty)]);
-    setAddingJobType(false);
-  };
-
-  const headingOptions = useMemo(
-    () => [
-      ...categoryHeadingOptions,
-      ...customHeadings.map((title) => ({ value: `custom:${title}`, label: title })),
-      { value: ADD_HEADING_VALUE, label: "+ Add heading…" },
-    ],
-    [customHeadings],
-  );
-
   const totals = useMemo(
     () =>
       computeTotals({
@@ -494,52 +132,8 @@ export default function QuoteBuilder({
     [lines, discountPct, depositDollars, gctRatePct],
   );
 
-  // Drives whether the summary/detailed toggle is offered — the setting only
-  // affects job-type lines, so it's hidden until the quote has at least one.
-  const hasAssemblyLine = lines.some((l) => l.assemblyId);
-
-  const patch = (key: string, p: Partial<DraftLine>) =>
-    setLines((ls) =>
-      ls.map((l) => {
-        if (l.key !== key) return l;
-        // Hand-editing the description breaks the link to whichever
-        // favourite populated this line — otherwise ★ Save would silently
-        // update that favourite's price using this line's now-diverged text
-        // as if nothing had changed (see saveFavourite's identity match).
-        const editedDescription = "description" in p && p.description !== l.description && l.materialFavouriteId;
-        return { ...l, ...p, ...(editedDescription ? { materialFavouriteId: undefined } : {}) };
-      }),
-    );
-  const removeLine = (key: string) =>
-    setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== key) : ls));
-
-  const onHeadingChange = (key: string, value: string) => {
-    if (value === ADD_HEADING_VALUE) {
-      setAddingHeadingKey(key);
-      setNewHeadingText("");
-      return;
-    }
-    patch(key, { heading: valueToHeading(value) });
-  };
-  /** Confirms the inline "new heading" input (Enter, or blur to also cover
-   * clicking away): adds the title to the quote's custom-heading list (once)
-   * and selects it on the line that triggered "+ Add heading…". An empty
-   * name is treated as a no-op cancel. */
-  const commitNewHeading = (key: string) => {
-    const title = newHeadingText.trim();
-    setAddingHeadingKey(null);
-    setNewHeadingText("");
-    if (!title) return;
-    setCustomHeadings((hs) => (hs.includes(title) ? hs : [...hs, title]));
-    patch(key, { heading: { kind: "custom", title } });
-  };
-  const cancelNewHeading = () => {
-    setAddingHeadingKey(null);
-    setNewHeadingText("");
-  };
-
   async function save() {
-    const validLines = lines.filter((l) => l.description.trim() && Number(l.quantity) > 0);
+    const validLines = savableLines(lines);
     if (validLines.length === 0) return setError("Add at least one line item with a description and quantity.");
 
     setSaving(true);
@@ -614,77 +208,16 @@ export default function QuoteBuilder({
         </div>
       </Card>
 
-      <section className={shared.section}>
-        <div className={shared.sectionHead}>
-          <h2 className={shared.sectionTitle}>Line items</h2>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <Button variant="outlineAccent" size="sm" onClick={() => setLines((ls) => [...ls, newLine()])}>
-              + Add line
-            </Button>
-            <Button
-              variant="outlineAccent"
-              size="sm"
-              onClick={openJobTypePicker}
-              disabled={assemblies.length === 0}
-              title={assemblies.length === 0 ? "Create a job type first (Job types in the sidebar)" : "Add a saved job type as a line"}
-            >
-              + Add job type
-            </Button>
-          </div>
-        </div>
-        {hasAssemblyLine && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              margin: "0 0 10px",
-              fontSize: 13,
-              color: "var(--jq-text-muted)",
-            }}
-          >
-            <span>Job type detail on quote:</span>
-            <div style={{ maxWidth: 200 }}>
-              <Select
-                aria-label="Job type detail on quote"
-                options={[
-                  { value: QuoteDetailLevel.SUMMARY, label: "Summary (one line each)" },
-                  { value: QuoteDetailLevel.DETAILED, label: "Detailed (show breakdown)" },
-                ]}
-                value={detailLevel}
-                onChange={(e) => setDetailLevel(e.target.value as QuoteDetailLevel)}
-              />
-            </div>
-          </div>
-        )}
-        <Card>
-          <LineRows
-            lines={lines}
-            headingOptions={headingOptions}
-            favouriteCategories={favouriteCategories}
-            materialFilters={materialFilters}
-            savingFavKey={savingFavKey}
-            addingHeadingKey={addingHeadingKey}
-            newHeadingText={newHeadingText}
-            addingMaterialKey={addingMaterialKey}
-            addingMaterialBusy={addingMaterialBusy}
-            onPatch={patch}
-            onRemove={removeLine}
-            onHeadingChange={onHeadingChange}
-            onNewHeadingTextChange={setNewHeadingText}
-            onCommitNewHeading={commitNewHeading}
-            onCancelNewHeading={cancelNewHeading}
-            onMaterialFilterChange={setMaterialFilter}
-            onPickFavourite={pickFavourite}
-            onSaveFavourite={saveFavourite}
-            onOpenAddMaterial={setAddingMaterialKey}
-            onCancelAddMaterial={() => setAddingMaterialKey(null)}
-            onCreateMaterial={createMaterialForLine}
-            onAddMaterialBusyChange={setAddingMaterialBusy}
-          />
-        </Card>
-        {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}
-      </section>
+      <LineItemsEditor
+        documentNoun="quote"
+        lines={lines}
+        onLinesChange={setLines}
+        initialCustomHeadings={initialCustomHeadings}
+        favourites={initialFavourites}
+        assemblies={assemblies}
+        detailLevel={detailLevel}
+        onDetailLevelChange={setDetailLevel}
+      />
 
       <div className={shared.grid2}>
         <Card>
@@ -745,48 +278,6 @@ export default function QuoteBuilder({
           {saving ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
         </Button>
       </div>
-
-      {addingJobType && (
-        <Modal title="Add job type" onClose={() => setAddingJobType(false)}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <Select
-              label="Job type"
-              options={assemblies.map((a) => ({
-                value: a.id,
-                label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}`,
-              }))}
-              value={jobTypeId}
-              onChange={(e) => setJobTypeId(e.target.value)}
-            />
-            <Input
-              label="Quantity"
-              type="number"
-              min={0}
-              step="any"
-              value={jobTypeQty}
-              onChange={(e) => setJobTypeQty(e.target.value)}
-              hint={selectedAssembly ? `Priced per ${selectedAssembly.unit}` : undefined}
-            />
-            {selectedAssembly && (
-              <div className={shared.totalRow} style={{ fontSize: 14 }}>
-                <span>Line total (editable after adding)</span>
-                <MoneyText
-                  cents={Math.round((Number(jobTypeQty) || 0) * selectedAssembly.unitCostCents)}
-                  weight={700}
-                />
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-              <Button variant="ghost" onClick={() => setAddingJobType(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={confirmAddJobType} disabled={!selectedAssembly}>
-                Add to quote
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }

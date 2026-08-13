@@ -10,8 +10,9 @@
  * Money is always integer cents.
  */
 import { GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
-import type { NewQuoteLineInput } from "./api-client";
-import { CATEGORY_LABEL } from "./quote-totals";
+import type { InvoiceLineItemInput, NewQuoteLineInput } from "./api-client";
+import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
+import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
 import type { Assembly, LabourRate, QuoteLineAssemblyComponent } from "./types";
 
 /** Heading-dropdown sentinel meaning "let me name a new one", never a value. */
@@ -289,6 +290,36 @@ export function groupLinesIntoSections(lines: DraftLine[]): HeadingSection[] {
   });
 }
 
+export interface SelectOption {
+  value: string;
+  label: string;
+}
+
+/**
+ * The options for a line's "Sold by" cell, built from the tenant's MaterialUnit
+ * vocabulary.
+ *
+ * The stored value is the unit's LABEL rather than its id, because `unitLabel`
+ * is a snapshot the document keeps even if the unit is later renamed or
+ * deleted — so a line carrying a label the current vocabulary no longer has
+ * keeps an option of its own rather than silently blanking to the fallback.
+ */
+export function soldByUnitOptions(
+  line: Pick<DraftLine, "rateUnit" | "unitLabel">,
+  units: readonly { label: string; custom?: boolean }[],
+): SelectOption[] {
+  const snapshot = line.unitLabel?.trim();
+  const orphaned = !!snapshot && !units.some((u) => u.label === snapshot);
+  return [
+    // Naming the fallback rather than calling it "none" keeps the dropdown
+    // honest: an unset unit still prints rateUnit's label on the document.
+    { value: "", label: `Default (${RATE_UNIT_LABEL[line.rateUnit]})` },
+    ...(orphaned && snapshot ? [{ value: snapshot, label: snapshot }] : []),
+    ...units.map((u) => ({ value: u.label, label: u.custom ? `${u.label} (yours)` : u.label })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new unit…" },
+  ];
+}
+
 /** A draft line as the API takes it. A custom heading has no category of its
  * own, so it is sent as OTHER — the heading survives as the section title. */
 export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
@@ -311,4 +342,13 @@ export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
         }
       : {}),
   };
+}
+
+/** The same line for the invoice write path, which additionally orders lines
+ * within their section by an explicit `sort` rather than by array position.
+ * The rest of the shape is identical — the API validates an invoice line
+ * against the quote line schema (invoiceLineItemInputSchema extends it), so
+ * `unitLabel` reaches an invoice exactly as it reaches a quote. */
+export function lineToInvoiceLineInput(l: DraftLine, sort: number): InvoiceLineItemInput {
+  return { ...lineToLineInput(l), sort };
 }

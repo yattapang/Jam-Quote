@@ -16,12 +16,14 @@ import {
   headingTitle,
   headingToValue,
   labourLine,
+  lineToInvoiceLineInput,
   lineToLineInput,
   linesFromInitial,
   newLine,
   patchLine,
   removeLineByKey,
   savableLines,
+  soldByUnitOptions,
   toCents,
   valueToHeading,
   type DraftLine,
@@ -403,5 +405,64 @@ describe("lineToLineInput", () => {
     );
     expect(input).toMatchObject({ assemblyId: "a1", assemblyName: "Tiling", assemblyUnit: "sq ft" });
     expect(input.assemblyComponents).toHaveLength(1);
+  });
+});
+
+describe("lineToInvoiceLineInput", () => {
+  it("carries unitLabel onto the invoice payload — the invoice PDF prints it, not rateUnit's label", () => {
+    const input = lineToInvoiceLineInput(line({ unitLabel: "bag" }), 0);
+    expect(input.unitLabel).toBe("bag");
+  });
+
+  it("sets the line's position within its section", () => {
+    expect(lineToInvoiceLineInput(line(), 3).sort).toBe(3);
+  });
+
+  it("is otherwise the quote line payload — the API validates both against one schema", () => {
+    const l = line({ description: "Cement", quantity: "2", unitPriceDollars: "10" });
+    const { sort, ...rest } = lineToInvoiceLineInput(l, 0);
+    expect(sort).toBe(0);
+    expect(rest).toEqual(lineToLineInput(l));
+  });
+});
+
+describe("soldByUnitOptions", () => {
+  const units = [
+    { label: "bag" },
+    { label: "sheet" },
+    { label: "per pallet", custom: true },
+  ];
+
+  it("offers the vocabulary, marks the tenant's own rows, and ends with the add-new row", () => {
+    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT }, units);
+    expect(options.map((o) => o.label)).toEqual([
+      "Default (unit)",
+      "bag",
+      "sheet",
+      "per pallet (yours)",
+      "+ Add new unit…",
+    ]);
+  });
+
+  it("names the fallback after the line's own rateUnit, since that is what an unset unit prints", () => {
+    expect(soldByUnitOptions({ rateUnit: RateUnit.HOUR }, units)[0]).toEqual({
+      value: "",
+      label: "Default (hour)",
+    });
+  });
+
+  it("keeps a snapshot label the vocabulary no longer has, rather than blanking the line's unit", () => {
+    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "drum" }, units);
+    expect(options.map((o) => o.value)).toContain("drum");
+  });
+
+  it("does not duplicate a snapshot the vocabulary still has", () => {
+    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "bag" }, units);
+    expect(options.filter((o) => o.value === "bag")).toHaveLength(1);
+  });
+
+  it("treats a blank snapshot as no unit at all", () => {
+    const options = soldByUnitOptions({ rateUnit: RateUnit.UNIT, unitLabel: "   " }, units);
+    expect(options.map((o) => o.value)).toEqual(["", "bag", "sheet", "per pallet", "__add__"]);
   });
 });

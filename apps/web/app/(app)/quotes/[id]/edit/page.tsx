@@ -43,6 +43,9 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             description: l.description,
             quantity: l.quantity,
             rateUnit: l.rateUnit,
+            // Without this, opening a saved quote and re-saving strips the
+            // sold-by label off every line and the PDF reverts to "unit".
+            unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
             assemblyId: l.assemblyId,
@@ -57,6 +60,9 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             description: l.description,
             quantity: l.quantity,
             rateUnit: l.rateUnit,
+            // Without this, opening a saved quote and re-saving strips the
+            // sold-by label off every line and the PDF reverts to "unit".
+            unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
             assemblyId: l.assemblyId,

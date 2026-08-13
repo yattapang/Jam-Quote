@@ -35,12 +35,19 @@ export interface MaterialSchemaState {
   failed: boolean;
 }
 
-export function useMaterialSchema(): MaterialSchemaState {
+/**
+ * @param enabled pass false to skip the fetch entirely. The shared line editor
+ * mounts on both the quote and the invoice screens but reads the unit
+ * vocabulary on only one of them, and a screen that never shows it should not
+ * pay for the request.
+ */
+export function useMaterialSchema(enabled = true): MaterialSchemaState {
   const [schema, setSchema] = useState<ApiMaterialSchema | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     loadMaterialSchema()
       .then((s) => {
@@ -55,7 +62,7 @@ export function useMaterialSchema(): MaterialSchemaState {
     return () => {
       active = false;
     };
-  }, []);
+  }, [enabled]);
 
   return { schema, loading, failed };
 }

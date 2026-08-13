@@ -1,6 +1,7 @@
-/* Quote builder line-item row. Desktop keeps the original fixed multi-column
-   grid; below 767px it reflows into a stacked "card" per line so nothing
-   overflows a phone viewport. Colors come only from --jq-* theme variables. */
+/* Line-item row for the shared line editor (quote builder + invoice editor).
+   Desktop keeps the original fixed multi-column grid; below 767px it reflows
+   into a stacked "card" per line so nothing overflows a phone viewport.
+   Colors come only from --jq-* theme variables. */
 
 .linesWrap {
   display: flex;
