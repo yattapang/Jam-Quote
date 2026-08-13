@@ -1417,10 +1417,16 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const [sl, st] = statusMap[status] ?? ["Active", "good"];
   const init = name.split(" ").slice(0, 2).map((w) => w[0]).join("");
-  const limit = plan === "Pro" ? 9999 : plan === "Core" ? 250 : plan === "Starter" ? 60 : 15;
-  const seats = plan === "Pro" ? 12 : plan === "Core" ? 6 : plan === "Starter" ? 3 : 1;
+  // Real tenants arrive as lowercase "free"/"pro" while the mock rows are
+  // already capitalized, so every lookup below is keyed off the normalized
+  // label — matching what the tenants table does. Comparing the raw value
+  // would send real Pro tenants down each free-tier branch: 15-quote cap,
+  // one seat, and $0.00 MRR, all shown as fact to staff.
+  const shown = planDisplay(plan);
+  const limit = shown === "Pro" ? 9999 : shown === "Core" ? 250 : shown === "Starter" ? 60 : 15;
+  const seats = shown === "Pro" ? 12 : shown === "Core" ? 6 : shown === "Starter" ? 3 : 1;
   const usedSeats = Math.max(1, Math.round(seats * 0.7));
-  const mrrPlan = ({ Free: 0, Starter: 4900, Core: 12900, Pro: 34900 } as Record<string, number>)[plan] ?? 0;
+  const mrrPlan = ({ Free: 0, Starter: 4900, Core: 12900, Pro: 34900 } as Record<string, number>)[shown] ?? 0;
   const metrics = [
     { label: "Quotes created", value: String(q) },
     { label: "This month", value: String(qm) },
@@ -1432,7 +1438,7 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
     { label: "Team seats", text: `${usedSeats} / ${seats}`, w: (usedSeats / seats) * 100, tone: "info" },
     { label: "Document storage", text: "2.1 / 10 GB", w: 21, tone: "good" },
   ];
-  const sub = [["Plan", plan], ["MRR", money(mrrPlan)], ["Started", "2024-08-19"], ["Renews", "2025-05-19"], ["Payment rail", "Lynk"]];
+  const sub = [["Plan", shown], ["MRR", money(mrrPlan)], ["Started", "2024-08-19"], ["Renews", "2025-05-19"], ["Payment rail", "Lynk"]];
 
   return (
     <>
@@ -1443,7 +1449,7 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, lineHeight: 1.15 }}>{name}</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{parish} · TRN {trn}</div>
-            <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[plan] ?? "muted")}>{plan}</span><span style={pill(st)}>{sl}</span></div>
+            <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[shown] ?? "muted")}>{shown}</span><span style={pill(st)}>{sl}</span></div>
           </div>
           <button className={styles.iconBtn} onClick={onClose} style={{ width: 30, height: 30, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
