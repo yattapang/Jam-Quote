@@ -4,15 +4,20 @@ import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
-import { regulatoryAlerts } from "@/lib/mock-data";
-import { getQuotes, getClients, getBusiness } from "@/lib/api-server";
+import { getQuotes, getClients, getBusiness, getRegulatoryUpdates } from "@/lib/api-server";
+import { sortRegulatoryAlerts } from "@/lib/regulatory";
 import { computeDashboardStats, QuoteStatus } from "@jamquote/core";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Dashboard · JamQuote" };
 
 export default async function DashboardPage() {
-  const [allQuotes, clients, business] = await Promise.all([getQuotes(), getClients(), getBusiness()]);
+  const [allQuotes, clients, business, regulatory] = await Promise.all([
+    getQuotes(),
+    getClients(),
+    getBusiness(),
+    getRegulatoryUpdates(),
+  ]);
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
   // Most recently created first, so a brand-new draft always surfaces here
   // regardless of its quote number (revisions can reuse an older number).
@@ -37,6 +42,10 @@ export default async function DashboardPage() {
     .filter((q) => q.status === QuoteStatus.SENT || q.status === QuoteStatus.VIEWED)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     .slice(0, 4);
+
+  // Soonest-to-take-effect first; the card only has room for the few that
+  // still leave time to act.
+  const alerts = sortRegulatoryAlerts(regulatory, new Date()).slice(0, 3);
 
   return (
     <div className={shared.page}>
@@ -151,28 +160,42 @@ export default async function DashboardPage() {
           </h2>
           <Card>
             <div className={shared.list}>
-              {regulatoryAlerts.map((a) => {
-                const body = (
-                  <div className={shared.rowMain}>
-                    <span className={shared.rowTitle}>
-                      <StatusPill
-                        label={a.effectiveLabel}
-                        kind={a.severity === "critical" ? "critical" : a.severity === "warn" ? "warn" : "info"}
-                      />
-                    </span>
-                    <span className={shared.rowSub} style={{ whiteSpace: "normal" }}>
-                      {a.title}
-                    </span>
-                  </div>
-                );
-                // Regulatory content is genuinely separate from quotes/clients —
-                // it's not derivable from them — so it still comes from the one
-                // regulatoryAlerts fixture. That fixture has no source-URL field
-                // yet (see RegulatoryAlert in apps/web/lib/types.ts), so there's
-                // nothing real to link to; once a regulatory feed exists and
-                // carries a URL, wire it up here rather than fabricating one.
-                return <div key={a.id}>{body}</div>;
-              })}
+              {alerts.length === 0 ? (
+                <div className={shared.empty}>No regulatory updates right now.</div>
+              ) : (
+                alerts.map((a) => {
+                  const body = (
+                    <div className={shared.rowMain}>
+                      <span className={shared.rowTitle}>
+                        <StatusPill
+                          label={a.effectiveLabel}
+                          kind={a.severity === "critical" ? "critical" : a.severity === "warn" ? "warn" : "info"}
+                        />
+                      </span>
+                      <span className={shared.rowSub} style={{ whiteSpace: "normal" }}>
+                        {a.title}
+                      </span>
+                    </div>
+                  );
+                  // Only the updates that carry the authority's own URL become
+                  // links — the rest stay plain text rather than pointing the
+                  // contractor at a guessed page. noopener/noreferrer because
+                  // the destination is a third-party government site.
+                  return a.sourceUrl ? (
+                    <a
+                      key={a.id}
+                      href={a.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={shared.rowLink}
+                    >
+                      {body}
+                    </a>
+                  ) : (
+                    <div key={a.id}>{body}</div>
+                  );
+                })
+              )}
             </div>
           </Card>
         </section>

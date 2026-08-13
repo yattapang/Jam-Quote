@@ -16,15 +16,14 @@ import {
   InvoiceStatus,
   PaymentMethod,
 } from "@jamquote/core";
-import type { Business, BusinessProfile, Client, Invoice, Quote, RegulatoryAlert } from "./types";
+import type { Business, BusinessProfile, Client, Invoice, Quote } from "./types";
 
-// businessProfile backs UI that has no real persistence yet — WhatsApp/email
-// connection status (Phase 2: WhatsApp Business Cloud API) and the
-// subscription plan (Phase 3: billing) per CLAUDE.md's build phasing. The
-// identity fields here (name/trn/parish/…) also seed `fixtureBusiness` below,
-// used only as api-client's offline fallback — the settings/dashboard/quote
-// pages read the live business via getBusiness(), not this object directly.
-export const businessProfile: BusinessProfile = {
+// Demo identity, module-local: it only seeds `fixtureBusiness` below. It used
+// to carry a WhatsApp/email "Connected" status and a subscription plan that
+// the settings page rendered as though they were the tenant's own — both were
+// invented. Billing is now read live (GET /billing/status); channel
+// connections have no writer at all, so settings states that plainly instead.
+const businessProfile: BusinessProfile = {
   name: "Blackwood Construction & Masonry",
   ownerFirstName: "Owen",
   trn: "102-458-963",
@@ -33,14 +32,6 @@ export const businessProfile: BusinessProfile = {
   defaultGctRatePct: 15,
   phone: "876 555 0142",
   email: "owen@blackwoodconstruction.jm",
-  whatsapp: { connected: true, label: "Connected · 876 555 0142" },
-  emailChannel: { connected: false, label: "Not connected" },
-  plan: {
-    name: "Pro plan",
-    priceCents: 180000,
-    renewsLabel: "Renews Aug 4, 2026",
-    features: "Unlimited quotes, WhatsApp sending, supplier price sync",
-  },
 };
 
 /** api-client's getBusiness() fallback when the API is unreachable — same
@@ -188,7 +179,7 @@ export function findJobDetail(id: string): JobDetail | undefined {
   };
 }
 
-// --- Invoices / regulatory / dashboard (not quote-derived) -----------------
+// --- Invoices (not quote-derived) ------------------------------------------
 
 export const invoices: Invoice[] = [
   { id: "inv-0098", num: "INV-0098", quoteId: "qt-0142", clientId: "cl-basil-reid", status: InvoiceStatus.OVERDUE, dueLabel: "Overdue 9 days", dueDate: "2026-06-30", overdueDays: 9, payments: [] },
@@ -202,10 +193,9 @@ export function findInvoice(id: string): Invoice | undefined {
   return invoices.find((i) => i.id === id);
 }
 
-export const regulatoryAlerts: RegulatoryAlert[] = [
-  { id: "reg-gct-threshold", title: "GCT threshold update takes effect Aug 1, 2026", detail: "The standard GCT rate and registration threshold change Aug 1, 2026 — review your default pricing and quote templates before then.", effectiveLabel: "Effective Aug 1, 2026", severity: "warn" },
-  { id: "reg-trn-verification", title: "New TRN verification requirement for invoices over $500,000", detail: "Invoices billing more than $500,000 JMD must display a verified TRN match for both business and client starting this date.", effectiveLabel: "Effective Sep 1, 2026", severity: "info" },
-];
+// Regulatory alerts are no longer hardcoded here either — the dashboard reads
+// the real DB-backed feed via getRegulatoryUpdates() (GET /regulatory) and
+// derives each label/severity in lib/regulatory.ts.
 
 // Dashboard stats and "needs follow-up" are no longer hardcoded here — the
 // dashboard page derives them from real quotes via

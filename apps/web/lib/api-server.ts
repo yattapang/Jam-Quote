@@ -46,6 +46,7 @@ import {
   type EffectiveRulePack,
   type BillingStatus,
   type PricingConfig,
+  type ApiRegulatoryUpdate,
   type Trade,
 } from "./api-client";
 import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
@@ -373,6 +374,19 @@ export async function getBillingStatus(): Promise<BillingStatus | null> {
     redirectOnAuthError(err);
     console.warn("[api-server] getBillingStatus: API unreachable, returning null");
     return null;
+  }
+}
+
+/** GET /regulatory — the published regulatory feed the dashboard card shows.
+ * No fixture backs these, so an unreachable API returns an empty list and the
+ * card renders its empty state (same convention as getLabourRates). */
+export async function getRegulatoryUpdates(): Promise<ApiRegulatoryUpdate[]> {
+  try {
+    return await serverRequest<ApiRegulatoryUpdate[]>("/regulatory");
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getRegulatoryUpdates: API unreachable, returning empty list");
+    return [];
   }
 }
 

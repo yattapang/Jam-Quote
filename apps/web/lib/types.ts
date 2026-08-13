@@ -171,14 +171,22 @@ export interface Invoice {
   payments: Payment[];
 }
 
+/** A regulatory feed row as the dashboard card renders it. `severity` and
+ * `effectiveLabel` are DERIVED from the API's effectiveDate at render time
+ * (lib/regulatory.ts) — the API sends neither. */
 export interface RegulatoryAlert {
   id: string;
   title: string;
   detail: string;
   effectiveLabel: string;
   severity: "warn" | "info" | "critical";
+  /** The authority's own page, when the update carries one. Never fabricated —
+   * null means the card renders as plain text with nothing to click. */
+  sourceUrl: string | null;
 }
 
+/** Identity fields for the demo business, used only to seed `fixtureBusiness`
+ * in lib/mock-data.ts. Every screen reads the live business via getBusiness(). */
 export interface BusinessProfile {
   name: string;
   ownerFirstName: string;
@@ -188,21 +196,10 @@ export interface BusinessProfile {
   defaultGctRatePct: number;
   phone: string;
   email: string;
-  whatsapp: { connected: boolean; label: string };
-  emailChannel: { connected: boolean; label: string };
-  plan: {
-    name: string;
-    priceCents: number;
-    renewsLabel: string;
-    features: string;
-  };
 }
 
 /** The real, API-backed business profile (mirrors the Prisma `Business`
- * model's editable identity fields — see business.dto's updateBusinessSchema).
- * Distinct from `BusinessProfile` above, which still backs the
- * not-yet-persisted WhatsApp/email-connection and subscription-plan fixture
- * data shown on the settings page. */
+ * model's editable identity fields — see business.dto's updateBusinessSchema). */
 export interface Business {
   id: string;
   name: string;

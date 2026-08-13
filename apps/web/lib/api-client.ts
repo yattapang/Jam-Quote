@@ -1177,6 +1177,19 @@ export interface BillingStatus {
   renewsAt: string | null;
 }
 
+/** GET /regulatory (tenant, signed-in) — the platform's published regulatory
+ * feed. Same rows the admin queue works from, minus `actionNeeded`, which is a
+ * staff operations note (see RegulatoryService in apps/api). Severity and the
+ * human date label are derived client-side in ./regulatory.ts, not sent. */
+export interface ApiRegulatoryUpdate {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  effectiveDate: string | null;
+  sourceUrl: string | null;
+}
+
 /** GET /admin/pricing — ADMIN only, read via the proxy so the logged-in
  * admin's cookie is forwarded. */
 export async function getAdminPricing(): Promise<PricingConfig> {

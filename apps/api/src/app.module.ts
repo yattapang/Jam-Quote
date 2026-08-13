@@ -19,6 +19,7 @@ import { PaymentsModule } from "./payments/payments.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { SyncModule } from "./sync/sync.module.js";
 import { BillingModule } from "./billing/billing.module.js";
+import { RegulatoryModule } from "./regulatory/regulatory.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
@@ -48,6 +49,7 @@ import { BillingModule } from "./billing/billing.module.js";
     AdminModule,
     SyncModule,
     BillingModule,
+    RegulatoryModule,
   ],
   controllers: [HealthController],
   providers: [

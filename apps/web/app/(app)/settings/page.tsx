@@ -1,5 +1,4 @@
 import Card from "@/components/ui/Card";
-import { businessProfile } from "@/lib/mock-data";
 import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import BrandingSection from "./BrandingSection";
@@ -58,17 +57,30 @@ export default async function SettingsPage() {
             <span>Default GCT rate</span>
             <span>{business.defaultGctRatePct}%</span>
           </div>
-          {/* WhatsApp/email connection status isn't part of the Business
-              persistence model yet (WhatsApp Business Cloud API is Phase 2
-              per CLAUDE.md) — these two rows stay on the fixture until that
-              lands; every field above this comment is now live. */}
+        </div>
+      </Card>
+
+      {/* Channel connections. The Connection model exists in the schema but
+          nothing writes it — there is no connect flow, no OAuth, no webhook —
+          so there is no state to read and this card is deliberately static.
+          It previously rendered a fixture that said "Connected · 876 555 0142",
+          which a signed-in contractor had every reason to read as their own
+          linked number. Wire this to a real read once messaging ships (Phase 2:
+          WhatsApp Business Cloud API, per CLAUDE.md). */}
+      <Card>
+        <div className={shared.statLabel}>Sending channels</div>
+        <div className={shared.list}>
           <div className={shared.totalRowMuted}>
             <span>WhatsApp</span>
-            <span>{businessProfile.whatsapp.label}</span>
+            <span>Not available yet</span>
           </div>
           <div className={shared.totalRowMuted}>
-            <span>Email channel</span>
-            <span>{businessProfile.emailChannel.label}</span>
+            <span>Email</span>
+            <span>Not available yet</span>
+          </div>
+          <div className={shared.statHint}>
+            Sending quotes straight from JamQuote over WhatsApp or email is coming in a later
+            release. For now, share a quote using the buttons on the quote itself.
           </div>
         </div>
       </Card>
