@@ -649,13 +649,13 @@ export default function AdminConsole({
 
       {/* MAIN */}
       <main className={styles.main}>
-        <header style={{ flex: "none", height: 60, borderBottom: "1px solid var(--border)", background: "color-mix(in srgb,var(--surface) 70%,transparent)", backdropFilter: "blur(8px)", display: "flex", alignItems: "center", gap: 16, padding: "0 24px" }}>
+        <header className={styles.screenHeader} style={{ borderBottom: "1px solid var(--border)", background: "color-mix(in srgb,var(--surface) 70%,transparent)", backdropFilter: "blur(8px)" }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, letterSpacing: "-.01em", lineHeight: 1.1 }}>{screenTitle}</div>
             <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.2 }}>{screenDesc}</div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, height: 34, padding: "0 11px", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", fontSize: 13, minWidth: 210 }}>
+            <div className={styles.headerSearch} style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", fontSize: 13 }}>
               <svg width="15" height="15" viewBox="0 0 24 24" {...iconStroke}><circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" /></svg>
               <span>Search tenants, TRN, rules…</span>
               <span style={{ marginLeft: "auto", fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
@@ -676,8 +676,8 @@ export default function AdminConsole({
         <div className={styles.scr} style={{ flex: 1, overflowY: "auto", position: "relative" }}>
           {/* OVERVIEW */}
           {screen === "overview" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1240, margin: "0 auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 22 }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1240, margin: "0 auto" }}>
+              <div className={styles.statTiles} style={{ marginBottom: 22 }}>
                 {stats.map((s) => (
                   <div key={s.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 16px 15px", boxShadow: "var(--shadow)" }}>
                     <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>{s.label}</div>
@@ -689,9 +689,9 @@ export default function AdminConsole({
                   </div>
                 ))}
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className={styles.overviewSplit} style={{ marginBottom: 16 }}>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)" }}>
-                  <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 18 }}>
+                  <div className={styles.mrrHead} style={{ marginBottom: 18 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Monthly recurring revenue</div>
                       <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", marginTop: 3 }}>{money(2418540)}</div>
@@ -733,7 +733,7 @@ export default function AdminConsole({
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9 16H3z" /><path d="M12 10v4M12 17h.01" /></svg>
                   <span style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: ".02em", color: "var(--muted)" }}>SYSTEM ALERTS</span>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, padding: "2px 6px 6px" }}>
+                <div className={styles.alertGrid} style={{ padding: "2px 6px 6px" }}>
                   {alerts.map((a, i) => (
                     <div key={i} style={{ display: "flex", gap: 10, padding: "11px 12px", borderRadius: 10, background: "var(--surface-alt)" }}>
                       <span style={dot(a.tone)} />
@@ -750,7 +750,7 @@ export default function AdminConsole({
 
           {/* TENANTS */}
           {screen === "tenants" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px" }}>
+            <div className={`${styles.fadein} ${styles.screen}`}>
               <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
                 {tenantFilters.map((f, i) => (
                   <div key={String(f[0])} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: i === 0 ? "var(--surface-alt)" : "var(--surface)", color: "var(--text)" }}>
@@ -759,7 +759,8 @@ export default function AdminConsole({
                 ))}
               </div>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div className={styles.tableScroll}>
+                <table className={`${styles.dataTable} ${styles.dataTableWide}`}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
                     <th style={th}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
                   </tr></thead>
@@ -833,6 +834,7 @@ export default function AdminConsole({
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -840,8 +842,8 @@ export default function AdminConsole({
 
           {/* REGULATORY */}
           {screen === "regulatory" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1100, margin: "0 auto" }}>
-              <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1100, margin: "0 auto" }}>
+              <div className={styles.regStatRow} style={{ marginBottom: 18 }}>
                 {regStats.map((s) => (
                   <div key={s.label} style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "15px 18px", boxShadow: "var(--shadow)", display: "flex", alignItems: "center", gap: 13 }}>
                     <span style={{ width: 11, height: 11, borderRadius: "50%", flex: "none", background: `var(--${s.tone})` }} />
@@ -854,13 +856,13 @@ export default function AdminConsole({
                   const [sl, st] = regMap[r[4]]!;
                   const isNeeds = r[4] === "needs";
                   return (
-                    <div key={i} className={styles.rowHover} style={{ display: "flex", alignItems: "center", gap: 16, padding: "15px 18px", borderBottom: "1px solid var(--border)" }}>
+                    <div key={i} className={`${styles.rowHover} ${styles.regRow}`} style={{ padding: "15px 18px", borderBottom: "1px solid var(--border)" }}>
                       <div style={{ width: 40, height: 40, flex: "none", borderRadius: 10, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}><path d="M4 4h11l5 5v11H4z" /><path d="M15 4v5h5" /></svg>
                       </div>
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{r[0]}</div>
-                        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, display: "flex", gap: 8, alignItems: "center" }}><span style={{ fontWeight: 600, color: "var(--info)" }}>{r[1]}</span>·<span>Effective {r[2]}</span>·<span>Flagged {r[3]}</span></div>
+                        <div className={styles.regMeta} style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}><span style={{ fontWeight: 600, color: "var(--info)" }}>{r[1]}</span>·<span>Effective {r[2]}</span>·<span>Flagged {r[3]}</span></div>
                       </div>
                       <span style={pill(st)}>{sl}</span>
                       <button onClick={() => { go("rulepack"); if (r[0].includes("GCT")) setDiffOpen(true); }} style={{ height: 32, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: isNeeds ? "none" : "1px solid var(--border)", background: isNeeds ? "var(--accent)" : "var(--surface)", color: isNeeds ? "#fff" : "var(--text)" }}>{isNeeds ? "Review diff" : "View"}</button>
@@ -873,7 +875,7 @@ export default function AdminConsole({
 
           {/* RULE-PACK */}
           {screen === "rulepack" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1180, margin: "0 auto" }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1180, margin: "0 auto" }}>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "20px 22px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 18, flexWrap: "wrap" }}>
                   <div style={{ width: 52, height: 52, flex: "none", borderRadius: 12, background: "linear-gradient(135deg,#0a7d3f,#f7d20e 55%,#0a0a0a)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 800, color: "#fff", fontSize: 19, boxShadow: "var(--shadow)" }}>JM</div>
@@ -905,7 +907,7 @@ export default function AdminConsole({
                   <div style={{ fontSize: 13, color: "var(--critical)" }}>Couldn&apos;t load the rule-pack — is the API running?</div>
                 ) : (
                   <>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, marginBottom: 16 }}>
+                    <div className={styles.formGrid} style={{ marginBottom: 16 }}>
                       <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
                         Consumption-tax rate (%)
                         <input type="number" min={0} max={100} step="0.01" disabled={!canManageRulepack} value={rpForm.defaultTaxRatePct}
@@ -932,19 +934,19 @@ export default function AdminConsole({
                       </label>
                     </div>
                     <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 8 }}>STATUTORY PAYROLL RATES (%)</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto", gap: "8px 12px", alignItems: "center", marginBottom: 16 }}>
-                      <div />
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textAlign: "right", width: 92 }}>EMPLOYEE</div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textAlign: "right", width: 92 }}>EMPLOYER</div>
+                    <div className={styles.statutoryGrid} style={{ marginBottom: 16 }}>
+                      <div className={styles.statutorySpacer} />
+                      <div className={styles.statutoryHead} style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>EMPLOYEE</div>
+                      <div className={styles.statutoryHead} style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>EMPLOYER</div>
                       {(rp?.statutory ?? []).map((s) => (
                         <div key={s.code} style={{ display: "contents" }}>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
-                          <input type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
+                          <div className={styles.statutoryLabel}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employeePct", e.target.value)}
-                            style={{ height: 32, width: 92, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
-                          <input type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
+                            style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employerPct", e.target.value)}
-                            style={{ height: 32, width: 92, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                            style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
                         </div>
                       ))}
                     </div>
@@ -962,7 +964,7 @@ export default function AdminConsole({
                 )}
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+              <div className={styles.ruleCardGrid} style={{ marginBottom: 16 }}>
                 {ruleCards.map((c) => (
                   <div key={c.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -988,7 +990,7 @@ export default function AdminConsole({
               </div>
 
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                <div style={{ padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div className={styles.cardHead} style={{ padding: "16px 20px 12px" }}>
                   <div>
                     <div style={{ ...archivo, fontWeight: 700, fontSize: 15 }}>Payroll statutory items</div>
                     <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>Employee &amp; employer contribution rates applied to estimates with labour</div>
@@ -997,7 +999,8 @@ export default function AdminConsole({
                     {payrollVerifiedCount === payroll.length && payroll.length > 0 ? `All ${payroll.length} verified ✓` : `${payrollVerifiedCount} of ${payroll.length} sourced`}
                   </span>
                 </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div className={styles.tableScroll}>
+                <table className={styles.dataTable}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
                     <th style={{ ...th, padding: "10px 20px", borderTop: "1px solid var(--border)" }}>STATUTORY ITEM</th>
                     <th style={{ ...th, textAlign: "right", borderTop: "1px solid var(--border)" }}>EMPLOYEE</th>
@@ -1015,13 +1018,14 @@ export default function AdminConsole({
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
 
           {/* PRICING */}
           {screen === "pricing" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 720, margin: "0 auto" }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 720, margin: "0 auto" }}>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 22px", boxShadow: "var(--shadow)" }}>
                 <div style={{ ...archivo, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Platform pricing</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 18 }}>
@@ -1031,7 +1035,7 @@ export default function AdminConsole({
                 {pricingLoadError && !pricing && (
                   <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 14 }}>Couldn&apos;t load pricing — is the API running?</div>
                 )}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 16 }}>
+                <div className={styles.formGrid} style={{ marginBottom: 16 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
                     Free quotes / month
                     <input
@@ -1095,11 +1099,11 @@ export default function AdminConsole({
 
           {/* FINANCIALS */}
           {screen === "financials" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1000, margin: "0 auto" }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1000, margin: "0 auto" }}>
               {!financials && (
                 <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 16 }}>Couldn&apos;t load financials — is the API running?</div>
               )}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 18 }}>
+              <div className={styles.financeTiles} style={{ marginBottom: 18 }}>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Free-tier businesses</div>
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? financials.freeCount.toLocaleString() : "—"}</div>
@@ -1126,7 +1130,8 @@ export default function AdminConsole({
                     {financials ? "No Pro renewals due in the next 60 days." : "—"}
                   </div>
                 ) : (
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <div className={styles.tableScroll}>
+                  <table className={styles.dataTable}>
                     <thead><tr style={{ background: "var(--surface-alt)" }}>
                       <th style={th}>BUSINESS</th><th style={th}>PLAN</th><th style={{ ...th, textAlign: "right" }}>RENEWS</th>
                     </tr></thead>
@@ -1140,6 +1145,7 @@ export default function AdminConsole({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -1147,9 +1153,10 @@ export default function AdminConsole({
 
           {/* ACTIVITY */}
           {screen === "activity" && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1180, margin: "0 auto" }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1180, margin: "0 auto" }}>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div className={styles.tableScroll}>
+                <table className={`${styles.dataTable} ${styles.dataTableWide}`}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
                     <th style={th}>WHEN</th><th style={th}>WHO</th><th style={th}>ACTION</th><th style={th}>TARGET</th><th style={th}>DETAILS</th>
                   </tr></thead>
@@ -1169,13 +1176,14 @@ export default function AdminConsole({
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
 
           {/* ADMINS — super-admin / MANAGE_ADMINS only */}
           {screen === "admins" && canManageAdmins && (
-            <div className={styles.fadein} style={{ padding: "24px 28px 60px", maxWidth: 1100, margin: "0 auto" }}>
+            <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1100, margin: "0 auto" }}>
               {/* Promote an existing user by email. */}
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
                 <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 4 }}>+ Add admin</div>
@@ -1183,8 +1191,8 @@ export default function AdminConsole({
                   Promote an existing JamQuote user by email — they must have signed up first. Choose which capabilities to grant.
                 </div>
                 <form onSubmit={submitPromote} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)", minWidth: 260 }}>
+                  <div className={styles.formRow}>
+                    <label className={styles.formField} style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
                       User email
                       <input required type="email" value={promoteEmail} onChange={(e) => setPromoteEmail(e.target.value)} placeholder="name@example.com" style={inputStyle} />
                     </label>
@@ -1211,7 +1219,8 @@ export default function AdminConsole({
 
               {/* Existing admins. */}
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <div className={styles.tableScroll}>
+                <table className={styles.dataTable}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
                     <th style={th}>ADMIN</th><th style={th}>CAPABILITIES</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
                   </tr></thead>
@@ -1278,6 +1287,7 @@ export default function AdminConsole({
                     )}
                   </tbody>
                 </table>
+                </div>
               </div>
             </div>
           )}
@@ -1290,7 +1300,7 @@ export default function AdminConsole({
       {/* PERMANENT DELETE MODAL — operator must type the exact business name;
           mirrors the server's confirmName check on DELETE /admin/tenants/:id. */}
       {deleteTarget && (
-        <div onClick={closeDeleteModal} style={{ position: "fixed", inset: 0, background: "rgba(15,12,8,.5)", zIndex: 55, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <div onClick={closeDeleteModal} className={styles.modalOverlay} style={{ background: "rgba(15,12,8,.5)", zIndex: 55 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ width: 440, maxWidth: "100%", background: "var(--surface)", border: "1px solid color-mix(in srgb, var(--critical) 40%, var(--border))", borderRadius: 16, boxShadow: "0 30px 80px -20px rgba(0,0,0,.55)", animation: "admin-fadein .2s ease" }}>
             <div style={{ padding: "20px 22px 4px", display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div style={{ width: 36, height: 36, flex: "none", borderRadius: 10, background: "color-mix(in srgb, var(--critical) 14%, transparent)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--critical)" }}>
@@ -1351,7 +1361,7 @@ export default function AdminConsole({
 
       {/* DIFF MODAL */}
       {diffOpen && (
-        <div onClick={() => setDiffOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,12,8,.5)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <div onClick={() => setDiffOpen(false)} className={styles.modalOverlay} style={{ background: "rgba(15,12,8,.5)", zIndex: 50 }}>
           <div className={styles.scr} onClick={(e) => e.stopPropagation()} style={{ width: 760, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, boxShadow: "0 30px 80px -20px rgba(0,0,0,.55)", animation: "admin-fadein .25s ease" }}>
             <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{ flex: 1 }}>
@@ -1364,7 +1374,7 @@ export default function AdminConsole({
               <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "var(--muted)", marginBottom: 16, flexWrap: "wrap" }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--info)" }}>Source: Tax Administration Jamaica (TAJ) ↗</span>·<span>Effective 2025-04-01</span>·<span>Flagged by rulebot · 2025-03-28</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div className={styles.diffGrid}>
                 <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                   <div style={{ padding: "9px 14px", background: "var(--surface-alt)", fontSize: 11, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)" }}>CURRENT · v2025.3</div>
                   <div style={{ padding: 14 }}><div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>GCT rate</div><div style={{ ...archivo, fontWeight: 700, fontSize: 20, marginTop: 4 }}>15%</div><div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>Single standard rate applied to all sectors. No sector-specific sub-rate.</div></div>
@@ -1427,7 +1437,7 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,12,8,.42)", zIndex: 40 }} />
-      <div className={`${styles.scr} ${styles.slidein}`} style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: 420, background: "var(--surface)", borderLeft: "1px solid var(--border)", zIndex: 41, overflowY: "auto", boxShadow: "-20px 0 50px -24px rgba(0,0,0,.4)" }}>
+      <div className={`${styles.scr} ${styles.slidein} ${styles.drawer}`} style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)", zIndex: 41, boxShadow: "-20px 0 50px -24px rgba(0,0,0,.4)" }}>
         <div style={{ padding: "20px 22px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 13 }}>
           <div style={{ width: 42, height: 42, flex: "none", borderRadius: 11, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 14, color: "var(--muted)" }}>{init}</div>
           <div style={{ flex: 1, minWidth: 0 }}>

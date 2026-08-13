@@ -219,3 +219,286 @@
     overflow-x: auto;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Responsive screens.
+
+   Same story as the shell above, one level in. Every screen inside <main> was
+   laid out from inline style={{…}} objects — `repeat(5,1fr)` stat rows,
+   two-column add-forms, tables with no scroll container of their own. Inline
+   styles beat any stylesheet rule that isn't !important, so no media query
+   could reach them: on a ~390px phone five tiles still tried to share 362px
+   and the wide tables ran off the side of the screen.
+
+   Only the layout properties that actually have to respond were moved here.
+   The purely cosmetic inline styles (colour, radius, shadow) stayed inline —
+   they never need to change. Every declaration outside the media query below
+   is exactly what the inline style already said, so desktop does not move.
+--------------------------------------------------------------------------- */
+
+/* Screen chrome: the per-screen title bar above the scrolling content. */
+.screenHeader {
+  flex: none;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+}
+
+/* Decorative ⌘K search affordance — not wired to anything yet. */
+.headerSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 11px;
+  min-width: 210px;
+}
+
+/* Outer padding shared by every screen. */
+.screen {
+  padding: 24px 28px 60px;
+}
+
+/* Overview */
+.statTiles {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+.overviewSplit {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 16px;
+}
+.mrrHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.alertGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+/* Regulatory */
+.regStatRow {
+  display: flex;
+  gap: 12px;
+}
+.regRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.regMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Two-column editors (rule-pack jurisdiction values, pricing). */
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+/* Rule-pack statutory rates: label + employee/employer number inputs. The
+   rows use `display: contents`, so the cells are direct grid items. */
+.statutoryGrid {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+.statutorySpacer {
+  grid-column: 1;
+}
+.statutoryHead {
+  width: 92px;
+  text-align: right;
+}
+.statutoryLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+.statInput {
+  width: 92px;
+}
+
+.ruleCardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Card header with a title block on the left and a status pill on the right. */
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Financials */
+.financeTiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+/* Tables. The surrounding card clips its children (`overflow: hidden`) to keep
+   its rounded corners, which on a phone is exactly what would make a wide
+   table unreachable. Rather than unpick the card, each table gets its own
+   scroll container inside it — the card, its heading and the page chrome all
+   stay put while only the table slides. A no-op on desktop, where the table
+   never exceeds 100% of the card. */
+.tableScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+/* Admins: the "add admin" email field sitting inline with its submit button. */
+.formRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.formField {
+  min-width: 260px;
+}
+
+/* Modals & the tenant drawer. */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.diffGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 420px;
+  overflow-y: auto;
+}
+
+@media (max-width: 767px) {
+  /* The title bar can no longer be a fixed 60px: the screen title and its
+     description need two lines each once the row is this narrow, and a fixed
+     height would let them spill over the content below. */
+  .screenHeader {
+    height: auto;
+    min-height: 60px;
+    padding: 10px 14px;
+    gap: 10px;
+  }
+  /* 210px of non-functional placeholder is more than half the viewport. */
+  .headerSearch {
+    display: none;
+  }
+
+  .screen {
+    padding: 16px 14px 48px;
+  }
+
+  /* auto-fit rather than a flat single column: the MRR figure is ~13
+     characters of 26px Archivo, so a tile narrower than ~220px would push it
+     past its own border. This gives one column on a phone and two or three on
+     a wide tablet, without a second breakpoint. */
+  .statTiles,
+  .financeTiles {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  }
+
+  .overviewSplit,
+  .alertGrid,
+  .formGrid,
+  .ruleCardGrid,
+  .diffGrid {
+    grid-template-columns: 1fr;
+  }
+
+  /* The MRR headline and its net-new/churn figures need ~370px side by side. */
+  .mrrHead {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .cardHead {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* The three counters have `flex: 1` inline; stacking them sidesteps that
+     without having to fight the inline style for a flex-basis. */
+  .regStatRow {
+    flex-direction: column;
+  }
+
+  /* Let the pill and the review button drop below the title instead of
+     squeezing it to a couple of words. */
+  .regRow {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+  }
+  .regMeta {
+    flex-wrap: wrap;
+  }
+
+  /* Two columns of inputs with the item name spanning the row above them —
+     the 1fr label column would otherwise be about 110px wide. */
+  .statutoryGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .statutorySpacer {
+    display: none; /* so EMPLOYEE/EMPLOYER head the two input columns */
+  }
+  .statutoryHead {
+    width: auto;
+  }
+  .statutoryLabel {
+    grid-column: 1 / -1;
+  }
+  .statInput {
+    width: 100%;
+  }
+
+  /* Without a min-width `width: 100%` just crushes the columns to one word
+     per line instead of scrolling — the min-width is what gives .tableScroll
+     something to scroll. */
+  .dataTable {
+    min-width: 620px;
+  }
+  .dataTableWide {
+    min-width: 880px;
+  }
+
+  .formField {
+    min-width: 100%;
+  }
+
+  .modalOverlay {
+    padding: 12px;
+  }
+  /* 420px of drawer on a 390px screen hangs off the left edge. */
+  .drawer {
+    width: 100%;
+  }
+}
