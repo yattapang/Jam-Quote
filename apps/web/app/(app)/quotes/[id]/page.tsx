@@ -67,7 +67,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             clientPhone={client?.phone}
             totalCents={totals.totalCents}
           />
-          <EmailQuoteButton quoteId={quote.id} clientEmail={client?.email} />
+          <EmailQuoteButton quoteId={quote.id} clientEmail={client?.email} status={quote.status} />
           <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>

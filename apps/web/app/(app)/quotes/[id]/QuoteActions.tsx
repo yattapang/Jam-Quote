@@ -9,9 +9,15 @@ import Modal, { modalStyles } from "@/components/ui/Modal";
 import { ApiError, createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
 
 /**
- * Header actions for the quote detail page. DRAFT quotes can be edited, sent
- * (DRAFT -> SENT), or deleted; any other status can be revised into a new
- * DRAFT copy (see ALLOWED_TRANSITIONS / revise in quotes.service.ts). An
+ * Header actions for the quote detail page. DRAFT quotes can be edited,
+ * marked as sent (DRAFT -> SENT), or deleted; any other status can be revised
+ * into a new DRAFT copy (see ALLOWED_TRANSITIONS / revise in
+ * quotes.service.ts).
+ *
+ * "Mark as sent" here is bookkeeping ONLY — it emails nothing. Emailing lives
+ * in EmailQuoteButton and advances the status itself (#35). The two used to
+ * both be called "Send", so whichever one a contractor picked, half the job
+ * silently did not happen. An
  * ACCEPTED quote also offers "Convert to invoice", which creates a DRAFT
  * invoice from it and lands the user in that invoice's editor. Every
  * state-changing action confirms via a Modal before calling the API.
@@ -77,8 +83,14 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
         <Button href={`/quotes/${id}/edit`} variant="outlineAccent" size="sm">
           Edit
         </Button>
-        <Button variant="primary" size="sm" onClick={() => setSendOpen(true)}>
-          Send
+        {/* Deliberately NOT "Send": emailing the quote is what sends it, and
+            that now advances the status by itself (#35). This is the record-
+            keeping path for a quote delivered some other way — WhatsApp and
+            hand delivery are primary channels in this market, so a contractor
+            needs to mark those sent without the app pretending it emailed
+            anything. */}
+        <Button variant="outlineAccent" size="sm" onClick={() => setSendOpen(true)}>
+          Mark as sent
         </Button>
         <DeleteRowButton
           kind="quote"
@@ -87,16 +99,21 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
           redirectTo="/quotes"
         />
         {sendOpen && (
-          <Modal title="Send quote?" onClose={() => (sending ? undefined : setSendOpen(false))}>
+          <Modal title="Mark as sent?" onClose={() => (sending ? undefined : setSendOpen(false))}>
             <div className={modalStyles.form}>
-              <p>Mark this quote as sent to the client? It moves out of Draft and can no longer be edited directly.</p>
+              <p>
+                Use this if you sent the quote yourself — by WhatsApp, in person, or
+                any other way. <strong>Nothing is emailed.</strong> To email it, use
+                Send by email instead.
+              </p>
+              <p>It moves out of Draft and can no longer be edited directly.</p>
               {sendError && <span className={modalStyles.error}>{sendError}</span>}
               <div className={modalStyles.actions}>
                 <Button variant="ghost" onClick={() => setSendOpen(false)} disabled={sending}>
                   Cancel
                 </Button>
                 <Button variant="primary" onClick={confirmSend} disabled={sending}>
-                  {sending ? "Sending…" : "Send"}
+                  {sending ? "Saving…" : "Mark as sent"}
                 </Button>
               </div>
             </div>
