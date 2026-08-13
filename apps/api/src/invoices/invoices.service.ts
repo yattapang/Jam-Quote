@@ -372,7 +372,12 @@ export class InvoicesService {
       await tx.invoice.update({
         where: { id },
         data: {
-          clientId: input.clientId ?? existing.clientId,
+          // `?? existing` would be wrong here: Invoice.clientId is nullable, so
+          // null is a value the caller can legitimately mean ("no client on
+          // this invoice yet") and `??` would silently discard it, leaving the
+          // old client attached to an invoice the user just detached. Only an
+          // ABSENT key means "leave as is".
+          clientId: input.clientId === undefined ? existing.clientId : input.clientId,
           dueDate: input.dueDate ?? existing.dueDate,
           terms: input.terms ?? existing.terms,
           detailLevel,

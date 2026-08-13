@@ -318,6 +318,44 @@ describe("InvoicesService.update", () => {
     });
   });
 
+  it("reassigns the invoice to a different client", async () => {
+    const { svc, tx } = existingInvoiceHarness(draftInvoice());
+
+    await svc.update("b1", "inv1", { clientId: "cl2" });
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: "inv1" },
+      data: expect.objectContaining({ clientId: "cl2" }),
+    });
+  });
+
+  // The next two pin the null-vs-undefined distinction. Invoice.clientId is
+  // nullable, so an explicit null is a real instruction ("detach this client")
+  // and must not be confused with the key simply being absent. The obvious
+  // `input.clientId ?? existing.clientId` collapses the two and silently keeps
+  // the old client on an invoice the user just cleared.
+  it("detaches the client when clientId is explicitly null", async () => {
+    const { svc, tx } = existingInvoiceHarness(draftInvoice());
+
+    await svc.update("b1", "inv1", { clientId: null });
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: "inv1" },
+      data: expect.objectContaining({ clientId: null }),
+    });
+  });
+
+  it("leaves the client alone when clientId is absent", async () => {
+    const { svc, tx } = existingInvoiceHarness(draftInvoice());
+
+    await svc.update("b1", "inv1", { discountPct: 10 });
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: "inv1" },
+      data: expect.objectContaining({ clientId: "cl1" }),
+    });
+  });
+
   it("rejects editing when status is INVOICED", async () => {
     const { svc, tx } = existingInvoiceHarness(draftInvoice({ status: InvoiceStatus.INVOICED }));
 

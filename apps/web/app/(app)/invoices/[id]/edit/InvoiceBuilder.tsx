@@ -8,6 +8,8 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
 import { updateInvoice, ApiError } from "@/lib/api-client";
+import ClientSelectField from "@/components/forms/ClientSelectField";
+import type { ClientOption } from "@/components/forms/types";
 import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../../../shared.module.css";
 import LineItemsEditor from "../../../LineItemsEditor";
@@ -32,6 +34,7 @@ const DEFAULT_GCT_RATE = 15; // fallback only — real rate comes from the invoi
 export type InitialInvoiceLine = InitialLine;
 export type InitialInvoiceSection = InitialSection;
 export interface InitialInvoice extends InitialLines {
+  clientId?: string;
   dueDate?: string; // yyyy-mm-dd, for the date input
   terms?: string;
   gctRatePct: number;
@@ -41,8 +44,9 @@ export interface InitialInvoice extends InitialLines {
 }
 
 /**
- * Draft invoice editor — edits header fields (due date, terms, GCT/discount/
- * deposit) and the sectioned line-item list, then PATCHes via updateInvoice.
+ * Draft invoice editor — edits header fields (bill-to client, due date, terms,
+ * GCT/discount/deposit) and the sectioned line-item list, then PATCHes via
+ * updateInvoice.
  * Only reachable while the invoice is DRAFT (enforced by the edit page, which
  * redirects otherwise); the API itself also rejects a PATCH once finalized.
  *
@@ -56,10 +60,13 @@ export default function InvoiceBuilder({
   favourites = [],
   assemblies = [],
   labourRates = [],
+  clients: initialClients = [],
 }: {
   invoiceId: string;
   invoiceNumber: string;
   initial: InitialInvoice;
+  /** Clients offered by the bill-to picker, which also creates new ones inline. */
+  clients?: ClientOption[];
   /** Saved materials offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". */
@@ -70,6 +77,8 @@ export default function InvoiceBuilder({
   const router = useRouter();
   const backHref = `/invoices/${invoiceId}`;
 
+  const [clientId, setClientId] = useState(initial.clientId ?? "");
+  const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [dueDate, setDueDate] = useState(initial.dueDate ?? "");
   const [terms, setTerms] = useState(initial.terms ?? "");
   const [gctRatePct, setGctRatePct] = useState(String(initial.gctRatePct ?? DEFAULT_GCT_RATE));
@@ -117,6 +126,10 @@ export default function InvoiceBuilder({
 
     try {
       await updateInvoice(invoiceId, {
+        // null, not undefined, when the picker is blank — the API reads an
+        // absent key as "leave the client alone", so undefined here would make
+        // clearing the field a silent no-op.
+        clientId: clientId || null,
         dueDate: dueDate ? new Date(`${dueDate}T00:00:00.000Z`).toISOString() : undefined,
         terms: terms.trim() || undefined,
         gctRatePct: gctRatePctNum,
@@ -146,6 +159,18 @@ export default function InvoiceBuilder({
           <span className={shared.subtitle}>Draft invoice — edit line items and terms before finalizing.</span>
         </div>
       </header>
+
+      <Card>
+        <div className={shared.list}>
+          <ClientSelectField
+            label="Bill to"
+            clients={clients}
+            value={clientId}
+            onChange={setClientId}
+            onCreated={(c) => setClients((cs) => [...cs, c])}
+          />
+        </div>
+      </Card>
 
       <LineItemsEditor
         documentNoun="invoice"

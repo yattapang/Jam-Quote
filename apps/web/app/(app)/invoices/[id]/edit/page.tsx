@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { InvoiceStatus } from "@jamquote/core";
-import { getAssemblies, getInvoice, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
+import { getAssemblies, getClients, getInvoice, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
 import InvoiceBuilder from "./InvoiceBuilder";
 
 export const metadata = { title: "Edit invoice · JamQuote" };
@@ -15,13 +15,15 @@ export default async function EditInvoicePage({ params }: { params: { id: string
     redirect(`/invoices/${invoice.id}`);
   }
 
-  // The same three catalogs the quote builder's page fetches, since the line
-  // editor is now shared. No clients/jobs (this screen has no client field) and
-  // no business (an invoice carries its own gctRatePct).
-  const [favourites, assemblies, labourRates] = await Promise.all([
+  // The same catalogs the quote builder's page fetches, since the line editor
+  // is now shared, plus the client list for the bill-to picker. No jobs (an
+  // invoice is billed to a client, not scheduled against a job) and no
+  // business (an invoice carries its own gctRatePct).
+  const [favourites, assemblies, labourRates, clients] = await Promise.all([
     getMaterialFavourites(),
     getAssemblies(),
     getLabourRates(),
+    getClients(),
   ]);
 
   return (
@@ -31,7 +33,9 @@ export default async function EditInvoicePage({ params }: { params: { id: string
       favourites={favourites}
       assemblies={assemblies}
       labourRates={labourRates}
+      clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       initial={{
+        clientId: invoice.clientId,
         dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : undefined,
         terms: invoice.terms,
         gctRatePct: invoice.gctRatePct,

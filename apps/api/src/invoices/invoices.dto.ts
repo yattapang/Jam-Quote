@@ -51,7 +51,10 @@ export type InvoiceSectionInput = z.infer<typeof invoiceSectionInputSchema>;
  * model" as quotes.dto.ts's updateQuoteSchema.
  */
 export const updateInvoiceSchema = z.object({
-  clientId: z.string().min(1).optional(),
+  // Nullable, not merely optional: sending null detaches the client, while
+  // omitting the key leaves whoever is attached alone. The editor's client
+  // picker offers a blank option, and that option has to mean something.
+  clientId: z.string().min(1).nullable().optional(),
   dueDate: z.coerce.date().optional(),
   terms: z.string().optional(),
   gctRatePct: z.number().min(0).max(100).optional(),

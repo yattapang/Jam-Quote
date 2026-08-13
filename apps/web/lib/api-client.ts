@@ -917,7 +917,8 @@ export interface InvoiceLineItemInput extends NewQuoteLineInput {
  * here, unlike updateBusiness. Providing `sections`/`lineItems` replaces the
  * invoice's lines in full. */
 export interface UpdateInvoiceInput {
-  clientId?: string;
+  /** null detaches the client; omitting the key leaves it unchanged. */
+  clientId?: string | null;
   dueDate?: string;
   terms?: string;
   gctRatePct?: number;
