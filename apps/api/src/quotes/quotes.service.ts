@@ -26,7 +26,17 @@ import type {
 /** Allowed forward status transitions. See docs/ARCHITECTURE.md. */
 const ALLOWED_TRANSITIONS: Record<QuoteStatus, QuoteStatus[]> = {
   [QuoteStatus.DRAFT]: [QuoteStatus.SENT],
-  [QuoteStatus.SENT]: [QuoteStatus.VIEWED, QuoteStatus.DECLINED, QuoteStatus.EXPIRED],
+  // ACCEPTED is reachable straight from SENT on purpose. VIEWED is a tracking
+  // artifact — an email open or portal view — and nothing in this app can
+  // detect either, so requiring it first would force a contractor whose client
+  // phoned to say yes to record a "view" that never happened. Keeping VIEWED
+  // available for when read-tracking exists, but not as a gate.
+  [QuoteStatus.SENT]: [
+    QuoteStatus.VIEWED,
+    QuoteStatus.ACCEPTED,
+    QuoteStatus.DECLINED,
+    QuoteStatus.EXPIRED,
+  ],
   [QuoteStatus.VIEWED]: [QuoteStatus.ACCEPTED, QuoteStatus.DECLINED, QuoteStatus.EXPIRED],
   [QuoteStatus.ACCEPTED]: [QuoteStatus.INVOICED],
   [QuoteStatus.DECLINED]: [],

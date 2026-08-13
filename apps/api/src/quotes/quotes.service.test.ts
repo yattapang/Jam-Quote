@@ -276,6 +276,17 @@ describe("QuotesService.updateStatus", () => {
     return { svc: new QuotesService(prisma as any, {} as any, {} as any), prisma };
   }
 
+  it("allows SENT -> ACCEPTED without passing through VIEWED", async () => {
+    // VIEWED is a tracking artifact nothing in this app can detect. Gating
+    // acceptance behind it would force a contractor whose client phoned to say
+    // yes to first record a "view" that never happened.
+    const { svc, prisma } = serviceForQuote(QuoteStatus.SENT);
+    await svc.updateStatus("b1", "q1", QuoteStatus.ACCEPTED);
+    expect(prisma.quote.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { status: QuoteStatus.ACCEPTED } }),
+    );
+  });
+
   it("allows a legal forward transition (DRAFT -> SENT)", async () => {
     const { svc, prisma } = serviceForQuote(QuoteStatus.DRAFT);
     await svc.updateStatus("b1", "q1", QuoteStatus.SENT);

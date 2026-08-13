@@ -32,6 +32,9 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
   const [reviseError, setReviseError] = useState("");
   const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
+  const [outcome, setOutcome] = useState<QuoteStatus | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [outcomeError, setOutcomeError] = useState("");
 
   async function convertToInvoice() {
     setConverting(true);
@@ -123,8 +126,61 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
     );
   }
 
+  async function confirmOutcome() {
+    if (!outcome) return;
+    setRecording(true);
+    setOutcomeError("");
+    try {
+      await setQuoteStatus(id, outcome);
+      setOutcome(null);
+      router.refresh();
+    } catch {
+      setOutcomeError("Couldn't record that — is the API running?");
+    } finally {
+      setRecording(false);
+    }
+  }
+
+  // The client's answer can be recorded from SENT or VIEWED. Without this the
+  // quote could never reach ACCEPTED, so "Convert to invoice" below — which
+  // only renders for ACCEPTED — was unreachable and the loop dead-ended.
+  const awaitingAnswer = status === QuoteStatus.SENT || status === QuoteStatus.VIEWED;
+
   return (
     <>
+      {awaitingAnswer && (
+        <>
+          <Button variant="primary" size="sm" onClick={() => setOutcome(QuoteStatus.ACCEPTED)}>
+            Mark accepted
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setOutcome(QuoteStatus.DECLINED)}>
+            Mark declined
+          </Button>
+        </>
+      )}
+      {outcome && (
+        <Modal
+          title={outcome === QuoteStatus.ACCEPTED ? "Mark as accepted?" : "Mark as declined?"}
+          onClose={() => (recording ? undefined : setOutcome(null))}
+        >
+          <div className={modalStyles.form}>
+            <p>
+              {outcome === QuoteStatus.ACCEPTED
+                ? "Record that the client accepted this quote. You'll then be able to convert it to an invoice."
+                : "Record that the client declined this quote. It can still be revised into a new draft."}
+            </p>
+            {outcomeError && <span className={modalStyles.error}>{outcomeError}</span>}
+            <div className={modalStyles.actions}>
+              <Button variant="ghost" onClick={() => setOutcome(null)} disabled={recording}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={confirmOutcome} disabled={recording}>
+                {recording ? "Saving…" : "Confirm"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {status === QuoteStatus.ACCEPTED && (
         <Button variant="primary" size="sm" onClick={convertToInvoice} disabled={converting}>
           {converting ? "Converting…" : "Convert to invoice"}
