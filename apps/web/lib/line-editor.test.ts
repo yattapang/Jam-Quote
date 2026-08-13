@@ -1,0 +1,407 @@
+import { describe, expect, it } from "vitest";
+import {
+  AssemblyComponentKind,
+  GctTreatment,
+  LineCategory,
+  RateUnit,
+} from "@jamquote/core";
+import {
+  assemblyLine,
+  categoryForLabel,
+  customHeadingsFromInitial,
+  draftLineFromInitial,
+  fromCents,
+  groupLinesIntoSections,
+  headingFromSectionTitle,
+  headingTitle,
+  headingToValue,
+  labourLine,
+  lineToLineInput,
+  linesFromInitial,
+  newLine,
+  patchLine,
+  removeLineByKey,
+  savableLines,
+  toCents,
+  valueToHeading,
+  type DraftLine,
+  type Heading,
+  type InitialLine,
+} from "./line-editor";
+import type { Assembly, LabourRate } from "./types";
+
+function line(over: Partial<DraftLine> = {}): DraftLine {
+  return { ...newLine(), ...over };
+}
+
+function initial(over: Partial<InitialLine> = {}): InitialLine {
+  return {
+    category: LineCategory.MATERIAL,
+    description: "Cement",
+    quantity: 3,
+    rateUnit: RateUnit.UNIT,
+    unitPriceCents: 125_000,
+    gctTreatment: GctTreatment.STANDARD,
+    ...over,
+  };
+}
+
+describe("heading values round-trip through the dropdown", () => {
+  it("encodes built-in categories and custom titles distinctly", () => {
+    expect(headingToValue({ kind: "category", category: LineCategory.LABOUR })).toBe("cat:LABOUR");
+    expect(headingToValue({ kind: "custom", title: "Site prep" })).toBe("custom:Site prep");
+  });
+
+  it("decodes back to the same heading", () => {
+    const headings: Heading[] = [
+      { kind: "category", category: LineCategory.MATERIAL },
+      { kind: "custom", title: "Site prep" },
+    ];
+    for (const h of headings) expect(valueToHeading(headingToValue(h))).toEqual(h);
+  });
+
+  it("keeps a custom title containing a colon intact", () => {
+    // slice() by prefix length, not split(":") — "Phase 2: roof" must survive.
+    expect(valueToHeading("custom:Phase 2: roof")).toEqual({ kind: "custom", title: "Phase 2: roof" });
+  });
+
+  it("treats anything not prefixed custom: as a category", () => {
+    expect(valueToHeading("cat:OTHER")).toEqual({ kind: "category", category: LineCategory.OTHER });
+  });
+});
+
+describe("headingTitle / categoryForLabel", () => {
+  it("titles a built-in heading with its customer-facing category label", () => {
+    expect(headingTitle({ kind: "category", category: LineCategory.EQUIPMENT })).toBe("Equipment & rental");
+    expect(headingTitle({ kind: "custom", title: "Site prep" })).toBe("Site prep");
+  });
+
+  it("maps a label back to its category, and only on an exact match", () => {
+    expect(categoryForLabel("Materials")).toBe(LineCategory.MATERIAL);
+    expect(categoryForLabel("Equipment & rental")).toBe(LineCategory.EQUIPMENT);
+    expect(categoryForLabel("materials")).toBeUndefined();
+    expect(categoryForLabel("Site prep")).toBeUndefined();
+  });
+
+  it("rebuilds a heading from a saved section title", () => {
+    expect(headingFromSectionTitle("Labour")).toEqual({ kind: "category", category: LineCategory.LABOUR });
+    expect(headingFromSectionTitle("Site prep")).toEqual({ kind: "custom", title: "Site prep" });
+  });
+
+  it("round-trips every built-in category through its section title", () => {
+    for (const category of Object.values(LineCategory)) {
+      const h: Heading = { kind: "category", category };
+      expect(headingFromSectionTitle(headingTitle(h))).toEqual(h);
+    }
+  });
+});
+
+describe("money conversion is integer cents in both directions", () => {
+  it("rounds dollars to whole cents", () => {
+    expect(toCents("1250.50")).toBe(125_050);
+    expect(toCents("0.005")).toBe(1);
+    expect(toCents("19.999")).toBe(2000);
+  });
+
+  it("treats blank or unparseable input as zero rather than NaN", () => {
+    expect(toCents("")).toBe(0);
+    expect(toCents("abc")).toBe(0);
+    expect(toCents(" ")).toBe(0);
+  });
+
+  it("renders cents back as a plain dollar string", () => {
+    expect(fromCents(125_050)).toBe("1250.5");
+    expect(fromCents(0)).toBe("0");
+    expect(fromCents(1)).toBe("0.01");
+  });
+});
+
+describe("newLine", () => {
+  it("starts on the Materials heading, quantity 1, standard GCT and no price", () => {
+    const l = newLine();
+    expect(l.heading).toEqual({ kind: "category", category: LineCategory.MATERIAL });
+    expect(l.quantity).toBe("1");
+    expect(l.rateUnit).toBe(RateUnit.UNIT);
+    expect(l.unitPriceDollars).toBe("");
+    expect(l.gctTreatment).toBe(GctTreatment.STANDARD);
+    expect(l.unitLabel).toBeUndefined();
+  });
+
+  it("gives every line a distinct React key", () => {
+    expect(newLine().key).not.toBe(newLine().key);
+  });
+});
+
+describe("assemblyLine", () => {
+  const assembly: Assembly = {
+    id: "a1",
+    name: "Tiling",
+    unit: "sq ft",
+    markupPct: 20,
+    unitCostCents: 45_000,
+    components: [
+      {
+        id: "c1",
+        kind: AssemblyComponentKind.MATERIAL,
+        description: "Tile",
+        quantityPerUnit: 1.1,
+        unitPriceCents: 30_000,
+        sort: 0,
+      },
+    ],
+  };
+
+  it("prices the line from the assembly's computed unit cost", () => {
+    const l = assemblyLine(assembly, 12);
+    expect(l.description).toBe("Tiling");
+    expect(l.quantity).toBe("12");
+    expect(l.unitPriceDollars).toBe("450");
+    expect(l.heading).toEqual({ kind: "category", category: LineCategory.OTHER });
+    expect(l.assemblyId).toBe("a1");
+    expect(l.assemblyUnit).toBe("sq ft");
+  });
+
+  it("snapshots the components without their database ids or sort", () => {
+    expect(assemblyLine(assembly, 1).assemblyComponents).toEqual([
+      {
+        kind: AssemblyComponentKind.MATERIAL,
+        description: "Tile",
+        quantityPerUnit: 1.1,
+        unitPriceCents: 30_000,
+      },
+    ]);
+  });
+});
+
+describe("labourLine", () => {
+  const rate: LabourRate = {
+    id: "lr1",
+    trade: "Mason",
+    rateCents: 350_000,
+    rateDollars: 3500,
+    rateUnit: RateUnit.DAY,
+  };
+
+  it("carries the rate's own cadence and leaves unitLabel unset", () => {
+    const l = labourLine(rate, 4);
+    expect(l.description).toBe("Mason");
+    expect(l.quantity).toBe("4");
+    expect(l.rateUnit).toBe(RateUnit.DAY);
+    expect(l.unitPriceDollars).toBe("3500");
+    expect(l.heading).toEqual({ kind: "category", category: LineCategory.LABOUR });
+    expect(l.unitLabel).toBeUndefined();
+  });
+
+  it("names the skill tier when the rate has one", () => {
+    expect(labourLine({ ...rate, skillTier: "Senior" }, 1).description).toBe("Mason — Senior");
+  });
+});
+
+describe("linesFromInitial", () => {
+  it("returns one blank line when there is nothing to restore", () => {
+    expect(linesFromInitial()).toHaveLength(1);
+    expect(linesFromInitial({ lines: [], sections: [] })).toHaveLength(1);
+    expect(linesFromInitial({}).at(0)?.description).toBe("");
+  });
+
+  it("puts sectioned lines first, in section order, then legacy ungrouped ones", () => {
+    const lines = linesFromInitial({
+      sections: [
+        { title: "Site prep", lines: [initial({ description: "Clear" })] },
+        { title: "Materials", lines: [initial({ description: "Cement" })] },
+      ],
+      lines: [initial({ description: "Legacy", category: LineCategory.LABOUR })],
+    });
+    expect(lines.map((l) => l.description)).toEqual(["Clear", "Cement", "Legacy"]);
+    expect(lines[0]?.heading).toEqual({ kind: "custom", title: "Site prep" });
+    expect(lines[1]?.heading).toEqual({ kind: "category", category: LineCategory.MATERIAL });
+    // A legacy line has no section, so its heading comes from its own category.
+    expect(lines[2]?.heading).toEqual({ kind: "category", category: LineCategory.LABOUR });
+  });
+
+  it("restores the sold-by unit a saved line already showed the customer", () => {
+    const lines = linesFromInitial({ lines: [initial({ unitLabel: "bag" })] });
+    expect(lines[0]?.unitLabel).toBe("bag");
+  });
+});
+
+describe("draftLineFromInitial", () => {
+  it("converts cents to a dollar string and keeps the assembly snapshot", () => {
+    const l = draftLineFromInitial(
+      initial({
+        unitPriceCents: 125_050,
+        quantity: 2.5,
+        assemblyId: "a1",
+        assemblyName: "Tiling",
+        assemblyUnit: "sq ft",
+        assemblyComponents: [
+          {
+            kind: AssemblyComponentKind.LABOUR,
+            description: "Fixing",
+            quantityPerUnit: 0.5,
+            unitPriceCents: 1000,
+          },
+        ],
+      }),
+      { kind: "custom", title: "Site prep" },
+    );
+    expect(l.unitPriceDollars).toBe("1250.5");
+    expect(l.quantity).toBe("2.5");
+    expect(l.heading).toEqual({ kind: "custom", title: "Site prep" });
+    expect(l.assemblyComponents).toHaveLength(1);
+  });
+});
+
+describe("customHeadingsFromInitial", () => {
+  it("keeps only non-category titles, deduplicated, in first-appearance order", () => {
+    expect(
+      customHeadingsFromInitial({
+        sections: [
+          { title: "Site prep", lines: [] },
+          { title: "Materials", lines: [] },
+          { title: "Finishing", lines: [] },
+          { title: "Site prep", lines: [] },
+        ],
+      }),
+    ).toEqual(["Site prep", "Finishing"]);
+  });
+
+  it("is empty when there is nothing to restore", () => {
+    expect(customHeadingsFromInitial()).toEqual([]);
+    expect(customHeadingsFromInitial({ lines: [initial()] })).toEqual([]);
+  });
+});
+
+describe("patchLine", () => {
+  it("only touches the addressed line", () => {
+    const a = line({ key: "a" });
+    const b = line({ key: "b" });
+    const [first, second] = patchLine([a, b], "b", { quantity: "9" });
+    expect(first).toBe(a);
+    expect(second?.quantity).toBe("9");
+  });
+
+  it("drops the favourite link when the description is hand-edited", () => {
+    const l = line({ key: "a", description: "Cement", materialFavouriteId: "f1" });
+    expect(patchLine([l], "a", { description: "Cement 42.5kg" })[0]?.materialFavouriteId).toBeUndefined();
+  });
+
+  it("keeps the favourite link when another field changes", () => {
+    const l = line({ key: "a", description: "Cement", materialFavouriteId: "f1" });
+    expect(patchLine([l], "a", { unitPriceDollars: "1300" })[0]?.materialFavouriteId).toBe("f1");
+  });
+
+  it("keeps the favourite link when the description is re-set to the same text", () => {
+    const l = line({ key: "a", description: "Cement", materialFavouriteId: "f1" });
+    expect(patchLine([l], "a", { description: "Cement" })[0]?.materialFavouriteId).toBe("f1");
+  });
+
+  it("does nothing special on a line that was never linked to a favourite", () => {
+    const l = line({ key: "a", description: "Cement" });
+    expect(patchLine([l], "a", { description: "Sand" })[0]).toMatchObject({ description: "Sand" });
+  });
+});
+
+describe("removeLineByKey", () => {
+  it("removes the addressed line", () => {
+    const kept = removeLineByKey([line({ key: "a" }), line({ key: "b" })], "a");
+    expect(kept.map((l) => l.key)).toEqual(["b"]);
+  });
+
+  it("refuses to remove the last remaining line", () => {
+    const only = [line({ key: "a" })];
+    expect(removeLineByKey(only, "a")).toBe(only);
+  });
+});
+
+describe("savableLines", () => {
+  it("drops rows with no description or a non-positive quantity", () => {
+    const rows = [
+      line({ key: "a", description: "Cement", quantity: "2" }),
+      line({ key: "b", description: "   ", quantity: "2" }),
+      line({ key: "c", description: "Sand", quantity: "0" }),
+      line({ key: "d", description: "Blocks", quantity: "" }),
+    ];
+    expect(savableLines(rows).map((l) => l.key)).toEqual(["a"]);
+  });
+});
+
+describe("groupLinesIntoSections", () => {
+  it("orders sections by each heading's first appearance", () => {
+    const sections = groupLinesIntoSections([
+      line({ key: "a", heading: { kind: "custom", title: "Site prep" } }),
+      line({ key: "b", heading: { kind: "category", category: LineCategory.MATERIAL } }),
+      line({ key: "c", heading: { kind: "custom", title: "Site prep" } }),
+    ]);
+    expect(sections.map((s) => [s.title, s.sort])).toEqual([
+      ["Site prep", 0],
+      ["Materials", 1],
+    ]);
+    // Two lines under one heading collapse into that heading's section even
+    // though another heading came between them in the list.
+    expect(sections[0]?.lines.map((l) => l.key)).toEqual(["a", "c"]);
+  });
+
+  it("keeps two custom headings with the same text as one section", () => {
+    const sections = groupLinesIntoSections([
+      line({ key: "a", heading: { kind: "custom", title: "Extras" } }),
+      line({ key: "b", heading: { kind: "custom", title: "Extras" } }),
+    ]);
+    expect(sections).toHaveLength(1);
+  });
+
+  it("is empty for no lines", () => {
+    expect(groupLinesIntoSections([])).toEqual([]);
+  });
+});
+
+describe("lineToLineInput", () => {
+  it("trims the description and converts the price to integer cents", () => {
+    const input = lineToLineInput(
+      line({ description: "  Cement  ", quantity: "3", unitPriceDollars: "1250.50" }),
+    );
+    expect(input.description).toBe("Cement");
+    expect(input.quantity).toBe(3);
+    expect(input.unitPriceCents).toBe(125_050);
+    expect(input.category).toBe(LineCategory.MATERIAL);
+  });
+
+  it("sends a custom heading's line as OTHER — the heading survives as the section title", () => {
+    expect(lineToLineInput(line({ heading: { kind: "custom", title: "Site prep" } })).category).toBe(
+      LineCategory.OTHER,
+    );
+  });
+
+  it("sends unitLabel when the line has one, and omits the key entirely when it does not", () => {
+    expect(lineToLineInput(line({ unitLabel: "bag" })).unitLabel).toBe("bag");
+    expect("unitLabel" in lineToLineInput(line())).toBe(false);
+    // A blank label would print as an empty unit; treat it as absent.
+    expect("unitLabel" in lineToLineInput(line({ unitLabel: "" }))).toBe(false);
+  });
+
+  it("omits every assembly field on a plain line", () => {
+    const input = lineToLineInput(line());
+    expect("assemblyId" in input).toBe(false);
+    expect("assemblyComponents" in input).toBe(false);
+  });
+
+  it("carries the whole assembly snapshot on a job-type line", () => {
+    const input = lineToLineInput(
+      line({
+        assemblyId: "a1",
+        assemblyName: "Tiling",
+        assemblyUnit: "sq ft",
+        assemblyComponents: [
+          {
+            kind: AssemblyComponentKind.MATERIAL,
+            description: "Tile",
+            quantityPerUnit: 1,
+            unitPriceCents: 100,
+          },
+        ],
+      }),
+    );
+    expect(input).toMatchObject({ assemblyId: "a1", assemblyName: "Tiling", assemblyUnit: "sq ft" });
+    expect(input.assemblyComponents).toHaveLength(1);
+  });
+});

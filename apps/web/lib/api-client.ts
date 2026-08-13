@@ -765,6 +765,11 @@ export interface NewQuoteLineInput {
   description: string;
   quantity: number;
   rateUnit: QuoteLineItemInput["rateUnit"];
+  /** How the material is SOLD ("bag", "sheet"). The builder has always sent
+   * this via a spread, but the type never declared it — the old object literal
+   * was inferred, so nothing caught the omission until the shared line-editor
+   * helper gave the return an explicit type. */
+  unitLabel?: string;
   unitPriceCents: number;
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   /** Assembly ("job type") provenance — set only when this line was built
