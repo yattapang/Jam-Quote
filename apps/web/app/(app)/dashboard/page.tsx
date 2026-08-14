@@ -4,7 +4,7 @@ import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
-import { getQuotes, getClients, getBusiness, getRegulatoryUpdates } from "@/lib/api-server";
+import { getQuotes, getClients, getBusiness, getInvoices, getRegulatoryUpdates } from "@/lib/api-server";
 import { sortRegulatoryAlerts } from "@/lib/regulatory";
 import { computeDashboardStats, QuoteStatus } from "@jamquote/core";
 import shared from "../shared.module.css";
@@ -12,11 +12,12 @@ import shared from "../shared.module.css";
 export const metadata = { title: "Dashboard · JamQuote" };
 
 export default async function DashboardPage() {
-  const [allQuotes, clients, business, regulatory] = await Promise.all([
+  const [allQuotes, clients, business, regulatory, allInvoices] = await Promise.all([
     getQuotes(),
     getClients(),
     getBusiness(),
     getRegulatoryUpdates(),
+    getInvoices(),
   ]);
   const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
   // Most recently created first, so a brand-new draft always surfaces here
@@ -25,14 +26,23 @@ export default async function DashboardPage() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 5);
 
-  // Every stat card is derived from the same quotes list the page already
-  // fetched — no hardcoded numbers. computeDashboardStats is the SSOT,
-  // mirroring how computeTotals is the SSOT for money math.
+  // Every stat card is derived from data this page actually fetched — no
+  // hardcoded numbers. computeDashboardStats is the SSOT, mirroring how
+  // computeTotals is the SSOT for money math. The invoices feed the overdue
+  // card, which until now read a hardcoded 0 and told every contractor they
+  // were owed nothing.
   const stats = computeDashboardStats(
     allQuotes.map((q) => ({
       status: q.status,
       totalCents: q.totalCents ?? 0,
       createdAt: q.createdAt,
+    })),
+    allInvoices.map((i) => ({
+      status: i.status,
+      totalCents: i.totalCents ?? 0,
+      paidCents: i.paidCents ?? 0,
+      createdAt: i.createdAt,
+      dueDate: i.dueDate,
     })),
   );
 

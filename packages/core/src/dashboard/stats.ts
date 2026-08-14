@@ -6,6 +6,7 @@
 
 import { QuoteStatus } from "../types/enums.js";
 import type { Cents } from "../tax/money.js";
+import { computeReceivables, type ReportInvoice } from "../reports/summary.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const WIN_RATE_WINDOW_DAYS = 90;
@@ -23,17 +24,30 @@ export interface DashboardStats {
   overdueInvoicesCents: Cents;
 }
 
-/** Compute the dashboard's four headline stats from a business's quotes. */
+/**
+ * Compute the dashboard's four headline stats from a business's quotes and
+ * invoices.
+ *
+ * `invoices` is deliberately REQUIRED rather than defaulting to `[]`. This
+ * card spent a long release cycle reading a hardcoded 0 behind a "no
+ * invoicing backend yet" TODO, quietly telling every contractor they were
+ * owed nothing. An optional parameter would let a caller reintroduce exactly
+ * that by omission; a required one makes the compiler ask for the data.
+ */
 export function computeDashboardStats(
   quotes: DashboardStatInput[],
+  invoices: ReportInvoice[],
   now: Date = new Date(),
 ): DashboardStats {
   return {
     pipelineValueCents: pipelineValueCents(quotes),
     winRatePct90d: winRatePct90d(quotes, now),
     quotesThisMonth: quotesThisMonth(quotes, now),
-    // TODO: no invoicing backend yet (Phase 2) — always 0 until invoices are modelled.
-    overdueInvoicesCents: 0,
+    // Reuses the Reports page's receivables logic rather than re-deriving
+    // "overdue" here — it already handles the unpaid remainder, skips drafts,
+    // and treats a missing due date as never overdue. A second implementation
+    // would drift and show two different numbers for the same money.
+    overdueInvoicesCents: computeReceivables(invoices, now).totalOverdueCents,
   };
 }
 

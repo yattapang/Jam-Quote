@@ -265,7 +265,13 @@ function clientGroupLabel(
  * it. Receivables are a snapshot of "as things stand today", not a tally of
  * activity during a period.
  */
-function computeReceivables(invoices: ReportInvoice[], now: Date): ReceivablesSummary {
+/**
+ * Exported because the dashboard's overdue card needs the same figure the
+ * Reports page shows. Two implementations of "overdue" would eventually
+ * disagree, and the contractor would be told two different things about the
+ * same money on two screens of the same app.
+ */
+export function computeReceivables(invoices: ReportInvoice[], now: Date): ReceivablesSummary {
   const nowMs = now.getTime();
   const byClient = new Map<string, ClientOutstandingSummary>();
 

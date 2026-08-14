@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { QuoteStatus } from "../types/enums.js";
+import { InvoiceStatus, QuoteStatus } from "../types/enums.js";
+import type { ReportInvoice } from "../reports/summary.js";
 import { computeDashboardStats, type DashboardStatInput } from "./stats.js";
 
 // Fixed "now" so every test is deterministic regardless of when it runs.
@@ -10,6 +11,16 @@ function quote(overrides: Partial<DashboardStatInput> = {}): DashboardStatInput 
     status: QuoteStatus.DRAFT,
     totalCents: 0,
     createdAt: "2026-07-12T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function invoice(overrides: Partial<ReportInvoice> = {}): ReportInvoice {
+  return {
+    status: InvoiceStatus.INVOICED,
+    totalCents: 0,
+    paidCents: 0,
+    createdAt: "2026-06-01T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -26,6 +37,7 @@ describe("computeDashboardStats", () => {
         quote({ status: QuoteStatus.EXPIRED, totalCents: 999_999 }),
         quote({ status: QuoteStatus.INVOICED, totalCents: 999_999 }),
       ],
+      [],
       NOW,
     );
     expect(stats.pipelineValueCents).toBe(300_000);
@@ -41,6 +53,7 @@ describe("computeDashboardStats", () => {
         // Not terminal — should be ignored regardless of date.
         quote({ status: QuoteStatus.SENT, createdAt: "2026-07-01T00:00:00.000Z" }),
       ],
+      [],
       NOW,
     );
     // 4 terminal quotes in the last 90 days, 2 accepted -> 50%.
@@ -54,6 +67,7 @@ describe("computeDashboardStats", () => {
         // Older than 90 days before NOW (2026-07-12) -> excluded.
         quote({ status: QuoteStatus.DECLINED, createdAt: "2026-01-01T00:00:00.000Z" }),
       ],
+      [],
       NOW,
     );
     expect(stats.winRatePct90d).toBe(100);
@@ -66,6 +80,7 @@ describe("computeDashboardStats", () => {
         quote({ status: QuoteStatus.SENT }),
         quote({ status: QuoteStatus.VIEWED }),
       ],
+      [],
       NOW,
     );
     expect(stats.winRatePct90d).toBe(0);
@@ -79,16 +94,67 @@ describe("computeDashboardStats", () => {
         quote({ createdAt: "2026-06-30T23:59:59.999Z" }), // last day of prior month -> excluded
         quote({ createdAt: "2026-05-15T00:00:00.000Z" }), // well before -> excluded
       ],
+      [],
       NOW,
     );
     expect(stats.quotesThisMonth).toBe(2);
   });
 
-  it("overdueInvoicesCents is always 0 — no invoicing backend yet", () => {
-    const stats = computeDashboardStats(
-      [quote({ status: QuoteStatus.INVOICED, totalCents: 1_000_000 })],
-      NOW,
-    );
-    expect(stats.overdueInvoicesCents).toBe(0);
+  describe("overdueInvoicesCents", () => {
+    it("is 0 when there are no invoices at all", () => {
+      const stats = computeDashboardStats(
+        [quote({ status: QuoteStatus.INVOICED, totalCents: 1_000_000 })],
+        [],
+        NOW,
+      );
+      expect(stats.overdueInvoicesCents).toBe(0);
+    });
+
+    it("sums the unpaid remainder of invoices past their due date", () => {
+      const stats = computeDashboardStats(
+        [],
+        [
+          // Past due but part-paid: only the REMAINDER is overdue, not the
+          // full face value of the invoice.
+          invoice({ totalCents: 500_000, paidCents: 200_000, dueDate: "2026-06-30T00:00:00.000Z" }),
+          invoice({ totalCents: 150_000, dueDate: "2026-07-01T00:00:00.000Z" }),
+        ],
+        NOW,
+      );
+      expect(stats.overdueInvoicesCents).toBe(450_000);
+    });
+
+    it("ignores invoices not yet due, fully paid, still draft, or with no due date", () => {
+      const stats = computeDashboardStats(
+        [],
+        [
+          invoice({ totalCents: 900_000, dueDate: "2026-08-30T00:00:00.000Z" }), // not due yet
+          invoice({ totalCents: 900_000, paidCents: 900_000, dueDate: "2026-01-01T00:00:00.000Z" }), // settled
+          invoice({
+            status: InvoiceStatus.DRAFT,
+            totalCents: 900_000,
+            dueDate: "2026-01-01T00:00:00.000Z",
+          }), // not a claim on anyone yet
+          invoice({ totalCents: 900_000, dueDate: null }), // nothing to be late against
+        ],
+        NOW,
+      );
+      expect(stats.overdueInvoicesCents).toBe(0);
+    });
+
+    // The regression this change exists to prevent. The card previously
+    // returned a hardcoded 0 behind a "no invoicing backend yet" TODO, so it
+    // told every contractor they were owed nothing regardless of the
+    // database. Note that a test passing only empty invoices would still pass
+    // against that hardcoded 0 — so this one insists a NON-zero figure
+    // actually reaches the card.
+    it("reports real money rather than a placeholder zero", () => {
+      const stats = computeDashboardStats(
+        [],
+        [invoice({ totalCents: 1_000_000, dueDate: "2026-05-01T00:00:00.000Z" })],
+        NOW,
+      );
+      expect(stats.overdueInvoicesCents).toBe(1_000_000);
+    });
   });
 });
