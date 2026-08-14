@@ -51,7 +51,7 @@ import {
 } from "./api-client";
 import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
-import type { InvoiceStatus } from "@jamquote/core";
+import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
 
 const TOKEN_COOKIE = "jamquote_token";
 
@@ -335,6 +335,47 @@ export async function getInvoice(id: string): Promise<Invoice | undefined> {
     redirectOnAuthError(err);
     console.warn(`[api-server] getInvoice(${id}): API unreachable, returning undefined`);
     return undefined;
+  }
+}
+
+/**
+ * getReports()'s failure fallback — same rationale as EMPTY_BUSINESS: every
+ * count/cents field is zero and every list is empty rather than throwing, so
+ * the Reports page renders its normal empty state instead of crashing when
+ * the API is briefly unreachable. `range` still reflects what was requested
+ * so the page's period label stays consistent with the (empty) data shown.
+ */
+function emptyReportsSummary(fromIso: string, toIso: string): ReportsSummary {
+  return {
+    range: { fromIso, toIso },
+    quotes: { sentCount: 0, sentValueCents: 0, acceptedCount: 0, acceptedValueCents: 0, winRatePct: 0 },
+    revenue: { invoicedCents: 0, collectedCents: 0 },
+    receivables: { totalOutstandingCents: 0, totalOverdueCents: 0, outstandingByClient: [] },
+    salesByMonth: [],
+    jobs: {
+      jobsCreated: 0,
+      jobsByStage: { QUOTED: 0, WON: 0, IN_PROGRESS: 0, COMPLETE: 0, CANCELLED: 0 },
+      topClientsByJobs: [],
+    },
+  };
+}
+
+/** GET /reports?from=&to= (server-side read) — the Reports page's single data
+ * source, computed by @jamquote/core's computeReportsSummary from raw rows.
+ * `from`/`to` are optional ISO instants; omit both to let the API default to
+ * the current Jamaica-local calendar month. */
+export async function getReports(from?: string, to?: string): Promise<ReportsSummary> {
+  const qs = new URLSearchParams();
+  if (from) qs.set("from", from);
+  if (to) qs.set("to", to);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  try {
+    return await serverRequest<ReportsSummary>(`/reports${suffix}`);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getReports: API unreachable, returning empty summary");
+    const now = new Date().toISOString();
+    return emptyReportsSummary(from ?? now, to ?? now);
   }
 }
 

@@ -1,0 +1,175 @@
+/* Reports page: sales-by-month bar chart + outstanding-by-client table.
+   Colors come only from --jq-* theme variables, same convention as
+   shared.module.css. Layout lives here (a CSS module) rather than inline
+   styles specifically so the mobile media queries below can actually
+   override it — two earlier bugs on this app were content cut off on
+   mobile because layout was inline and no stylesheet rule could reach it. */
+
+.legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--jq-text-muted);
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.swatchInvoiced {
+  background: var(--jq-accent);
+}
+
+.swatchCollected {
+  background: var(--jq-good);
+}
+
+/* The chart itself can get wide (up to 12 monthly columns for "This year"),
+   so it gets its own horizontal scroll container — same reasoning as
+   .tableScroll below — rather than letting the page scroll sideways. */
+.chartScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 180px;
+  min-width: min-content;
+  padding-top: 8px;
+}
+
+.barGroup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 44px;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 150px;
+  width: 100%;
+}
+
+.bar {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+}
+
+.barInvoiced {
+  background: var(--jq-accent);
+}
+
+.barCollected {
+  background: var(--jq-good);
+}
+
+.barLabel {
+  font-size: 11px;
+  color: var(--jq-text-muted);
+  white-space: nowrap;
+}
+
+.asOfNote {
+  color: var(--jq-text-muted);
+  font-size: 12.5px;
+  margin: 0 0 12px;
+}
+
+.receivablesTotals {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.receivablesTotal {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Table. The surrounding card clips its children to keep its rounded
+   corners, which on a phone is exactly what would make a wide table
+   unreachable — same fix as the admin console's .tableScroll/.dataTable
+   (apps/web/app/admin/console.module.css). Each table gets its own scroll
+   container so only it slides, not the page. */
+.tableScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dataTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.dataTable th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--jq-text-muted);
+  padding: 0 10px 8px 0;
+  white-space: nowrap;
+}
+
+.dataTable td {
+  padding: 9px 10px 9px 0;
+  border-top: 1px solid var(--jq-border);
+  white-space: nowrap;
+}
+
+.dataTable td:first-child,
+.dataTable th:first-child {
+  white-space: normal;
+}
+
+.stageList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.stageRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stageCount {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+@media (max-width: 767px) {
+  /* Without a min-width, a table with several columns just crushes each
+     column to one word per line instead of scrolling — the min-width is
+     what gives .tableScroll something to scroll. */
+  .dataTable {
+    min-width: 480px;
+  }
+}

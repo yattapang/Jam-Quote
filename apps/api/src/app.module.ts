@@ -20,11 +20,12 @@ import { AdminModule } from "./admin/admin.module.js";
 import { SyncModule } from "./sync/sync.module.js";
 import { BillingModule } from "./billing/billing.module.js";
 import { RegulatoryModule } from "./regulatory/regulatory.module.js";
+import { ReportsModule } from "./reports/reports.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
  * deliver them. Still TODO: DocumentsModule (PDF), MessagingModule
- * (whatsapp/email), ReportsModule.
+ * (whatsapp/email).
  */
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { RegulatoryModule } from "./regulatory/regulatory.module.js";
     SyncModule,
     BillingModule,
     RegulatoryModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
   providers: [

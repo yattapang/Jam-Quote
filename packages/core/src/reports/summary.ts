@@ -121,8 +121,13 @@ const TOP_CLIENTS_BY_JOBS_LIMIT = 10;
  * rather than invented on the JurisdictionProfile. If JamQuote later expands
  * to a Caribbean jurisdiction that *does* observe DST, this constant needs
  * to become a real per-jurisdiction lookup rather than being reused as-is.
+ *
+ * Exported because the API's default range and the web period presets must
+ * agree with the bucketing here exactly. If they drift, "This month" selects
+ * a window whose edges fall in a different month than the buckets drawn from
+ * it, and the chart quietly gains or loses a column.
  */
-const JAMAICA_UTC_OFFSET_MS = -5 * 60 * 60 * 1000;
+export const JAMAICA_UTC_OFFSET_MS = -5 * 60 * 60 * 1000;
 
 /** Compute every headline number the Reports page shows, from raw rows. */
 export function computeReportsSummary(
