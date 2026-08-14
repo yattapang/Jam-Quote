@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { UserRole } from "@prisma/client";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { AuthTokenPayload } from "./auth.service.js";
@@ -52,6 +53,10 @@ export class TenantAuthGuard implements CanActivate {
       throw new UnauthorizedException("Invalid or expired token");
     }
 
+    if (payload.impersonatedBusinessId) {
+      return this.allowImpersonatedRead(req, payload, payload.impersonatedBusinessId);
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: {
@@ -82,6 +87,58 @@ export class TenantAuthGuard implements CanActivate {
 
     req.user = payload;
     req.businessId = user.businessId;
+    return true;
+  }
+
+  /**
+   * The admin "view as tenant" path. This is the ONE case where req.businessId
+   * comes from the token rather than from the caller's own DB row, so it earns
+   * its own method and its own checks.
+   *
+   * That is not a hole in the rule the class docblock states, but it does
+   * invert what is being proved. Normally we prove "this user belongs to this
+   * business". Here we prove "this caller is, right now, an admin entitled to
+   * look at any business" — re-read from the DB, never trusted from the
+   * token's role claim — and only then treat the token's target as the scope.
+   * An admin demoted a minute ago is refused on their next request, exactly
+   * like every other authorization decision in this file.
+   */
+  private async allowImpersonatedRead(
+    req: Request,
+    payload: AuthTokenPayload,
+    targetBusinessId: string,
+  ): Promise<boolean> {
+    // Read-only, enforced by HTTP method. A support session exists to look at
+    // a contractor's books, never to act as them: an admin must not be able to
+    // email a quote to that contractor's customer, record a payment against
+    // their invoice, or delete their work — actions the tenant would later see
+    // as their own with nothing on screen to say otherwise. Fails closed, so a
+    // write route added tomorrow is refused without anyone remembering to
+    // update this list.
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      throw new ForbiddenException("View-as-tenant sessions are read-only");
+    }
+
+    const admin = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, role: true },
+    });
+    if (!admin || admin.role !== UserRole.ADMIN) {
+      // Either the account is gone or it is no longer an admin. Both mean the
+      // authorization that justified minting this token no longer holds.
+      throw new ForbiddenException("Admin access required");
+    }
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: targetBusinessId },
+      select: { id: true, deletedAt: true },
+    });
+    if (!business || business.deletedAt) {
+      throw new ForbiddenException("This business account is unavailable");
+    }
+
+    req.user = payload;
+    req.businessId = business.id;
     return true;
   }
 }

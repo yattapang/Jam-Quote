@@ -122,3 +122,82 @@ describe("TenantAuthGuard", () => {
     );
   });
 });
+
+/**
+ * The admin "view as tenant" path. This is the only route by which
+ * req.businessId is set from a token claim rather than the caller's own DB
+ * row, so each guarantee that makes that acceptable is pinned here.
+ */
+describe("TenantAuthGuard — view-as-tenant tokens", () => {
+  const IMP_TOKEN = { sub: "admin-1", businessId: null, role: "ADMIN", impersonatedBusinessId: "biz-target" };
+
+  function harness(opts: { role?: string; deletedAt?: Date | null; missingAdmin?: boolean; missingBiz?: boolean } = {}) {
+    const jwt = { verify: vi.fn().mockReturnValue(IMP_TOKEN) };
+    const prisma = {
+      user: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue(opts.missingAdmin ? null : { id: "admin-1", role: opts.role ?? "ADMIN" }),
+      },
+      business: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue(
+            opts.missingBiz ? null : { id: "biz-target", deletedAt: opts.deletedAt ?? null },
+          ),
+      },
+    };
+    return { jwt, prisma, guard: new TenantAuthGuard(jwt as any, prisma as any) };
+  }
+
+  it("scopes a GET to the impersonated business", async () => {
+    const { prisma, guard } = harness();
+    const req = makeReq({ method: "GET", headers: { authorization: "Bearer t" } });
+
+    await expect(guard.canActivate(makeContext(req))).resolves.toBe(true);
+    expect((req as any).businessId).toBe("biz-target");
+    // The admin is never looked up as a member of that business — they are
+    // authorized as an admin and the target is validated separately.
+    expect(prisma.business.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "biz-target" } }),
+    );
+  });
+
+  // The property the whole feature rests on. An admin looking at a support
+  // case must not be able to act as the contractor — emailing that
+  // contractor's customer, taking a payment, deleting their work — because
+  // the tenant would later see those as their own doing.
+  it.each(["POST", "PATCH", "PUT", "DELETE"])("refuses %s outright", async (method) => {
+    const { prisma, guard } = harness();
+    const req = makeReq({ method, headers: { authorization: "Bearer t" } });
+
+    await expect(guard.canActivate(makeContext(req))).rejects.toBeInstanceOf(ForbiddenException);
+    expect((req as any).businessId).toBeUndefined();
+    // Refused before any lookup — the method alone settles it.
+    expect(prisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("refuses once the admin has been demoted, without waiting for expiry", async () => {
+    const { guard } = harness({ role: "OWNER" });
+    const req = makeReq({ method: "GET", headers: { authorization: "Bearer t" } });
+
+    await expect(guard.canActivate(makeContext(req))).rejects.toBeInstanceOf(ForbiddenException);
+    expect((req as any).businessId).toBeUndefined();
+  });
+
+  it("refuses when the admin account no longer exists", async () => {
+    const { guard } = harness({ missingAdmin: true });
+    const req = makeReq({ method: "GET", headers: { authorization: "Bearer t" } });
+
+    await expect(guard.canActivate(makeContext(req))).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it("refuses when the target tenant is suspended or gone", async () => {
+    for (const opts of [{ deletedAt: new Date() }, { missingBiz: true }]) {
+      const { guard } = harness(opts);
+      const req = makeReq({ method: "GET", headers: { authorization: "Bearer t" } });
+      await expect(guard.canActivate(makeContext(req))).rejects.toBeInstanceOf(ForbiddenException);
+      expect((req as any).businessId).toBeUndefined();
+    }
+  });
+});

@@ -48,6 +48,16 @@ export class AdminGuard implements CanActivate {
       throw new UnauthorizedException("Invalid or expired token");
     }
 
+    if (payload.impersonatedBusinessId) {
+      // A view-as-tenant token belongs to a real, currently-serving admin, so
+      // every check below would pass and it would reach the admin API. It is
+      // deliberately narrow — one tenant, read-only, half an hour, audited —
+      // and letting it act platform-wide would quietly restore it to a full
+      // admin session that nobody would think to revoke, because it was only
+      // ever meant for looking at a support case.
+      throw new ForbiddenException("View-as-tenant sessions cannot access the admin API");
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       select: { id: true, role: true, isSuperAdmin: true, adminCapabilities: true },

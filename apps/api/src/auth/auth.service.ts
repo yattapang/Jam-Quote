@@ -24,6 +24,13 @@ import type {
 
 const BCRYPT_COST = 10;
 const TOKEN_EXPIRY = "30d";
+/**
+ * View-as-tenant tokens expire in 30 minutes, not the 30 days an ordinary
+ * session gets. This token lets one person read another company's books, so
+ * its lifetime should be about as long as the support task that justified it.
+ * There is no revocation list; the short expiry IS the revocation.
+ */
+const IMPERSONATION_TOKEN_EXPIRY_SECONDS = 30 * 60;
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 
 function hashResetToken(rawToken: string): string {
@@ -41,6 +48,23 @@ export interface AuthTokenPayload {
   sub: string;
   businessId: string | null;
   role: User["role"];
+  /**
+   * Set ONLY on an admin's short-lived "view as tenant" token, naming the
+   * tenant being viewed. `sub` stays the ADMIN's user id — the admin does not
+   * become the tenant's user; they are themselves, looking at someone else's
+   * data, and the audit trail has to keep saying so.
+   *
+   * Its presence changes what the token may do, in three places that must
+   * agree:
+   *   - TenantAuthGuard accepts it, scopes the request to this business, and
+   *     allows read-only methods only.
+   *   - AdminGuard REJECTS it, so a view-as token can never reach the admin
+   *     API. Without that it would sail straight through, because it does
+   *     belong to a genuine, currently-serving admin.
+   *   - JwtAuthGuard REJECTS it, so it cannot act on the admin's own account
+   *     (password changes and the like).
+   */
+  impersonatedBusinessId?: string;
 }
 
 // Never let a passwordHash leak into an API response.
@@ -340,5 +364,32 @@ export class AuthService implements OnModuleInit {
       role: user.role,
     };
     return this.jwt.sign(payload, { expiresIn: TOKEN_EXPIRY });
+  }
+
+  /**
+   * Mint a short-lived, read-only token letting `admin` view `businessId`'s
+   * data. Callers must already have proved the admin's authorization —
+   * AdminGuard plus @RequireCapability(MANAGE_TENANTS) — and must record the
+   * audit entry; this method only signs.
+   *
+   * `businessId` on the payload stays null. That field means "the business
+   * this user belongs to", and the admin still belongs to no business;
+   * writing the target there would blur the very distinction the guards rely
+   * on to tell a real tenant session from a borrowed view.
+   */
+  issueImpersonationToken(
+    admin: Pick<User, "id" | "role">,
+    businessId: string,
+  ): { token: string; expiresAt: string } {
+    const payload: AuthTokenPayload = {
+      sub: admin.id,
+      businessId: null,
+      role: admin.role,
+      impersonatedBusinessId: businessId,
+    };
+    return {
+      token: this.jwt.sign(payload, { expiresIn: IMPERSONATION_TOKEN_EXPIRY_SECONDS }),
+      expiresAt: new Date(Date.now() + IMPERSONATION_TOKEN_EXPIRY_SECONDS * 1000).toISOString(),
+    };
   }
 }

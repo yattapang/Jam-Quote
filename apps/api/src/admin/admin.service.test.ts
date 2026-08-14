@@ -10,7 +10,7 @@ describe("AdminService.overview", () => {
       supplier: { count: vi.fn().mockResolvedValue(6) },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     const overview = await svc.overview();
 
@@ -55,7 +55,7 @@ describe("AdminService.tenants", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     const tenants = await svc.tenants();
 
@@ -110,7 +110,7 @@ describe("AdminService.tenants", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     const tenants = await svc.tenants(true);
 
@@ -132,7 +132,7 @@ describe("AdminService.suspendTenant / restoreTenant", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
 
     await svc.suspendTenant("biz-1", "admin-1");
 
@@ -157,7 +157,7 @@ describe("AdminService.suspendTenant / restoreTenant", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     await expect(svc.suspendTenant("biz-1", "admin-1")).rejects.toBeInstanceOf(
       BadRequestException,
@@ -174,7 +174,7 @@ describe("AdminService.suspendTenant / restoreTenant", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
 
     await svc.restoreTenant("biz-1", "admin-1");
 
@@ -194,7 +194,7 @@ describe("AdminService.suspendTenant / restoreTenant", () => {
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     await expect(svc.restoreTenant("biz-1", "admin-1")).rejects.toBeInstanceOf(
       BadRequestException,
@@ -212,7 +212,7 @@ describe("AdminService.hardDeleteTenant", () => {
     };
     const record = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
 
     await expect(
       svc.hardDeleteTenant("biz-1", "wrong name", "admin-1"),
@@ -227,7 +227,7 @@ describe("AdminService.hardDeleteTenant", () => {
       $transaction: vi.fn(),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     await expect(svc.hardDeleteTenant("biz-1", "anything", "admin-1")).rejects.toBeInstanceOf(
       NotFoundException,
@@ -261,7 +261,7 @@ describe("AdminService.hardDeleteTenant", () => {
     };
     const record = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
 
     const result = await svc.hardDeleteTenant("biz-1", "Blackwood Construction", "admin-1");
 
@@ -308,7 +308,7 @@ describe("AdminService.hardDeleteTenant", () => {
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     await svc.hardDeleteTenant("biz-1", "Blackwood Construction", "admin-1");
 
@@ -352,7 +352,7 @@ describe("AdminService.financials", () => {
       }),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, pricingService as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, pricingService as any, { record: vi.fn() } as any, {} as any);
 
     const financials = await svc.financials();
 
@@ -382,7 +382,7 @@ describe("AdminService.regulatory", () => {
       regulatoryUpdate: { findMany: vi.fn().mockResolvedValue([row]) },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any);
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
 
     const updates = await svc.regulatory();
 

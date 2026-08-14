@@ -64,6 +64,21 @@ export class AdminController {
     return this.admin.suspendTenant(id, req.user!.sub);
   }
 
+  /**
+   * Mint a 30-minute, read-only token for viewing this tenant's own screens.
+   * Gated on MANAGE_TENANTS — the same authorization as suspending them —
+   * because reading a contractor's entire book of business is at least as
+   * consequential as closing their account. Audited as tenant.impersonate.
+   */
+  @Post("tenants/:id/impersonate")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  impersonateTenant(
+    @Param("id") id: string,
+    @Req() req: Request,
+  ): Promise<{ token: string; expiresAt: string; business: { id: string; name: string } }> {
+    return this.admin.impersonateTenant(id, req.user!.sub);
+  }
+
   /** Undoes a suspend — clears Business.deletedAt. */
   @Patch("tenants/:id/restore")
   @RequireCapability(AdminCapability.MANAGE_TENANTS)

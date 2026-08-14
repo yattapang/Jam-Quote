@@ -8,7 +8,7 @@ const REGULAR: AdminActor = { userId: "reg-1", isSuperAdmin: false };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const make = (prisma: any, record = vi.fn()) => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  svc: new AdminService(prisma as any, {} as any, { record } as any),
+  svc: new AdminService(prisma as any, {} as any, { record } as any, {} as any),
   record,
 });
 

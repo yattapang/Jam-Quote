@@ -24,6 +24,7 @@ export interface AdminUser {
   createdAt: Date;
 }
 import { AuditService } from "./audit.service.js";
+import { AuthService } from "../auth/auth.service.js";
 import { deleteBusinessCascade } from "./tenant-deletion.util.js";
 
 export interface AdminOverview {
@@ -84,7 +85,49 @@ export class AdminService {
     private readonly prisma: PrismaService,
     private readonly pricingService: PricingService,
     private readonly audit: AuditService,
+    private readonly auth: AuthService,
   ) {}
+
+  /**
+   * POST /admin/tenants/:id/impersonate — mint a short-lived, read-only token
+   * scoping the tenant API to this business, so an admin can see what the
+   * contractor sees while diagnosing a support issue.
+   *
+   * The audit entry is written BEFORE the token is minted, and a failure to
+   * write it is deliberately not caught. If we cannot record who read a
+   * company's books and when, then we do not get to read them: an unlogged
+   * look is indistinguishable from one that never happened, and this is the
+   * most sensitive capability in the console.
+   *
+   * A suspended tenant is refused. Suspension means the account is closed, and
+   * reading its data should require a deliberate restore rather than a quieter
+   * side entrance.
+   */
+  async impersonateTenant(
+    id: string,
+    actorUserId: string,
+  ): Promise<{ token: string; expiresAt: string; business: { id: string; name: string } }> {
+    const business = await this.prisma.business.findUnique({ where: { id } });
+    if (!business) throw new NotFoundException("Business not found");
+    if (business.deletedAt) throw new BadRequestException("Tenant is suspended");
+
+    const admin = await this.prisma.user.findUnique({
+      where: { id: actorUserId },
+      select: { id: true, role: true },
+    });
+    if (!admin) throw new NotFoundException("Admin user not found");
+
+    await this.audit.record({
+      actorUserId,
+      action: "tenant.impersonate",
+      targetType: "Business",
+      targetId: id,
+      details: { name: business.name },
+    });
+
+    const { token, expiresAt } = this.auth.issueImpersonationToken(admin, business.id);
+    return { token, expiresAt, business: { id: business.id, name: business.name } };
+  }
 
   async overview(): Promise<AdminOverview> {
     const [businesses, activeSubscriptions, suppliersTracked] = await Promise.all([
