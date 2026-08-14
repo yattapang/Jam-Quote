@@ -9,6 +9,19 @@ import { API_BASE_URL } from "./api-client";
 
 export const TOKEN_COOKIE = "jamquote_token";
 
+/**
+ * Holds the read-only, single-tenant JWT returned by
+ * POST /admin/tenants/:id/impersonate while an admin is "viewing as" a
+ * tenant. Deliberately a SEPARATE cookie from TOKEN_COOKIE: the admin's own
+ * session must never be overwritten or restored, so exiting is just deleting
+ * this cookie (see lib/impersonation-actions.ts's stopImpersonation).
+ */
+export const IMPERSONATION_COOKIE = "jamquote_impersonation";
+/** The impersonated tenant's display name, cached alongside the token so the
+ * banner (components/layout/ImpersonationBanner.tsx) can name it without an
+ * extra API round trip. */
+export const IMPERSONATION_NAME_COOKIE = "jamquote_impersonation_name";
+
 export interface SessionUser {
   id: string;
   email: string | null;
@@ -26,6 +39,20 @@ export interface Session {
 
 export function getToken(): string | undefined {
   return cookies().get(TOKEN_COOKIE)?.value;
+}
+
+export interface ImpersonationInfo {
+  tenantName: string;
+}
+
+/** Non-null whenever an admin's "view as tenant" session is active — the
+ * (app) layout uses this to decide whether to render ImpersonationBanner.
+ * Reads only the cookies set by startImpersonation; never calls the API. */
+export function getImpersonation(): ImpersonationInfo | null {
+  const jar = cookies();
+  const token = jar.get(IMPERSONATION_COOKIE)?.value;
+  if (!token) return null;
+  return { tenantName: jar.get(IMPERSONATION_NAME_COOKIE)?.value ?? "this tenant" };
 }
 
 /** Resolve the logged-in user via GET /auth/me, or null when signed out. */

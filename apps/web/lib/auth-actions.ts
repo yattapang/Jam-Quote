@@ -6,7 +6,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { API_BASE_URL } from "./api-client";
-import { TOKEN_COOKIE } from "./session";
+import { IMPERSONATION_COOKIE, IMPERSONATION_NAME_COOKIE, TOKEN_COOKIE } from "./session";
 import { safeRedirectPath } from "./safe-redirect";
 
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30d — matches the API token expiry.
@@ -143,6 +143,13 @@ export async function adminLogin(
 
 export async function logout(): Promise<void> {
   cookies().delete(TOKEN_COOKIE);
+  // Signing out has to clear the view-as-tenant cookies too. They are
+  // independent of the session cookie by design, so without this an admin who
+  // signs out mid-session leaves a live, tenant-scoped token in the browser —
+  // still readable for up to half an hour by whoever sits down next, on a
+  // machine its owner believes they just signed out of.
+  cookies().delete(IMPERSONATION_COOKIE);
+  cookies().delete(IMPERSONATION_NAME_COOKIE);
   redirect("/login");
 }
 

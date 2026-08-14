@@ -21,6 +21,7 @@ import {
   type EffectiveRulePack,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
+import { startImpersonation } from "@/lib/impersonation-actions";
 import { relativeTime } from "@/lib/relative-time";
 import styles from "./console.module.css";
 
@@ -542,6 +543,15 @@ export default function AdminConsole({
   const payrollVerifiedCount = payroll.filter((p) => p.verified).length;
 
   const selTenant = tenantId !== null ? tenantsRaw[tenantId] : null;
+  // Real business id + current suspended state for the selected drawer row,
+  // computed the same way as each table row (see tenantIds/tenantSuspendedBase
+  // above) — null id for the design-mock rows, which have no real business
+  // behind them and so get no "View as tenant" action.
+  const selBusinessId = tenantId !== null ? tenantIds[tenantId] ?? null : null;
+  const selSuspended =
+    tenantId !== null && selBusinessId
+      ? tenantSuspendOverride[selBusinessId] ?? tenantSuspendedBase[tenantId] ?? false
+      : false;
 
   // --- Financials screen data (GET /admin/financials) ---
   const financials = data.financials;
@@ -1295,7 +1305,14 @@ export default function AdminConsole({
       </main>
 
       {/* TENANT DRAWER */}
-      {selTenant && <TenantDrawer raw={selTenant} onClose={() => setTenantId(null)} />}
+      {selTenant && (
+        <TenantDrawer
+          raw={selTenant}
+          businessId={selBusinessId}
+          suspended={selSuspended}
+          onClose={() => setTenantId(null)}
+        />
+      )}
 
       {/* PERMANENT DELETE MODAL — operator must type the exact business name;
           mirrors the server's confirmName check on DELETE /admin/tenants/:id. */}
@@ -1412,7 +1429,17 @@ export default function AdminConsole({
   );
 }
 
-function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, string, string, number | string, number, number]; onClose: () => void }) {
+function TenantDrawer({
+  raw,
+  businessId,
+  suspended,
+  onClose,
+}: {
+  raw: [string, string, string, string, string, string, number | string, number, number];
+  businessId: string | null;
+  suspended: boolean;
+  onClose: () => void;
+}) {
   const [name, parish, plan, trn, status, , mrr, q, qm] = raw;
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const [sl, st] = statusMap[status] ?? ["Active", "good"];
@@ -1450,6 +1477,33 @@ function TenantDrawer({ raw, onClose }: { raw: [string, string, string, string, 
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, lineHeight: 1.15 }}>{name}</div>
             <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{parish} · TRN {trn}</div>
             <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[shown] ?? "muted")}>{shown}</span><span style={pill(st)}>{sl}</span></div>
+            {businessId && (
+              <form action={startImpersonation.bind(null, businessId)} style={{ marginTop: 12 }}>
+                <button
+                  type="submit"
+                  disabled={suspended}
+                  title={suspended ? "Suspended tenants can't be viewed as — restore the tenant first" : "Open the app as this tenant sees it (read-only, 30 min)"}
+                  style={{
+                    height: 32,
+                    padding: "0 13px",
+                    border: "none",
+                    borderRadius: 8,
+                    background: suspended ? "var(--surface-alt)" : "var(--accent)",
+                    color: suspended ? "var(--muted)" : "#fff",
+                    fontWeight: 700,
+                    fontSize: 12,
+                    fontFamily: "inherit",
+                    cursor: suspended ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" /><circle cx="12" cy="12" r="3" /></svg>
+                  View as tenant
+                </button>
+              </form>
+            )}
           </div>
           <button className={styles.iconBtn} onClick={onClose} style={{ width: 30, height: 30, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>

@@ -1,0 +1,81 @@
+/* Solid, high-contrast fill — deliberately not a soft tint like AlertBanner
+ * or DemoDataBanner. --jq-crit / --jq-on-accent already carry correct,
+ * accessible-contrast values for both light and dark themes (see
+ * lib/theme-style.ts), so no bespoke colors are hand-picked here. */
+.banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 18px;
+  border-radius: var(--jq-radius-lg);
+  background: var(--jq-crit);
+  color: var(--jq-on-accent);
+  box-shadow: 0 6px 16px -8px rgba(0, 0, 0, 0.45);
+  /* Sticky, because a warning that scrolls away stops warning. This is the
+     only thing standing between an admin and mistaking a viewed tenant's
+     figures for their own, and the screens where that matters most — a long
+     client list, a quote history — are exactly the ones you scroll. .main is
+     the scroll container (overflow-y: auto), and z-index stays below the
+     sidebar's mobile bar and drawer (40/50/60) so those still overlay it. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+/* On mobile a fixed 52px top bar stands in for the sidebar and overlays the
+   viewport, so sticking to 0 would park the banner underneath it. */
+@media (max-width: 767px) {
+  .banner {
+    top: 52px;
+  }
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+  font-family: var(--jq-font-body);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.icon {
+  flex: none;
+  font-size: 17px;
+}
+
+.exitButton {
+  flex: none;
+  white-space: nowrap;
+  padding: 8px 14px;
+  border-radius: var(--jq-radius-md);
+  border: 1.5px solid var(--jq-on-accent);
+  background: transparent;
+  color: var(--jq-on-accent);
+  font-family: var(--jq-font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.exitButton:hover {
+  background: color-mix(in srgb, var(--jq-on-accent) 16%, transparent);
+}
+
+/* Below ~375px the message + button no longer fit on one line comfortably —
+ * stack them so the exit button always has full width and never clips. */
+@media (max-width: 480px) {
+  .banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .exitButton {
+    width: 100%;
+    text-align: center;
+  }
+}

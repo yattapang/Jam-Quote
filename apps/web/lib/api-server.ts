@@ -52,6 +52,7 @@ import {
 import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { JobSummary, JobDetail } from "./mock-data";
 import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
+import { IMPERSONATION_COOKIE } from "./session";
 
 const TOKEN_COOKIE = "jamquote_token";
 
@@ -79,9 +80,22 @@ const EMPTY_BUSINESS: Business = {
 /** Server-side GET with the caller's JWT. No token means no auth header at
  * all — the API's TenantAuthGuard rejects that with 401, same as an
  * expired/invalid token, which redirectOnAuthError below turns into a
- * redirect to /login rather than an empty page. */
+ * redirect to /login rather than an empty page.
+ *
+ * When an impersonation cookie is present (an admin is "viewing as" a
+ * tenant), it's preferred over the admin's own token — EXCEPT for `/admin`
+ * paths, which always use the admin's own token. The API deliberately
+ * refuses impersonation tokens on admin routes, so without this carve-out
+ * the admin console would 403 the moment someone started a view-as session,
+ * including the console page holding the button they'd use to get out.
+ * Both identities being live at once (the admin's own cookie AND the
+ * impersonation cookie) is intentional and safe: the impersonation token is
+ * read-only and scoped to that one tenant. */
 async function serverRequest<T>(path: string): Promise<T> {
-  const token = cookies().get(TOKEN_COOKIE)?.value;
+  const jar = cookies();
+  const ownToken = jar.get(TOKEN_COOKIE)?.value;
+  const impersonationToken = jar.get(IMPERSONATION_COOKIE)?.value;
+  const token = impersonationToken && !path.startsWith("/admin") ? impersonationToken : ownToken;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers["authorization"] = `Bearer ${token}`;
 

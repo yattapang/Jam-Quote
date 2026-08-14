@@ -12,6 +12,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { IMPERSONATION_COOKIE } from "@/lib/session";
 
 const API_BASE_URL =
   process.env.API_BASE_URL ??
@@ -22,7 +23,17 @@ const TOKEN_COOKIE = "jamquote_token";
 
 async function forward(req: NextRequest, path: string[]): Promise<NextResponse> {
   const target = `${API_BASE_URL}/${path.join("/")}${req.nextUrl.search}`;
-  const token = cookies().get(TOKEN_COOKIE)?.value;
+  const jar = cookies();
+  // Same carve-out as serverRequest in lib/api-server.ts, and it has to be the
+  // same or a view-as-tenant session half-works: the server-rendered page
+  // would show the tenant's data while every client-side fetch after it —
+  // material search-as-you-type, any in-place editor — silently queried the
+  // API as the admin's own account, which belongs to no business and 403s.
+  // Admin routes keep the admin's own token because the API deliberately
+  // refuses impersonation tokens there.
+  const impersonationToken = jar.get(IMPERSONATION_COOKIE)?.value;
+  const isAdminPath = path[0] === "admin";
+  const token = impersonationToken && !isAdminPath ? impersonationToken : jar.get(TOKEN_COOKIE)?.value;
 
   const headers: Record<string, string> = {};
   const contentType = req.headers.get("content-type");
