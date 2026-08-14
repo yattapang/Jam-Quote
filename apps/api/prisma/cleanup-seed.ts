@@ -12,8 +12,12 @@
  *
  * Scope: only data belonging to seed-business-blackwood. It intentionally
  * leaves alone:
- *   - Supplier / MaterialPriceEntry rows (catalog data, not business-scoped
- *     in the schema — shared across tenants).
+ *   - CURATED catalog rows — Supplier, MaterialPriceEntry, Trade,
+ *     MaterialUnit, MaterialCategoryDef, MaterialAttributeDef and
+ *     MaterialAttributeOption all use the curated/tenant-extension pattern,
+ *     where businessId NULL means "platform-curated, visible to everyone".
+ *     Those NULL rows are untouched; only rows stamped with THIS business's
+ *     id go. That distinction is the whole safety property here.
  *   - RegulatoryUpdate rows (platform-wide, not business-scoped).
  *   - The other seeded admin-console businesses (biz-2..biz-8) and their
  *     Subscription rows — those are a separate concern from this demo
@@ -34,6 +38,16 @@
  *   LabourRate, MaterialFavourite, EquipmentItem, Connection, Subscription
  *   User (businessId is nullable, but still an FK to Business)
  *   Business
+ *
+ * Nine further tables DO declare onDelete: Cascade on their Business
+ * relation and so are removed automatically by the final business.delete():
+ * BusinessLogo, Supplier, MaterialPriceEntry, MaterialCategoryDef,
+ * MaterialAttributeDef, MaterialAttributeOption, MaterialUnit, Trade and
+ * Assembly. They still have to be COUNTED and shown in the summary below.
+ * A destructive script whose confirmation prompt understates what it will
+ * destroy is worse than one with no prompt at all: it buys consent for a
+ * smaller act than the one actually performed. Most of these tables did not
+ * exist when this script was first written.
  */
 import "dotenv/config"; // load apps/api/.env so DATABASE_URL is set when run via tsx
 import { PrismaClient } from "@prisma/client";
@@ -69,6 +83,19 @@ async function main(): Promise<void> {
     connectionCount,
     subscriptionCount,
     userCount,
+    // Cascade-deleted by business.delete(), but counted so the confirmation
+    // summary reflects the true blast radius. Each `where` is businessId:
+    // business.id — NEVER null — so platform-curated rows in these same
+    // tables are left alone.
+    businessLogoCount,
+    supplierCount,
+    priceEntryCount,
+    categoryDefCount,
+    attributeDefCount,
+    attributeOptionCount,
+    materialUnitCount,
+    tradeCount,
+    assemblyCount,
   ] = await Promise.all([
     prisma.messageLog.count({ where: { quote: { businessId: business.id } } }),
     prisma.payment.count({ where: { invoice: { businessId: business.id } } }),
@@ -85,6 +112,15 @@ async function main(): Promise<void> {
     prisma.connection.count({ where: { businessId: business.id } }),
     prisma.subscription.count({ where: { businessId: business.id } }),
     prisma.user.count({ where: { businessId: business.id } }),
+    prisma.businessLogo.count({ where: { businessId: business.id } }),
+    prisma.supplier.count({ where: { businessId: business.id } }),
+    prisma.materialPriceEntry.count({ where: { businessId: business.id } }),
+    prisma.materialCategoryDef.count({ where: { businessId: business.id } }),
+    prisma.materialAttributeDef.count({ where: { businessId: business.id } }),
+    prisma.materialAttributeOption.count({ where: { businessId: business.id } }),
+    prisma.materialUnit.count({ where: { businessId: business.id } }),
+    prisma.trade.count({ where: { businessId: business.id } }),
+    prisma.assembly.count({ where: { businessId: business.id } }),
   ]);
 
   // eslint-disable-next-line no-console
@@ -122,9 +158,32 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`  1 business`);
   // eslint-disable-next-line no-console
+  console.log("\n  ...and removed automatically by cascade:");
+  // eslint-disable-next-line no-console
+  console.log(`  ${businessLogoCount} business logo`);
+  // eslint-disable-next-line no-console
+  console.log(`  ${supplierCount} tenant-owned suppliers`);
+  // eslint-disable-next-line no-console
+  console.log(`  ${priceEntryCount} tenant-owned material price entries`);
+  // eslint-disable-next-line no-console
+  console.log(`  ${categoryDefCount} tenant-owned material categories`);
+  // eslint-disable-next-line no-console
   console.log(
-    "\nNOT touched (shared/platform data, not owned by this business): Supplier, " +
-      "MaterialPriceEntry, RegulatoryUpdate, and the other seeded admin-console businesses.",
+    `  ${attributeDefCount} tenant-owned material attributes and ${attributeOptionCount} attribute options`,
+  );
+  // eslint-disable-next-line no-console
+  console.log(`  ${materialUnitCount} tenant-owned units`);
+  // eslint-disable-next-line no-console
+  console.log(`  ${tradeCount} tenant-owned trades`);
+  // eslint-disable-next-line no-console
+  console.log(`  ${assemblyCount} assemblies (job types)`);
+  // eslint-disable-next-line no-console
+  console.log(
+    "\nNOT touched: RegulatoryUpdate (platform-wide), the other seeded " +
+      "admin-console businesses, and every PLATFORM-CURATED catalog row — the " +
+      "businessId IS NULL suppliers, price entries, trades, units, categories " +
+      "and attributes that all tenants share. Only rows stamped with this " +
+      "business's id are counted above.",
   );
 
   if (process.env.CONFIRM_CLEANUP !== "yes") {
