@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Assembly, AssemblyComponent, Prisma } from "@prisma/client";
+import type { Job, JobComponent, Prisma } from "@prisma/client";
 import { computeAssemblyUnitCostCents } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type {
@@ -10,9 +10,9 @@ import type {
 
 const ASSEMBLY_DETAIL_INCLUDE = {
   components: { orderBy: { sort: "asc" as const } },
-} satisfies Prisma.AssemblyInclude;
+} satisfies Prisma.JobInclude;
 
-type AssemblyWithComponents = Prisma.AssemblyGetPayload<{
+type AssemblyWithComponents = Prisma.JobGetPayload<{
   include: typeof ASSEMBLY_DETAIL_INCLUDE;
 }>;
 
@@ -34,7 +34,7 @@ function componentCreateData(
   assemblyId: string,
   c: AssemblyComponentInput,
   idx: number,
-): Prisma.AssemblyComponentUncheckedCreateInput {
+): Prisma.JobComponentUncheckedCreateInput {
   return {
     assemblyId,
     kind: c.kind,
@@ -53,7 +53,7 @@ export class AssembliesService {
 
   async create(businessId: string, input: CreateAssemblyInput): Promise<AssemblyWithCost> {
     const assemblyId = await this.prisma.$transaction(async (tx) => {
-      const assembly = await tx.assembly.create({
+      const assembly = await tx.job.create({
         data: {
           businessId,
           name: input.name,
@@ -62,7 +62,7 @@ export class AssembliesService {
         },
       });
       for (const [idx, c] of input.components.entries()) {
-        await tx.assemblyComponent.create({
+        await tx.jobComponent.create({
           data: componentCreateData(assembly.id, c, idx),
         });
       }
@@ -73,7 +73,7 @@ export class AssembliesService {
   }
 
   async findAll(businessId: string): Promise<AssemblyWithCost[]> {
-    const assemblies = await this.prisma.assembly.findMany({
+    const assemblies = await this.prisma.job.findMany({
       where: { businessId, deletedAt: null },
       include: ASSEMBLY_DETAIL_INCLUDE,
       orderBy: { name: "asc" },
@@ -82,7 +82,7 @@ export class AssembliesService {
   }
 
   async findOne(businessId: string, id: string): Promise<AssemblyWithCost> {
-    const assembly = await this.prisma.assembly.findFirst({
+    const assembly = await this.prisma.job.findFirst({
       where: { id, businessId, deletedAt: null },
       include: ASSEMBLY_DETAIL_INCLUDE,
     });
@@ -91,8 +91,8 @@ export class AssembliesService {
   }
 
   /** Throws NotFoundException via findOne if the assembly doesn't exist (or isn't this business's). */
-  private async assertExists(businessId: string, id: string): Promise<Assembly> {
-    const assembly = await this.prisma.assembly.findFirst({
+  private async assertExists(businessId: string, id: string): Promise<Job> {
+    const assembly = await this.prisma.job.findFirst({
       where: { id, businessId, deletedAt: null },
     });
     if (!assembly) throw new NotFoundException("Assembly not found");
@@ -108,7 +108,7 @@ export class AssembliesService {
     const replacingComponents = input.components !== undefined;
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.assembly.update({
+      await tx.job.update({
         where: { id },
         data: {
           name: input.name ?? existing.name,
@@ -118,9 +118,9 @@ export class AssembliesService {
       });
 
       if (replacingComponents) {
-        await tx.assemblyComponent.deleteMany({ where: { assemblyId: id } });
+        await tx.jobComponent.deleteMany({ where: { assemblyId: id } });
         for (const [idx, c] of (input.components ?? []).entries()) {
-          await tx.assemblyComponent.create({ data: componentCreateData(id, c, idx) });
+          await tx.jobComponent.create({ data: componentCreateData(id, c, idx) });
         }
       }
     });
@@ -132,6 +132,6 @@ export class AssembliesService {
    * clients doing a delta-sync can observe the tombstone. */
   async remove(businessId: string, id: string): Promise<void> {
     await this.assertExists(businessId, id);
-    await this.prisma.assembly.update({ where: { id }, data: { deletedAt: new Date() } });
+    await this.prisma.job.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }

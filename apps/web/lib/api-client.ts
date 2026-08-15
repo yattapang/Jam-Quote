@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineAssemblyComponent } from "./types";
-import type { AssemblyComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -145,7 +145,7 @@ export interface ApiJob {
   progressPct: number;
 }
 export interface ApiLineAssemblyComponent {
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   description: string;
   // Prisma Decimal / JSON snapshot — may come over as a numeric string.
   quantityPerUnit: number | string;
@@ -249,7 +249,7 @@ export interface ApiLabourRate {
 }
 export interface ApiAssemblyComponent {
   id: string;
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   materialFavouriteId?: string | null;
   labourRateId?: string | null;
   description: string;
@@ -734,7 +734,7 @@ export async function createLabourRate(input: NewLabourRateInput): Promise<Labou
 }
 
 export interface NewAssemblyComponentInput {
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
   description: string;
@@ -759,7 +759,7 @@ export async function createAssembly(input: NewAssemblyInput): Promise<Assembly>
 /** Display-only assembly component snapshot sent with an assembly-backed line
  * (mirrors the API's quoteLineAssemblyComponentSchema). */
 export interface NewQuoteLineAssemblyComponentInput {
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   description: string;
   quantityPerUnit: number;
   unitPriceCents: number;

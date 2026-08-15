@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, HttpException } from "@nestjs/common";
 import {
-  AssemblyComponentKind,
+  JobComponentKind,
   computeTotals,
   GctTreatment,
   LineCategory,
@@ -81,13 +81,13 @@ describe("QuotesService.create — assembly lines + detail level", () => {
     assemblyUnit: "sq ft",
     assemblyComponents: [
       {
-        kind: AssemblyComponentKind.MATERIAL,
+        kind: JobComponentKind.MATERIAL,
         description: "Tile, 12x12",
         quantityPerUnit: 1,
         unitPriceCents: 1500,
       },
       {
-        kind: AssemblyComponentKind.LABOUR,
+        kind: JobComponentKind.LABOUR,
         description: "Mason",
         quantityPerUnit: 0.5,
         unitPriceCents: 2000,

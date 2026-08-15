@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
-import { AssemblyComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
+import { JobComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
 import { AssembliesService } from "./assemblies.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 const materialComponent = {
-  kind: AssemblyComponentKind.MATERIAL,
+  kind: JobComponentKind.MATERIAL,
   description: "Ceramic tile, 12x12",
   quantityPerUnit: 1.1,
   unitPriceCents: 25_000,
 };
 const labourComponent = {
-  kind: AssemblyComponentKind.LABOUR,
+  kind: JobComponentKind.LABOUR,
   description: "Tiler labour",
   quantityPerUnit: 0.2,
   unitPriceCents: 800_000,
@@ -38,12 +38,12 @@ function tileAssemblyRow(overrides: Partial<Record<string, unknown>> = {}) {
 
 function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
   const tx = {
-    assembly: { create: vi.fn().mockResolvedValue({ id: "a1" }), update: vi.fn() },
-    assemblyComponent: { create: vi.fn(), deleteMany: vi.fn() },
+    job: { create: vi.fn().mockResolvedValue({ id: "a1" }), update: vi.fn() },
+    jobComponent: { create: vi.fn(), deleteMany: vi.fn() },
   };
   const prisma = {
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
-    assembly: {
+    job: {
       create: vi.fn(),
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -57,7 +57,7 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
 describe("AssembliesService.create", () => {
   it("creates the assembly + components in a transaction and returns the computed unitCostCents", async () => {
     const { svc, prisma, tx } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
 
     const result = await svc.create("b1", {
       name: "Tiling — per sq ft",
@@ -66,14 +66,14 @@ describe("AssembliesService.create", () => {
       components: [materialComponent, labourComponent],
     } as any);
 
-    expect(tx.assembly.create).toHaveBeenCalledWith({
+    expect(tx.job.create).toHaveBeenCalledWith({
       data: { businessId: "b1", name: "Tiling — per sq ft", unit: "sq ft", markupPct: 20 },
     });
-    expect(tx.assemblyComponent.create).toHaveBeenCalledTimes(2);
-    expect(tx.assemblyComponent.create).toHaveBeenNthCalledWith(1, {
+    expect(tx.jobComponent.create).toHaveBeenCalledTimes(2);
+    expect(tx.jobComponent.create).toHaveBeenNthCalledWith(1, {
       data: expect.objectContaining({
         assemblyId: "a1",
-        kind: AssemblyComponentKind.MATERIAL,
+        kind: JobComponentKind.MATERIAL,
         sort: 0,
       }),
     });
@@ -87,7 +87,7 @@ describe("AssembliesService.create", () => {
 
   it("defaults markupPct to 0 when omitted", async () => {
     const { svc, prisma, tx } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow({ markupPct: 0 }));
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow({ markupPct: 0 }));
 
     await svc.create("b1", {
       name: "Tiling — per sq ft",
@@ -95,7 +95,7 @@ describe("AssembliesService.create", () => {
       components: [],
     } as any);
 
-    expect(tx.assembly.create).toHaveBeenCalledWith({
+    expect(tx.job.create).toHaveBeenCalledWith({
       data: { businessId: "b1", name: "Tiling — per sq ft", unit: "sq ft", markupPct: 0 },
     });
   });
@@ -104,11 +104,11 @@ describe("AssembliesService.create", () => {
 describe("AssembliesService.findAll", () => {
   it("scopes to the business, excludes soft-deleted rows, and computes unitCostCents", async () => {
     const { svc, prisma } = withPrisma();
-    prisma.assembly.findMany = vi.fn().mockResolvedValue([tileAssemblyRow()]);
+    prisma.job.findMany = vi.fn().mockResolvedValue([tileAssemblyRow()]);
 
     const result = await svc.findAll("b1");
 
-    expect(prisma.assembly.findMany).toHaveBeenCalledWith({
+    expect(prisma.job.findMany).toHaveBeenCalledWith({
       where: { businessId: "b1", deletedAt: null },
       include: { components: { orderBy: { sort: "asc" } } },
       orderBy: { name: "asc" },
@@ -126,7 +126,7 @@ describe("AssembliesService.findAll", () => {
 describe("AssembliesService.findOne", () => {
   it("throws NotFoundException when no matching (non-deleted) row exists", async () => {
     const { svc, prisma } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(null);
+    prisma.job.findFirst = vi.fn().mockResolvedValue(null);
     await expect(svc.findOne("b1", "missing")).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -134,7 +134,7 @@ describe("AssembliesService.findOne", () => {
 describe("AssembliesService.update", () => {
   it("replaces components (delete old, insert new) when components is provided", async () => {
     const { svc, prisma, tx } = withPrisma();
-    prisma.assembly.findFirst = vi
+    prisma.job.findFirst = vi
       .fn()
       // assertExists lookup
       .mockResolvedValueOnce(tileAssemblyRow())
@@ -142,7 +142,7 @@ describe("AssembliesService.update", () => {
       .mockResolvedValueOnce(tileAssemblyRow({ markupPct: 25 }));
 
     const newComponent = {
-      kind: AssemblyComponentKind.OTHER,
+      kind: JobComponentKind.OTHER,
       description: "Grout",
       quantityPerUnit: 0.05,
       unitPriceCents: 10_000,
@@ -150,51 +150,51 @@ describe("AssembliesService.update", () => {
 
     await svc.update("b1", "a1", { markupPct: 25, components: [newComponent] } as any);
 
-    expect(tx.assembly.update).toHaveBeenCalledWith({
+    expect(tx.job.update).toHaveBeenCalledWith({
       where: { id: "a1" },
       data: { name: "Tiling — per sq ft", unit: "sq ft", markupPct: 25 },
     });
-    expect(tx.assemblyComponent.deleteMany).toHaveBeenCalledWith({
+    expect(tx.jobComponent.deleteMany).toHaveBeenCalledWith({
       where: { assemblyId: "a1" },
     });
-    expect(tx.assemblyComponent.create).toHaveBeenCalledTimes(1);
-    expect(tx.assemblyComponent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ assemblyId: "a1", kind: AssemblyComponentKind.OTHER }),
+    expect(tx.jobComponent.create).toHaveBeenCalledTimes(1);
+    expect(tx.jobComponent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ assemblyId: "a1", kind: JobComponentKind.OTHER }),
     });
   });
 
   it("leaves the existing components untouched when components is omitted", async () => {
     const { svc, prisma, tx } = withPrisma();
-    prisma.assembly.findFirst = vi
+    prisma.job.findFirst = vi
       .fn()
       .mockResolvedValueOnce(tileAssemblyRow())
       .mockResolvedValueOnce(tileAssemblyRow({ name: "Tiling (updated)" }));
 
     await svc.update("b1", "a1", { name: "Tiling (updated)" } as any);
 
-    expect(tx.assemblyComponent.deleteMany).not.toHaveBeenCalled();
-    expect(tx.assemblyComponent.create).not.toHaveBeenCalled();
+    expect(tx.jobComponent.deleteMany).not.toHaveBeenCalled();
+    expect(tx.jobComponent.create).not.toHaveBeenCalled();
   });
 
   it("throws NotFoundException instead of updating when the row is already gone", async () => {
     const { svc, prisma, tx } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(null);
+    prisma.job.findFirst = vi.fn().mockResolvedValue(null);
     await expect(svc.update("b1", "missing", { name: "x" } as any)).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(tx.assembly.update).not.toHaveBeenCalled();
+    expect(tx.job.update).not.toHaveBeenCalled();
   });
 });
 
 describe("AssembliesService.remove", () => {
   it("soft-deletes by setting deletedAt instead of removing the row", async () => {
     const { svc, prisma } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
-    prisma.assembly.update = vi.fn();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
+    prisma.job.update = vi.fn();
 
     await svc.remove("b1", "a1");
 
-    expect(prisma.assembly.update).toHaveBeenCalledWith({
+    expect(prisma.job.update).toHaveBeenCalledWith({
       where: { id: "a1" },
       data: { deletedAt: expect.any(Date) },
     });
@@ -202,7 +202,7 @@ describe("AssembliesService.remove", () => {
 
   it("throws NotFoundException instead of deleting when the row is already gone", async () => {
     const { svc, prisma } = withPrisma();
-    prisma.assembly.findFirst = vi.fn().mockResolvedValue(null);
+    prisma.job.findFirst = vi.fn().mockResolvedValue(null);
     await expect(svc.remove("b1", "missing")).rejects.toBeInstanceOf(NotFoundException);
   });
 });

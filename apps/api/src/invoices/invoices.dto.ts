@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  AssemblyComponentKind,
+  JobComponentKind,
   QuoteDetailLevel,
   quoteLineItemSchema,
 } from "@jamquote/core";
@@ -11,7 +11,7 @@ import {
  * — only for DETAILED rendering. Mirrors quotes.dto.ts exactly.
  */
 export const invoiceLineAssemblyComponentSchema = z.object({
-  kind: z.nativeEnum(AssemblyComponentKind),
+  kind: z.nativeEnum(JobComponentKind),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
   unitPriceCents: z.number().int().nonnegative(),

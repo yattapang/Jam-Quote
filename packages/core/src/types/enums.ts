@@ -77,14 +77,14 @@ export const EntityType = {
 } as const;
 export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 
-/** What an assembly component draws its cost from. */
-export const AssemblyComponentKind = {
+/** What a job component draws its cost from. */
+export const JobComponentKind = {
   MATERIAL: "MATERIAL",
   LABOUR: "LABOUR",
   OTHER: "OTHER",
 } as const;
-export type AssemblyComponentKind =
-  (typeof AssemblyComponentKind)[keyof typeof AssemblyComponentKind];
+export type JobComponentKind =
+  (typeof JobComponentKind)[keyof typeof JobComponentKind];
 
 /**
  * Per-quote rendering detail level: SUMMARY shows an assembly line as a

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AssemblyComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
+import { JobComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -13,9 +13,9 @@ import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
 import styles from "./AssemblyForm.module.css";
 
 const kindOptions = [
-  { value: AssemblyComponentKind.MATERIAL, label: "Material" },
-  { value: AssemblyComponentKind.LABOUR, label: "Labour" },
-  { value: AssemblyComponentKind.OTHER, label: "Other" },
+  { value: JobComponentKind.MATERIAL, label: "Material" },
+  { value: JobComponentKind.LABOUR, label: "Labour" },
+  { value: JobComponentKind.OTHER, label: "Other" },
 ];
 
 /** One draft recipe line in the builder. `unitPriceDollars`/`description`
@@ -25,7 +25,7 @@ const kindOptions = [
  * an optional back-reference, not a live link). */
 export interface AssemblyComponentDraft {
   key: string;
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
   description: string;
@@ -44,7 +44,7 @@ let draftCounter = 0;
 function newComponentDraft(): AssemblyComponentDraft {
   return {
     key: `c${++draftCounter}`,
-    kind: AssemblyComponentKind.MATERIAL,
+    kind: JobComponentKind.MATERIAL,
     description: "",
     quantityPerUnit: "1",
     unitPriceDollars: "",
@@ -96,8 +96,8 @@ export function assemblyPayloadFromValues(values: AssemblyFormValues): NewAssemb
     markupPct: Number(values.markupPct) || 0,
     components: validComponents(values.components).map((c) => ({
       kind: c.kind,
-      materialFavouriteId: c.kind === AssemblyComponentKind.MATERIAL ? c.materialFavouriteId : undefined,
-      labourRateId: c.kind === AssemblyComponentKind.LABOUR ? c.labourRateId : undefined,
+      materialFavouriteId: c.kind === JobComponentKind.MATERIAL ? c.materialFavouriteId : undefined,
+      labourRateId: c.kind === JobComponentKind.LABOUR ? c.labourRateId : undefined,
       description: c.description.trim(),
       quantityPerUnit: Number(c.quantityPerUnit) || 0,
       unitPriceCents: toCents(c.unitPriceDollars),
@@ -147,7 +147,7 @@ function ComponentRow({
     ...labourRates.map((r) => ({ value: r.id, label: labourLabel(r) })),
   ];
 
-  function changeKind(kind: AssemblyComponentKind) {
+  function changeKind(kind: JobComponentKind) {
     onChange({ kind, materialFavouriteId: undefined, labourRateId: undefined });
   }
 
@@ -178,16 +178,16 @@ function ComponentRow({
           label="Kind"
           options={kindOptions}
           value={draft.kind}
-          onChange={(e) => changeKind(e.target.value as AssemblyComponentKind)}
+          onChange={(e) => changeKind(e.target.value as JobComponentKind)}
         />
-        {draft.kind === AssemblyComponentKind.MATERIAL ? (
+        {draft.kind === JobComponentKind.MATERIAL ? (
           <Select
             label="Saved material"
             options={materialOptions}
             value={draft.materialFavouriteId ?? ""}
             onChange={(e) => pickMaterial(e.target.value)}
           />
-        ) : draft.kind === AssemblyComponentKind.LABOUR ? (
+        ) : draft.kind === JobComponentKind.LABOUR ? (
           <Select
             label="Saved labour rate"
             options={labourOptions}
@@ -213,7 +213,7 @@ function ComponentRow({
         </button>
       </div>
       <div className={styles.componentBottomRow}>
-        {draft.kind !== AssemblyComponentKind.OTHER && (
+        {draft.kind !== JobComponentKind.OTHER && (
           <Input
             label="Description"
             value={draft.description}

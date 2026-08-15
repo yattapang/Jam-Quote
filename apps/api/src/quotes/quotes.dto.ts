@@ -1,6 +1,6 @@
 import { z } from "zod";
 import {
-  AssemblyComponentKind,
+  JobComponentKind,
   QuoteDetailLevel,
   QuoteStatus,
   quoteLineItemSchema,
@@ -12,7 +12,7 @@ import {
  * line's own quantity x unitPriceCents is) — only for DETAILED rendering.
  */
 export const quoteLineAssemblyComponentSchema = z.object({
-  kind: z.nativeEnum(AssemblyComponentKind),
+  kind: z.nativeEnum(JobComponentKind),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
   unitPriceCents: z.number().int().nonnegative(),

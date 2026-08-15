@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { AssemblyComponentKind } from "@jamquote/core";
+import { JobComponentKind } from "@jamquote/core";
 
 // materialFavouriteId/labourRateId are optional recompute back-references,
 // not required — a component may be freeform (no library link).
 export const assemblyComponentInputSchema = z.object({
-  kind: z.nativeEnum(AssemblyComponentKind),
+  kind: z.nativeEnum(JobComponentKind),
   materialFavouriteId: z.string().min(1).optional(),
   labourRateId: z.string().min(1).optional(),
   description: z.string().min(1),

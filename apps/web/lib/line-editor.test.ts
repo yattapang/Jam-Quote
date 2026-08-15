@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  AssemblyComponentKind,
+  JobComponentKind,
   GctTreatment,
   LineCategory,
   RateUnit,
@@ -150,7 +150,7 @@ describe("assemblyLine", () => {
     components: [
       {
         id: "c1",
-        kind: AssemblyComponentKind.MATERIAL,
+        kind: JobComponentKind.MATERIAL,
         description: "Tile",
         quantityPerUnit: 1.1,
         unitPriceCents: 30_000,
@@ -172,7 +172,7 @@ describe("assemblyLine", () => {
   it("snapshots the components without their database ids or sort", () => {
     expect(assemblyLine(assembly, 1).assemblyComponents).toEqual([
       {
-        kind: AssemblyComponentKind.MATERIAL,
+        kind: JobComponentKind.MATERIAL,
         description: "Tile",
         quantityPerUnit: 1.1,
         unitPriceCents: 30_000,
@@ -244,7 +244,7 @@ describe("draftLineFromInitial", () => {
         assemblyUnit: "sq ft",
         assemblyComponents: [
           {
-            kind: AssemblyComponentKind.LABOUR,
+            kind: JobComponentKind.LABOUR,
             description: "Fixing",
             quantityPerUnit: 0.5,
             unitPriceCents: 1000,
@@ -401,7 +401,7 @@ describe("lineToLineInput", () => {
         assemblyUnit: "sq ft",
         assemblyComponents: [
           {
-            kind: AssemblyComponentKind.MATERIAL,
+            kind: JobComponentKind.MATERIAL,
             description: "Tile",
             quantityPerUnit: 1,
             unitPriceCents: 100,

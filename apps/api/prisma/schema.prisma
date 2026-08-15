@@ -97,10 +97,14 @@ enum MessageChannel {
   EMAIL
 }
 
-enum AssemblyComponentKind {
+enum JobComponentKind {
   MATERIAL
   LABOUR
   OTHER
+
+  // Postgres enum type stays "AssemblyComponentKind" — @@map keeps this
+  // rename free of SQL. See PLANNING.md §1.
+  @@map("AssemblyComponentKind")
 }
 
 // Per-quote rendering detail level: SUMMARY shows an assembly line as a
@@ -170,7 +174,7 @@ model Business {
   connections  Connection[]
   subscription Subscription?
   trades       Trade[]
-  assemblies   Assembly[]
+  jobs         Job[]
 
   materialCategoryDefs     MaterialCategoryDef[]
   materialAttributeDefs    MaterialAttributeDef[]
@@ -487,7 +491,7 @@ model LabourRate {
   updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
-  assemblyComponents AssemblyComponent[]
+  jobComponents      JobComponent[]
 
   @@index([businessId])
 }
@@ -544,7 +548,7 @@ model MaterialFavourite {
   updatedAt           DateTime             @default(now()) @updatedAt // delta-sync cursor
   deletedAt           DateTime? // soft-delete for offline sync
 
-  assemblyComponents   AssemblyComponent[]
+  jobComponents        JobComponent[]
   materialPriceEntries MaterialPriceEntry[]
 
   @@index([businessId])
@@ -699,11 +703,13 @@ model EquipmentItem {
   @@index([businessId])
 }
 
-// A reusable composite unit ("job type", e.g. "Tiling — per sq ft") built
-// from material/labour/other components. Its unit cost is computed from
-// those components (see computeAssemblyUnitCostCents in @jamquote/core) but
-// stays editable/overridable later once used on a quote.
-model Assembly {
+/// A reusable, priced service the contractor sells ("Interior wall painting,
+/// per sq ft"), built from material/labour/other components. The UI calls this
+/// a JOB. Its unit cost is computed from those components (see
+/// computeAssemblyUnitCostCents in @jamquote/core) but stays
+/// editable/overridable once used on a quote. Not to be confused with Project,
+/// which is work for a specific client. See PLANNING.md §1.
+model Job {
   id         String    @id @default(uuid())
   businessId String
   business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -714,9 +720,10 @@ model Assembly {
   updatedAt  DateTime  @updatedAt
   deletedAt  DateTime? // soft-delete for offline sync
 
-  components AssemblyComponent[]
+  components JobComponent[]
 
   @@index([businessId])
+  @@map("Assembly")
 }
 
 // One line of an Assembly's recipe. unitPriceCents is a snapshot of the
@@ -726,11 +733,13 @@ model Assembly {
 // demand. materialFavouriteId/labourRateId are optional back-references for
 // that recompute path and are set null (not deleted) if the source row goes
 // away.
-model AssemblyComponent {
+model JobComponent {
   id                  String                @id @default(uuid())
+  // Scalar stays `assemblyId`: it is the existing column name and appears in
+  // the public API line-item snapshot. Only the accessor is `job`.
   assemblyId          String
-  assembly            Assembly              @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
-  kind                AssemblyComponentKind
+  job                 Job                   @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  kind                JobComponentKind
   materialFavouriteId String?
   materialFavourite   MaterialFavourite?    @relation(fields: [materialFavouriteId], references: [id], onDelete: SetNull)
   labourRateId        String?
@@ -741,6 +750,7 @@ model AssemblyComponent {
   sort                Int                   @default(0)
 
   @@index([assemblyId])
+  @@map("AssemblyComponent")
 }
 
 // ---------------------------------------------------------------------------

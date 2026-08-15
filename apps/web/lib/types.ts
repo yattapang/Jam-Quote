@@ -1,5 +1,5 @@
 import type {
-  AssemblyComponentKind,
+  JobComponentKind,
   InvoiceStatus,
   PaymentMethod,
   Parish,
@@ -14,7 +14,7 @@ import type {
  * totals math — only to expand a line in DETAILED view. Mirrors the API's
  * `quoteLineAssemblyComponentSchema` (quotes.dto.ts). */
 export interface QuoteLineAssemblyComponent {
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   description: string;
   quantityPerUnit: number;
   unitPriceCents: number;
@@ -142,7 +142,7 @@ export interface LabourRate {
  * "OTHER" line (mirrors the Prisma `AssemblyComponent` model). */
 export interface AssemblyComponent {
   id: string;
-  kind: AssemblyComponentKind;
+  kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
   description: string;
