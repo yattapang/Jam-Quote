@@ -5,7 +5,7 @@ import StatusPill from "@/components/ui/StatusPill";
 import { getReports } from "@/lib/api-server";
 import { REPORT_PERIODS, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
 import { jobStagePill } from "@/lib/status";
-import { JOB_STAGES } from "@jamquote/core";
+import { PROJECT_STAGES } from "@jamquote/core";
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
 
@@ -201,7 +201,7 @@ export default async function ReportsPage({
               {reports.jobs.jobsCreated}
             </span>
             <div className={styles.stageList}>
-              {JOB_STAGES.map((stage) => {
+              {PROJECT_STAGES.map((stage) => {
                 const pill = jobStagePill(stage);
                 return (
                   <div key={stage} className={styles.stageRow}>

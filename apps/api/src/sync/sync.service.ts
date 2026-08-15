@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Client, Job } from "@prisma/client";
+import type { Client, Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { ClientChange, JobChange, PushInput } from "./sync.dto.js";
 
@@ -7,7 +7,7 @@ export interface PullResult {
   cursor: string;
   changes: {
     clients: Client[];
-    jobs: Job[];
+    jobs: Project[];
   };
 }
 
@@ -45,7 +45,7 @@ export class SyncService {
     const base = since ? { businessId, updatedAt: { gt: new Date(since) } } : { businessId };
     const [clients, jobs] = await Promise.all([
       this.prisma.client.findMany({ where: base }),
-      this.prisma.job.findMany({ where: base }),
+      this.prisma.project.findMany({ where: base }),
     ]);
     return { cursor: cursor.toISOString(), changes: { clients, jobs } };
   }
@@ -95,12 +95,12 @@ export class SyncService {
   }
 
   private async applyJob(businessId: string, change: JobChange): Promise<PushOutcome> {
-    const existing = await this.prisma.job.findUnique({ where: { id: change.id } });
+    const existing = await this.prisma.project.findUnique({ where: { id: change.id } });
     if (existing && existing.businessId !== businessId) return "foreign";
     if (existing && existing.updatedAt > new Date(change.updatedAt)) return "server_kept";
 
     if (change.op === "delete") {
-      if (existing) await this.prisma.job.update({ where: { id: change.id }, data: { deletedAt: new Date() } });
+      if (existing) await this.prisma.project.update({ where: { id: change.id }, data: { deletedAt: new Date() } });
       return "applied";
     }
 
@@ -125,7 +125,7 @@ export class SyncService {
       ...(d.stage !== undefined ? { stage: d.stage } : {}),
       ...(d.progressPct !== undefined ? { progressPct: d.progressPct } : {}),
     };
-    await this.prisma.job.upsert({
+    await this.prisma.project.upsert({
       where: { id: change.id },
       create: { id: change.id, businessId, ...fields, ...workflow },
       update: { ...fields, ...workflow },

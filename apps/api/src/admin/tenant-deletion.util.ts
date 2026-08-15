@@ -17,9 +17,9 @@ import type { Prisma } from "@prisma/client";
  *
  *   MessageLog (-> Quote)
  *   Invoice (-> Quote, -> Client; cascades to Payment)
- *   Attachment (-> Job)
- *   Quote (-> Job, -> Client; cascades to QuoteSection, QuoteLineItem)
- *   Job (-> Client)
+ *   Attachment (-> Project)
+ *   Quote (-> Project, -> Client; cascades to QuoteSection, QuoteLineItem)
+ *   Project (-> Client)
  *   Client
  *   LabourRate, MaterialFavourite, EquipmentItem, Connection, Subscription
  *   MaterialPriceEntry, then Supplier (see step 8 — RESTRICT between them)
@@ -39,15 +39,15 @@ export async function deleteBusinessCascade(
   //    rows go with it automatically.
   await tx.invoice.deleteMany({ where: { businessId } });
 
-  // 3. Attachment references Job (no cascade) — delete before Job.
-  await tx.attachment.deleteMany({ where: { job: { businessId } } });
+  // 3. Attachment references Project (no cascade) — delete before Project.
+  await tx.attachment.deleteMany({ where: { project: { businessId } } });
 
-  // 4. Quote references Job and Client (no cascade on either); cascades to
-  //    QuoteSection and QuoteLineItem itself.
+  // 4. Quote references Project and Client (no cascade on either); cascades
+  //    to QuoteSection and QuoteLineItem itself.
   await tx.quote.deleteMany({ where: { businessId } });
 
-  // 5. Job references Client (no cascade) — delete before Client.
-  await tx.job.deleteMany({ where: { businessId } });
+  // 5. Project references Client (no cascade) — delete before Client.
+  await tx.project.deleteMany({ where: { businessId } });
 
   // 6. Client.
   await tx.client.deleteMany({ where: { businessId } });

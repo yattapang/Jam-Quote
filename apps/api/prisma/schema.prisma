@@ -115,12 +115,16 @@ enum QuoteDetailLevel {
 // from quotes/invoices (nothing in the system knows whether the blocks are
 // laid). Deliberately no INVOICED/PAID member: that is Invoice.status, and
 // holding the same fact in two places guarantees they eventually disagree.
-enum JobStage {
+enum ProjectStage {
   QUOTED
   WON
   IN_PROGRESS
   COMPLETE
   CANCELLED
+
+  // The Postgres enum type is still named "JobStage"; @@map keeps it that way
+  // so this rename generates no SQL. See PLANNING.md §1.
+  @@map("JobStage")
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +161,7 @@ model Business {
 
   users        User[]
   clients      Client[]
-  jobs         Job[]
+  projects     Project[]
   quotes       Quote[]
   invoices     Invoice[]
   labourRates  LabourRate[]
@@ -256,14 +260,17 @@ model Client {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime? // soft-delete for offline sync
 
-  jobs     Job[]
+  projects Project[]
   quotes   Quote[]
   invoices Invoice[]
 
   @@index([businessId])
 }
 
-model Job {
+/// A specific piece of work for a specific client ("Retaining wall, Spanish
+/// Town"). The UI calls this a PROJECT. Not to be confused with the Job model
+/// (formerly Assembly), which is the reusable priced template. See PLANNING.md §1.
+model Project {
   id          String    @id @default(uuid())
   businessId  String
   business    Business  @relation(fields: [businessId], references: [id])
@@ -273,7 +280,7 @@ model Job {
   addressLine String?
   town        String? // town/city — see Business.town
   parish      String?
-  stage       JobStage  @default(QUOTED)
+  stage       ProjectStage @default(QUOTED)
   // 0–100, hand-set alongside stage. Only rendered where it means something —
   // see jobStageTracksProgress in packages/core.
   progressPct Int       @default(0)
@@ -286,6 +293,8 @@ model Job {
 
   @@index([businessId])
   @@index([clientId])
+
+  @@map("Job")
 }
 
 // ---------------------------------------------------------------------------
@@ -297,8 +306,10 @@ model Quote {
   business      Business         @relation(fields: [businessId], references: [id])
   clientId      String?
   client        Client?          @relation(fields: [clientId], references: [id])
+  // Scalar stays `jobId`: it is the public API field name and a deployed
+  // mobile client already sends it. The relation accessor is `project`.
   jobId         String?
-  job           Job?             @relation(fields: [jobId], references: [id])
+  project       Project?         @relation(fields: [jobId], references: [id])
   number        String // e.g. QT-0142
   status        QuoteStatus      @default(DRAFT)
   // Display setting only: SUMMARY collapses assembly lines to one priced
@@ -882,8 +893,8 @@ model RegulatoryUpdate {
 
 model Attachment {
   id        String   @id @default(uuid())
-  jobId     String?
-  job       Job?     @relation(fields: [jobId], references: [id])
+  jobId     String? // public API field name — see Quote.jobId
+  project   Project? @relation(fields: [jobId], references: [id])
   url       String
   kind      String   @default("photo")
   createdAt DateTime @default(now())

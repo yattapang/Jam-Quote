@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import type { Job } from "@prisma/client";
+import type { Project } from "@prisma/client";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
@@ -20,7 +20,7 @@ export class JobsController {
   create(
     @BusinessId() businessId: string,
     @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobInput,
-  ): Promise<Job> {
+  ): Promise<Project> {
     return this.jobs.create(businessId, body);
   }
 
@@ -28,12 +28,12 @@ export class JobsController {
   findAll(
     @BusinessId() businessId: string,
     @Query("clientId") clientId?: string,
-  ): Promise<Job[]> {
+  ): Promise<Project[]> {
     return this.jobs.findAll(businessId, clientId);
   }
 
   @Get(":id")
-  findOne(@BusinessId() businessId: string, @Param("id") id: string): Promise<Job> {
+  findOne(@BusinessId() businessId: string, @Param("id") id: string): Promise<Project> {
     return this.jobs.findOne(businessId, id);
   }
 
@@ -42,7 +42,7 @@ export class JobsController {
     @BusinessId() businessId: string,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobInput,
-  ): Promise<Job> {
+  ): Promise<Project> {
     return this.jobs.update(businessId, id, body);
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { JobStage } from "@jamquote/core";
+import { ProjectStage } from "@jamquote/core";
 import { SyncService } from "./sync.service.js";
 import type { PrismaService } from "../prisma/prisma.service.js";
 import type { PushInput } from "./sync.dto.js";
@@ -19,7 +19,7 @@ function makePrisma() {
       update: vi.fn().mockResolvedValue({}),
       upsert: vi.fn().mockResolvedValue({}),
     },
-    job: {
+    project: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
       update: vi.fn().mockResolvedValue({}),
@@ -49,7 +49,7 @@ const jobData = {
   clientId: CLIENT_ID,
   addressLine: "12 Hope Rd",
   parish: "Kingston",
-  stage: JobStage.QUOTED,
+  stage: ProjectStage.QUOTED,
   progressPct: 0,
 };
 
@@ -59,13 +59,13 @@ describe("SyncService.pull", () => {
     const rowClient = { id: CLIENT_ID, businessId: BUSINESS_ID, deletedAt: null };
     const rowJob = { id: JOB_ID, businessId: BUSINESS_ID, deletedAt: null };
     prisma.client.findMany.mockResolvedValue([rowClient]);
-    prisma.job.findMany.mockResolvedValue([rowJob]);
+    prisma.project.findMany.mockResolvedValue([rowJob]);
     const svc = makeService(prisma);
 
     const result = await svc.pull(BUSINESS_ID);
 
     expect(prisma.client.findMany).toHaveBeenCalledWith({ where: { businessId: BUSINESS_ID } });
-    expect(prisma.job.findMany).toHaveBeenCalledWith({ where: { businessId: BUSINESS_ID } });
+    expect(prisma.project.findMany).toHaveBeenCalledWith({ where: { businessId: BUSINESS_ID } });
     expect(typeof result.cursor).toBe("string");
     expect(new Date(result.cursor).toISOString()).toBe(result.cursor);
     expect(result.changes.clients).toEqual([rowClient]);
@@ -81,7 +81,7 @@ describe("SyncService.pull", () => {
 
     const expectedWhere = { businessId: BUSINESS_ID, updatedAt: { gt: new Date(since) } };
     expect(prisma.client.findMany).toHaveBeenCalledWith({ where: expectedWhere });
-    expect(prisma.job.findMany).toHaveBeenCalledWith({ where: expectedWhere });
+    expect(prisma.project.findMany).toHaveBeenCalledWith({ where: expectedWhere });
   });
 
   it("passes tombstoned rows (deletedAt set) straight through in the result", async () => {
@@ -97,7 +97,7 @@ describe("SyncService.pull", () => {
       deletedAt: new Date("2026-02-01T00:00:00.000Z"),
     };
     prisma.client.findMany.mockResolvedValue([tombstonedClient]);
-    prisma.job.findMany.mockResolvedValue([tombstonedJob]);
+    prisma.project.findMany.mockResolvedValue([tombstonedJob]);
     const svc = makeService(prisma);
 
     const result = await svc.pull(BUSINESS_ID);
@@ -287,7 +287,7 @@ describe("SyncService.push — clients", () => {
 describe("SyncService.push — jobs (mirror)", () => {
   it("upsert create: findUnique -> null calls job.upsert with create containing id + businessId; outcome applied", async () => {
     const prisma = makePrisma();
-    prisma.job.findUnique.mockResolvedValue(null);
+    prisma.project.findUnique.mockResolvedValue(null);
     const svc = makeService(prisma);
 
     const input: PushInput = {
@@ -297,7 +297,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const result = await svc.push(BUSINESS_ID, input);
 
-    expect(prisma.job.upsert).toHaveBeenCalledWith(
+    expect(prisma.project.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: JOB_ID },
         create: expect.objectContaining({ id: JOB_ID, businessId: BUSINESS_ID }),
@@ -308,7 +308,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
   it("writes the stage and progress the device sent", async () => {
     const prisma = makePrisma();
-    prisma.job.findUnique.mockResolvedValue(null);
+    prisma.project.findUnique.mockResolvedValue(null);
     const svc = makeService(prisma);
 
     await svc.push(BUSINESS_ID, {
@@ -318,15 +318,15 @@ describe("SyncService.push — jobs (mirror)", () => {
           id: JOB_ID,
           op: "upsert",
           updatedAt: "2026-03-01T00:00:00.000Z",
-          data: { ...jobData, stage: JobStage.IN_PROGRESS, progressPct: 62 },
+          data: { ...jobData, stage: ProjectStage.IN_PROGRESS, progressPct: 62 },
         },
       ],
     });
 
-    expect(prisma.job.upsert).toHaveBeenCalledWith(
+    expect(prisma.project.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        create: expect.objectContaining({ stage: JobStage.IN_PROGRESS, progressPct: 62 }),
-        update: expect.objectContaining({ stage: JobStage.IN_PROGRESS, progressPct: 62 }),
+        create: expect.objectContaining({ stage: ProjectStage.IN_PROGRESS, progressPct: 62 }),
+        update: expect.objectContaining({ stage: ProjectStage.IN_PROGRESS, progressPct: 62 }),
       }),
     );
   });
@@ -337,7 +337,7 @@ describe("SyncService.push — jobs (mirror)", () => {
     // web back to QUOTED/0. They are optional (not nullish) in the DTO
     // precisely because omission means "no opinion", not "cleared".
     const prisma = makePrisma();
-    prisma.job.findUnique.mockResolvedValue(null);
+    prisma.project.findUnique.mockResolvedValue(null);
     const svc = makeService(prisma);
     const { stage: _stage, progressPct: _pct, ...withoutWorkflow } = jobData;
 
@@ -346,7 +346,7 @@ describe("SyncService.push — jobs (mirror)", () => {
       jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: withoutWorkflow }],
     });
 
-    const args = prisma.job.upsert.mock.calls[0]?.[0] as { create: object; update: object };
+    const args = prisma.project.upsert.mock.calls[0]?.[0] as { create: object; update: object };
     expect(args.update).not.toHaveProperty("stage");
     expect(args.update).not.toHaveProperty("progressPct");
     // Nor on create — the column defaults (QUOTED/0) are the single source of
@@ -362,7 +362,7 @@ describe("SyncService.push — jobs (mirror)", () => {
       businessId: BUSINESS_ID,
       updatedAt: new Date("2026-05-01T00:00:00.000Z"),
     };
-    prisma.job.findUnique.mockResolvedValue(existing);
+    prisma.project.findUnique.mockResolvedValue(existing);
     const svc = makeService(prisma);
 
     const input: PushInput = {
@@ -372,7 +372,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const result = await svc.push(BUSINESS_ID, input);
 
-    expect(prisma.job.upsert).not.toHaveBeenCalled();
+    expect(prisma.project.upsert).not.toHaveBeenCalled();
     expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "server_kept" }]);
   });
 
@@ -383,7 +383,7 @@ describe("SyncService.push — jobs (mirror)", () => {
       businessId: OTHER_BUSINESS_ID,
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     };
-    prisma.job.findUnique.mockResolvedValue(existing);
+    prisma.project.findUnique.mockResolvedValue(existing);
     const svc = makeService(prisma);
 
     const input: PushInput = {
@@ -393,8 +393,8 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const result = await svc.push(BUSINESS_ID, input);
 
-    expect(prisma.job.upsert).not.toHaveBeenCalled();
-    expect(prisma.job.update).not.toHaveBeenCalled();
+    expect(prisma.project.upsert).not.toHaveBeenCalled();
+    expect(prisma.project.update).not.toHaveBeenCalled();
     expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "foreign" }]);
   });
 
@@ -405,7 +405,7 @@ describe("SyncService.push — jobs (mirror)", () => {
       businessId: BUSINESS_ID,
       updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     };
-    prisma.job.findUnique.mockResolvedValue(existing);
+    prisma.project.findUnique.mockResolvedValue(existing);
     const svc = makeService(prisma);
 
     const input: PushInput = {
@@ -415,7 +415,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const result = await svc.push(BUSINESS_ID, input);
 
-    expect(prisma.job.update).toHaveBeenCalledWith(
+    expect(prisma.project.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: JOB_ID },
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),
@@ -426,7 +426,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
   it("delete with no existing job row: outcome applied, no update call", async () => {
     const prisma = makePrisma();
-    prisma.job.findUnique.mockResolvedValue(null);
+    prisma.project.findUnique.mockResolvedValue(null);
     const svc = makeService(prisma);
 
     const input: PushInput = {
@@ -436,7 +436,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const result = await svc.push(BUSINESS_ID, input);
 
-    expect(prisma.job.update).not.toHaveBeenCalled();
+    expect(prisma.project.update).not.toHaveBeenCalled();
     expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "applied" }]);
   });
 });

@@ -153,10 +153,16 @@ describe("Job.stage enum migration", () => {
         )
       ).rows.map((r) => r.enumlabel);
       const schema = readFileSync(SCHEMA_PATH, "utf8");
-      const declared = (schema.match(/^enum JobStage \{([\s\S]*?)^\}/m)?.[1] ?? "")
+      const declared = (schema.match(/^enum ProjectStage \{([\s\S]*?)^\}/m)?.[1] ?? "")
         .split("\n")
-        .map((l) => l.replace(/\/\/.*$/, "").trim())
-        .filter(Boolean);
+        // Trailing \r (schema.prisma is CRLF): without it, "." can't reach an
+        // unanchored end-of-string $, so a same-line // comment silently
+        // fails to strip and the line survives as a bogus "member".
+        .map((l) => l.replace(/\/\/.*/, "").trim())
+        .filter(Boolean)
+        // Block-level attributes (e.g. @@map, here keeping the Postgres enum
+        // type named "JobStage" — see PLANNING.md §1) are not members.
+        .filter((l) => !l.startsWith("@@"));
       expect(members).toEqual(declared);
       // Guards the decision, not just the sync: no INVOICED/PAID member —
       // that is Invoice.status, and duplicating it invites the two to drift.

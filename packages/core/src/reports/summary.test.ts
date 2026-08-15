@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InvoiceStatus, JOB_STAGES, JobStage, QuoteStatus } from "../types/enums.js";
+import { InvoiceStatus, PROJECT_STAGES, ProjectStage, QuoteStatus } from "../types/enums.js";
 import {
   computeReportsSummary,
   type ReportInvoice,
@@ -49,7 +49,7 @@ function payment(overrides: Partial<ReportPayment> = {}): ReportPayment {
 
 function job(overrides: Partial<ReportJob> = {}): ReportJob {
   return {
-    stage: JobStage.QUOTED,
+    stage: ProjectStage.QUOTED,
     createdAt: "2026-08-10T12:00:00.000Z",
     ...overrides,
   };
@@ -89,7 +89,7 @@ describe("computeReportsSummary", () => {
         invoicedCents: 0,
         collectedCents: 0,
       });
-      for (const stage of JOB_STAGES) {
+      for (const stage of PROJECT_STAGES) {
         expect(s.jobs.jobsByStage[stage]).toBe(0);
       }
     });
@@ -444,28 +444,28 @@ describe("computeReportsSummary", () => {
   });
 
   describe("jobs", () => {
-    it("counts jobs created in range and zero-fills every JobStage", () => {
+    it("counts jobs created in range and zero-fills every ProjectStage", () => {
       const s = computeReportsSummary(
         {
           ...EMPTY_INPUT,
           jobs: [
-            job({ stage: JobStage.WON, createdAt: "2026-08-05T12:00:00.000Z" }),
-            job({ stage: JobStage.WON, createdAt: "2026-08-06T12:00:00.000Z" }),
-            job({ stage: JobStage.COMPLETE, createdAt: "2026-08-07T12:00:00.000Z" }),
+            job({ stage: ProjectStage.WON, createdAt: "2026-08-05T12:00:00.000Z" }),
+            job({ stage: ProjectStage.WON, createdAt: "2026-08-06T12:00:00.000Z" }),
+            job({ stage: ProjectStage.COMPLETE, createdAt: "2026-08-07T12:00:00.000Z" }),
             // Outside range -> excluded.
-            job({ stage: JobStage.QUOTED, createdAt: "2026-07-01T12:00:00.000Z" }),
+            job({ stage: ProjectStage.QUOTED, createdAt: "2026-07-01T12:00:00.000Z" }),
           ],
         },
         AUGUST,
         NOW,
       );
       expect(s.jobs.jobsCreated).toBe(3);
-      expect(s.jobs.jobsByStage[JobStage.WON]).toBe(2);
-      expect(s.jobs.jobsByStage[JobStage.COMPLETE]).toBe(1);
-      expect(s.jobs.jobsByStage[JobStage.QUOTED]).toBe(0);
-      expect(s.jobs.jobsByStage[JobStage.CANCELLED]).toBe(0);
+      expect(s.jobs.jobsByStage[ProjectStage.WON]).toBe(2);
+      expect(s.jobs.jobsByStage[ProjectStage.COMPLETE]).toBe(1);
+      expect(s.jobs.jobsByStage[ProjectStage.QUOTED]).toBe(0);
+      expect(s.jobs.jobsByStage[ProjectStage.CANCELLED]).toBe(0);
       // Every stage present, even ones with zero jobs.
-      for (const stage of JOB_STAGES) {
+      for (const stage of PROJECT_STAGES) {
         expect(s.jobs.jobsByStage[stage]).toBeTypeOf("number");
       }
     });

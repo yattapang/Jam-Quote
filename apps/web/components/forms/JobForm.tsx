@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { JobStage, JOB_STAGES, JOB_STAGE_LABELS, PARISHES, jobStageTracksProgress } from "@jamquote/core";
+import { ProjectStage, PROJECT_STAGES, PROJECT_STAGE_LABELS, PARISHES, projectStageTracksProgress } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -14,7 +14,7 @@ import type { ClientOption } from "./types";
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 // No blank option: every job is at some stage, and a new one starts at QUOTED
 // (the same default the column carries).
-const stageOptions = JOB_STAGES.map((s) => ({ value: s, label: JOB_STAGE_LABELS[s] }));
+const stageOptions = PROJECT_STAGES.map((s) => ({ value: s, label: PROJECT_STAGE_LABELS[s] }));
 
 export interface JobFormValues {
   name: string;
@@ -22,7 +22,7 @@ export interface JobFormValues {
   town: string;
   parish: string;
   address: string;
-  stage: JobStage;
+  stage: ProjectStage;
   /** Kept as the raw input string so the field can be emptied while typing;
    * `jobPayloadFromValues` is what turns it back into a number. */
   progressPct: string;
@@ -34,7 +34,7 @@ export const emptyJobForm: JobFormValues = {
   town: "",
   parish: "",
   address: "",
-  stage: JobStage.QUOTED,
+  stage: ProjectStage.QUOTED,
   progressPct: "0",
 };
 
@@ -150,7 +150,7 @@ export default function JobForm({
           label="Stage"
           options={stageOptions}
           value={values.stage}
-          onChange={(e) => set("stage", e.target.value as JobStage)}
+          onChange={(e) => set("stage", e.target.value as ProjectStage)}
         />
         <Input
           label="Progress"
@@ -163,11 +163,11 @@ export default function JobForm({
           onChange={(e) => set("progressPct", e.target.value)}
           // Says where the number will and won't appear, so nobody types 40%
           // against a quoted job and assumes the list is broken when it
-          // doesn't show up (jobStageTracksProgress).
+          // doesn't show up (projectStageTracksProgress).
           hint={
-            jobStageTracksProgress(values.stage)
+            projectStageTracksProgress(values.stage)
               ? "% of the work done — shown on the jobs list"
-              : `Kept, but not shown while the job is ${JOB_STAGE_LABELS[values.stage].toLowerCase()}`
+              : `Kept, but not shown while the job is ${PROJECT_STAGE_LABELS[values.stage].toLowerCase()}`
           }
         />
       </div>

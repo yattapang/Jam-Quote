@@ -100,7 +100,7 @@ export class ReportsService {
           client: { select: { firstName: true, lastName: true } },
         },
       }),
-      this.prisma.job.findMany({
+      this.prisma.project.findMany({
         where: { businessId, deletedAt: null },
         select: {
           stage: true,

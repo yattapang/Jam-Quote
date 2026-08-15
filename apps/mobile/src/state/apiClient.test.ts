@@ -21,7 +21,7 @@ import {
   setAuthToken,
   setUnauthorizedHandler,
 } from "./apiClient";
-import { JobStage, JOB_STAGES, JOB_STAGE_LABELS, QuoteStatus } from "@jamquote/core";
+import { ProjectStage, PROJECT_STAGES, PROJECT_STAGE_LABELS, QuoteStatus } from "@jamquote/core";
 import { STAGE_KIND } from "./mockData";
 
 type Routes = Record<string, unknown>;
@@ -58,7 +58,7 @@ const apiJob = {
   clientId: "cl-basil-reid",
   name: "Retaining wall, Spanish Town",
   addressLine: "Lot 14 Bloxburgh Dr, Spanish Town",
-  stage: JobStage.IN_PROGRESS,
+  stage: ProjectStage.IN_PROGRESS,
   progressPct: 62,
 };
 
@@ -95,13 +95,13 @@ describe("pure mappers", () => {
   it("mapJobRow keeps the stage value and maps it to a pill kind", () => {
     // The row carries the ENUM, not its label: the screen needs the value to
     // decide whether the progress bar means anything, and the label itself
-    // comes from JOB_STAGE_LABELS so it matches web exactly.
+    // comes from PROJECT_STAGE_LABELS so it matches web exactly.
     expect(mapJobRow(apiJob, "Basil Reid", 18_354_000)).toEqual({
       id: "job-0142",
       name: "Retaining wall, Spanish Town",
       clientName: "Basil Reid",
       address: "Lot 14 Bloxburgh Dr, Spanish Town",
-      stage: JobStage.IN_PROGRESS,
+      stage: ProjectStage.IN_PROGRESS,
       pct: 62,
       valueCents: 18_354_000,
       kind: "info",
@@ -109,10 +109,10 @@ describe("pure mappers", () => {
   });
 
   it("maps every stage to a pill kind — no stage renders as an unstyled pill", () => {
-    for (const stage of JOB_STAGES) {
+    for (const stage of PROJECT_STAGES) {
       const row = mapJobRow({ ...apiJob, stage }, "Basil Reid", 0);
       expect(row.kind).toBe(STAGE_KIND[stage]);
-      expect(JOB_STAGE_LABELS[row.stage]).toBeTruthy();
+      expect(PROJECT_STAGE_LABELS[row.stage]).toBeTruthy();
     }
   });
 });

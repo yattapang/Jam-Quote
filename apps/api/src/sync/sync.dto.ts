@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { JobStage } from "@jamquote/core";
+import { ProjectStage } from "@jamquote/core";
 
 /** Pull everything changed since this server cursor (ISO). Omit for a full sync. */
 export const pullSchema = z.object({
@@ -32,7 +32,7 @@ const jobDataSchema = z.object({
   // text now gets a 400 instead of writing a value the column can no longer
   // hold — and the stage it sends survives the round-trip rather than being
   // quietly rewritten to the default.
-  stage: z.nativeEnum(JobStage).optional(),
+  stage: z.nativeEnum(ProjectStage).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),
 });
 

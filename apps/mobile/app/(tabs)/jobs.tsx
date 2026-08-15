@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { JOB_STAGE_LABELS, jobStageTracksProgress } from "@jamquote/core";
+import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { MoneyText, SignInPrompt, StatusPill } from "../../src/components";
 import { type JobRow } from "../../src/state/mockData";
 import { ApiAuthError, deleteJob, fetchJobRows } from "../../src/state/apiClient";
@@ -86,14 +86,14 @@ export default function JobsListScreen() {
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end", gap: 4 }}>
-                <StatusPill label={JOB_STAGE_LABELS[item.stage]} kind={item.kind} />
+                <StatusPill label={PROJECT_STAGE_LABELS[item.stage]} kind={item.kind} />
                 <MoneyText cents={item.valueCents} size={13} />
               </View>
             </View>
             {/* Only where the percentage means something: an empty track on a
                 quoted job, or a 40%-filled one on a cancelled job, asserts
-                something the app cannot know (jobStageTracksProgress). */}
-            {jobStageTracksProgress(item.stage) && (
+                something the app cannot know (projectStageTracksProgress). */}
+            {projectStageTracksProgress(item.stage) && (
               <View style={{ height: 6, borderRadius: 4, backgroundColor: colors.surfaceAlt, overflow: "hidden" }}>
                 <View style={{ height: "100%", width: `${item.pct}%`, backgroundColor: colors.accent, borderRadius: 4 }} />
               </View>

@@ -9,7 +9,7 @@
  * arithmetic and grouping.
  */
 
-import { InvoiceStatus, JobStage, JOB_STAGES, QuoteStatus } from "../types/enums.js";
+import { InvoiceStatus, ProjectStage, PROJECT_STAGES, QuoteStatus } from "../types/enums.js";
 import type { Cents } from "../tax/money.js";
 
 /** Inclusive start, exclusive end — so consecutive reporting periods
@@ -43,7 +43,7 @@ export interface ReportPayment {
 }
 
 export interface ReportJob {
-  stage: JobStage;
+  stage: ProjectStage;
   createdAt: string; // ISO
   clientId?: string | null;
   clientName?: string | null;
@@ -92,8 +92,8 @@ export interface ClientJobCount {
 
 export interface JobsSummary {
   jobsCreated: number;
-  /** Every JobStage present, zero-filled, in workflow order. */
-  jobsByStage: Record<JobStage, number>;
+  /** Every ProjectStage present, zero-filled, in workflow order. */
+  jobsByStage: Record<ProjectStage, number>;
   /** Sorted by jobCount descending, ties broken by name. Capped — see
    * TOP_CLIENTS_BY_JOBS_LIMIT. */
   topClientsByJobs: ClientJobCount[];
@@ -400,8 +400,8 @@ function computeJobsSummary(jobs: ReportJob[], range: ReportsRange): JobsSummary
   // Zero-fill every stage up front, in workflow order, so a stage with no
   // jobs this period still shows as 0 rather than being silently absent —
   // and so a stage added later can't be forgotten here.
-  const jobsByStage = Object.fromEntries(JOB_STAGES.map((stage) => [stage, 0])) as Record<
-    JobStage,
+  const jobsByStage = Object.fromEntries(PROJECT_STAGES.map((stage) => [stage, 0])) as Record<
+    ProjectStage,
     number
   >;
   for (const j of inRangeJobs) {

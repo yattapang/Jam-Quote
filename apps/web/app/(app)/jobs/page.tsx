@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { jobStageTracksProgress } from "@jamquote/core";
+import { projectStageTracksProgress } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
@@ -53,8 +53,8 @@ export default async function JobsPage() {
                       existing sub-line rather than a bar — no other list screen
                       draws one, and an empty track at 0% reads as broken when 0
                       is simply where every job starts. Hidden at stages where
-                      the number would mislead (jobStageTracksProgress). */}
-                  {jobStageTracksProgress(job.stage) && (
+                      the number would mislead (projectStageTracksProgress). */}
+                  {projectStageTracksProgress(job.stage) && (
                     <span className={shared.rowSub}>{job.progressPct}% complete</span>
                   )}
                 </div>

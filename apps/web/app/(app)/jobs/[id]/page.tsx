@@ -4,7 +4,7 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { JOB_STAGE_LABELS, jobStageTracksProgress } from "@jamquote/core";
+import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
 import { getJob, getClients, getQuotes } from "@/lib/api-server";
 import EditJobButton from "./EditJobButton";
@@ -34,7 +34,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           </span>
           <h1 className={shared.title}>{job.name}</h1>
           <span className={shared.subtitle}>
-            {job.clientName} · {JOB_STAGE_LABELS[job.stage]}
+            {job.clientName} · {PROJECT_STAGE_LABELS[job.stage]}
           </span>
         </div>
         <div className={shared.headerActions}>
@@ -97,11 +97,11 @@ export default async function JobDetailPage({ params }: { params: { id: string }
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Stage</span>
-                <span>{JOB_STAGE_LABELS[job.stage]}</span>
+                <span>{PROJECT_STAGE_LABELS[job.stage]}</span>
               </div>
               {/* Same rule as the list: the stored percentage is kept, but a
                   cancelled or not-yet-won job showing "40%" reads as a bug. */}
-              {jobStageTracksProgress(job.stage) && (
+              {projectStageTracksProgress(job.stage) && (
                 <div className={shared.totalRowMuted}>
                   <span>Progress</span>
                   <span>{job.progressPct}% complete</span>

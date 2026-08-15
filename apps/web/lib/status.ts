@@ -1,4 +1,4 @@
-import { InvoiceStatus, JobStage, JOB_STAGE_LABELS, QuoteStatus } from "@jamquote/core";
+import { InvoiceStatus, ProjectStage, PROJECT_STAGE_LABELS, QuoteStatus } from "@jamquote/core";
 import type { PillKind, PillVariant } from "@/components/ui/StatusPill";
 
 interface PillSpec {
@@ -27,18 +27,18 @@ const INVOICE_STATUS_PILL: Record<InvoiceStatus, PillSpec> = {
 
 /** Stage colours only. The LABELS come from @jamquote/core so web and mobile
  * cannot drift into calling the same stage two different things (#36). */
-const JOB_STAGE_KIND: Record<JobStage, { kind: PillKind; variant: PillVariant }> = {
-  [JobStage.QUOTED]: { kind: "neutral", variant: "soft" },
-  [JobStage.WON]: { kind: "info", variant: "soft" },
-  [JobStage.IN_PROGRESS]: { kind: "info", variant: "solid" },
-  [JobStage.COMPLETE]: { kind: "good", variant: "solid" },
+const JOB_STAGE_KIND: Record<ProjectStage, { kind: PillKind; variant: PillVariant }> = {
+  [ProjectStage.QUOTED]: { kind: "neutral", variant: "soft" },
+  [ProjectStage.WON]: { kind: "info", variant: "soft" },
+  [ProjectStage.IN_PROGRESS]: { kind: "info", variant: "solid" },
+  [ProjectStage.COMPLETE]: { kind: "good", variant: "solid" },
   // Not "critical": a cancelled job is a normal business outcome, not an
   // error the contractor needs to be alarmed about in a list.
-  [JobStage.CANCELLED]: { kind: "neutral", variant: "soft" },
+  [ProjectStage.CANCELLED]: { kind: "neutral", variant: "soft" },
 };
 
-export function jobStagePill(stage: JobStage): PillSpec {
-  return { label: JOB_STAGE_LABELS[stage], ...JOB_STAGE_KIND[stage] };
+export function jobStagePill(stage: ProjectStage): PillSpec {
+  return { label: PROJECT_STAGE_LABELS[stage], ...JOB_STAGE_KIND[stage] };
 }
 
 export function quoteStatusPill(status: QuoteStatus): PillSpec {
