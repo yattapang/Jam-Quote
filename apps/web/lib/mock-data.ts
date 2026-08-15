@@ -95,8 +95,8 @@ export const quotes: Quote[] = demoQuotes.map((q) => ({
   id: q.id,
   num: q.number,
   clientId: q.clientId,
-  jobId: q.jobId,
-  jobLabel: findDemoJob(q.jobId)?.name ?? "",
+  projectId: q.projectId,
+  jobLabel: findDemoJob(q.projectId)?.name ?? "",
   status: q.status,
   lines: q.lines.map((l) => ({
     id: l.id,
@@ -135,7 +135,7 @@ export interface JobSummary {
 
 /** Jobs list — one canonical name/address per job, shared with mobile. */
 export const jobs: JobSummary[] = demoJobs.map((j) => {
-  const jobQuotes = demoQuotes.filter((q) => q.jobId === j.id);
+  const jobQuotes = demoQuotes.filter((q) => q.projectId === j.id);
   return {
     id: j.id,
     name: j.name,

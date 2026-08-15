@@ -121,7 +121,7 @@ const apiJob = {
 const apiQuote = {
   id: "qt-0142",
   clientId: "cl-basil-reid",
-  jobId: "job-0142",
+  projectId: "job-0142",
   number: "QT-0142",
   status: "ACCEPTED",
   gctRate: "15",
@@ -458,7 +458,7 @@ describe("getJob", () => {
 describe("getQuotes", () => {
   it("maps quotes, attaches jobLabel, and sorts newest-first", async () => {
     stubFetch({
-      "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140", jobId: "job-0142" }],
+      "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140", projectId: "job-0142" }],
       "/jobs": [apiJob],
     });
     const quotes = await getQuotes();

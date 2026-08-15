@@ -285,7 +285,7 @@ export interface ApiBusiness {
 export interface ApiQuote {
   id: string;
   clientId?: string | null;
-  jobId?: string | null;
+  projectId?: string | null;
   number: string;
   status: QuoteStatus;
   gctRate: number | string;
@@ -484,7 +484,7 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     id: q.id,
     num: q.number,
     clientId: q.clientId ?? "",
-    jobId: q.jobId ?? undefined,
+    projectId: q.projectId ?? undefined,
     jobLabel,
     status: q.status,
     lines,
@@ -785,7 +785,7 @@ export interface NewQuoteLineInput {
 }
 export interface NewQuoteInput {
   clientId?: string;
-  jobId?: string;
+  projectId?: string;
   gctRatePct: number;
   discountPct: number;
   depositCents: number;

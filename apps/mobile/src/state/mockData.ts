@@ -99,7 +99,7 @@ export const quoteListRows: QuoteListRow[] = demoQuotes.map((q) => {
     id: q.id,
     num: q.number,
     client: findDemoClient(q.clientId)?.name ?? "Unknown",
-    job: findDemoJob(q.jobId)?.name ?? "",
+    job: findDemoJob(q.projectId)?.name ?? "",
     amountCents: demoQuoteTotals(q).totalCents, // derived — matches the editor
     status: pill.label,
     kind: pill.kind,
@@ -154,7 +154,7 @@ export interface JobRow {
 }
 
 export const jobRows: JobRow[] = demoJobs.map((j) => {
-  const jobQuotes = demoQuotes.filter((q) => q.jobId === j.id);
+  const jobQuotes = demoQuotes.filter((q) => q.projectId === j.id);
   return {
     id: j.id,
     name: j.name,

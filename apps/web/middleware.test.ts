@@ -18,9 +18,9 @@ describe("middleware", () => {
   });
 
   it("preserves the query string of the originally requested protected path", () => {
-    const res = middleware(makeRequest("/quotes/new?jobId=job-0142"));
+    const res = middleware(makeRequest("/quotes/new?projectId=job-0142"));
     const location = new URL(res.headers.get("location")!);
-    expect(location.searchParams.get("redirect")).toBe("/quotes/new?jobId=job-0142");
+    expect(location.searchParams.get("redirect")).toBe("/quotes/new?projectId=job-0142");
   });
 
   it("lets a signed-out request through for every non-protected page", () => {

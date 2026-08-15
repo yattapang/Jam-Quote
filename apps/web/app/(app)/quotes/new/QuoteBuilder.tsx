@@ -38,7 +38,7 @@ export type InitialQuoteLine = InitialLine;
 export type InitialQuoteSection = InitialSection;
 export interface InitialQuote extends InitialLines {
   clientId?: string;
-  jobId?: string;
+  projectId?: string;
   discountPct: number;
   depositCents: number;
   /** Per-quote summary/detailed presentation setting to restore on edit. */
@@ -93,7 +93,7 @@ export default function QuoteBuilder({
   const isEdit = mode === "edit" && !!quoteId;
   const backHref = isEdit ? `/quotes/${quoteId}` : "/quotes";
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
-  const [jobId, setJobId] = useState(initial?.jobId ?? "");
+  const [projectId, setJobId] = useState(initial?.projectId ?? "");
   const [discountPct, setDiscountPct] = useState(String(initial?.discountPct ?? 0));
   const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
   const [validDays, setValidDays] = useState(String(initialValidDays(initial)));
@@ -151,7 +151,7 @@ export default function QuoteBuilder({
     const days = Number(validDays) || DEFAULT_VALID_DAYS;
     const payload = {
       clientId: clientId || undefined,
-      jobId: jobId || undefined,
+      projectId: projectId || undefined,
       gctRatePct,
       discountPct: Number(discountPct) || 0,
       depositCents: toCents(depositDollars),
@@ -199,7 +199,7 @@ export default function QuoteBuilder({
             <JobSelectField
               jobs={jobs}
               clients={clients}
-              value={jobId}
+              value={projectId}
               onChange={setJobId}
               onCreated={(j) => setJobs((js) => [...js, j])}
               onClientCreated={(c) => setClients((cs) => [...cs, c])}

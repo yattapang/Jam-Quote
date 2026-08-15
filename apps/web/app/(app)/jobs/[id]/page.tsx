@@ -19,7 +19,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
 
   const [clients, quotes] = await Promise.all([
     getClients(),
-    getQuotes().then((qs) => qs.filter((q) => q.jobId === job.id)),
+    getQuotes().then((qs) => qs.filter((q) => q.projectId === job.id)),
   ]);
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 

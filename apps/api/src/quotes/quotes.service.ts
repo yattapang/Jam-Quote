@@ -181,7 +181,7 @@ export class QuotesService {
         data: {
           businessId,
           clientId: input.clientId,
-          jobId: input.jobId,
+          projectId: input.projectId,
           number,
           status: QuoteStatus.DRAFT,
           version: 1,
@@ -205,14 +205,14 @@ export class QuotesService {
 
   findAll(
     businessId: string,
-    filters: { status?: QuoteStatus; clientId?: string; jobId?: string } = {},
+    filters: { status?: QuoteStatus; clientId?: string; projectId?: string } = {},
   ) {
     return this.prisma.quote.findMany({
       where: {
         businessId,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.clientId ? { clientId: filters.clientId } : {}),
-        ...(filters.jobId ? { jobId: filters.jobId } : {}),
+        ...(filters.projectId ? { projectId: filters.projectId } : {}),
       },
       orderBy: { createdAt: "desc" },
     });
@@ -266,7 +266,7 @@ export class QuotesService {
         where: { id },
         data: {
           clientId: input.clientId ?? existing.clientId,
-          jobId: input.jobId ?? existing.jobId,
+          projectId: input.projectId ?? existing.projectId,
           detailLevel,
           gctRate: gctRatePct,
           discountPct,
@@ -338,7 +338,7 @@ export class QuotesService {
         data: {
           businessId,
           clientId: original.clientId,
-          jobId: original.jobId,
+          projectId: original.projectId,
           number,
           status: QuoteStatus.DRAFT,
           version,

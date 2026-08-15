@@ -22,7 +22,7 @@ const clientDataSchema = z.object({
   notes: z.string().nullish(),
 });
 
-const jobDataSchema = z.object({
+const projectDataSchema = z.object({
   name: z.string().min(1),
   clientId: z.string().uuid().nullish(),
   addressLine: z.string().nullish(),
@@ -50,8 +50,8 @@ const changeSchema = <T extends z.ZodTypeAny>(data: T) =>
 
 export const pushSchema = z.object({
   clients: z.array(changeSchema(clientDataSchema)).default([]),
-  jobs: z.array(changeSchema(jobDataSchema)).default([]),
+  projects: z.array(changeSchema(projectDataSchema)).default([]),
 });
 export type PushInput = z.infer<typeof pushSchema>;
 export type ClientChange = PushInput["clients"][number];
-export type JobChange = PushInput["jobs"][number];
+export type ProjectChange = PushInput["projects"][number];

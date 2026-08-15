@@ -243,7 +243,7 @@ export async function getJobs(): Promise<JobSummary[]> {
     ]);
     const clientName = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
     return jobs.map((j) => {
-      const jobQuotes = quotes.filter((q) => q.jobId === j.id);
+      const jobQuotes = quotes.filter((q) => q.projectId === j.id);
       return {
         id: j.id,
         name: j.name,
@@ -296,7 +296,7 @@ export async function getQuotes(): Promise<Quote[]> {
     ]);
     const jobName = new Map(jobs.map((j) => [j.id, j.name]));
     return quotes
-      .map((q) => mapQuote(q, jobName.get(q.jobId ?? "") ?? ""))
+      .map((q) => mapQuote(q, jobName.get(q.projectId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
   } catch (err) {
     redirectOnAuthError(err);
@@ -309,9 +309,9 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
   try {
     const q = await serverRequest<ApiQuote>(`/quotes/${id}`);
     let jobLabel = "";
-    if (q.jobId) {
+    if (q.projectId) {
       try {
-        jobLabel = (await serverRequest<ApiJob>(`/jobs/${q.jobId}`)).name;
+        jobLabel = (await serverRequest<ApiJob>(`/jobs/${q.projectId}`)).name;
       } catch {
         /* job label is best-effort */
       }

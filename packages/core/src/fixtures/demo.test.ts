@@ -14,7 +14,7 @@ describe("demo fixtures — referential integrity", () => {
   it("every quote points at a real client and job", () => {
     for (const q of demoQuotes) {
       expect(findDemoClient(q.clientId), `${q.number} client`).toBeDefined();
-      expect(findDemoJob(q.jobId), `${q.number} job`).toBeDefined();
+      expect(findDemoJob(q.projectId), `${q.number} job`).toBeDefined();
     }
   });
 

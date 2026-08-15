@@ -30,7 +30,7 @@ export default function JobSelectField({
   jobs: JobOption[];
   clients: ClientOption[];
   value: string;
-  onChange: (jobId: string) => void;
+  onChange: (projectId: string) => void;
   onCreated: (job: JobOption) => void;
   onClientCreated?: (client: ClientOption) => void;
 }) {

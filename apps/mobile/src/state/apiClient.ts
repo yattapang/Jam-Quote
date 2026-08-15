@@ -177,7 +177,7 @@ export async function fetchMe(token: string): Promise<{ user: AuthUser; business
 interface ApiQuote {
   id: string;
   clientId?: string | null;
-  jobId?: string | null;
+  projectId?: string | null;
   number: string;
   status: QuoteStatus;
   totalCents: number;
@@ -257,7 +257,7 @@ export async function fetchQuoteRows(): Promise<QuoteListRow[]> {
     const clientName = new Map(clients.map((c) => [c.id, c.name]));
     const jobName = new Map(jobs.map((j) => [j.id, j.name]));
     return quotes
-      .map((q) => mapQuoteRow(q, clientName.get(q.clientId ?? "") ?? "Unknown", jobName.get(q.jobId ?? "") ?? ""))
+      .map((q) => mapQuoteRow(q, clientName.get(q.clientId ?? "") ?? "Unknown", jobName.get(q.projectId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
   } catch (err) {
     // Auth failures are never masked as data — let the caller/central handler deal with it.
@@ -295,7 +295,7 @@ export async function fetchJobRows(): Promise<JobRow[]> {
     ]);
     const clientName = new Map(clients.map((c) => [c.id, c.name]));
     return jobs.map((j) => {
-      const theirs = quotes.filter((q) => q.jobId === j.id);
+      const theirs = quotes.filter((q) => q.projectId === j.id);
       return mapJobRow(
         j,
         clientName.get(j.clientId ?? "") ?? "Unknown",

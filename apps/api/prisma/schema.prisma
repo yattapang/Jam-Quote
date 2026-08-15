@@ -310,10 +310,9 @@ model Quote {
   business      Business         @relation(fields: [businessId], references: [id])
   clientId      String?
   client        Client?          @relation(fields: [clientId], references: [id])
-  // Scalar stays `jobId`: it is the public API field name and a deployed
-  // mobile client already sends it. The relation accessor is `project`.
-  jobId         String?
-  project       Project?         @relation(fields: [jobId], references: [id])
+  // @map keeps the physical column "jobId" — the rename is code-only.
+  projectId     String?          @map("jobId")
+  project       Project?         @relation(fields: [projectId], references: [id])
   number        String // e.g. QT-0142
   status        QuoteStatus      @default(DRAFT)
   // Display setting only: SUMMARY collapses assembly lines to one priced
@@ -903,8 +902,8 @@ model RegulatoryUpdate {
 
 model Attachment {
   id        String   @id @default(uuid())
-  jobId     String? // public API field name — see Quote.jobId
-  project   Project? @relation(fields: [jobId], references: [id])
+  projectId String?  @map("jobId") // physical column unchanged — see Quote.projectId
+  project   Project? @relation(fields: [projectId], references: [id])
   url       String
   kind      String   @default("photo")
   createdAt DateTime @default(now())

@@ -47,7 +47,7 @@ afterEach(() => {
 const apiQuote = {
   id: "qt-0142",
   clientId: "cl-basil-reid",
-  jobId: "job-0142",
+  projectId: "job-0142",
   number: "QT-0142",
   status: QuoteStatus.ACCEPTED,
   totalCents: 18_354_000,

@@ -54,7 +54,7 @@ export interface DemoQuote {
   id: string;
   number: string; // e.g. "QT-0142"
   clientId: string;
-  jobId: string;
+  projectId: string;
   status: QuoteStatus;
   createdLabel: string;
   createdAt: string; // ISO — raw creation date, `createdLabel` is the formatted display string
@@ -97,7 +97,7 @@ export const demoJobs: DemoJob[] = [
 
 export const demoQuotes: DemoQuote[] = [
   {
-    id: "qt-0142", number: "QT-0142", clientId: "cl-basil-reid", jobId: "job-0142",
+    id: "qt-0142", number: "QT-0142", clientId: "cl-basil-reid", projectId: "job-0142",
     status: QuoteStatus.ACCEPTED, createdLabel: "Sent Jul 9", createdAt: "2026-07-09T09:00:00.000Z", validUntilLabel: "Valid until Aug 8, 2026",
     gctRatePct: 15, discountPct: 5, depositCents: 5_000_000,
     lines: [
@@ -109,7 +109,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0141", number: "QT-0141", clientId: "cl-paulette-wright", jobId: "job-0141",
+    id: "qt-0141", number: "QT-0141", clientId: "cl-paulette-wright", projectId: "job-0141",
     status: QuoteStatus.DRAFT, createdLabel: "Draft · not sent", createdAt: "2026-07-11T09:00:00.000Z", validUntilLabel: "Valid until Aug 20, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
@@ -118,7 +118,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0140", number: "QT-0140", clientId: "cl-devon-facey", jobId: "job-0140",
+    id: "qt-0140", number: "QT-0140", clientId: "cl-devon-facey", projectId: "job-0140",
     status: QuoteStatus.SENT, createdLabel: "Sent Jul 7", createdAt: "2026-07-07T09:00:00.000Z", validUntilLabel: "Valid until Aug 6, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
@@ -127,7 +127,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0139", number: "QT-0139", clientId: "cl-marva-grant", jobId: "job-0139",
+    id: "qt-0139", number: "QT-0139", clientId: "cl-marva-grant", projectId: "job-0139",
     status: QuoteStatus.VIEWED, createdLabel: "Sent Jul 5", createdAt: "2026-07-05T09:00:00.000Z", validUntilLabel: "Valid until Aug 4, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
@@ -137,7 +137,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0138", number: "QT-0138", clientId: "cl-errol-campbell", jobId: "job-0138",
+    id: "qt-0138", number: "QT-0138", clientId: "cl-errol-campbell", projectId: "job-0138",
     status: QuoteStatus.INVOICED, createdLabel: "Sent Jun 30", createdAt: "2026-06-30T09:00:00.000Z", validUntilLabel: "Valid until Jul 30, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
@@ -147,7 +147,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0137", number: "QT-0137", clientId: "cl-shauna-bailey", jobId: "job-0137",
+    id: "qt-0137", number: "QT-0137", clientId: "cl-shauna-bailey", projectId: "job-0137",
     status: QuoteStatus.DECLINED, createdLabel: "Sent Jun 26", createdAt: "2026-06-26T09:00:00.000Z", validUntilLabel: "Expired Jul 26, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [
@@ -156,7 +156,7 @@ export const demoQuotes: DemoQuote[] = [
     ],
   },
   {
-    id: "qt-0136", number: "QT-0136", clientId: "cl-trevor-dixon", jobId: "job-0136",
+    id: "qt-0136", number: "QT-0136", clientId: "cl-trevor-dixon", projectId: "job-0136",
     status: QuoteStatus.EXPIRED, createdLabel: "Sent Jun 20", createdAt: "2026-06-20T09:00:00.000Z", validUntilLabel: "Expired Jul 20, 2026",
     gctRatePct: 15, discountPct: 0, depositCents: 0,
     lines: [

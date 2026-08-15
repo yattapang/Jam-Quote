@@ -69,7 +69,7 @@ describe("SyncService.pull", () => {
     expect(typeof result.cursor).toBe("string");
     expect(new Date(result.cursor).toISOString()).toBe(result.cursor);
     expect(result.changes.clients).toEqual([rowClient]);
-    expect(result.changes.jobs).toEqual([rowJob]);
+    expect(result.changes.projects).toEqual([rowJob]);
   });
 
   it("with `since`, the where clause includes updatedAt: { gt: <Date> }", async () => {
@@ -103,7 +103,7 @@ describe("SyncService.pull", () => {
     const result = await svc.pull(BUSINESS_ID);
 
     expect(result.changes.clients).toEqual([tombstonedClient]);
-    expect(result.changes.jobs).toEqual([tombstonedJob]);
+    expect(result.changes.projects).toEqual([tombstonedJob]);
   });
 });
 
@@ -122,7 +122,7 @@ describe("SyncService.push — clients", () => {
           data: clientData,
         },
       ],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -155,7 +155,7 @@ describe("SyncService.push — clients", () => {
           data: clientData,
         },
       ],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -183,7 +183,7 @@ describe("SyncService.push — clients", () => {
           data: clientData,
         },
       ],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -211,7 +211,7 @@ describe("SyncService.push — clients", () => {
           data: clientData,
         },
       ],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -233,7 +233,7 @@ describe("SyncService.push — clients", () => {
 
     const input: PushInput = {
       clients: [{ id: CLIENT_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -254,7 +254,7 @@ describe("SyncService.push — clients", () => {
 
     const input: PushInput = {
       clients: [{ id: CLIENT_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -272,7 +272,7 @@ describe("SyncService.push — clients", () => {
       clients: [
         { id: CLIENT_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: clientData },
       ],
-      jobs: [],
+      projects: [],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -292,7 +292,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const input: PushInput = {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
+      projects: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -303,7 +303,7 @@ describe("SyncService.push — jobs (mirror)", () => {
         create: expect.objectContaining({ id: JOB_ID, businessId: BUSINESS_ID }),
       }),
     );
-    expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "applied" }]);
+    expect(result.results).toEqual([{ table: "projects", id: JOB_ID, outcome: "applied" }]);
   });
 
   it("writes the stage and progress the device sent", async () => {
@@ -313,7 +313,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     await svc.push(BUSINESS_ID, {
       clients: [],
-      jobs: [
+      projects: [
         {
           id: JOB_ID,
           op: "upsert",
@@ -343,7 +343,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     await svc.push(BUSINESS_ID, {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: withoutWorkflow }],
+      projects: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: withoutWorkflow }],
     });
 
     const args = prisma.project.upsert.mock.calls[0]?.[0] as { create: object; update: object };
@@ -367,13 +367,13 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const input: PushInput = {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
+      projects: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
 
     expect(prisma.project.upsert).not.toHaveBeenCalled();
-    expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "server_kept" }]);
+    expect(result.results).toEqual([{ table: "projects", id: JOB_ID, outcome: "server_kept" }]);
   });
 
   it("foreign tenant on jobs: existing.businessId differs -> foreign, no write call", async () => {
@@ -388,14 +388,14 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const input: PushInput = {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
+      projects: [{ id: JOB_ID, op: "upsert", updatedAt: "2026-03-01T00:00:00.000Z", data: jobData }],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
 
     expect(prisma.project.upsert).not.toHaveBeenCalled();
     expect(prisma.project.update).not.toHaveBeenCalled();
-    expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "foreign" }]);
+    expect(result.results).toEqual([{ table: "projects", id: JOB_ID, outcome: "foreign" }]);
   });
 
   it("delete with an existing job row: calls job.update setting deletedAt; outcome applied", async () => {
@@ -410,7 +410,7 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const input: PushInput = {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
+      projects: [{ id: JOB_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
@@ -421,7 +421,7 @@ describe("SyncService.push — jobs (mirror)", () => {
         data: expect.objectContaining({ deletedAt: expect.any(Date) }),
       }),
     );
-    expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "applied" }]);
+    expect(result.results).toEqual([{ table: "projects", id: JOB_ID, outcome: "applied" }]);
   });
 
   it("delete with no existing job row: outcome applied, no update call", async () => {
@@ -431,12 +431,12 @@ describe("SyncService.push — jobs (mirror)", () => {
 
     const input: PushInput = {
       clients: [],
-      jobs: [{ id: JOB_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
+      projects: [{ id: JOB_ID, op: "delete", updatedAt: "2026-03-01T00:00:00.000Z" }],
     };
 
     const result = await svc.push(BUSINESS_ID, input);
 
     expect(prisma.project.update).not.toHaveBeenCalled();
-    expect(result.results).toEqual([{ table: "jobs", id: JOB_ID, outcome: "applied" }]);
+    expect(result.results).toEqual([{ table: "projects", id: JOB_ID, outcome: "applied" }]);
   });
 });

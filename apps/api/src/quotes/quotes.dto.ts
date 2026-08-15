@@ -52,7 +52,7 @@ export type QuoteSectionInput = z.infer<typeof quoteSectionInputSchema>;
  */
 export const createQuoteSchema = z.object({
   clientId: z.string().min(1).optional(),
-  jobId: z.string().min(1).optional(),
+  projectId: z.string().min(1).optional(),
   gctRatePct: z.number().min(0).max(100).optional(),
   discountPct: z.number().min(0).max(100).optional(),
   depositCents: z.number().int().nonnegative().optional(),

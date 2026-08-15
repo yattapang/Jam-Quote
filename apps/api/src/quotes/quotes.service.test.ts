@@ -315,7 +315,7 @@ describe("QuotesService.revise", () => {
       id: "q1",
       businessId: "b1",
       clientId: "cl1",
-      jobId: "job1",
+      projectId: "job1",
       status: original.status,
       number: original.number,
       version: original.version,

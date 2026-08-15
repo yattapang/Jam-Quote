@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import type { Client, Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { ClientChange, JobChange, PushInput } from "./sync.dto.js";
+import type { ClientChange, ProjectChange, PushInput } from "./sync.dto.js";
 
 export interface PullResult {
   cursor: string;
   changes: {
     clients: Client[];
-    jobs: Project[];
+    projects: Project[];
   };
 }
 
@@ -17,7 +17,7 @@ export type PushOutcome =
   | "foreign"; // id belongs to another business — ignored
 
 export interface PushRowResult {
-  table: "clients" | "jobs";
+  table: "clients" | "projects";
   id: string;
   outcome: PushOutcome;
 }
@@ -28,7 +28,7 @@ export interface PushResult {
 }
 
 /**
- * Offline-first sync engine (v1: clients + jobs — the milestone's proving
+ * Offline-first sync engine (v1: clients + projects — the milestone's proving
  * ground). Pull returns every row (including tombstones) changed since the
  * caller's cursor; push applies device changes with record-level last-write-
  * wins by server-authoritative updatedAt. See docs/SYNC.md.
@@ -43,11 +43,11 @@ export class SyncService {
   async pull(businessId: string, since?: string): Promise<PullResult> {
     const cursor = new Date();
     const base = since ? { businessId, updatedAt: { gt: new Date(since) } } : { businessId };
-    const [clients, jobs] = await Promise.all([
+    const [clients, projects] = await Promise.all([
       this.prisma.client.findMany({ where: base }),
       this.prisma.project.findMany({ where: base }),
     ]);
-    return { cursor: cursor.toISOString(), changes: { clients, jobs } };
+    return { cursor: cursor.toISOString(), changes: { clients, projects } };
   }
 
   async push(businessId: string, input: PushInput): Promise<PushResult> {
@@ -55,8 +55,8 @@ export class SyncService {
     for (const change of input.clients) {
       results.push({ table: "clients", id: change.id, outcome: await this.applyClient(businessId, change) });
     }
-    for (const change of input.jobs) {
-      results.push({ table: "jobs", id: change.id, outcome: await this.applyJob(businessId, change) });
+    for (const change of input.projects) {
+      results.push({ table: "projects", id: change.id, outcome: await this.applyProject(businessId, change) });
     }
     return { cursor: new Date().toISOString(), results };
   }
@@ -94,7 +94,7 @@ export class SyncService {
     return "applied";
   }
 
-  private async applyJob(businessId: string, change: JobChange): Promise<PushOutcome> {
+  private async applyProject(businessId: string, change: ProjectChange): Promise<PushOutcome> {
     const existing = await this.prisma.project.findUnique({ where: { id: change.id } });
     if (existing && existing.businessId !== businessId) return "foreign";
     if (existing && existing.updatedAt > new Date(change.updatedAt)) return "server_kept";

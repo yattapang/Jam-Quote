@@ -28,7 +28,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
       quoteId={quote.id}
       initial={{
         clientId: quote.clientId || undefined,
-        jobId: quote.jobId,
+        projectId: quote.projectId,
         discountPct: quote.discountPct,
         depositCents: quote.depositCents,
         detailLevel: quote.detailLevel,

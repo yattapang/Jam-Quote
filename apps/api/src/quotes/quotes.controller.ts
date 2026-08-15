@@ -41,9 +41,9 @@ export class QuotesController {
     @BusinessId() businessId: string,
     @Query("status") status?: QuoteStatus,
     @Query("clientId") clientId?: string,
-    @Query("jobId") jobId?: string,
+    @Query("projectId") projectId?: string,
   ) {
-    return this.quotes.findAll(businessId, { status, clientId, jobId });
+    return this.quotes.findAll(businessId, { status, clientId, projectId });
   }
 
   @Get(":id")
