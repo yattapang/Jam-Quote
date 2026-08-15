@@ -11,19 +11,24 @@ that lags the code is worse than no plan, because it is trusted and wrong.
 
 ## 1. Vocabulary — read this before touching anything
 
-Two concepts, and until Phase 1 step 0 lands the code and the UI name them
-the OPPOSITE way round.
+**DONE — step 0 landed in 687c29c (0a) and 74108b7 (0b).** Code and UI now
+agree. What follows is the settled vocabulary.
 
-| Concept | User sees | Prisma model (today) | Prisma model (after step 0) |
+| Concept | User sees | Prisma model | Physical table |
 |---|---|---|---|
-| Reusable priced service — "Interior wall painting, $1,500/sq ft", built from material + labour components. A **template**. | **Job** (Job Library) | `Assembly` | `Job` (`@@map("Assembly")`) |
-| A specific piece of work for a specific client — "Retaining wall, Spanish Town". A **live engagement**. | **Project** | `Job` | `Project` (`@@map("Job")`) |
+| Reusable priced service — "Interior wall painting, $1,500/sq ft", built from material + labour components. A **template**. | **Job** (Job Library) | `Job`, `JobComponent`, `JobComponentKind` | `Assembly`, `AssemblyComponent` (via `@@map`) |
+| A specific piece of work for a specific client — "Retaining wall, Spanish Town". A **live engagement**. | **Project** | `Project`, `ProjectStage` | `Job` (via `@@map`) |
 
-**The split is being eliminated, not documented.** The first version of this
-plan proposed keeping the DB names and living with the mismatch. That was the
-wrong call: the failure mode is reading `prisma.job` and acting on the wrong
+**The split was eliminated, not documented.** The first version of this plan
+proposed keeping the DB names and living with the mismatch. That was the wrong
+call: the failure mode is reading `prisma.job` and acting on the wrong
 vocabulary, which produces code that compiles, runs, and touches the wrong
 table. Silent and data-corrupting. A note in a planning file is not a control.
+
+Physical names still differ from model names, but that mismatch is inert —
+`@@map` is a single declared line per model, not something a reader can act on
+by mistake. Only touch it when writing raw SQL, of which there is currently
+none beyond `SELECT 1`.
 
 `@@map` makes the rename nearly free — it decouples the model name in code
 from the table name in Postgres, so the tables, columns, indexes and foreign
@@ -31,14 +36,26 @@ keys are untouched and **no data migration is generated**. Verify that:
 `prisma migrate diff` must emit no SQL. If it wants to emit SQL, the `@@map`
 is wrong — stop and fix it rather than accepting a table rename.
 
-Rules while the rename is in flight and after:
+Rules:
 
 - Variables and services follow the Prisma model name; translation to user
   wording happens at the render boundary only.
-- `JobStage` becomes `ProjectStage` in the same work. A half-renamed enum
-  rebuilds the exact confusion being removed.
-- Until step 0 is committed, assume any `job` identifier you read means the
-  CLIENT ENGAGEMENT, and any `assembly` means the TEMPLATE.
+- **Wire contract is frozen.** These stayed unrenamed on purpose, because a
+  deployed mobile client sends them: the scalar FKs `jobId` and `assemblyId`,
+  and the line-item snapshot fields `assemblyName`, `assemblyUnit`,
+  `assemblyComponents`. Enum VALUES are likewise untouched — they are
+  persisted. Renaming any of these is a breaking API change, not a cleanup.
+- **Known residual, to clear during the Phase 1 UI rename.** Some
+  non-Prisma identifiers still say "job" meaning client work: `ReportJob`,
+  `JobsSummary`, `jobsByStage`, `ClientJobCount` in
+  `packages/core/src/reports/summary.ts`; `DemoJob`/`demoJobs` in fixtures;
+  `JobForm`, `JobRow`, `JobSummary`, `JobDetail`, `jobStagePill` in web.
+  These are view types, not Prisma models, so they were deliberately left out
+  of step 0 to keep a mechanical rename free of UI judgement. Rename them
+  with the screens so the two stay consistent.
+- Test mocks typed `as any` opt out of this protection entirely — the
+  assemblies service test compiled fine against a renamed model and failed
+  only at runtime. Prefer typed mocks where practical.
 
 Other terms already settled:
 
@@ -92,32 +109,12 @@ sooner, and a chance to correct direction before the expensive change.
 
 ### Phase 1 — Make what exists findable (small, independent)
 
-**Step 0 — unify the vocabulary in the schema (do this FIRST).**
+**Step 0 — unify the vocabulary in the schema. DONE (687c29c, 74108b7).**
 
-Before any UI is relabelled, so the codebase never has a period where the
-screen says "Job" and the code says `Assembly`.
-
-Two commits that **never share a name** — this sequencing is the whole safety
-property, not a stylistic preference:
-
-- **0a.** `model Job` → `model Project` with `@@map("Job")`. The identifier
-  `job` is now vacant, so every `prisma.job.*` reference becomes a COMPILE
-  ERROR rather than a silent wrong-table read. Fix them all. `assembly` is
-  untouched. Rename `JobStage` → `ProjectStage` here too.
-- **0b.** `model Assembly` → `model Job` with `@@map("Assembly")`. Now
-  `assembly` is vacant and errors the same way.
-
-Doing both in one commit is unsafe: after a simultaneous swap
-`prisma.job.findMany()` still compiles and simply queries a different table.
-Type-correct, semantically wrong, silent. The two-step order makes the
-compiler do the work instead of relying on anyone's diligence.
-
-Scope: ~63 client call sites plus relation field names, almost all in
-`apps/api`; web and mobile use their own mapped types. No raw SQL depends on
-table names (checked — the only `$queryRaw` is `SELECT 1`).
-
-Gate: `migrate diff` emits no SQL, full verification passes, and the API
-boots.
+Two commits that never shared a name: 0a vacated `job` by renaming client
+work to `Project`, 0b then gave `job` to the template. Every stale reference
+was a compile error rather than a reference that still compiled while meaning
+something else. Both verified to generate zero SQL.
 
 Then, the findability work:
 
