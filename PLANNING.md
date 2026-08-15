@@ -11,23 +11,34 @@ that lags the code is worse than no plan, because it is trusted and wrong.
 
 ## 1. Vocabulary — read this before touching anything
 
-The product uses two words that the database uses for the OPPOSITE things.
-This is deliberate (renaming the Prisma models is a risky migration with no
-user-visible benefit), and it is the single most likely source of drift in
-this codebase.
+Two concepts, and until Phase 1 step 0 lands the code and the UI name them
+the OPPOSITE way round.
 
-| User sees (UI/routes) | Database model | What it actually is |
-|---|---|---|
-| **Job** / Job Library | `Assembly` | A reusable, priced service the contractor sells: "Interior wall painting, $1,500/sq ft", built from material + labour components. A **template**. |
-| **Project** | `Job` | A specific piece of work for a specific client: "Retaining wall, Spanish Town". A **live engagement**. |
+| Concept | User sees | Prisma model (today) | Prisma model (after step 0) |
+|---|---|---|---|
+| Reusable priced service — "Interior wall painting, $1,500/sq ft", built from material + labour components. A **template**. | **Job** (Job Library) | `Assembly` | `Job` (`@@map("Assembly")`) |
+| A specific piece of work for a specific client — "Retaining wall, Spanish Town". A **live engagement**. | **Project** | `Job` | `Project` (`@@map("Job")`) |
 
-Rules that follow from this:
+**The split is being eliminated, not documented.** The first version of this
+plan proposed keeping the DB names and living with the mismatch. That was the
+wrong call: the failure mode is reading `prisma.job` and acting on the wrong
+vocabulary, which produces code that compiles, runs, and touches the wrong
+table. Silent and data-corrupting. A note in a planning file is not a control.
 
-- Never rename the Prisma models to match the UI. The mapping lives here.
-- When writing UI copy, "Job" always means the template. When reading code,
-  `Job` always means the client engagement.
-- New code touching either concept should name variables after the DB model
-  (`assembly`, `job`) and only translate at the render boundary.
+`@@map` makes the rename nearly free — it decouples the model name in code
+from the table name in Postgres, so the tables, columns, indexes and foreign
+keys are untouched and **no data migration is generated**. Verify that:
+`prisma migrate diff` must emit no SQL. If it wants to emit SQL, the `@@map`
+is wrong — stop and fix it rather than accepting a table rename.
+
+Rules while the rename is in flight and after:
+
+- Variables and services follow the Prisma model name; translation to user
+  wording happens at the render boundary only.
+- `JobStage` becomes `ProjectStage` in the same work. A half-renamed enum
+  rebuilds the exact confusion being removed.
+- Until step 0 is committed, assume any `job` identifier you read means the
+  CLIENT ENGAGEMENT, and any `assembly` means the TEMPLATE.
 
 Other terms already settled:
 
@@ -80,6 +91,35 @@ Sequence chosen: **quick wins first, redesign second.** Working software
 sooner, and a chance to correct direction before the expensive change.
 
 ### Phase 1 — Make what exists findable (small, independent)
+
+**Step 0 — unify the vocabulary in the schema (do this FIRST).**
+
+Before any UI is relabelled, so the codebase never has a period where the
+screen says "Job" and the code says `Assembly`.
+
+Two commits that **never share a name** — this sequencing is the whole safety
+property, not a stylistic preference:
+
+- **0a.** `model Job` → `model Project` with `@@map("Job")`. The identifier
+  `job` is now vacant, so every `prisma.job.*` reference becomes a COMPILE
+  ERROR rather than a silent wrong-table read. Fix them all. `assembly` is
+  untouched. Rename `JobStage` → `ProjectStage` here too.
+- **0b.** `model Assembly` → `model Job` with `@@map("Assembly")`. Now
+  `assembly` is vacant and errors the same way.
+
+Doing both in one commit is unsafe: after a simultaneous swap
+`prisma.job.findMany()` still compiles and simply queries a different table.
+Type-correct, semantically wrong, silent. The two-step order makes the
+compiler do the work instead of relying on anyone's diligence.
+
+Scope: ~63 client call sites plus relation field names, almost all in
+`apps/api`; web and mobile use their own mapped types. No raw SQL depends on
+table names (checked — the only `$queryRaw` is `SELECT 1`).
+
+Gate: `migrate diff` emits no SQL, full verification passes, and the API
+boots.
+
+Then, the findability work:
 
 1. **Visible "+ Add new trade…"** in `TradeSelectField`, matching the
    `ClientSelectField` convention, shown before typing rather than only after
