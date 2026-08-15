@@ -6,7 +6,7 @@ import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
-import { getJob, getClients, getQuotes } from "@/lib/api-server";
+import { getProject, getClients, getQuotes } from "@/lib/api-server";
 import EditJobButton from "./EditJobButton";
 import shared from "../../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
@@ -14,7 +14,7 @@ import { formatAddress } from "@/lib/format-address";
 export const metadata = { title: "Job · JamQuote" };
 
 export default async function JobDetailPage({ params }: { params: { id: string } }) {
-  const job = await getJob(params.id);
+  const job = await getProject(params.id);
   if (!job) notFound();
 
   const [clients, quotes] = await Promise.all([

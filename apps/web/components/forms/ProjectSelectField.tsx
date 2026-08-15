@@ -3,22 +3,22 @@
 import { useState } from "react";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
-import { createJob } from "@/lib/api-client";
-import JobForm, { jobPayloadFromValues, type JobFormValues } from "./JobForm";
-import type { ClientOption, JobOption } from "./types";
+import { createProject } from "@/lib/api-client";
+import ProjectForm, { projectPayloadFromValues, type ProjectFormValues } from "./ProjectForm";
+import type { ClientOption, ProjectOption } from "./types";
 
 const ADD_NEW = "__add_new_job__";
 
 /**
  * A job <Select> with an inline "+ Add new job…" option, mirroring
- * ClientSelectField. Picking it opens a Modal with JobForm (which itself
+ * ClientSelectField. Picking it opens a Modal with ProjectForm (which itself
  * offers "+ Add new client…"); on success the new job is appended to the
  * caller's list and immediately selected — no navigation.
  */
-export default function JobSelectField({
+export default function ProjectSelectField({
   label = "Job (optional)",
   placeholder = "None",
-  jobs,
+  projects,
   clients,
   value,
   onChange,
@@ -27,11 +27,11 @@ export default function JobSelectField({
 }: {
   label?: string;
   placeholder?: string;
-  jobs: JobOption[];
+  projects: ProjectOption[];
   clients: ClientOption[];
   value: string;
   onChange: (projectId: string) => void;
-  onCreated: (job: JobOption) => void;
+  onCreated: (project: ProjectOption) => void;
   onClientCreated?: (client: ClientOption) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -39,7 +39,7 @@ export default function JobSelectField({
 
   const options = [
     { value: "", label: placeholder },
-    ...jobs.map((j) => ({ value: j.id, label: j.name })),
+    ...projects.map((j) => ({ value: j.id, label: j.name })),
     { value: ADD_NEW, label: "+ Add new job…" },
   ];
 
@@ -51,8 +51,8 @@ export default function JobSelectField({
     onChange(next);
   }
 
-  async function handleCreate(values: JobFormValues) {
-    const { id } = await createJob(jobPayloadFromValues(values));
+  async function handleCreate(values: ProjectFormValues) {
+    const { id } = await createProject(projectPayloadFromValues(values));
     const created = { id, name: values.name.trim() };
     onCreated(created);
     onChange(created.id);
@@ -64,7 +64,7 @@ export default function JobSelectField({
       <Select label={label} options={options} value={value} onChange={(e) => handleChange(e.target.value)} />
       {open && (
         <Modal title="Add new job" onClose={() => (busy ? undefined : setOpen(false))}>
-          <JobForm
+          <ProjectForm
             clients={clients}
             submitLabel="Add job"
             onCancel={() => setOpen(false)}

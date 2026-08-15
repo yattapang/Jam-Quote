@@ -134,7 +134,7 @@ export interface ApiClientRow {
   parish?: string | null;
   addressLine?: string | null;
 }
-export interface ApiJob {
+export interface ApiProject {
   id: string;
   clientId?: string | null;
   name: string;
@@ -629,7 +629,7 @@ export async function createClient(input: NewClientInput): Promise<Client> {
   return mapClient(await apiClient.post<ApiClientRow>("/clients", input));
 }
 
-export interface NewJobInput {
+export interface NewProjectInput {
   name: string;
   clientId?: string;
   addressLine?: string;
@@ -640,7 +640,7 @@ export interface NewJobInput {
   /** 0–100, hand-set alongside stage — never derived from quotes or invoices. */
   progressPct?: number;
 }
-export async function createJob(input: NewJobInput): Promise<{ id: string }> {
+export async function createProject(input: NewProjectInput): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>("/jobs", input);
 }
 
@@ -814,8 +814,8 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
 }
 
 /** PATCH /api/jobs/:id — same shape as create, all fields optional. */
-export type UpdateJobInput = Partial<NewJobInput>;
-export async function updateJob(id: string, input: UpdateJobInput): Promise<{ id: string }> {
+export type UpdateProjectInput = Partial<NewProjectInput>;
+export async function updateProject(id: string, input: UpdateProjectInput): Promise<{ id: string }> {
   return apiClient.patch<{ id: string }>(`/jobs/${id}`, input);
 }
 
@@ -948,7 +948,7 @@ export async function deleteClient(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/clients/${id}`);
 }
 
-export async function deleteJob(id: string): Promise<void> {
+export async function deleteProject(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/jobs/${id}`);
 }
 

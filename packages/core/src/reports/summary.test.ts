@@ -3,7 +3,7 @@ import { InvoiceStatus, PROJECT_STAGES, ProjectStage, QuoteStatus } from "../typ
 import {
   computeReportsSummary,
   type ReportInvoice,
-  type ReportJob,
+  type ReportProject,
   type ReportPayment,
   type ReportQuote,
   type ReportsRange,
@@ -47,7 +47,7 @@ function payment(overrides: Partial<ReportPayment> = {}): ReportPayment {
   };
 }
 
-function job(overrides: Partial<ReportJob> = {}): ReportJob {
+function project(overrides: Partial<ReportProject> = {}): ReportProject {
   return {
     stage: ProjectStage.QUOTED,
     createdAt: "2026-08-10T12:00:00.000Z",
@@ -55,7 +55,7 @@ function job(overrides: Partial<ReportJob> = {}): ReportJob {
   };
 }
 
-const EMPTY_INPUT = { quotes: [], invoices: [], payments: [], jobs: [] };
+const EMPTY_INPUT = { quotes: [], invoices: [], payments: [], projects: [] };
 
 function must<T>(value: T | undefined, msg = "expected value"): T {
   if (value === undefined) throw new Error(`${msg}: missing`);
@@ -77,11 +77,11 @@ describe("computeReportsSummary", () => {
       expect(s.receivables.totalOutstandingCents).toBe(0);
       expect(s.receivables.totalOverdueCents).toBe(0);
       expect(s.receivables.outstandingByClient).toEqual([]);
-      expect(s.jobs.jobsCreated).toBe(0);
-      expect(s.jobs.topClientsByJobs).toEqual([]);
+      expect(s.projects.projectsCreated).toBe(0);
+      expect(s.projects.topClientsByProjects).toEqual([]);
     });
 
-    it("still zero-fills every month bucket and every job stage", () => {
+    it("still zero-fills every month bucket and every project stage", () => {
       const s = computeReportsSummary(EMPTY_INPUT, AUGUST, NOW);
       expect(s.salesByMonth).toHaveLength(1);
       expect(s.salesByMonth[0]).toEqual({
@@ -90,7 +90,7 @@ describe("computeReportsSummary", () => {
         collectedCents: 0,
       });
       for (const stage of PROJECT_STAGES) {
-        expect(s.jobs.jobsByStage[stage]).toBe(0);
+        expect(s.projects.projectsByStage[stage]).toBe(0);
       }
     });
   });
@@ -443,80 +443,80 @@ describe("computeReportsSummary", () => {
     });
   });
 
-  describe("jobs", () => {
-    it("counts jobs created in range and zero-fills every ProjectStage", () => {
+  describe("projects", () => {
+    it("counts projects created in range and zero-fills every ProjectStage", () => {
       const s = computeReportsSummary(
         {
           ...EMPTY_INPUT,
-          jobs: [
-            job({ stage: ProjectStage.WON, createdAt: "2026-08-05T12:00:00.000Z" }),
-            job({ stage: ProjectStage.WON, createdAt: "2026-08-06T12:00:00.000Z" }),
-            job({ stage: ProjectStage.COMPLETE, createdAt: "2026-08-07T12:00:00.000Z" }),
+          projects: [
+            project({ stage: ProjectStage.WON, createdAt: "2026-08-05T12:00:00.000Z" }),
+            project({ stage: ProjectStage.WON, createdAt: "2026-08-06T12:00:00.000Z" }),
+            project({ stage: ProjectStage.COMPLETE, createdAt: "2026-08-07T12:00:00.000Z" }),
             // Outside range -> excluded.
-            job({ stage: ProjectStage.QUOTED, createdAt: "2026-07-01T12:00:00.000Z" }),
+            project({ stage: ProjectStage.QUOTED, createdAt: "2026-07-01T12:00:00.000Z" }),
           ],
         },
         AUGUST,
         NOW,
       );
-      expect(s.jobs.jobsCreated).toBe(3);
-      expect(s.jobs.jobsByStage[ProjectStage.WON]).toBe(2);
-      expect(s.jobs.jobsByStage[ProjectStage.COMPLETE]).toBe(1);
-      expect(s.jobs.jobsByStage[ProjectStage.QUOTED]).toBe(0);
-      expect(s.jobs.jobsByStage[ProjectStage.CANCELLED]).toBe(0);
-      // Every stage present, even ones with zero jobs.
+      expect(s.projects.projectsCreated).toBe(3);
+      expect(s.projects.projectsByStage[ProjectStage.WON]).toBe(2);
+      expect(s.projects.projectsByStage[ProjectStage.COMPLETE]).toBe(1);
+      expect(s.projects.projectsByStage[ProjectStage.QUOTED]).toBe(0);
+      expect(s.projects.projectsByStage[ProjectStage.CANCELLED]).toBe(0);
+      // Every stage present, even ones with zero projects.
       for (const stage of PROJECT_STAGES) {
-        expect(s.jobs.jobsByStage[stage]).toBeTypeOf("number");
+        expect(s.projects.projectsByStage[stage]).toBeTypeOf("number");
       }
     });
 
-    it("topClientsByJobs sorts by count desc, ties broken by name", () => {
+    it("topClientsByProjects sorts by count desc, ties broken by name", () => {
       const s = computeReportsSummary(
         {
           ...EMPTY_INPUT,
-          jobs: [
-            job({ clientId: "z", clientName: "Zeta", createdAt: "2026-08-01T12:00:00.000Z" }),
-            job({ clientId: "a", clientName: "Alpha", createdAt: "2026-08-02T12:00:00.000Z" }),
-            job({ clientId: "b", clientName: "Beta", createdAt: "2026-08-03T12:00:00.000Z" }),
-            job({ clientId: "b", clientName: "Beta", createdAt: "2026-08-04T12:00:00.000Z" }),
+          projects: [
+            project({ clientId: "z", clientName: "Zeta", createdAt: "2026-08-01T12:00:00.000Z" }),
+            project({ clientId: "a", clientName: "Alpha", createdAt: "2026-08-02T12:00:00.000Z" }),
+            project({ clientId: "b", clientName: "Beta", createdAt: "2026-08-03T12:00:00.000Z" }),
+            project({ clientId: "b", clientName: "Beta", createdAt: "2026-08-04T12:00:00.000Z" }),
           ],
         },
         AUGUST,
         NOW,
       );
-      // Beta has 2 jobs (wins outright); Alpha and Zeta tie at 1 and are
+      // Beta has 2 projects (wins outright); Alpha and Zeta tie at 1 and are
       // broken alphabetically.
-      expect(s.jobs.topClientsByJobs.map((c) => c.clientId)).toEqual(["b", "a", "z"]);
-      expect(must(s.jobs.topClientsByJobs[0]).jobCount).toBe(2);
+      expect(s.projects.topClientsByProjects.map((c) => c.clientId)).toEqual(["b", "a", "z"]);
+      expect(must(s.projects.topClientsByProjects[0]).projectCount).toBe(2);
     });
 
-    it("includes a null-client bucket only when such jobs exist", () => {
+    it("includes a null-client bucket only when such projects exist", () => {
       const withNullClient = computeReportsSummary(
-        { ...EMPTY_INPUT, jobs: [job({ clientId: null, createdAt: "2026-08-01T12:00:00.000Z" })] },
+        { ...EMPTY_INPUT, projects: [project({ clientId: null, createdAt: "2026-08-01T12:00:00.000Z" })] },
         AUGUST,
         NOW,
       );
-      expect(withNullClient.jobs.topClientsByJobs).toHaveLength(1);
-      expect(must(withNullClient.jobs.topClientsByJobs[0]).clientId).toBeNull();
-      expect(must(withNullClient.jobs.topClientsByJobs[0]).clientName).toBe("No client");
+      expect(withNullClient.projects.topClientsByProjects).toHaveLength(1);
+      expect(must(withNullClient.projects.topClientsByProjects[0]).clientId).toBeNull();
+      expect(must(withNullClient.projects.topClientsByProjects[0]).clientName).toBe("No client");
 
-      const withoutAnyJobs = computeReportsSummary(EMPTY_INPUT, AUGUST, NOW);
-      expect(withoutAnyJobs.jobs.topClientsByJobs).toEqual([]);
+      const withoutAnyProjects = computeReportsSummary(EMPTY_INPUT, AUGUST, NOW);
+      expect(withoutAnyProjects.projects.topClientsByProjects).toEqual([]);
     });
 
-    it("caps topClientsByJobs at 10 clients", () => {
-      const jobs: ReportJob[] = [];
+    it("caps topClientsByProjects at 10 clients", () => {
+      const projects: ReportProject[] = [];
       for (let i = 0; i < 15; i++) {
-        jobs.push(
-          job({
+        projects.push(
+          project({
             clientId: `client-${i}`,
             clientName: `Client ${i}`,
             createdAt: "2026-08-01T12:00:00.000Z",
           }),
         );
       }
-      const s = computeReportsSummary({ ...EMPTY_INPUT, jobs }, AUGUST, NOW);
-      expect(s.jobs.topClientsByJobs).toHaveLength(10);
+      const s = computeReportsSummary({ ...EMPTY_INPUT, projects }, AUGUST, NOW);
+      expect(s.projects.topClientsByProjects).toHaveLength(10);
     });
   });
 

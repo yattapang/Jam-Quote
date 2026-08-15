@@ -2,24 +2,24 @@ import { describe, expect, it } from "vitest";
 import {
   demoClients,
   demoClientTotalCents,
-  demoJobs,
+  demoProjects,
   demoQuotes,
   demoQuoteTotals,
   findDemoClient,
-  findDemoJob,
+  findDemoProject,
 } from "./demo.js";
 import { formatJmd } from "../tax/money.js";
 
 describe("demo fixtures — referential integrity", () => {
-  it("every quote points at a real client and job", () => {
+  it("every quote points at a real client and project", () => {
     for (const q of demoQuotes) {
       expect(findDemoClient(q.clientId), `${q.number} client`).toBeDefined();
-      expect(findDemoJob(q.projectId), `${q.number} job`).toBeDefined();
+      expect(findDemoProject(q.projectId), `${q.number} project`).toBeDefined();
     }
   });
 
-  it("every job points at a real client", () => {
-    for (const j of demoJobs) {
+  it("every project points at a real client", () => {
+    for (const j of demoProjects) {
       expect(findDemoClient(j.clientId), `${j.id} client`).toBeDefined();
     }
   });

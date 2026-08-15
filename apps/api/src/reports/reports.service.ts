@@ -3,7 +3,7 @@ import {
   computeReportsSummary,
   JAMAICA_UTC_OFFSET_MS,
   type ReportInvoice,
-  type ReportJob,
+  type ReportProject,
   type ReportPayment,
   type ReportQuote,
   type ReportsRange,
@@ -77,7 +77,7 @@ export class ReportsService {
   async getSummary(businessId: string, from?: Date, to?: Date, now: Date = new Date()): Promise<ReportsSummary> {
     const range = this.resolveRange(from, to, now);
 
-    const [quoteRows, invoiceRows, jobRows, paymentRows] = await Promise.all([
+    const [quoteRows, invoiceRows, projectRows, paymentRows] = await Promise.all([
       this.prisma.quote.findMany({
         where: { businessId, deletedAt: null },
         select: { status: true, totalCents: true, createdAt: true },
@@ -157,7 +157,7 @@ export class ReportsService {
       clientName: inv.client ? `${inv.client.firstName} ${inv.client.lastName}`.trim() : null,
     }));
 
-    const jobs: ReportJob[] = jobRows.map((j) => ({
+    const projects: ReportProject[] = projectRows.map((j) => ({
       stage: j.stage,
       createdAt: j.createdAt.toISOString(),
       clientId: j.clientId,
@@ -169,6 +169,6 @@ export class ReportsService {
       paidAt: p.paidAt.toISOString(),
     }));
 
-    return computeReportsSummary({ quotes, invoices, payments, jobs }, range, now);
+    return computeReportsSummary({ quotes, invoices, payments, projects }, range, now);
   }
 }

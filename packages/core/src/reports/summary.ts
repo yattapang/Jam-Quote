@@ -42,7 +42,7 @@ export interface ReportPayment {
   paidAt: string; // ISO
 }
 
-export interface ReportJob {
+export interface ReportProject {
   stage: ProjectStage;
   createdAt: string; // ISO
   clientId?: string | null;
@@ -84,19 +84,19 @@ export interface MonthlySalesBucket {
   collectedCents: Cents;
 }
 
-export interface ClientJobCount {
+export interface ClientProjectCount {
   clientId: string | null;
   clientName: string;
-  jobCount: number;
+  projectCount: number;
 }
 
-export interface JobsSummary {
-  jobsCreated: number;
+export interface ProjectsSummary {
+  projectsCreated: number;
   /** Every ProjectStage present, zero-filled, in workflow order. */
-  jobsByStage: Record<ProjectStage, number>;
-  /** Sorted by jobCount descending, ties broken by name. Capped — see
+  projectsByStage: Record<ProjectStage, number>;
+  /** Sorted by projectCount descending, ties broken by name. Capped — see
    * TOP_CLIENTS_BY_JOBS_LIMIT. */
-  topClientsByJobs: ClientJobCount[];
+  topClientsByProjects: ClientProjectCount[];
 }
 
 export interface ReportsSummary {
@@ -105,7 +105,7 @@ export interface ReportsSummary {
   revenue: RevenueSummary;
   receivables: ReceivablesSummary;
   salesByMonth: MonthlySalesBucket[];
-  jobs: JobsSummary;
+  projects: ProjectsSummary;
 }
 
 /** The "top clients" card is a leaderboard, not a directory — past a
@@ -135,7 +135,7 @@ export function computeReportsSummary(
     quotes: ReportQuote[];
     invoices: ReportInvoice[];
     payments: ReportPayment[];
-    jobs: ReportJob[];
+    projects: ReportProject[];
   },
   range: ReportsRange,
   now: Date = new Date(),
@@ -147,7 +147,7 @@ export function computeReportsSummary(
     // Deliberately NOT range-filtered — see computeReceivables.
     receivables: computeReceivables(input.invoices, now),
     salesByMonth: computeSalesByMonth(input.invoices, input.payments, range),
-    jobs: computeJobsSummary(input.jobs, range),
+    projects: computeProjectsSummary(input.projects, range),
   };
 }
 
@@ -393,39 +393,39 @@ function computeSalesByMonth(
   return Array.from(buckets.values());
 }
 
-/** Jobs created in range, by stage, and the busiest clients. */
-function computeJobsSummary(jobs: ReportJob[], range: ReportsRange): JobsSummary {
-  const inRangeJobs = jobs.filter((j) => inRange(j.createdAt, range));
+/** Projects created in range, by stage, and the busiest clients. */
+function computeProjectsSummary(projects: ReportProject[], range: ReportsRange): ProjectsSummary {
+  const inRangeProjects = projects.filter((j) => inRange(j.createdAt, range));
 
   // Zero-fill every stage up front, in workflow order, so a stage with no
-  // jobs this period still shows as 0 rather than being silently absent —
+  // projects this period still shows as 0 rather than being silently absent —
   // and so a stage added later can't be forgotten here.
-  const jobsByStage = Object.fromEntries(PROJECT_STAGES.map((stage) => [stage, 0])) as Record<
+  const projectsByStage = Object.fromEntries(PROJECT_STAGES.map((stage) => [stage, 0])) as Record<
     ProjectStage,
     number
   >;
-  for (const j of inRangeJobs) {
-    jobsByStage[j.stage] += 1;
+  for (const j of inRangeProjects) {
+    projectsByStage[j.stage] += 1;
   }
 
-  const counts = new Map<string, ClientJobCount>();
-  for (const j of inRangeJobs) {
+  const counts = new Map<string, ClientProjectCount>();
+  for (const j of inRangeProjects) {
     const key = clientGroupKey(j.clientId);
     const existing = counts.get(key);
     if (existing) {
-      existing.jobCount += 1;
+      existing.projectCount += 1;
     } else {
       counts.set(key, {
         clientId: j.clientId ?? null,
         clientName: clientGroupLabel(j.clientId, j.clientName),
-        jobCount: 1,
+        projectCount: 1,
       });
     }
   }
 
-  const topClientsByJobs = Array.from(counts.values())
-    .sort((a, b) => b.jobCount - a.jobCount || a.clientName.localeCompare(b.clientName))
+  const topClientsByProjects = Array.from(counts.values())
+    .sort((a, b) => b.projectCount - a.projectCount || a.clientName.localeCompare(b.clientName))
     .slice(0, TOP_CLIENTS_BY_JOBS_LIMIT);
 
-  return { jobsCreated: inRangeJobs.length, jobsByStage, topClientsByJobs };
+  return { projectsCreated: inRangeProjects.length, projectsByStage, topClientsByProjects };
 }

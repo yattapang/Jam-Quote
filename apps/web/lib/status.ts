@@ -27,18 +27,18 @@ const INVOICE_STATUS_PILL: Record<InvoiceStatus, PillSpec> = {
 
 /** Stage colours only. The LABELS come from @jamquote/core so web and mobile
  * cannot drift into calling the same stage two different things (#36). */
-const JOB_STAGE_KIND: Record<ProjectStage, { kind: PillKind; variant: PillVariant }> = {
+const PROJECT_STAGE_KIND: Record<ProjectStage, { kind: PillKind; variant: PillVariant }> = {
   [ProjectStage.QUOTED]: { kind: "neutral", variant: "soft" },
   [ProjectStage.WON]: { kind: "info", variant: "soft" },
   [ProjectStage.IN_PROGRESS]: { kind: "info", variant: "solid" },
   [ProjectStage.COMPLETE]: { kind: "good", variant: "solid" },
-  // Not "critical": a cancelled job is a normal business outcome, not an
+  // Not "critical": a cancelled project is a normal business outcome, not an
   // error the contractor needs to be alarmed about in a list.
   [ProjectStage.CANCELLED]: { kind: "neutral", variant: "soft" },
 };
 
-export function jobStagePill(stage: ProjectStage): PillSpec {
-  return { label: PROJECT_STAGE_LABELS[stage], ...JOB_STAGE_KIND[stage] };
+export function projectStagePill(stage: ProjectStage): PillSpec {
+  return { label: PROJECT_STAGE_LABELS[stage], ...PROJECT_STAGE_KIND[stage] };
 }
 
 export function quoteStatusPill(status: QuoteStatus): PillSpec {

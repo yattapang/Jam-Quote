@@ -12,7 +12,7 @@ import bcrypt from "bcryptjs";
 import { PrismaClient, UserRole, RateUnit, PriceSource, EntityType } from "@prisma/client";
 import {
   demoClients,
-  demoJobs,
+  demoProjects,
   demoQuotes,
   demoQuoteTotals,
 } from "@jamquote/core";
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   await prisma.quoteLineItem.deleteMany({ where: { quote: { businessId: business.id } } });
   await prisma.quoteSection.deleteMany({ where: { quote: { businessId: business.id } } });
   await prisma.quote.deleteMany({ where: { businessId: business.id } });
-  await prisma.job.deleteMany({ where: { businessId: business.id } });
+  await prisma.project.deleteMany({ where: { businessId: business.id } });
   await prisma.client.deleteMany({ where: { businessId: business.id } });
 
   for (const c of demoClients) {
@@ -99,8 +99,8 @@ async function main(): Promise<void> {
     });
   }
 
-  for (const j of demoJobs) {
-    await prisma.job.create({
+  for (const j of demoProjects) {
+    await prisma.project.create({
       data: {
         id: j.id,
         businessId: business.id,
@@ -121,7 +121,7 @@ async function main(): Promise<void> {
         id: q.id,
         businessId: business.id,
         clientId: q.clientId,
-        jobId: q.jobId,
+        projectId: q.projectId,
         number: q.number,
         status: q.status,
         version: 1,
@@ -444,7 +444,7 @@ async function main(): Promise<void> {
 
   // eslint-disable-next-line no-console
   console.log(
-    `Seeded ${demoClients.length} clients, ${demoJobs.length} jobs, ${demoQuotes.length} quotes for ${business.name}; ` +
+    `Seeded ${demoClients.length} clients, ${demoProjects.length} jobs, ${demoQuotes.length} quotes for ${business.name}; ` +
       `${otherBusinesses.length + 1} businesses, ${otherSuppliers.length + 1} suppliers, ${regulatoryUpdates.length} regulatory updates total.`,
   );
   // eslint-disable-next-line no-console

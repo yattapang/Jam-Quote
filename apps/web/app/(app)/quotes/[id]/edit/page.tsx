@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getJobs, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
+import { getQuote, getClients, getProjects, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -10,7 +10,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
 
   const [clients, jobs, favourites, assemblies, business] = await Promise.all([
     getClients(),
-    getJobs(),
+    getProjects(),
     getMaterialFavourites(),
     getAssemblies(),
     getBusiness(),

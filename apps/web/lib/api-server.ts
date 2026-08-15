@@ -29,7 +29,7 @@ import {
   type ApiBusiness,
   type ApiClientRow,
   type ApiInvoice,
-  type ApiJob,
+  type ApiProject,
   type ApiLabourRate,
   type ApiMaterialFavourite,
   type ApiQuote,
@@ -50,7 +50,7 @@ import {
   type Trade,
 } from "./api-client";
 import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
-import type { JobSummary, JobDetail } from "./mock-data";
+import type { ProjectSummary, ProjectDetail } from "./mock-data";
 import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
 import { IMPERSONATION_COOKIE } from "./session";
 
@@ -234,16 +234,16 @@ export async function getAssemblies(): Promise<Assembly[]> {
   }
 }
 
-export async function getJobs(): Promise<JobSummary[]> {
+export async function getProjects(): Promise<ProjectSummary[]> {
   try {
-    const [jobs, quotes, clients] = await Promise.all([
-      serverRequest<ApiJob[]>("/jobs"),
+    const [projects, quotes, clients] = await Promise.all([
+      serverRequest<ApiProject[]>("/jobs"),
       serverRequest<ApiQuote[]>("/quotes"),
       serverRequest<ApiClientRow[]>("/clients"),
     ]);
     const clientName = new Map(clients.map((c) => [c.id, `${c.firstName} ${c.lastName}`.trim()]));
-    return jobs.map((j) => {
-      const jobQuotes = quotes.filter((q) => q.projectId === j.id);
+    return projects.map((j) => {
+      const projectQuotes = quotes.filter((q) => q.projectId === j.id);
       return {
         id: j.id,
         name: j.name,
@@ -252,49 +252,49 @@ export async function getJobs(): Promise<JobSummary[]> {
         parish: j.parish ?? "",
         stage: j.stage,
         progressPct: j.progressPct,
-        quoteCount: jobQuotes.length,
-        valueCents: jobQuotes.reduce((sum, q) => sum + q.totalCents, 0),
+        quoteCount: projectQuotes.length,
+        valueCents: projectQuotes.reduce((sum, q) => sum + q.totalCents, 0),
       };
     });
   } catch (err) {
     redirectOnAuthError(err);
-    console.warn("[api-server] getJobs: API unreachable, returning empty list");
+    console.warn("[api-server] getProjects: API unreachable, returning empty list");
     return [];
   }
 }
 
-export async function getJob(id: string): Promise<JobDetail | undefined> {
+export async function getProject(id: string): Promise<ProjectDetail | undefined> {
   try {
-    const [job, clients] = await Promise.all([
-      serverRequest<ApiJob>(`/jobs/${id}`),
+    const [project, clients] = await Promise.all([
+      serverRequest<ApiProject>(`/jobs/${id}`),
       serverRequest<ApiClientRow[]>("/clients"),
     ]);
-    const client = clients.find((c) => c.id === job.clientId);
+    const client = clients.find((c) => c.id === project.clientId);
     return {
-      id: job.id,
-      name: job.name,
-      clientId: job.clientId ?? "",
+      id: project.id,
+      name: project.name,
+      clientId: project.clientId ?? "",
       clientName: client ? `${client.firstName} ${client.lastName}`.trim() : "Unknown",
-      town: job.town ?? "",
-      addressLine: job.addressLine ?? "",
-      parish: job.parish ?? "",
-      stage: job.stage,
-      progressPct: job.progressPct,
+      town: project.town ?? "",
+      addressLine: project.addressLine ?? "",
+      parish: project.parish ?? "",
+      stage: project.stage,
+      progressPct: project.progressPct,
     };
   } catch (err) {
     redirectOnAuthError(err);
-    console.warn(`[api-server] getJob(${id}): API unreachable, returning undefined`);
+    console.warn(`[api-server] getProject(${id}): API unreachable, returning undefined`);
     return undefined;
   }
 }
 
 export async function getQuotes(): Promise<Quote[]> {
   try {
-    const [quotes, jobs] = await Promise.all([
+    const [quotes, projects] = await Promise.all([
       serverRequest<ApiQuote[]>("/quotes"),
-      serverRequest<ApiJob[]>("/jobs"),
+      serverRequest<ApiProject[]>("/jobs"),
     ]);
-    const jobName = new Map(jobs.map((j) => [j.id, j.name]));
+    const jobName = new Map(projects.map((j) => [j.id, j.name]));
     return quotes
       .map((q) => mapQuote(q, jobName.get(q.projectId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
@@ -311,7 +311,7 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
     let jobLabel = "";
     if (q.projectId) {
       try {
-        jobLabel = (await serverRequest<ApiJob>(`/jobs/${q.projectId}`)).name;
+        jobLabel = (await serverRequest<ApiProject>(`/jobs/${q.projectId}`)).name;
       } catch {
         /* job label is best-effort */
       }
@@ -366,10 +366,10 @@ function emptyReportsSummary(fromIso: string, toIso: string): ReportsSummary {
     revenue: { invoicedCents: 0, collectedCents: 0 },
     receivables: { totalOutstandingCents: 0, totalOverdueCents: 0, outstandingByClient: [] },
     salesByMonth: [],
-    jobs: {
-      jobsCreated: 0,
-      jobsByStage: { QUOTED: 0, WON: 0, IN_PROGRESS: 0, COMPLETE: 0, CANCELLED: 0 },
-      topClientsByJobs: [],
+    projects: {
+      projectsCreated: 0,
+      projectsByStage: { QUOTED: 0, WON: 0, IN_PROGRESS: 0, COMPLETE: 0, CANCELLED: 0 },
+      topClientsByProjects: [],
     },
   };
 }

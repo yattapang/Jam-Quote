@@ -6,7 +6,7 @@ export interface ClientOption {
   name: string;
 }
 
-export interface JobOption {
+export interface ProjectOption {
   id: string;
   name: string;
 }

@@ -8,7 +8,7 @@ import {
   deleteAssembly,
   deleteClient,
   deleteInvoice,
-  deleteJob,
+  deleteProject,
   deleteLabourRate,
   deleteMaterialFavourite,
   deleteQuote,
@@ -17,7 +17,7 @@ import styles from "./DeleteRowButton.module.css";
 
 const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   client: deleteClient,
-  job: deleteJob,
+  job: deleteProject,
   quote: deleteQuote,
   material: deleteMaterialFavourite,
   labourRate: deleteLabourRate,

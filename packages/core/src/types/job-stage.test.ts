@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoJobs } from "../fixtures/demo.js";
+import { demoProjects } from "../fixtures/demo.js";
 import { ProjectStage, PROJECT_STAGES, PROJECT_STAGE_LABELS, projectStageTracksProgress } from "./enums.js";
 
 describe("ProjectStage", () => {
@@ -32,10 +32,10 @@ describe("ProjectStage", () => {
   it("keeps the demo fixtures on real stages", () => {
     // The fixtures are what prisma/seed.ts writes, so a stray free-text stage
     // here would fail the seed against the enum column rather than at review.
-    for (const job of demoJobs) {
-      expect(PROJECT_STAGES).toContain(job.stage);
-      expect(job.progressPct).toBeGreaterThanOrEqual(0);
-      expect(job.progressPct).toBeLessThanOrEqual(100);
+    for (const project of demoProjects) {
+      expect(PROJECT_STAGES).toContain(project.stage);
+      expect(project.progressPct).toBeGreaterThanOrEqual(0);
+      expect(project.progressPct).toBeLessThanOrEqual(100);
     }
   });
 });

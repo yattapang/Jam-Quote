@@ -4,15 +4,15 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import { jobStagePill } from "@/lib/status";
-import { getJobs, getClients } from "@/lib/api-server";
+import { projectStagePill } from "@/lib/status";
+import { getProjects, getClients } from "@/lib/api-server";
 import AddJobButton from "./AddJobButton";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Jobs · JamQuote" };
 
 export default async function JobsPage() {
-  const [jobs, clients] = await Promise.all([getJobs(), getClients()]);
+  const [jobs, clients] = await Promise.all([getProjects(), getClients()]);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -32,7 +32,7 @@ export default async function JobsPage() {
             <div className={shared.empty}>No jobs yet — add one to get started.</div>
           )}
           {jobs.map((job) => {
-            const pill = jobStagePill(job.stage);
+            const pill = projectStagePill(job.stage);
             return (
               <div key={job.id} className={shared.row}>
                 <div className={shared.rowMain}>

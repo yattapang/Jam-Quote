@@ -7,8 +7,8 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
 import ClientSelectField from "./ClientSelectField";
-import type { NewJobInput } from "@/lib/api-client";
-import type { JobDetail } from "@/lib/mock-data";
+import type { NewProjectInput } from "@/lib/api-client";
+import type { ProjectDetail } from "@/lib/mock-data";
 import type { ClientOption } from "./types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
@@ -16,7 +16,7 @@ const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map
 // (the same default the column carries).
 const stageOptions = PROJECT_STAGES.map((s) => ({ value: s, label: PROJECT_STAGE_LABELS[s] }));
 
-export interface JobFormValues {
+export interface ProjectFormValues {
   name: string;
   clientId: string;
   town: string;
@@ -24,11 +24,11 @@ export interface JobFormValues {
   address: string;
   stage: ProjectStage;
   /** Kept as the raw input string so the field can be emptied while typing;
-   * `jobPayloadFromValues` is what turns it back into a number. */
+   * `projectPayloadFromValues` is what turns it back into a number. */
   progressPct: string;
 }
 
-export const emptyJobForm: JobFormValues = {
+export const emptyProjectForm: ProjectFormValues = {
   name: "",
   clientId: "",
   town: "",
@@ -38,15 +38,15 @@ export const emptyJobForm: JobFormValues = {
   progressPct: "0",
 };
 
-export function jobFormValuesFromJob(job: JobDetail): JobFormValues {
+export function projectFormValuesFromProject(project: ProjectDetail): ProjectFormValues {
   return {
-    name: job.name,
-    clientId: job.clientId,
-    town: job.town,
-    parish: job.parish,
-    address: job.addressLine,
-    stage: job.stage,
-    progressPct: String(job.progressPct),
+    name: project.name,
+    clientId: project.clientId,
+    town: project.town,
+    parish: project.parish,
+    address: project.addressLine,
+    stage: project.stage,
+    progressPct: String(project.progressPct),
   };
 }
 
@@ -61,7 +61,7 @@ function progressFromInput(raw: string): number | undefined {
   return Math.min(100, Math.max(0, Math.round(n)));
 }
 
-export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
+export function projectPayloadFromValues(values: ProjectFormValues): NewProjectInput {
   return {
     name: values.name.trim(),
     clientId: values.clientId || undefined,
@@ -79,9 +79,9 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
  * field is itself a ClientSelectField, so every entry point into this form
  * also gets "+ Add new client…" inline for free.
  */
-export default function JobForm({
+export default function ProjectForm({
   clients,
-  initial = emptyJobForm,
+  initial = emptyProjectForm,
   submitLabel = "Save job",
   onCancel,
   onSubmit,
@@ -89,22 +89,22 @@ export default function JobForm({
   onClientCreated,
 }: {
   clients: ClientOption[];
-  initial?: JobFormValues;
+  initial?: ProjectFormValues;
   submitLabel?: string;
   onCancel: () => void;
-  onSubmit: (values: JobFormValues) => Promise<void> | void;
+  onSubmit: (values: ProjectFormValues) => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
   /** Bubbles a client created via the nested "+ Add new client…" up to the
    * caller, so a QuoteBuilder rendering this inside "+ Add new job…" can also
    * add it to its own client list/select. */
   onClientCreated?: (client: ClientOption) => void;
 }) {
-  const [values, setValues] = useState<JobFormValues>(initial);
+  const [values, setValues] = useState<ProjectFormValues>(initial);
   const [localClients, setLocalClients] = useState<ClientOption[]>(clients);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const set = <K extends keyof JobFormValues>(key: K, value: JobFormValues[K]) =>
+  const set = <K extends keyof ProjectFormValues>(key: K, value: ProjectFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
   async function submit(e: React.FormEvent) {

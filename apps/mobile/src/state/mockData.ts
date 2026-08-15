@@ -2,11 +2,11 @@ import {
   demoClients,
   demoClientQuoteCount,
   demoClientTotalCents,
-  demoJobs,
+  demoProjects,
   demoQuotes,
   demoQuoteTotals,
   findDemoClient,
-  findDemoJob,
+  findDemoProject,
   findDemoQuote,
   GctTreatment,
   LineCategory,
@@ -99,7 +99,7 @@ export const quoteListRows: QuoteListRow[] = demoQuotes.map((q) => {
     id: q.id,
     num: q.number,
     client: findDemoClient(q.clientId)?.name ?? "Unknown",
-    job: findDemoJob(q.projectId)?.name ?? "",
+    job: findDemoProject(q.projectId)?.name ?? "",
     amountCents: demoQuoteTotals(q).totalCents, // derived — matches the editor
     status: pill.label,
     kind: pill.kind,
@@ -140,7 +140,7 @@ export const STAGE_KIND: Record<ProjectStage, StatusKind> = {
   CANCELLED: "neutral",
 };
 
-export interface JobRow {
+export interface ProjectRow {
   id: string;
   name: string;
   clientName: string;
@@ -153,8 +153,8 @@ export interface JobRow {
   kind: StatusKind;
 }
 
-export const jobRows: JobRow[] = demoJobs.map((j) => {
-  const jobQuotes = demoQuotes.filter((q) => q.projectId === j.id);
+export const projectRows: ProjectRow[] = demoProjects.map((j) => {
+  const projectQuotes = demoQuotes.filter((q) => q.projectId === j.id);
   return {
     id: j.id,
     name: j.name,
@@ -162,7 +162,7 @@ export const jobRows: JobRow[] = demoJobs.map((j) => {
     address: j.addressLine,
     stage: j.stage,
     pct: j.progressPct,
-    valueCents: jobQuotes.reduce((sum, q) => sum + demoQuoteTotals(q).totalCents, 0),
+    valueCents: projectQuotes.reduce((sum, q) => sum + demoQuoteTotals(q).totalCents, 0),
     kind: STAGE_KIND[j.stage] ?? "neutral",
   };
 });

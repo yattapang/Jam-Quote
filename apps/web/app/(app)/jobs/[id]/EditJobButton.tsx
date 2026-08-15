@@ -4,21 +4,25 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { updateJob } from "@/lib/api-client";
-import JobForm, { jobFormValuesFromJob, jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
+import { updateProject } from "@/lib/api-client";
+import ProjectForm, {
+  projectFormValuesFromProject,
+  projectPayloadFromValues,
+  type ProjectFormValues,
+} from "@/components/forms/ProjectForm";
 import type { ClientOption } from "@/components/forms/types";
-import type { JobDetail } from "@/lib/mock-data";
+import type { ProjectDetail } from "@/lib/mock-data";
 
 /** Header action on the job detail page — mirrors AddJobButton but pre-fills
  * from the existing job and PATCHes instead of POSTing. `clients` comes from
  * the server detail page, same as AddJobButton receives it. */
-export default function EditJobButton({ job, clients }: { job: JobDetail; clients: ClientOption[] }) {
+export default function EditJobButton({ job, clients }: { job: ProjectDetail; clients: ClientOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(values: JobFormValues) {
-    await updateJob(job.id, jobPayloadFromValues(values));
+  async function handleSubmit(values: ProjectFormValues) {
+    await updateProject(job.id, projectPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }
@@ -30,9 +34,9 @@ export default function EditJobButton({ job, clients }: { job: JobDetail; client
       </Button>
       {open && (
         <Modal title="Edit job" onClose={() => (busy ? undefined : setOpen(false))}>
-          <JobForm
+          <ProjectForm
             clients={clients}
-            initial={jobFormValuesFromJob(job)}
+            initial={projectFormValuesFromProject(job)}
             submitLabel="Save changes"
             onCancel={() => setOpen(false)}
             onSubmit={handleSubmit}

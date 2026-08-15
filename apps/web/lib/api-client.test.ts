@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createClient,
   createInvoiceFromQuote,
-  createJob,
+  createProject,
   createMaterialCategory,
   createMaterialFavourite,
   createMaterialPrice,
@@ -11,7 +11,7 @@ import {
   createSupplier,
   deleteClient,
   deleteInvoice,
-  deleteJob,
+  deleteProject,
   deleteMaterialFavourite,
   deleteMaterialPrice,
   deleteQuote,
@@ -30,7 +30,7 @@ import {
   updateBusiness,
   updateClient,
   updateInvoice,
-  updateJob,
+  updateProject,
   updateMaterialFavourite,
   updateQuote,
 } from "./api-client";
@@ -60,8 +60,8 @@ import {
   getClients,
   getInvoice,
   getInvoices,
-  getJob,
-  getJobs,
+  getProject,
+  getProjects,
   getMaterialFavourites,
   getQuote,
   getQuotes,
@@ -108,7 +108,7 @@ const apiClientRow = {
   parish: "St. Catherine",
   addressLine: "Lot 14 Bloxburgh Dr, Spanish Town",
 };
-const apiJob = {
+const apiProject = {
   id: "job-0142",
   clientId: "cl-basil-reid",
   name: "Retaining wall, Spanish Town",
@@ -436,10 +436,10 @@ describe("getBusiness", () => {
   });
 });
 
-describe("getJob", () => {
+describe("getProject", () => {
   it("fetches a single job and joins the client name", async () => {
-    stubFetch({ "/jobs/job-0142": apiJob, "/clients": [apiClientRow] });
-    const j = await getJob("job-0142");
+    stubFetch({ "/jobs/job-0142": apiProject, "/clients": [apiClientRow] });
+    const j = await getProject("job-0142");
     expect(j?.name).toBe("Retaining wall, Spanish Town");
     expect(j?.clientId).toBe("cl-basil-reid");
     expect(j?.clientName).toBe("Basil Reid");
@@ -450,7 +450,7 @@ describe("getJob", () => {
 
   it("returns undefined when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
-    const j = await getJob("job-0142");
+    const j = await getProject("job-0142");
     expect(j).toBeUndefined();
   });
 });
@@ -459,7 +459,7 @@ describe("getQuotes", () => {
   it("maps quotes, attaches jobLabel, and sorts newest-first", async () => {
     stubFetch({
       "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140", projectId: "job-0142" }],
-      "/jobs": [apiJob],
+      "/jobs": [apiProject],
     });
     const quotes = await getQuotes();
     expect(quotes.map((q) => q.num)).toEqual(["QT-0142", "QT-0140"]); // desc
@@ -476,7 +476,7 @@ describe("getQuotes", () => {
 
 describe("getQuote", () => {
   it("returns a detail quote with line items", async () => {
-    stubFetch({ "/quotes/qt-0142": apiQuote, "/jobs/job-0142": apiJob });
+    stubFetch({ "/quotes/qt-0142": apiQuote, "/jobs/job-0142": apiProject });
     const q = await getQuote("qt-0142");
     expect(q?.num).toBe("QT-0142");
     expect(q?.jobLabel).toBe("Retaining wall, Spanish Town");
@@ -534,9 +534,9 @@ describe("create (write path)", () => {
     expect(JSON.parse(init.body as string)).toMatchObject({ firstName: "Jane", lastName: "Doe" });
   });
 
-  it("createJob POSTs the job body", async () => {
+  it("createProject POSTs the job body", async () => {
     const spy = stubFetch({ "/jobs": { id: "job-new" } });
-    const r = await createJob({ name: "New wall", clientId: "cl-basil-reid" });
+    const r = await createProject({ name: "New wall", clientId: "cl-basil-reid" });
     expect(r.id).toBe("job-new");
     expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
       name: "New wall",
@@ -544,9 +544,9 @@ describe("create (write path)", () => {
     });
   });
 
-  it("createJob carries the stage and progress the form set", async () => {
+  it("createProject carries the stage and progress the form set", async () => {
     const spy = stubFetch({ "/jobs": { id: "job-new" } });
-    await createJob({ name: "New wall", stage: ProjectStage.WON, progressPct: 10 });
+    await createProject({ name: "New wall", stage: ProjectStage.WON, progressPct: 10 });
     expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
       stage: "WON",
       progressPct: 10,
@@ -648,9 +648,9 @@ describe("update (write path)", () => {
     expect(JSON.parse(init.body as string)).toEqual({ lastName: "Reid-Campbell" });
   });
 
-  it("updateJob PATCHes the job body to /jobs/:id", async () => {
+  it("updateProject PATCHes the job body to /jobs/:id", async () => {
     const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
-    const r = await updateJob("job-0142", { name: "Retaining wall, phase 2" });
+    const r = await updateProject("job-0142", { name: "Retaining wall, phase 2" });
     expect(r.id).toBe("job-0142");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/jobs/job-0142");
@@ -659,11 +659,11 @@ describe("update (write path)", () => {
     expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
   });
 
-  it("updateJob can PATCH the stage on its own", async () => {
+  it("updateProject can PATCH the stage on its own", async () => {
     // Before #36 nothing could set this at all — the field rendered on three
     // screens and no writer existed.
     const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
-    await updateJob("job-0142", { stage: ProjectStage.COMPLETE, progressPct: 100 });
+    await updateProject("job-0142", { stage: ProjectStage.COMPLETE, progressPct: 100 });
     const [, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ stage: "COMPLETE", progressPct: 100 });
   });
@@ -770,9 +770,9 @@ describe("delete (write path)", () => {
     expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
   });
 
-  it("deleteJob sends DELETE to /jobs/:id", async () => {
+  it("deleteProject sends DELETE to /jobs/:id", async () => {
     const spy = stubEmptyOk();
-    await deleteJob("job-0142");
+    await deleteProject("job-0142");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(String(url)).toContain("/jobs/job-0142");
     expect(init.method).toBe("DELETE");
@@ -871,10 +871,10 @@ describe("getMaterialFavouritesClient", () => {
   });
 });
 
-describe("getJobs", () => {
+describe("getProjects", () => {
   it("computes per-job value and quote count", async () => {
-    stubFetch({ "/jobs": [apiJob], "/quotes": [apiQuote], "/clients": [apiClientRow] });
-    const jobs = await getJobs();
+    stubFetch({ "/jobs": [apiProject], "/quotes": [apiQuote], "/clients": [apiClientRow] });
+    const jobs = await getProjects();
     expect(jobs[0]?.name).toBe("Retaining wall, Spanish Town");
     expect(jobs[0]?.clientName).toBe("Basil Reid");
     expect(jobs[0]?.quoteCount).toBe(1);
@@ -887,7 +887,7 @@ describe("getJobs", () => {
 
   it("returns an empty list when the API is unreachable (no fixture fallback)", async () => {
     stubFetch(null);
-    const jobs = await getJobs();
+    const jobs = await getProjects();
     expect(jobs).toEqual([]);
   });
 });

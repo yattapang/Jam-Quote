@@ -31,9 +31,9 @@
  *
  *   MessageLog (-> Quote)
  *   Invoice (-> Quote, -> Client; cascades to Payment)
- *   Attachment (-> Job)
- *   Quote (-> Job, -> Client; cascades to QuoteSection, QuoteLineItem)
- *   Job (-> Client)
+ *   Attachment (-> Project)
+ *   Quote (-> Project, -> Client; cascades to QuoteSection, QuoteLineItem)
+ *   Project (-> Client)
  *   Client
  *   LabourRate, MaterialFavourite, EquipmentItem, Connection, Subscription
  *   User (businessId is nullable, but still an FK to Business)
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     quoteLineItemCount,
     quoteSectionCount,
     quoteCount,
-    jobCount,
+    projectCount,
     clientCount,
     labourRateCount,
     materialFavouriteCount,
@@ -95,16 +95,16 @@ async function main(): Promise<void> {
     attributeOptionCount,
     materialUnitCount,
     tradeCount,
-    assemblyCount,
+    jobTemplateCount,
   ] = await Promise.all([
     prisma.messageLog.count({ where: { quote: { businessId: business.id } } }),
     prisma.payment.count({ where: { invoice: { businessId: business.id } } }),
     prisma.invoice.count({ where: { businessId: business.id } }),
-    prisma.attachment.count({ where: { job: { businessId: business.id } } }),
+    prisma.attachment.count({ where: { project: { businessId: business.id } } }),
     prisma.quoteLineItem.count({ where: { quote: { businessId: business.id } } }),
     prisma.quoteSection.count({ where: { quote: { businessId: business.id } } }),
     prisma.quote.count({ where: { businessId: business.id } }),
-    prisma.job.count({ where: { businessId: business.id } }),
+    prisma.project.count({ where: { businessId: business.id } }),
     prisma.client.count({ where: { businessId: business.id } }),
     prisma.labourRate.count({ where: { businessId: business.id } }),
     prisma.materialFavourite.count({ where: { businessId: business.id } }),
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
     prisma.materialAttributeOption.count({ where: { businessId: business.id } }),
     prisma.materialUnit.count({ where: { businessId: business.id } }),
     prisma.trade.count({ where: { businessId: business.id } }),
-    prisma.assembly.count({ where: { businessId: business.id } }),
+    prisma.job.count({ where: { businessId: business.id } }),
   ]);
 
   // eslint-disable-next-line no-console
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`  ${quoteCount} quotes`);
   // eslint-disable-next-line no-console
-  console.log(`  ${jobCount} jobs`);
+  console.log(`  ${projectCount} projects`);
   // eslint-disable-next-line no-console
   console.log(`  ${clientCount} clients`);
   // eslint-disable-next-line no-console
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
   // eslint-disable-next-line no-console
   console.log(`  ${tradeCount} tenant-owned trades`);
   // eslint-disable-next-line no-console
-  console.log(`  ${assemblyCount} assemblies (job types)`);
+  console.log(`  ${jobTemplateCount} job templates`);
   // eslint-disable-next-line no-console
   console.log(
     "\nNOT touched: RegulatoryUpdate (platform-wide), the other seeded " +
@@ -207,15 +207,15 @@ async function main(): Promise<void> {
     //    rows go with it automatically.
     await tx.invoice.deleteMany({ where: { businessId: business.id } });
 
-    // 3. Attachment references Job (no cascade) — delete before Job.
-    await tx.attachment.deleteMany({ where: { job: { businessId: business.id } } });
+    // 3. Attachment references Project (no cascade) — delete before Project.
+    await tx.attachment.deleteMany({ where: { project: { businessId: business.id } } });
 
-    // 4. Quote references Job and Client (no cascade on either); cascades to
-    //    QuoteSection and QuoteLineItem itself.
+    // 4. Quote references Project and Client (no cascade on either); cascades
+    //    to QuoteSection and QuoteLineItem itself.
     await tx.quote.deleteMany({ where: { businessId: business.id } });
 
-    // 5. Job references Client (no cascade) — delete before Client.
-    await tx.job.deleteMany({ where: { businessId: business.id } });
+    // 5. Project references Client (no cascade) — delete before Client.
+    await tx.project.deleteMany({ where: { businessId: business.id } });
 
     // 6. Client.
     await tx.client.deleteMany({ where: { businessId: business.id } });

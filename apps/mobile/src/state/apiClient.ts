@@ -11,7 +11,7 @@
  * "API unreachable" (no dev server, LAN hiccup), not a real offline mode. They
  * are used ONLY for genuine network failures, never to paper over an
  * authentication/authorization failure — see ApiAuthError handling below and
- * in fetchQuoteRows/fetchClientRows/fetchJobRows.
+ * in fetchQuoteRows/fetchClientRows/fetchProjectRows.
  *
  * Base URL: on Expo web use the browser host; on a device derive the dev
  * machine's LAN IP from the Metro packager host (expo-constants) — a phone
@@ -24,10 +24,10 @@ import {
   STAGE_KIND,
   STATUS_PILL,
   clientRows as fixtureClientRows,
-  jobRows as fixtureJobRows,
+  projectRows as fixtureProjectRows,
   quoteListRows as fixtureQuoteRows,
   type ClientRow,
-  type JobRow,
+  type ProjectRow,
   type QuoteListRow,
 } from "./mockData";
 
@@ -188,7 +188,7 @@ interface ApiClientRow {
   phone?: string | null;
   parish?: string | null;
 }
-interface ApiJob {
+interface ApiProject {
   id: string;
   clientId?: string | null;
   name: string;
@@ -231,7 +231,7 @@ export function mapClientRow(c: ApiClientRow, totalCents: number, quoteCount: nu
   };
 }
 
-export function mapJobRow(j: ApiJob, clientName: string, valueCents: number): JobRow {
+export function mapProjectRow(j: ApiProject, clientName: string, valueCents: number): ProjectRow {
   return {
     id: j.id,
     name: j.name,
@@ -252,7 +252,7 @@ export async function fetchQuoteRows(): Promise<QuoteListRow[]> {
     const [quotes, clients, jobs] = await Promise.all([
       get<ApiQuote[]>("/quotes"),
       get<ApiClientRow[]>("/clients"),
-      get<ApiJob[]>("/jobs"),
+      get<ApiProject[]>("/jobs"),
     ]);
     const clientName = new Map(clients.map((c) => [c.id, c.name]));
     const jobName = new Map(jobs.map((j) => [j.id, j.name]));
@@ -286,17 +286,17 @@ export async function fetchClientRows(): Promise<ClientRow[]> {
   }
 }
 
-export async function fetchJobRows(): Promise<JobRow[]> {
+export async function fetchProjectRows(): Promise<ProjectRow[]> {
   try {
     const [jobs, clients, quotes] = await Promise.all([
-      get<ApiJob[]>("/jobs"),
+      get<ApiProject[]>("/jobs"),
       get<ApiClientRow[]>("/clients"),
       get<ApiQuote[]>("/quotes"),
     ]);
     const clientName = new Map(clients.map((c) => [c.id, c.name]));
     return jobs.map((j) => {
       const theirs = quotes.filter((q) => q.projectId === j.id);
-      return mapJobRow(
+      return mapProjectRow(
         j,
         clientName.get(j.clientId ?? "") ?? "Unknown",
         theirs.reduce((sum, q) => sum + q.totalCents, 0),
@@ -304,7 +304,7 @@ export async function fetchJobRows(): Promise<JobRow[]> {
     });
   } catch (err) {
     if (err instanceof ApiAuthError) throw err;
-    return fixtureJobRows;
+    return fixtureProjectRows;
   }
 }
 
@@ -312,7 +312,7 @@ export function deleteClient(id: string): Promise<void> {
   return del(`/clients/${id}`);
 }
 
-export function deleteJob(id: string): Promise<void> {
+export function deleteProject(id: string): Promise<void> {
   return del(`/jobs/${id}`);
 }
 

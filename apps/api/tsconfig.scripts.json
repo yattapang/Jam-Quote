@@ -1,0 +1,21 @@
+{
+  // The prisma/ scripts sit outside the build (tsconfig.json has rootDir
+  // "src"), so until this file existed they were never type-checked at all.
+  //
+  // That is a bad place to have a blind spot: seed.ts, cleanup-seed.ts and
+  // cleanup-demo-tenants.ts are the most destructive code in the repo, and
+  // they talk to Prisma directly. When the Job/Assembly models were renamed,
+  // cleanup-demo-tenants.ts kept calling prisma.job.count() — which still
+  // compiled in spirit but now counts the TEMPLATE table instead of client
+  // work, in the very guard that decides whether a tenant is safe to delete.
+  // Nothing caught it, because nothing was looking.
+  //
+  // noEmit + rootDir "." so this only ever checks; building is still
+  // tsconfig.json's job.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["prisma/**/*.ts"]
+}

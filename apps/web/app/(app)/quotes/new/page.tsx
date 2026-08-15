@@ -1,4 +1,4 @@
-import { getClients, getJobs, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
+import { getClients, getProjects, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "./QuoteBuilder";
 
 export const metadata = { title: "New quote · JamQuote" };
@@ -6,7 +6,7 @@ export const metadata = { title: "New quote · JamQuote" };
 export default async function NewQuotePage() {
   const [clients, jobs, favourites, assemblies, business] = await Promise.all([
     getClients(),
-    getJobs(),
+    getProjects(),
     getMaterialFavourites(),
     getAssemblies(),
     getBusiness(),

@@ -8,11 +8,11 @@ import {
   demoClients,
   demoClientQuoteCount,
   demoClientTotalCents,
-  demoJobs,
+  demoProjects,
   demoQuotes,
   demoQuoteTotals,
   findDemoClient,
-  findDemoJob,
+  findDemoProject,
   InvoiceStatus,
   PaymentMethod,
 } from "@jamquote/core";
@@ -96,7 +96,7 @@ export const quotes: Quote[] = demoQuotes.map((q) => ({
   num: q.number,
   clientId: q.clientId,
   projectId: q.projectId,
-  jobLabel: findDemoJob(q.projectId)?.name ?? "",
+  jobLabel: findDemoProject(q.projectId)?.name ?? "",
   status: q.status,
   lines: q.lines.map((l) => ({
     id: l.id,
@@ -121,7 +121,7 @@ export function findQuote(id: string): Quote | undefined {
   return quotes.find((q) => q.id === id);
 }
 
-export interface JobSummary {
+export interface ProjectSummary {
   id: string;
   name: string;
   clientName: string;
@@ -134,8 +134,8 @@ export interface JobSummary {
 }
 
 /** Jobs list — one canonical name/address per job, shared with mobile. */
-export const jobs: JobSummary[] = demoJobs.map((j) => {
-  const jobQuotes = demoQuotes.filter((q) => q.projectId === j.id);
+export const projects: ProjectSummary[] = demoProjects.map((j) => {
+  const projectQuotes = demoQuotes.filter((q) => q.projectId === j.id);
   return {
     id: j.id,
     name: j.name,
@@ -144,12 +144,12 @@ export const jobs: JobSummary[] = demoJobs.map((j) => {
     parish: j.parish,
     stage: j.stage,
     progressPct: j.progressPct,
-    quoteCount: jobQuotes.length,
-    valueCents: jobQuotes.reduce((sum, q) => sum + demoQuoteTotals(q).totalCents, 0),
+    quoteCount: projectQuotes.length,
+    valueCents: projectQuotes.reduce((sum, q) => sum + demoQuoteTotals(q).totalCents, 0),
   };
 });
 
-export interface JobDetail {
+export interface ProjectDetail {
   id: string;
   name: string;
   clientId: string;
@@ -161,10 +161,10 @@ export interface JobDetail {
   progressPct: number;
 }
 
-/** Single-job detail fixture — same fields as `jobs`, plus `clientId` for the
- * edit form's client select (list rows don't need it). */
-export function findJobDetail(id: string): JobDetail | undefined {
-  const j = findDemoJob(id);
+/** Single-job detail fixture — same fields as `projects`, plus `clientId` for
+ * the edit form's client select (list rows don't need it). */
+export function findProjectDetail(id: string): ProjectDetail | undefined {
+  const j = findDemoProject(id);
   if (!j) return undefined;
   return {
     id: j.id,

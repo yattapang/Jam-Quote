@@ -4,8 +4,8 @@ import { Alert, FlatList, Pressable, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { MoneyText, SignInPrompt, StatusPill } from "../../src/components";
-import { type JobRow } from "../../src/state/mockData";
-import { ApiAuthError, deleteJob, fetchJobRows } from "../../src/state/apiClient";
+import { type ProjectRow } from "../../src/state/mockData";
+import { ApiAuthError, deleteProject, fetchProjectRows } from "../../src/state/apiClient";
 import { useAuth } from "../../src/state/AuthContext";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { resolveFontFamily } from "../../src/theme/fontFamily";
@@ -17,12 +17,12 @@ export default function JobsListScreen() {
   const router = useRouter();
   const { isAuthenticated, initializing } = useAuth();
   // Every tenant route requires auth now — no rows until we know who's signed
-  // in. Fixtures only ever come back from fetchJobRows() itself, as a
+  // in. Fixtures only ever come back from fetchProjectRows() itself, as a
   // network-failure fallback.
-  const [rows, setRows] = useState<JobRow[]>([]);
+  const [rows, setRows] = useState<ProjectRow[]>([]);
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchJobRows()
+    fetchProjectRows()
       .then(setRows)
       .catch((err) => {
         // ApiAuthError: the central handler (AuthContext) already cleared the
@@ -39,7 +39,7 @@ export default function JobsListScreen() {
     );
   }
 
-  const handleDelete = (item: JobRow) => {
+  const handleDelete = (item: ProjectRow) => {
     Alert.alert(`Delete ${item.name}?`, "This permanently removes the job. This can't be undone.", [
       { text: "Cancel", style: "cancel" },
       {
@@ -47,7 +47,7 @@ export default function JobsListScreen() {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteJob(item.id);
+            await deleteProject(item.id);
             setRows((prev) => prev.filter((r) => r.id !== item.id));
           } catch (err) {
             Alert.alert("Couldn't delete job", err instanceof Error ? err.message : "Please try again.");

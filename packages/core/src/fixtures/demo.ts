@@ -40,7 +40,7 @@ export interface DemoClient {
   addressLine: string;
 }
 
-export interface DemoJob {
+export interface DemoProject {
   id: string;
   clientId: string;
   name: string; // one canonical label rendered by BOTH surfaces
@@ -85,7 +85,7 @@ export const demoClients: DemoClient[] = [
 // approval" is a quote nobody has answered yet (QUOTED), and "Invoiced" is
 // billing state, so it becomes WON. progressPct is left exactly as it was —
 // on a QUOTED job it simply stops being rendered (projectStageTracksProgress).
-export const demoJobs: DemoJob[] = [
+export const demoProjects: DemoProject[] = [
   { id: "job-0142", clientId: "cl-basil-reid", name: "Retaining wall, Spanish Town", addressLine: "Lot 14 Bloxburgh Dr, Spanish Town", parish: "St. Catherine", stage: ProjectStage.IN_PROGRESS, progressPct: 62 },
   { id: "job-0141", clientId: "cl-paulette-wright", name: "Bathroom remodel, Portmore", addressLine: "22 Passage Fort Dr, Portmore", parish: "St. Catherine", stage: ProjectStage.QUOTED, progressPct: 20 },
   { id: "job-0140", clientId: "cl-devon-facey", name: "Fence & gate, St. Catherine", addressLine: "8 Angels, St. Andrew", parish: "St. Andrew", stage: ProjectStage.QUOTED, progressPct: 40 },
@@ -197,8 +197,8 @@ export function findDemoClient(id: string): DemoClient | undefined {
   return demoClients.find((c) => c.id === id);
 }
 
-export function findDemoJob(id: string): DemoJob | undefined {
-  return demoJobs.find((j) => j.id === id);
+export function findDemoProject(id: string): DemoProject | undefined {
+  return demoProjects.find((j) => j.id === id);
 }
 
 export function findDemoQuote(idOrNumber: string): DemoQuote | undefined {

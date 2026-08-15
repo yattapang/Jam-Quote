@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { demoQuoteTotals, findDemoQuote, formatJmd } from "@jamquote/core";
-import { clients, clientTotalCents, jobs, quotes } from "./mock-data";
+import { clients, clientTotalCents, projects, quotes } from "./mock-data";
 import { getQuoteTotals } from "./quote-totals";
 
 describe("web mock data derives amounts from the shared fixtures", () => {
@@ -27,11 +27,11 @@ describe("web mock data derives amounts from the shared fixtures", () => {
   });
 
   it("job values equal the sum of that job's quote totals", () => {
-    for (const job of jobs) {
-      expect(job.valueCents, job.name).toBeGreaterThanOrEqual(0);
+    for (const project of projects) {
+      expect(project.valueCents, project.name).toBeGreaterThanOrEqual(0);
     }
     // The retaining-wall job carries QT-0142's total.
-    const wall = jobs.find((j) => j.name.startsWith("Retaining wall"))!;
+    const wall = projects.find((j) => j.name.startsWith("Retaining wall"))!;
     expect(formatJmd(wall.valueCents)).toBe("$183,540.00");
   });
 });

@@ -9,14 +9,14 @@ import {
   ApiAuthError,
   apiBaseUrl,
   deleteClient,
-  deleteJob,
+  deleteProject,
   deleteQuote,
   fetchClientRows,
-  fetchJobRows,
+  fetchProjectRows,
   fetchQuoteRows,
   initialsOf,
   mapClientRow,
-  mapJobRow,
+  mapProjectRow,
   mapQuoteRow,
   setAuthToken,
   setUnauthorizedHandler,
@@ -53,7 +53,7 @@ const apiQuote = {
   totalCents: 18_354_000,
 };
 const apiClientRow = { id: "cl-basil-reid", name: "Basil Reid", phone: "876 402 8811", parish: "St. Catherine" };
-const apiJob = {
+const apiProject = {
   id: "job-0142",
   clientId: "cl-basil-reid",
   name: "Retaining wall, Spanish Town",
@@ -92,11 +92,11 @@ describe("pure mappers", () => {
     });
   });
 
-  it("mapJobRow keeps the stage value and maps it to a pill kind", () => {
+  it("mapProjectRow keeps the stage value and maps it to a pill kind", () => {
     // The row carries the ENUM, not its label: the screen needs the value to
     // decide whether the progress bar means anything, and the label itself
     // comes from PROJECT_STAGE_LABELS so it matches web exactly.
-    expect(mapJobRow(apiJob, "Basil Reid", 18_354_000)).toEqual({
+    expect(mapProjectRow(apiProject, "Basil Reid", 18_354_000)).toEqual({
       id: "job-0142",
       name: "Retaining wall, Spanish Town",
       clientName: "Basil Reid",
@@ -110,7 +110,7 @@ describe("pure mappers", () => {
 
   it("maps every stage to a pill kind — no stage renders as an unstyled pill", () => {
     for (const stage of PROJECT_STAGES) {
-      const row = mapJobRow({ ...apiJob, stage }, "Basil Reid", 0);
+      const row = mapProjectRow({ ...apiProject, stage }, "Basil Reid", 0);
       expect(row.kind).toBe(STAGE_KIND[stage]);
       expect(PROJECT_STAGE_LABELS[row.stage]).toBeTruthy();
     }
@@ -128,7 +128,7 @@ describe("fetchQuoteRows", () => {
     stubFetch({
       "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140" }],
       "/clients": [apiClientRow],
-      "/jobs": [apiJob],
+      "/jobs": [apiProject],
     });
     const rows = await fetchQuoteRows();
     expect(rows.map((r) => r.num)).toEqual(["QT-0142", "QT-0140"]);
@@ -175,10 +175,10 @@ describe("fetchClientRows", () => {
   });
 });
 
-describe("fetchJobRows", () => {
+describe("fetchProjectRows", () => {
   it("joins client names and sums quote totals", async () => {
-    stubFetch({ "/jobs": [apiJob], "/clients": [apiClientRow], "/quotes": [apiQuote] });
-    const rows = await fetchJobRows();
+    stubFetch({ "/jobs": [apiProject], "/clients": [apiClientRow], "/quotes": [apiQuote] });
+    const rows = await fetchProjectRows();
     expect(rows[0]?.name).toBe("Retaining wall, Spanish Town");
     expect(rows[0]?.clientName).toBe("Basil Reid");
     expect(rows[0]?.valueCents).toBe(18_354_000);
@@ -186,7 +186,7 @@ describe("fetchJobRows", () => {
 
   it("falls back to fixtures on a network failure", async () => {
     stubFetch(null);
-    const rows = await fetchJobRows();
+    const rows = await fetchProjectRows();
     expect(rows.length).toBeGreaterThan(0);
   });
 
@@ -195,7 +195,7 @@ describe("fetchJobRows", () => {
       "fetch",
       vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}) }) as unknown as Response),
     );
-    await expect(fetchJobRows()).rejects.toBeInstanceOf(ApiAuthError);
+    await expect(fetchProjectRows()).rejects.toBeInstanceOf(ApiAuthError);
   });
 });
 
@@ -215,9 +215,9 @@ describe("delete helpers", () => {
     );
   });
 
-  it("deleteJob issues a DELETE", async () => {
+  it("deleteProject issues a DELETE", async () => {
     const fetchMock = stubDelete();
-    await deleteJob("job-0142");
+    await deleteProject("job-0142");
     expect(fetchMock).toHaveBeenCalledWith(
       "http://10.0.0.5:3001/api/jobs/job-0142",
       expect.objectContaining({ method: "DELETE" }),
@@ -280,7 +280,7 @@ describe("central 401/403 handling", () => {
       "fetch",
       vi.fn(async () => ({ ok: false, status: 403, json: async () => ({}) }) as unknown as Response),
     );
-    await expect(deleteJob("job-1")).rejects.toBeInstanceOf(ApiAuthError);
+    await expect(deleteProject("job-1")).rejects.toBeInstanceOf(ApiAuthError);
     expect(handler).toHaveBeenCalledWith(403);
   });
 

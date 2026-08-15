@@ -4,7 +4,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import { getReports } from "@/lib/api-server";
 import { REPORT_PERIODS, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
-import { jobStagePill } from "@/lib/status";
+import { projectStagePill } from "@/lib/status";
 import { PROJECT_STAGES } from "@jamquote/core";
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
@@ -198,15 +198,15 @@ export default async function ReportsPage({
           <Card>
             <div className={shared.statLabel}>Jobs created</div>
             <span className="jq-numeral" style={{ fontSize: 24, fontWeight: 800 }}>
-              {reports.jobs.jobsCreated}
+              {reports.projects.projectsCreated}
             </span>
             <div className={styles.stageList}>
               {PROJECT_STAGES.map((stage) => {
-                const pill = jobStagePill(stage);
+                const pill = projectStagePill(stage);
                 return (
                   <div key={stage} className={styles.stageRow}>
                     <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
-                    <span className={styles.stageCount}>{reports.jobs.jobsByStage[stage]}</span>
+                    <span className={styles.stageCount}>{reports.projects.projectsByStage[stage]}</span>
                   </div>
                 );
               })}
@@ -216,14 +216,14 @@ export default async function ReportsPage({
           <Card>
             <div className={shared.statLabel}>Top clients by jobs</div>
             <div className={shared.list} style={{ marginTop: 14 }}>
-              {reports.jobs.topClientsByJobs.length === 0 ? (
+              {reports.projects.topClientsByProjects.length === 0 ? (
                 <div className={shared.empty}>No jobs created in this period.</div>
               ) : (
-                reports.jobs.topClientsByJobs.map((c) => (
+                reports.projects.topClientsByProjects.map((c) => (
                   <div key={c.clientId ?? "no-client"} className={shared.row}>
                     <span className={shared.rowTitle}>{c.clientName}</span>
                     <span className={shared.rowSub}>
-                      {c.jobCount} job{c.jobCount === 1 ? "" : "s"}
+                      {c.projectCount} job{c.projectCount === 1 ? "" : "s"}
                     </span>
                   </div>
                 ))

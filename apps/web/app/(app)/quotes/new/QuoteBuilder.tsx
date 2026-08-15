@@ -10,8 +10,8 @@ import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
 import { createQuote, updateQuote, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
-import JobSelectField from "@/components/forms/JobSelectField";
-import type { ClientOption, JobOption } from "@/components/forms/types";
+import ProjectSelectField from "@/components/forms/ProjectSelectField";
+import type { ClientOption, ProjectOption } from "@/components/forms/types";
 import type { Assembly, MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
 import LineItemsEditor from "../../LineItemsEditor";
@@ -65,7 +65,7 @@ function initialValidDays(initial?: InitialQuote): number {
 
 export default function QuoteBuilder({
   clients: initialClients,
-  jobs: initialJobs,
+  jobs: initialProjects,
   favourites: initialFavourites = [],
   assemblies = [],
   mode = "create",
@@ -74,7 +74,7 @@ export default function QuoteBuilder({
   gctRatePct = DEFAULT_GCT_RATE,
 }: {
   clients: ClientOption[];
-  jobs: JobOption[];
+  jobs: ProjectOption[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". Each
@@ -93,7 +93,7 @@ export default function QuoteBuilder({
   const isEdit = mode === "edit" && !!quoteId;
   const backHref = isEdit ? `/quotes/${quoteId}` : "/quotes";
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
-  const [projectId, setJobId] = useState(initial?.projectId ?? "");
+  const [projectId, setProjectId] = useState(initial?.projectId ?? "");
   const [discountPct, setDiscountPct] = useState(String(initial?.discountPct ?? 0));
   const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
   const [validDays, setValidDays] = useState(String(initialValidDays(initial)));
@@ -110,7 +110,7 @@ export default function QuoteBuilder({
   // "+ Add new job…") so it appears immediately in the picker without
   // navigating away or losing the in-progress quote.
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
-  const [jobs, setJobs] = useState<JobOption[]>(initialJobs);
+  const [projects, setProjects] = useState<ProjectOption[]>(initialProjects);
   // Per-quote presentation setting: SUMMARY (each job-type line as one priced
   // row) vs DETAILED (expand its component snapshot on the quote/PDF). Display
   // only — never affects totals.
@@ -196,12 +196,12 @@ export default function QuoteBuilder({
         <div className={shared.list}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <ClientSelectField clients={clients} value={clientId} onChange={setClientId} onCreated={(c) => setClients((cs) => [...cs, c])} />
-            <JobSelectField
-              jobs={jobs}
+            <ProjectSelectField
+              projects={projects}
               clients={clients}
               value={projectId}
-              onChange={setJobId}
-              onCreated={(j) => setJobs((js) => [...js, j])}
+              onChange={setProjectId}
+              onCreated={(j) => setProjects((js) => [...js, j])}
               onClientCreated={(c) => setClients((cs) => [...cs, c])}
             />
           </div>
