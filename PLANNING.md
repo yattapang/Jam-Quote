@@ -40,19 +40,16 @@ Rules:
 
 - Variables and services follow the Prisma model name; translation to user
   wording happens at the render boundary only.
-- **Wire contract is frozen.** These stayed unrenamed on purpose, because a
-  deployed mobile client sends them: the scalar FKs `jobId` and `assemblyId`,
-  and the line-item snapshot fields `assemblyName`, `assemblyUnit`,
-  `assemblyComponents`. Enum VALUES are likewise untouched — they are
-  persisted. Renaming any of these is a breaking API change, not a cleanup.
-- **Known residual, to clear during the Phase 1 UI rename.** Some
-  non-Prisma identifiers still say "job" meaning client work: `ReportJob`,
-  `JobsSummary`, `jobsByStage`, `ClientJobCount` in
-  `packages/core/src/reports/summary.ts`; `DemoJob`/`demoJobs` in fixtures;
-  `JobForm`, `JobRow`, `JobSummary`, `JobDetail`, `jobStagePill` in web.
-  These are view types, not Prisma models, so they were deliberately left out
-  of step 0 to keep a mechanical rename free of UI judgement. Rename them
-  with the screens so the two stay consistent.
+- **Wire contract: UNFROZEN as of 2026-08-15.** The deployed mobile client is
+  being rebuilt, so backward compatibility with it is no longer a constraint,
+  and the API field names get fixed properly in steps 0c/0d rather than
+  carrying the old vocabulary forever. This was the right call to revisit:
+  the only reason to keep `assemblyId` on a line item was a client we are
+  about to replace.
+- **Enum VALUES stay untouched regardless** (`QUOTED`, `MATERIAL`, …). Those
+  are persisted in the database, not just sent over the wire — renaming them
+  is a data migration and a corruption risk, which is a different question
+  entirely from what a JSON key is called.
 - Test mocks typed `as any` opt out of this protection entirely — the
   assemblies service test compiled fine against a renamed model and failed
   only at runtime. Prefer typed mocks where practical.
@@ -115,6 +112,34 @@ Two commits that never shared a name: 0a vacated `job` by renaming client
 work to `Project`, 0b then gave `job` to the template. Every stale reference
 was a compile error rather than a reference that still compiled while meaning
 something else. Both verified to generate zero SQL.
+
+**Steps 0c/0d — finish the rename through the wire and the view types.**
+
+Now unblocked: the deployed mobile client is being rebuilt, so the API field
+names are no longer pinned by a client we cannot change. Same two-step
+vacate-then-occupy discipline, for the same reason — `jobId` is about to
+change meaning, and a swap done in one pass would leave code that compiles
+while referring to the wrong thing.
+
+- **0c — vacate `job` in the wire and the view types.** `Quote.jobId` /
+  `Attachment.jobId` → `projectId` (Prisma field with `@map("jobId")` so the
+  column is untouched and no SQL is generated), the matching API DTO and
+  JSON keys, the sync payload's `jobs` table key → `projects`, and the view
+  types that mean client work: `ReportJob` → `ReportProject`, `JobsSummary`,
+  `jobsByStage`, `ClientJobCount`, `DemoJob`/`demoJobs`, and web's `JobForm`,
+  `JobRow`, `JobSummary`, `JobDetail`, `jobStagePill`.
+- **0d — give `job` to the template.** Line-item snapshot fields
+  `assemblyId` / `assemblyName` / `assemblyUnit` / `assemblyComponents` →
+  `jobId` / `jobName` / `jobUnit` / `jobComponents`; `JobComponent.assemblyId`
+  → `jobId` (again `@map`, no SQL); web's `Assembly`/`AssemblyComponent` view
+  types → `Job`/`JobComponent`; `AssemblyForm` → `JobForm` (the name freed by
+  0c).
+
+**Deployment note.** These change the JSON contract, so the API and web must
+ship together. During any window where one is new and the other is old,
+affected requests fail. Acceptable here — three tenants, one of them ours,
+pre-launch — but it is a real window and should not be assumed away. Deploy
+API and web in the same push and check a quote round-trips afterwards.
 
 Then, the findability work:
 
