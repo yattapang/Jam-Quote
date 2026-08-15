@@ -4,7 +4,6 @@ import {
   buildSearchText,
   composeMaterialName,
   normalizeOptionValue,
-  sellUnitsRequired,
   slugifyKey,
   type AttributeShape,
 } from "./material-schema.js";
@@ -96,28 +95,8 @@ describe("buildSearchText", () => {
   });
 });
 
-describe("sellUnitsRequired", () => {
-  it("rounds up to whole purchase units — you cannot buy 0.4 of a box", () => {
-    // 400 sq ft measured, each box covers 12 sq ft -> 33.3 -> 34
-    expect(sellUnitsRequired(400, 12, null)).toBe(34);
-  });
-
-  it("applies waste BEFORE rounding so the allowance is not swallowed by it", () => {
-    // 100 / 12 = 8.33 -> 9 without waste; +10% = 110/12 = 9.17 -> 10.
-    expect(sellUnitsRequired(100, 12, null)).toBe(9);
-    expect(sellUnitsRequired(100, 12, 10)).toBe(10);
-  });
-
-  it("returns null when no coverage is configured, which is the normal case", () => {
-    expect(sellUnitsRequired(400, null, null)).toBeNull();
-    expect(sellUnitsRequired(400, 0, null)).toBeNull();
-  });
-
-  it("returns 0 rather than NaN for a nonsense measured quantity", () => {
-    expect(sellUnitsRequired(0, 12, null)).toBe(0);
-    expect(sellUnitsRequired(Number.NaN, 12, null)).toBe(0);
-  });
-});
+// sellUnitsRequired's own tests moved with it to
+// packages/core/src/quote/coverage.test.ts. It is only re-exported here.
 
 // ---------------------------------------------------------------------------
 

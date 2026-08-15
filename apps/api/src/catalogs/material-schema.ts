@@ -78,21 +78,8 @@ export function buildSearchText(
 }
 
 /**
- * How many whole sell units to buy for a measured quantity — the one
- * conversion #26 accepts (see the units decision). Rounds UP, because you
- * cannot buy 0.4 of a box, and applies wastePct as overage BEFORE rounding so
- * the waste allowance can't be swallowed by the rounding step.
- *
- * Returns null when the material has no coverage configured, which is the
- * normal case; callers then use the measured quantity as-is.
+ * Re-exported from @jamquote/core, where it now lives so the web quote builder
+ * and mobile can show the same figure as the API stores. Kept exported here so
+ * existing importers of this module are unaffected; there is one implementation.
  */
-export function sellUnitsRequired(
-  measuredQty: number,
-  coveragePerSellUnit: number | null | undefined,
-  wastePct: number | null | undefined,
-): number | null {
-  if (!coveragePerSellUnit || coveragePerSellUnit <= 0) return null;
-  if (!Number.isFinite(measuredQty) || measuredQty <= 0) return 0;
-  const withWaste = measuredQty * (1 + (wastePct ?? 0) / 100);
-  return Math.ceil(withWaste / coveragePerSellUnit);
-}
+export { sellUnitsRequired } from "@jamquote/core";

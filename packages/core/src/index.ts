@@ -4,6 +4,7 @@ export * from "./types/validators.js";
 export * from "./tax/money.js";
 export * from "./quote/totals.js";
 export * from "./quote/assembly.js";
+export * from "./quote/coverage.js";
 export * from "./dashboard/stats.js";
 export * from "./reports/summary.js";
 export * from "./jurisdiction/jurisdiction.js";
