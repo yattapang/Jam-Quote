@@ -112,6 +112,17 @@ export interface MaterialFavourite {
    * the API's GET /catalogs/material-favourites `q` param alongside name and
    * specs values. */
   description?: string;
+  /** The unit the contractor MEASURES the job in (e.g. "m²", "sq ft") — distinct
+   * from `unit`/`unitId`, which is how the material is SOLD (e.g. "box"). Only
+   * meaningful alongside coveragePerSellUnit; see packages/core's coverage.ts. */
+  measureUnit?: string;
+  /** How much of measureUnit one sell unit covers (e.g. 1.5 m² per box). Null/
+   * undefined means this material has no coverage configured — the normal case —
+   * and quote lines use the measured quantity as-is. */
+  coveragePerSellUnit?: number;
+  /** Waste allowance percentage applied before rounding up to whole sell units
+   * (e.g. 10 for 10%). Only meaningful alongside coveragePerSellUnit. */
+  wastePct?: number;
 }
 
 /** A reusable labour rate a contractor keeps on hand for quoting (mirrors the

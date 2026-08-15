@@ -400,6 +400,10 @@ export function mapMaterialFavourite(m: ApiMaterialFavourite): MaterialFavourite
     category: m.category ?? undefined,
     specs: m.specs ?? undefined,
     description: m.description ?? undefined,
+    measureUnit: m.measureUnit ?? undefined,
+    // Prisma Decimal arrives as a numeric string over JSON.
+    coveragePerSellUnit: m.coveragePerSellUnit == null ? undefined : Number(m.coveragePerSellUnit),
+    wastePct: m.wastePct == null ? undefined : Number(m.wastePct),
   };
 }
 

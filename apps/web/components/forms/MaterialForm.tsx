@@ -45,6 +45,16 @@ export interface MaterialFormValues {
    * label; the migration rewrote existing rows). */
   specs: Record<string, string>;
   description: string;
+  /** The unit the contractor MEASURES the job in (e.g. "m²", "sq ft") — free
+   * text, distinct from unitId (how the material is SOLD). Only meaningful
+   * alongside coveragePerSellUnit/wastePct below. */
+  measureUnit: string;
+  /** How much of measureUnit one sell unit covers, e.g. "1.5" m² per box.
+   * Kept as a string like the other numeric fields until submit. */
+  coveragePerSellUnit: string;
+  /** Waste allowance percentage (0-100), applied before rounding up to whole
+   * sell units at quote time. */
+  wastePct: string;
 }
 
 export const emptyMaterialForm: MaterialFormValues = {
@@ -56,6 +66,9 @@ export const emptyMaterialForm: MaterialFormValues = {
   categoryDefId: "",
   specs: {},
   description: "",
+  measureUnit: "",
+  coveragePerSellUnit: "",
+  wastePct: "",
 };
 
 /** Prefills the form from an existing saved material (edit flow). */
@@ -71,6 +84,9 @@ export function materialFormValuesFromMaterial(m: MaterialFavourite): MaterialFo
     categoryDefId: m.categoryDefId ?? "",
     specs: m.specs ?? {},
     description: m.description ?? "",
+    measureUnit: m.measureUnit ?? "",
+    coveragePerSellUnit: m.coveragePerSellUnit != null ? String(m.coveragePerSellUnit) : "",
+    wastePct: m.wastePct != null ? String(m.wastePct) : "",
   };
 }
 
@@ -105,6 +121,13 @@ export function materialPayloadFromValues(
     priceCents: Math.round((Number(values.priceDollars) || 0) * 100),
     specs: Object.keys(specs).length ? specs : undefined,
     description: values.description.trim() || undefined,
+    measureUnit: values.measureUnit.trim() || undefined,
+    ...(values.coveragePerSellUnit.trim() && Number(values.coveragePerSellUnit) > 0
+      ? { coveragePerSellUnit: Number(values.coveragePerSellUnit) }
+      : {}),
+    ...(values.wastePct.trim() && Number.isFinite(Number(values.wastePct))
+      ? { wastePct: Number(values.wastePct) }
+      : {}),
   };
 }
 
@@ -190,6 +213,13 @@ export default function MaterialForm({
   const category = useMemo(
     () => categories.find((c) => c.id === values.categoryDefId),
     [categories, values.categoryDefId],
+  );
+  // Drives the "Covers per <unit>" label below — reads naturally ("Covers per
+  // box") only once a sold-by unit is actually chosen; otherwise falls back
+  // to a generic phrase rather than showing nothing.
+  const soldByUnit = useMemo(
+    () => units.find((u) => u.id === values.unitId),
+    [units, values.unitId],
   );
 
   // Only price and supplier move — the contractor's name, category and specs
@@ -450,6 +480,41 @@ export default function MaterialForm({
         />
       )}
       {unitNote && <span className={fieldStyles.hint}>{unitNote}</span>}
+
+      <div className={styles.coverageGroup}>
+        <span className={fieldStyles.hint}>
+          Lets you enter a measured quantity on a quote (e.g. 40 m²) and have
+          JamQuote work out how many {soldByUnit ? soldByUnit.label : "sell units"} to
+          buy. Optional — fill in any of these, or none.
+        </span>
+        <div className={styles.coverageRow}>
+          <Input
+            label="Measured in"
+            placeholder="e.g. m², sq ft, litre"
+            value={values.measureUnit}
+            onChange={(e) => set("measureUnit", e.target.value)}
+          />
+          <Input
+            label={`Covers per ${soldByUnit ? soldByUnit.label : "sell unit"}`}
+            type="number"
+            min={0}
+            step="any"
+            placeholder="e.g. 1.5"
+            value={values.coveragePerSellUnit}
+            onChange={(e) => set("coveragePerSellUnit", e.target.value)}
+          />
+          <Input
+            label="Waste %"
+            type="number"
+            min={0}
+            max={100}
+            step="any"
+            placeholder="e.g. 10"
+            value={values.wastePct}
+            onChange={(e) => set("wastePct", e.target.value)}
+          />
+        </div>
+      </div>
 
       <label className={fieldStyles.field}>
         <span className={fieldStyles.label}>Description</span>

@@ -20,3 +20,28 @@
     align-items: stretch;
   }
 }
+
+/* The optional "Coverage" group — boxed like .addRow so it reads as one
+   related unit rather than three more form fields, since the three values
+   are only meaningful together (see the hint text rendered inside it). */
+.coverageGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--jq-border);
+  border-radius: 10px;
+  background: var(--jq-surface-alt);
+}
+
+.coverageRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .coverageRow {
+    grid-template-columns: 1fr;
+  }
+}

@@ -9,11 +9,11 @@
  * the two builders, neither of which can be render-tested in this repo.
  * Money is always integer cents.
  */
-import { GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
+import { coverageBreakdown, GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
 import type { InvoiceLineItemInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
 import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
-import type { Assembly, LabourRate, QuoteLineAssemblyComponent } from "./types";
+import type { Assembly, LabourRate, MaterialFavourite, QuoteLineAssemblyComponent } from "./types";
 
 /** Heading-dropdown sentinel meaning "let me name a new one", never a value. */
 export const ADD_HEADING_VALUE = "__add_heading__";
@@ -388,4 +388,93 @@ export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
  * `unitLabel` reaches an invoice exactly as it reaches a quote. */
 export function lineToInvoiceLineInput(l: DraftLine, sort: number): InvoiceLineItemInput {
   return { ...lineToLineInput(l), sort };
+}
+
+// --- Coverage (measured quantity -> sell-unit quantity) --------------------
+//
+// A contractor measures a job in one unit (40 m² of wall) and buys in
+// another (boxes of tile) — packages/core's coverage.ts does that
+// conversion. What lives here is purely: does THIS line's picked material
+// have coverage configured, and if so, what does a typed measured quantity
+// turn into. The measured quantity itself is NOT part of DraftLine — see
+// LineItemsEditor, which keeps it as local per-line editor state — so
+// nothing here reads or writes it directly; callers pass it in as plain text.
+
+/** A picked material's coverage setup. Both a measure unit and a positive
+ * coveragePerSellUnit are required — coverage with no measure unit is an
+ * unlabelled number (see MaterialForm's Coverage group), so a material
+ * missing either is treated the same as one with no coverage configured. */
+export interface CoverageConfig {
+  measureUnit: string;
+  coveragePerSellUnit: number;
+  wastePct?: number;
+}
+
+/** Reads a coverage config off a material favourite, or null when it has
+ * none configured (the normal case) or only half-configured one. */
+export function coverageConfigFromFavourite(
+  fav: Pick<MaterialFavourite, "measureUnit" | "coveragePerSellUnit" | "wastePct"> | undefined,
+): CoverageConfig | null {
+  const measureUnit = fav?.measureUnit?.trim();
+  if (!fav || !measureUnit || !fav.coveragePerSellUnit || fav.coveragePerSellUnit <= 0) return null;
+  return { measureUnit, coveragePerSellUnit: fav.coveragePerSellUnit, wastePct: fav.wastePct };
+}
+
+/** A line's coverage config, looked up from the favourites list by
+ * materialFavouriteId rather than stored on DraftLine itself — the config
+ * belongs to the material, not the line, and a line whose description has
+ * been hand-edited since picking (which clears materialFavouriteId — see
+ * patchLine) no longer reliably represents that material. */
+export function coverageConfigForLine(
+  line: Pick<DraftLine, "materialFavouriteId">,
+  favourites: readonly MaterialFavourite[],
+): CoverageConfig | null {
+  if (!line.materialFavouriteId) return null;
+  return coverageConfigFromFavourite(favourites.find((f) => f.id === line.materialFavouriteId));
+}
+
+/** Trims float noise (44.00000000001) without padding a whole number with
+ * decimals, for the explanation string below. */
+function formatQty(n: number): string {
+  return Number(n.toFixed(2)).toString();
+}
+
+export interface CoverageComputation {
+  /** The line's new SELL-UNIT quantity (e.g. "12" boxes) — this is what must
+   * land in DraftLine.quantity. See computeCoverageQuantity's own doc for
+   * why this is never the measured quantity. */
+  quantity: string;
+  /** Plain-text working to show under the measured-quantity input, e.g.
+   * "40 m² + 10% waste = 44 m² → 12 box". */
+  explanation: string;
+}
+
+/**
+ * Turns a measured-quantity input into the line's sell-unit quantity plus
+ * the working to show for it.
+ *
+ * Returns null for a blank or non-positive measured quantity, so callers
+ * leave the line's existing `quantity` untouched rather than stomping a real
+ * value with zero the moment the field is cleared.
+ *
+ * CRITICAL: the returned `quantity` is the SELL-UNIT count (boxes), never
+ * the measured quantity (m²) — unitPriceCents is priced per sell unit, and
+ * computeTotals multiplies the two directly. A caller that writes the
+ * measured quantity into DraftLine.quantity instead would invoice the wrong
+ * count entirely (40 boxes instead of 12).
+ */
+export function computeCoverageQuantity(
+  measuredQtyText: string,
+  config: CoverageConfig,
+  sellUnitLabel: string,
+): CoverageComputation | null {
+  const measuredQty = Number(measuredQtyText);
+  if (!measuredQtyText.trim() || !Number.isFinite(measuredQty) || measuredQty <= 0) return null;
+  const result = coverageBreakdown(measuredQty, config.coveragePerSellUnit, config.wastePct);
+  if (!result) return null;
+  const wastePart = config.wastePct ? ` + ${formatQty(config.wastePct)}% waste` : "";
+  const explanation =
+    `${formatQty(measuredQty)} ${config.measureUnit}${wastePart} = ` +
+    `${formatQty(result.withWasteQty)} ${config.measureUnit} → ${result.sellUnits} ${sellUnitLabel}`;
+  return { quantity: String(result.sellUnits), explanation };
 }

@@ -8,6 +8,9 @@ import {
 import {
   assemblyLine,
   categoryForLabel,
+  computeCoverageQuantity,
+  coverageConfigForLine,
+  coverageConfigFromFavourite,
   customHeadingsFromInitial,
   draftLineFromInitial,
   fromCents,
@@ -28,11 +31,12 @@ import {
   unitValue,
   toCents,
   valueToHeading,
+  type CoverageConfig,
   type DraftLine,
   type Heading,
   type InitialLine,
 } from "./line-editor";
-import type { Assembly, LabourRate } from "./types";
+import type { Assembly, LabourRate, MaterialFavourite } from "./types";
 
 function line(over: Partial<DraftLine> = {}): DraftLine {
   return { ...newLine(), ...over };
@@ -490,5 +494,120 @@ describe("unitValue / applyUnitChoice — routing to the right field", () => {
   it("round-trips: what unitValue shows is what applyUnitChoice accepts", () => {
     const line = { rateUnit: RateUnit.WEEK };
     expect(applyUnitChoice(unitValue(line))).toEqual({ rateUnit: RateUnit.WEEK, unitLabel: undefined });
+  });
+});
+
+function favourite(over: Partial<MaterialFavourite> = {}): MaterialFavourite {
+  return {
+    id: "f1",
+    name: "Tile",
+    priceCents: 250_000,
+    priceDollars: 2500,
+    ...over,
+  };
+}
+
+describe("coverageConfigFromFavourite", () => {
+  it("reads a fully-configured material's coverage setup", () => {
+    expect(
+      coverageConfigFromFavourite(
+        favourite({ measureUnit: "m²", coveragePerSellUnit: 1.5, wastePct: 10 }),
+      ),
+    ).toEqual({ measureUnit: "m²", coveragePerSellUnit: 1.5, wastePct: 10 });
+  });
+
+  it("is null for a material with no coverage configured — the normal case", () => {
+    expect(coverageConfigFromFavourite(favourite())).toBeNull();
+  });
+
+  it("is null when coveragePerSellUnit is set but measureUnit is missing", () => {
+    // Coverage with no measure unit is an unlabelled number.
+    expect(coverageConfigFromFavourite(favourite({ coveragePerSellUnit: 1.5 }))).toBeNull();
+  });
+
+  it("is null when measureUnit is set but coveragePerSellUnit is missing", () => {
+    expect(coverageConfigFromFavourite(favourite({ measureUnit: "m²" }))).toBeNull();
+  });
+
+  it("is null for a zero or negative coveragePerSellUnit", () => {
+    expect(coverageConfigFromFavourite(favourite({ measureUnit: "m²", coveragePerSellUnit: 0 }))).toBeNull();
+    expect(coverageConfigFromFavourite(favourite({ measureUnit: "m²", coveragePerSellUnit: -1 }))).toBeNull();
+  });
+
+  it("is null when the favourite itself is undefined", () => {
+    expect(coverageConfigFromFavourite(undefined)).toBeNull();
+  });
+});
+
+describe("coverageConfigForLine", () => {
+  const favourites = [
+    favourite({ id: "f1", measureUnit: "m²", coveragePerSellUnit: 1.5, wastePct: 10 }),
+    favourite({ id: "f2", name: "Sand" }),
+  ];
+
+  it("looks up the line's picked material by materialFavouriteId", () => {
+    expect(coverageConfigForLine({ materialFavouriteId: "f1" }, favourites)).toEqual({
+      measureUnit: "m²",
+      coveragePerSellUnit: 1.5,
+      wastePct: 10,
+    });
+  });
+
+  it("is null for a line with no picked material", () => {
+    expect(coverageConfigForLine({ materialFavouriteId: undefined }, favourites)).toBeNull();
+  });
+
+  it("is null when the picked material has no coverage configured", () => {
+    expect(coverageConfigForLine({ materialFavouriteId: "f2" }, favourites)).toBeNull();
+  });
+
+  it("is null when materialFavouriteId points at nothing in the list", () => {
+    expect(coverageConfigForLine({ materialFavouriteId: "missing" }, favourites)).toBeNull();
+  });
+});
+
+describe("computeCoverageQuantity", () => {
+  const config: CoverageConfig = { measureUnit: "m²", coveragePerSellUnit: 4, wastePct: 10 };
+
+  it("rounds up to whole sell units and explains the working, waste included", () => {
+    // 40 m² + 10% waste = 44 m² / 4 m² per box = 11 boxes exactly.
+    const result = computeCoverageQuantity("40", config, "box");
+    expect(result).toEqual({
+      quantity: "11",
+      explanation: "40 m² + 10% waste = 44 m² → 11 box",
+    });
+  });
+
+  it("rounds UP a non-exact division rather than truncating", () => {
+    // 10 m² + 10% waste = 11 m² / 4 = 2.75 -> 3 boxes, not 2.
+    const result = computeCoverageQuantity("10", config, "box");
+    expect(result?.quantity).toBe("3");
+  });
+
+  it("omits the waste clause when wastePct is unset", () => {
+    const noWaste: CoverageConfig = { measureUnit: "m²", coveragePerSellUnit: 4 };
+    const result = computeCoverageQuantity("40", noWaste, "box");
+    expect(result?.explanation).toBe("40 m² = 40 m² → 10 box");
+  });
+
+  it("is null for a blank measured quantity — callers must leave `quantity` untouched", () => {
+    expect(computeCoverageQuantity("", config, "box")).toBeNull();
+    expect(computeCoverageQuantity("   ", config, "box")).toBeNull();
+  });
+
+  it("is null for a zero or negative measured quantity", () => {
+    expect(computeCoverageQuantity("0", config, "box")).toBeNull();
+    expect(computeCoverageQuantity("-5", config, "box")).toBeNull();
+  });
+
+  it("is null for unparseable text", () => {
+    expect(computeCoverageQuantity("abc", config, "box")).toBeNull();
+  });
+
+  it("returns the SELL-UNIT count, never the measured quantity — the line's quantity " +
+    "must stay boxes, not m², or every total computed from it is wrong", () => {
+    const result = computeCoverageQuantity("40", config, "box");
+    expect(result?.quantity).not.toBe("40");
+    expect(Number(result?.quantity)).toBeLessThan(40);
   });
 });

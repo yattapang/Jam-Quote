@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
+import fieldStyles from "@/components/ui/Field.module.css";
 import MoneyText from "@/components/ui/MoneyText";
 import MaterialForm, {
   InlineAddRow,
@@ -26,6 +27,9 @@ import {
   ADD_HEADING_VALUE,
   assemblyLine,
   categoryHeadingOptions,
+  computeCoverageQuantity,
+  coverageConfigForLine,
+  coverageConfigFromFavourite,
   gctOptions,
   headingToValue,
   labourLine,
@@ -41,7 +45,7 @@ import {
   type SelectOption,
 } from "@/lib/line-editor";
 import { materialLineDescription } from "@/lib/material-display";
-import { RATE_UNIT_LABEL } from "@/lib/quote-totals";
+import { lineUnitLabel, RATE_UNIT_LABEL } from "@/lib/quote-totals";
 import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
 import shared from "./shared.module.css";
@@ -72,6 +76,8 @@ function LineRows({
   materialFilters,
   unitOptionsFor,
   unitsLoading,
+  favourites,
+  measuredQtyByKey,
   savingFavKey,
   addingHeadingKey,
   newHeadingText,
@@ -91,6 +97,7 @@ function LineRows({
   onCreateMaterial,
   onAddMaterialBusyChange,
   onUnitChange,
+  onMeasuredQtyChange,
 }: {
   lines: DraftLine[];
   headingOptions: SelectOption[];
@@ -104,6 +111,14 @@ function LineRows({
    * is no longer in the vocabulary still has to show it. */
   unitOptionsFor: (line: DraftLine) => SelectOption[];
   unitsLoading: boolean;
+  /** Needed to look up a line's picked material's coverage config (see
+   * coverageConfigForLine) — a line only knows the material's id, not its
+   * measureUnit/coveragePerSellUnit/wastePct. */
+  favourites: MaterialFavourite[];
+  /** The measured-quantity text typed per line, keyed by line key. Not part
+   * of DraftLine/the saved document — see LineItemsEditor's own state decl
+   * for why. */
+  measuredQtyByKey: Record<string, string>;
   savingFavKey: string | null;
   addingHeadingKey: string | null;
   newHeadingText: string;
@@ -127,11 +142,20 @@ function LineRows({
   ) => Promise<void>;
   onAddMaterialBusyChange: (busy: boolean) => void;
   onUnitChange: (key: string, value: string) => void;
+  onMeasuredQtyChange: (key: string, value: string) => void;
 }) {
   return (
     <div className={styles.linesWrap}>
       {lines.map((l) => {
         const materialFilter = materialFilters[l.key] ?? "";
+        // Only offered when the picked material has coverage configured
+        // (see coverageConfigForLine) — most lines have none, and this stays
+        // silent for them exactly like sellUnitsRequired does in core.
+        const coverageConfig = coverageConfigForLine(l, favourites);
+        const measuredQtyText = measuredQtyByKey[l.key] ?? "";
+        const coverage = coverageConfig
+          ? computeCoverageQuantity(measuredQtyText, coverageConfig, lineUnitLabel(l))
+          : null;
         return (
         <div key={l.key} className={styles.lineRow}>
           <div className={`${styles.fieldCell} ${styles.full}`}>
@@ -220,6 +244,33 @@ function LineRows({
             </button>
           </div>
 
+          {coverageConfig && (
+            <div className={`${styles.fieldCell} ${styles.coverageCell}`}>
+              <span className={styles.mobileLabel}>Measured quantity</span>
+              <div className={styles.coverageInputRow}>
+                <Input
+                  aria-label={`Measured quantity, in ${coverageConfig.measureUnit}`}
+                  type="number"
+                  placeholder={`Measured qty (${coverageConfig.measureUnit})`}
+                  value={measuredQtyText}
+                  onChange={(e) => onMeasuredQtyChange(l.key, e.target.value)}
+                />
+                <span className={styles.coverageUnit}>{coverageConfig.measureUnit}</span>
+              </div>
+              {coverage && (
+                <span className={fieldStyles.hint}>
+                  {coverage.explanation}
+                  {/* Once the contractor overrides Qty by hand — they know
+                      their supplier's boxes run short — the working above
+                      still describes what the calculator suggested, not what
+                      the line will actually bill. Saying so keeps the hint
+                      from quietly contradicting the field beside it. */}
+                  {l.quantity !== coverage.quantity && ` · billing ${l.quantity}`}
+                </span>
+              )}
+            </div>
+          )}
+
           {addingMaterialKey === l.key && (
             <Modal title="Add material" onClose={() => (addingMaterialBusy ? undefined : onCancelAddMaterial())}>
               <MaterialForm
@@ -302,6 +353,13 @@ export default function LineItemsEditor({
   // The line whose Sold-by cell asked for a unit the vocabulary doesn't have.
   const [addingUnitKey, setAddingUnitKey] = useState<string | null>(null);
   const [addedUnits, setAddedUnits] = useState<ApiMaterialUnit[]>([]);
+  // The measured-quantity text typed per line (e.g. "40" against "m²"),
+  // keyed by line key. Deliberately NOT part of DraftLine/the saved document
+  // shape — there is no field for it on the API's line schema, and inventing
+  // one would need a migration for a value that is only ever an input aid.
+  // The consequence: reopening a saved quote shows the computed sell-unit
+  // quantity (12 boxes) without remembering the 40 m² that produced it.
+  const [measuredQtyByKey, setMeasuredQtyByKey] = useState<Record<string, string>>({});
 
   // Only the sold-by cell needs the vocabulary; the rate-unit cell is a fixed
   // enum, so a screen showing that one pays for no request it didn't make
@@ -338,6 +396,54 @@ export default function LineItemsEditor({
     patch(key, applyUnitChoice(value));
   };
 
+  /**
+   * Recomputes a line's SELL-UNIT quantity from a typed measured quantity —
+   * the only two triggers for recomputation are this and a material change
+   * (pickFavourite/createMaterialForLine below), never a bare render, so a
+   * manual edit of the Qty field itself is never stomped: nothing here runs
+   * again until the contractor types into this input or picks a different
+   * material.
+   */
+  const onMeasuredQtyChange = (key: string, value: string) => {
+    setMeasuredQtyByKey((m) => ({ ...m, [key]: value }));
+    const line = lines.find((l) => l.key === key);
+    if (!line) return;
+    const config = coverageConfigForLine(line, favourites);
+    if (!config) return;
+    const computed = computeCoverageQuantity(value, config, lineUnitLabel(line));
+    // A blank/cleared measured quantity leaves `quantity` exactly where the
+    // contractor last set it (typed or computed) rather than zeroing it out.
+    if (computed) patch(key, { quantity: computed.quantity });
+  };
+
+  /** Applies a material's coverage config to whatever measured quantity is
+   * already sitting in state for that line, so switching materials mid-entry
+   * (or picking one after already typing a measured quantity) recomputes
+   * rather than leaving the old material's sell-unit count on the line. When
+   * the newly picked material has no coverage configured, any stale measured
+   * quantity is dropped — the input disappears along with it, and keeping
+   * the text around would only resurface confusingly if a coverage material
+   * were picked again later. */
+  function coveragePatchForNewMaterial(
+    key: string,
+    fav: Pick<MaterialFavourite, "measureUnit" | "coveragePerSellUnit" | "wastePct" | "unit">,
+  ): Partial<DraftLine> {
+    const config = coverageConfigFromFavourite(fav);
+    if (!config) {
+      setMeasuredQtyByKey((m) => {
+        if (!(key in m)) return m;
+        const next = { ...m };
+        delete next[key];
+        return next;
+      });
+      return {};
+    }
+    const measuredQty = measuredQtyByKey[key];
+    if (!measuredQty) return {};
+    const computed = computeCoverageQuantity(measuredQty, config, fav.unit?.trim() || "unit");
+    return computed ? { quantity: computed.quantity } : {};
+  }
+
   /** Creates a tenant unit from a line's "+ Add new unit…" prompt and applies
    * it to that line. The create is idempotent server-side, so a label the
    * business already has comes back as the existing row. */
@@ -362,6 +468,7 @@ export default function LineItemsEditor({
    * Materials when the line is still on its untouched default heading — an
    * already-customized heading is left alone. */
   const pickFavourite = (key: string, fav: MaterialFavourite) => {
+    const coveragePatch = coveragePatchForNewMaterial(key, fav);
     onLinesChange((ls) =>
       ls.map((l) => {
         if (l.key !== key) return l;
@@ -376,6 +483,7 @@ export default function LineItemsEditor({
           unitLabel: fav.unit,
           heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
           materialFavouriteId: fav.id,
+          ...coveragePatch,
         };
       }),
     );
@@ -451,6 +559,7 @@ export default function LineItemsEditor({
     const created = await createMaterialFavourite(materialPayloadFromValues(values, category));
     invalidateMaterialSchema();
     setFavourites((favs) => [...favs, created]);
+    const coveragePatch = coveragePatchForNewMaterial(key, created);
     onLinesChange((ls) =>
       ls.map((l) =>
         l.key === key
@@ -460,6 +569,7 @@ export default function LineItemsEditor({
               unitPriceDollars: String(created.priceDollars),
               unitLabel: created.unit,
               materialFavouriteId: created.id,
+              ...coveragePatch,
             }
           : l,
       ),
@@ -600,6 +710,8 @@ export default function LineItemsEditor({
           materialFilters={materialFilters}
           unitOptionsFor={(l) => unitOptions(l, units)}
           unitsLoading={unitsLoading}
+          favourites={favourites}
+          measuredQtyByKey={measuredQtyByKey}
           savingFavKey={savingFavKey}
           addingHeadingKey={addingHeadingKey}
           newHeadingText={newHeadingText}
@@ -619,6 +731,7 @@ export default function LineItemsEditor({
           onCreateMaterial={createMaterialForLine}
           onAddMaterialBusyChange={setAddingMaterialBusy}
           onUnitChange={onUnitChange}
+          onMeasuredQtyChange={onMeasuredQtyChange}
         />
       </Card>
       {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}
