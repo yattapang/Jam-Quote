@@ -2,7 +2,8 @@ import { MiddlewareConsumer, Module, NestModule } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
-import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerModule } from "@nestjs/throttler";
+import { IdentityThrottlerGuard } from "./common/identity-throttler.guard.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { HealthController } from "./health.controller.js";
 import { AuthModule } from "./auth/auth.module.js";
@@ -31,10 +32,12 @@ import { ReportsModule } from "./reports/reports.module.js";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
-    // Global default rate limit: 120 requests / 60s per client IP. Stricter
-    // per-route limits (e.g. auth login/register) override this via the
-    // @Throttle decorator. Requires `trust proxy` in main.ts to see real
-    // client IPs behind Render's load balancer, not the proxy IP.
+    // Global default rate limit: 120 requests / 60s per CALLER — keyed by
+    // authenticated user id where there is one, not by IP. See
+    // IdentityThrottlerGuard: the whole web tier reaches this API from
+    // Vercel's addresses, so IP keying would make this a cap on the platform's
+    // total traffic rather than on any one user's. Stricter per-route limits
+    // (e.g. auth login/register) override this via the @Throttle decorator.
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     PrismaModule,
     AuthModule,
@@ -55,8 +58,9 @@ import { ReportsModule } from "./reports/reports.module.js";
   ],
   controllers: [HealthController],
   providers: [
-    // Apply the ThrottlerModule's rate limiting to every route globally.
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Apply the ThrottlerModule's rate limiting to every route globally,
+    // keyed by caller identity rather than source IP.
+    { provide: APP_GUARD, useClass: IdentityThrottlerGuard },
   ],
 })
 export class AppModule implements NestModule {
