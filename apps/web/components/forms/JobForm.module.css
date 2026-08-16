@@ -48,6 +48,23 @@
   }
 }
 
+/* The remove control is labelled like the fields it sits beside. Unlabelled,
+   a 32px box holding "x" aligned to the bottom of two labelled fields reads
+   as a field with no name rather than as a button. */
+.removeCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.removeLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--jq-text-muted);
+  white-space: nowrap;
+}
+
 .removeButton {
   height: 38px;
   border: 1px solid var(--jq-border);

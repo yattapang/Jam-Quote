@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
+import { ADD_NEW_OPTION_VALUE, isAddNewOption } from "@/lib/catalog-options";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
-import { modalStyles } from "@/components/ui/Modal";
-import type { NewJobInput } from "@/lib/api-client";
+import Modal, { modalStyles } from "@/components/ui/Modal";
+import MaterialForm, { materialPayloadFromValues } from "@/components/forms/MaterialForm";
+import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/LabourRateForm";
+import { createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
 import { materialFavouriteLabel } from "@/lib/material-display";
 import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import styles from "./JobForm.module.css";
@@ -130,6 +133,8 @@ function ComponentRow({
   onChange,
   onRemove,
   canRemove,
+  onAddMaterial,
+  onAddLabourRate,
 }: {
   draft: JobComponentDraft;
   materials: MaterialFavourite[];
@@ -137,14 +142,22 @@ function ComponentRow({
   onChange: (patch: Partial<JobComponentDraft>) => void;
   onRemove: () => void;
   canRemove: boolean;
+  onAddMaterial: () => void;
+  onAddLabourRate: () => void;
 }) {
+  // "+ Add new…" belongs on these pickers for the same reason it belongs on
+  // the quote line's: a contractor building a job type discovers a missing
+  // material HERE, and sending them to another screen means abandoning the
+  // job half-built. The quote editor gained this; the job builder did not.
   const materialOptions = [
     { value: "", label: materials.length ? "Select a material…" : "No saved materials" },
     ...materials.map((m) => ({ value: m.id, label: materialFavouriteLabel(m) })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new material…" },
   ];
   const labourOptions = [
     { value: "", label: labourRates.length ? "Select a labour rate…" : "No saved labour rates" },
     ...labourRates.map((r) => ({ value: r.id, label: labourLabel(r) })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new labour rate…" },
   ];
 
   function changeKind(kind: JobComponentKind) {
@@ -185,14 +198,18 @@ function ComponentRow({
             label="Saved material"
             options={materialOptions}
             value={draft.materialFavouriteId ?? ""}
-            onChange={(e) => pickMaterial(e.target.value)}
+            onChange={(e) =>
+              isAddNewOption(e.target.value) ? onAddMaterial() : pickMaterial(e.target.value)
+            }
           />
         ) : draft.kind === JobComponentKind.LABOUR ? (
           <Select
             label="Saved labour rate"
             options={labourOptions}
             value={draft.labourRateId ?? ""}
-            onChange={(e) => pickLabour(e.target.value)}
+            onChange={(e) =>
+              isAddNewOption(e.target.value) ? onAddLabourRate() : pickLabour(e.target.value)
+            }
           />
         ) : (
           <Input
@@ -202,15 +219,22 @@ function ComponentRow({
             onChange={(e) => onChange({ description: e.target.value })}
           />
         )}
-        <button
-          type="button"
-          className={styles.removeButton}
-          aria-label="Remove component"
-          onClick={onRemove}
-          disabled={!canRemove}
-        >
-          ×
-        </button>
+        {/* Labelled like its neighbours. As a bare 32px box holding "×",
+            aligned to the bottom of two labelled fields, it read as a field
+            with no label rather than as a button. */}
+        <div className={styles.removeCell}>
+          <span className={styles.removeLabel}>Remove</span>
+          <button
+            type="button"
+            className={styles.removeButton}
+            aria-label="Remove component"
+            title="Remove this component"
+            onClick={onRemove}
+            disabled={!canRemove}
+          >
+            ×
+          </button>
+        </div>
       </div>
       <div className={styles.componentBottomRow}>
         {draft.kind !== JobComponentKind.OTHER && (
@@ -249,6 +273,7 @@ export default function JobForm({
   submitLabel = "Save job type",
   materials,
   labourRates,
+  trades = [],
   onCancel,
   onSubmit,
   onBusyChange,
@@ -259,11 +284,21 @@ export default function JobForm({
    * page, that populate the per-component pickers. */
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
+  /** For the inline "+ Add new labour rate" form's trade picker. Optional so
+   * a caller that has not fetched them still renders — that picker degrades to
+   * type-your-own rather than breaking the job builder. */
+  trades?: Trade[];
   onCancel: () => void;
   onSubmit: (values: JobFormValues) => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [values, setValues] = useState<JobFormValues>(initial);
+  // Local copies so something created inline appears in the pickers at once.
+  // As pass-through props a new material would save and then not show up until
+  // a reload, which reads exactly like the create having failed.
+  const [materialList, setMaterialList] = useState<MaterialFavourite[]>(materials);
+  const [labourList, setLabourList] = useState<LabourRate[]>(labourRates);
+  const [adding, setAdding] = useState<{ kind: "material" | "labour"; componentKey: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -350,11 +385,13 @@ export default function JobForm({
           <ComponentRow
             key={c.key}
             draft={c}
-            materials={materials}
-            labourRates={labourRates}
+            materials={materialList}
+            labourRates={labourList}
             onChange={(patch) => patchComponent(c.key, patch)}
             onRemove={() => removeComponent(c.key)}
             canRemove={values.components.length > 1}
+            onAddMaterial={() => setAdding({ kind: "material", componentKey: c.key })}
+            onAddLabourRate={() => setAdding({ kind: "labour", componentKey: c.key })}
           />
         ))}
       </div>
@@ -386,6 +423,51 @@ export default function JobForm({
           {saving ? "Saving…" : submitLabel}
         </Button>
       </div>
+
+      {/* Creating a material or rate from inside the job builder. The new row
+          is applied to the component that asked for it, so the contractor is
+          left where they were rather than having to find the row again. */}
+      {adding?.kind === "material" && (
+        <Modal title="Add material" onClose={() => setAdding(null)}>
+          <MaterialForm
+            submitLabel="Save material"
+            onCancel={() => setAdding(null)}
+            onSubmit={async (formValues, category) => {
+              const created = await createMaterialFavourite(
+                materialPayloadFromValues(formValues, category),
+              );
+              setMaterialList((ms) => [...ms, created]);
+              patchComponent(adding.componentKey, {
+                materialFavouriteId: created.id,
+                description: materialFavouriteLabel(created),
+                unitPriceDollars: String(created.priceCents / 100),
+              });
+              setAdding(null);
+            }}
+          />
+        </Modal>
+      )}
+      {adding?.kind === "labour" && (
+        <Modal title="Add labour rate" onClose={() => setAdding(null)}>
+          <LabourRateForm
+            trades={trades}
+            submitLabel="Save labour rate"
+            onCancel={() => setAdding(null)}
+            onSubmit={async (formValues) => {
+              const created = await createLabourRate(labourRatePayloadFromValues(formValues));
+              setLabourList((rs) => [...rs, created]);
+              patchComponent(adding.componentKey, {
+                labourRateId: created.id,
+                description: created.skillTier
+                  ? `${created.trade} — ${created.skillTier}`
+                  : created.trade,
+                unitPriceDollars: String(created.rateCents / 100),
+              });
+              setAdding(null);
+            }}
+          />
+        </Modal>
+      )}
     </form>
   );
 }

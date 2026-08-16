@@ -4,6 +4,7 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import EditJobButton from "./EditJobButton";
+import type { Trade } from "@/lib/api-client";
 import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../shared.module.css";
 
@@ -17,10 +18,12 @@ export default function JobsListClient({
   jobs,
   materials,
   labourRates,
+  trades,
 }: {
   jobs: Job[];
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
+  trades: Trade[];
 }) {
   // The empty state is where this feature is least obvious and most worth
   // explaining: the point is that you build the job ONCE, with its paint and
@@ -56,7 +59,8 @@ export default function JobsListClient({
               <div className={shared.rowRight}>
                 <MoneyText cents={a.unitCostCents} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <EditJobButton job={a} materials={materials} labourRates={labourRates} />
+                  <EditJobButton job={a} materials={materials} labourRates={labourRates}
+            trades={trades} />
                   <DeleteRowButton
                     kind="job"
                     id={a.id}

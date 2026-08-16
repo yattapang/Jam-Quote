@@ -4,16 +4,18 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { createJob } from "@/lib/api-client";
+import { createJob, type Trade } from "@/lib/api-client";
 import JobForm, { jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
 import type { LabourRate, MaterialFavourite } from "@/lib/types";
 
 export default function AddJobButton({
   materials,
   labourRates,
+  trades,
 }: {
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
+  trades: Trade[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -35,6 +37,7 @@ export default function AddJobButton({
           <JobForm
             materials={materials}
             labourRates={labourRates}
+            trades={trades}
             submitLabel="Save job type"
             onCancel={() => setOpen(false)}
             onSubmit={handleSubmit}
