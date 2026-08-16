@@ -12,6 +12,7 @@ import MaterialForm, { materialPayloadFromValues } from "@/components/forms/Mate
 import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/LabourRateForm";
 import { createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
 import { materialFavouriteLabel } from "@/lib/material-display";
+import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
 import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import styles from "./JobForm.module.css";
 
@@ -135,6 +136,8 @@ function ComponentRow({
   canRemove,
   onAddMaterial,
   onAddLabourRate,
+  isDuplicate,
+  onMergeDuplicates,
 }: {
   draft: JobComponentDraft;
   materials: MaterialFavourite[];
@@ -144,6 +147,8 @@ function ComponentRow({
   canRemove: boolean;
   onAddMaterial: () => void;
   onAddLabourRate: () => void;
+  isDuplicate: boolean;
+  onMergeDuplicates: () => void;
 }) {
   // "+ Add new…" belongs on these pickers for the same reason it belongs on
   // the quote line's: a contractor building a job type discovers a missing
@@ -185,7 +190,7 @@ function ComponentRow({
   }
 
   return (
-    <div className={styles.componentRow}>
+    <div className={`${styles.componentRow} ${isDuplicate ? styles.duplicateRow : ""}`}>
       <div className={styles.componentTopRow}>
         <Select
           label="Kind"
@@ -257,6 +262,19 @@ function ComponentRow({
           onChange={(e) => onChange({ unitPriceDollars: e.target.value })}
         />
       </div>
+      {/* Advisory, not preventive. Adding the same material twice is almost
+          always a slip — reported as exactly that — but it is not invalid: the
+          cost comes out identical either way. So it is pointed out with a way
+          to fix it, rather than blocking the save. Only the LATER row is
+          flagged; marking both would leave you unsure which to remove. */}
+      {isDuplicate && (
+        <div className={styles.duplicateNote}>
+          <span>Already in this job.</span>
+          <button type="button" className={styles.mergeButton} onClick={onMergeDuplicates}>
+            Combine them
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -299,6 +317,9 @@ export default function JobForm({
   const [materialList, setMaterialList] = useState<MaterialFavourite[]>(materials);
   const [labourList, setLabourList] = useState<LabourRate[]>(labourRates);
   const [adding, setAdding] = useState<{ kind: "material" | "labour"; componentKey: string } | null>(null);
+  const duplicateKeys = duplicateComponentKeys(values.components);
+  const mergeDuplicates = () =>
+    setValues((v) => ({ ...v, components: mergeDuplicateComponents(v.components) }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -392,6 +413,8 @@ export default function JobForm({
             canRemove={values.components.length > 1}
             onAddMaterial={() => setAdding({ kind: "material", componentKey: c.key })}
             onAddLabourRate={() => setAdding({ kind: "labour", componentKey: c.key })}
+            isDuplicate={duplicateKeys.has(c.key)}
+            onMergeDuplicates={mergeDuplicates}
           />
         ))}
       </div>

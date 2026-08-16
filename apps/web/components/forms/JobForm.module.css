@@ -103,3 +103,30 @@
   font-weight: 800;
   font-size: 15px;
 }
+
+/* A repeated component. Tinted rather than red-bordered: it is a slip worth
+   noticing, not an error blocking the save — the cost is identical either way. */
+.duplicateRow {
+  border-color: var(--jq-warn, var(--jq-accent));
+}
+
+.duplicateNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--jq-text-muted);
+}
+
+.mergeButton {
+  border: 1px solid var(--jq-border);
+  background: var(--jq-surface);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--jq-accent);
+  cursor: pointer;
+}
