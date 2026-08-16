@@ -231,6 +231,55 @@ Only after the web app is solid. The client is being REBUILT, which is why the
 wire contract was unfrozen in 0c/0d. `apps/mobile` still renders mock data in
 the quote editor, add-material and invoice detail.
 
+## 4b. Release checklist — DO THIS BEFORE MORE FEATURES
+
+A large amount of work is committed and none of it has met a real user. Two
+finished features are inert until their migrations run. Building more on top
+of an unverified stack is how a small problem becomes five interleaved ones.
+
+**1. Verify the build somewhere with clean egress.**
+`npm run build` has never succeeded on the dev machine — `next/font` cannot
+reach fonts.googleapis.com (TLS interception). Typecheck, lint and ~770 tests
+pass, but the production build is genuinely unverified. Vercel's build will be
+the first real run; expect to watch it.
+
+**2. Apply the two pending migrations.**
+- `20260816090000_labour_rate_unit_label` — unitLabel on LabourRate + EquipmentItem
+- `20260816140000_catalog_hidden` — the CatalogHidden table
+
+Both additive, nullable/new-table, non-destructive. Until they run, saving a
+custom unit and hiding a catalog entry both fail against the live database.
+
+```
+npm run -w @jamquote/api exec -- prisma migrate deploy
+```
+
+**Use a DIRECT, non-pooled Neon endpoint.** Through the pooler a failed
+migration strands a session-level advisory lock and every retry then times out
+(hit once as P1002; cost a diagnosis session). This is still unfixed in
+whatever runs migrations on deploy.
+
+**3. Deploy API and web TOGETHER.**
+Non-negotiable this time. 0c/0d renamed JSON fields (`jobId` -> `projectId`,
+`assemblyId` -> `jobId`) and Phase 1 moved routes (`/jobs` is now the Job
+Library, client work is `/projects`). A new API with an old web, or the
+reverse, fails real requests rather than degrading.
+
+**4. Then USE it, on a phone, against Blackwood.**
+Every round of the owner actually using the app has found defects the tests
+did not: the admin console cut off twice, the missing material description,
+the trade picker, the category dropdown, the cramped job builder, and the
+Saved picker gap. That is the highest-yield activity available, and it is not
+something more code substitutes for.
+
+Worth walking specifically, since these are new and unexercised:
+- A quote line of each kind — Material, Labour, Equipment, Job — including
+  creating one of each inline.
+- A job priced per sq ft: check the QUOTE prints "sq ft", not "unit".
+- Reports against Blackwood (the only tenant with data).
+- Settings -> Catalog & vocabulary: hide something, confirm it leaves the
+  quote picker.
+
 ## 5. Standing outstanding items
 
 | Item | State |
