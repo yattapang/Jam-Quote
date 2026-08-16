@@ -264,7 +264,7 @@ export interface ApiJob {
   unit: string;
   // Prisma Decimal comes over JSON as a numeric string, e.g. "20.00".
   markupPct: number | string;
-  // Attached server-side by AssembliesService.withUnitCost via
+  // Attached server-side by JobsService.withUnitCost via
   // computeJobUnitCostCents — never computed here from stale data.
   unitCostCents: number;
   components: ApiJobComponent[];
@@ -747,13 +747,13 @@ export interface NewJobInput {
   markupPct?: number;
   components: NewJobComponentInput[];
 }
-/** GET /api/assemblies (client-side, via the proxy) — this business's job
+/** GET /api/jobs (client-side, via the proxy) — this business's job
  * types, each with its components and server-computed unitCostCents. */
 export async function getJobsClient(): Promise<Job[]> {
-  return (await apiClient.get<ApiJob[]>("/assemblies")).map(mapJob);
+  return (await apiClient.get<ApiJob[]>("/jobs")).map(mapJob);
 }
 export async function createJob(input: NewJobInput): Promise<Job> {
-  return mapJob(await apiClient.post<ApiJob>("/assemblies", input));
+  return mapJob(await apiClient.post<ApiJob>("/jobs", input));
 }
 
 /** Display-only job component snapshot sent with an job-backed line
@@ -841,12 +841,12 @@ export async function updateLabourRate(
   );
 }
 
-/** PATCH /api/assemblies/:id — same shape as create, all fields optional;
+/** PATCH /api/jobs/:id — same shape as create, all fields optional;
  * sending `components` replaces the job's full recipe (see
- * AssembliesService.update). */
+ * JobsService.update). */
 export type UpdateJobInput = Partial<NewJobInput>;
 export async function updateJob(id: string, input: UpdateJobInput): Promise<Job> {
-  return mapJob(await apiClient.patch<ApiJob>(`/assemblies/${id}`, input));
+  return mapJob(await apiClient.patch<ApiJob>(`/jobs/${id}`, input));
 }
 
 /** PATCH /api/business/:id — editable fields mirror updateBusinessSchema
@@ -970,9 +970,9 @@ export async function deleteLabourRate(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/labour-rates/${id}`);
 }
 
-/** DELETE /api/assemblies/:id — soft delete (API sets deletedAt). */
+/** DELETE /api/jobs/:id — soft delete (API sets deletedAt). */
 export async function deleteJob(id: string): Promise<void> {
-  await apiClient.delete<unknown>(`/assemblies/${id}`);
+  await apiClient.delete<unknown>(`/jobs/${id}`);
 }
 
 // --- Admin (platform-level, staff console) — types here, reads in api-server -

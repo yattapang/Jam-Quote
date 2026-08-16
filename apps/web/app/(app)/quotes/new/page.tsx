@@ -4,7 +4,7 @@ import QuoteBuilder from "./QuoteBuilder";
 export const metadata = { title: "New quote · JamQuote" };
 
 export default async function NewQuotePage() {
-  const [clients, jobs, favourites, assemblies, business] = await Promise.all([
+  const [clients, projects, favourites, jobs, business] = await Promise.all([
     getClients(),
     getProjects(),
     getMaterialFavourites(),
@@ -18,9 +18,9 @@ export default async function NewQuotePage() {
   return (
     <QuoteBuilder
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
-      jobs={jobs.map((j) => ({ id: j.id, name: j.name }))}
+      projects={projects.map((p) => ({ id: p.id, name: p.name }))}
       favourites={favourites}
-      assemblies={assemblies}
+      jobs={jobs}
       gctRatePct={gctRatePct}
     />
   );

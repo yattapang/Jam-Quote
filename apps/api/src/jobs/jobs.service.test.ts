@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
-import { AssembliesService } from "./assemblies.service.js";
+import { JobsService } from "./jobs.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -51,10 +51,10 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
     },
     ...overrides,
   };
-  return { svc: new AssembliesService(prisma as any), prisma, tx };
+  return { svc: new JobsService(prisma as any), prisma, tx };
 }
 
-describe("AssembliesService.create", () => {
+describe("JobsService.create", () => {
   it("creates the job + components in a transaction and returns the computed unitCostCents", async () => {
     const { svc, prisma, tx } = withPrisma();
     prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
@@ -101,7 +101,7 @@ describe("AssembliesService.create", () => {
   });
 });
 
-describe("AssembliesService.findAll", () => {
+describe("JobsService.findAll", () => {
   it("scopes to the business, excludes soft-deleted rows, and computes unitCostCents", async () => {
     const { svc, prisma } = withPrisma();
     prisma.job.findMany = vi.fn().mockResolvedValue([tileAssemblyRow()]);
@@ -123,7 +123,7 @@ describe("AssembliesService.findAll", () => {
   });
 });
 
-describe("AssembliesService.findOne", () => {
+describe("JobsService.findOne", () => {
   it("throws NotFoundException when no matching (non-deleted) row exists", async () => {
     const { svc, prisma } = withPrisma();
     prisma.job.findFirst = vi.fn().mockResolvedValue(null);
@@ -131,7 +131,7 @@ describe("AssembliesService.findOne", () => {
   });
 });
 
-describe("AssembliesService.update", () => {
+describe("JobsService.update", () => {
   it("replaces components (delete old, insert new) when components is provided", async () => {
     const { svc, prisma, tx } = withPrisma();
     prisma.job.findFirst = vi
@@ -186,7 +186,7 @@ describe("AssembliesService.update", () => {
   });
 });
 
-describe("AssembliesService.remove", () => {
+describe("JobsService.remove", () => {
   it("soft-deletes by setting deletedAt instead of removing the row", async () => {
     const { svc, prisma } = withPrisma();
     prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());

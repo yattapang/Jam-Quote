@@ -3,7 +3,7 @@
 import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
-import EditAssemblyButton from "./EditAssemblyButton";
+import EditJobButton from "./EditJobButton";
 import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../shared.module.css";
 
@@ -13,24 +13,38 @@ import shared from "../shared.module.css";
  * Materials/labour rates are passed through so Edit can re-populate the
  * component builder's pickers without an extra fetch.
  */
-export default function AssembliesListClient({
-  assemblies,
+export default function JobsListClient({
+  jobs,
   materials,
   labourRates,
 }: {
-  assemblies: Job[];
+  jobs: Job[];
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
 }) {
+  // The empty state is where this feature is least obvious and most worth
+  // explaining: the point is that you build the job ONCE, with its paint and
+  // its labour inside, and afterwards quote it by the square foot. A bare
+  // "nothing here yet" leaves a contractor to infer that from a blank screen,
+  // so it shows the shape of a real job in a trade they recognise.
   return (
     <Card>
-      {assemblies.length === 0 ? (
-        <span className={shared.empty}>
-          No job types yet — build one from your material and labour libraries to quote it in one click.
-        </span>
+      {jobs.length === 0 ? (
+        <div className={shared.empty}>
+          <p style={{ margin: "0 0 8px", fontWeight: 600 }}>No saved jobs yet.</p>
+          <p style={{ margin: "0 0 8px" }}>
+            A job is work you sell over and over, priced by the unit. Say you paint interior
+            walls: add the paint from your materials and the painter from your labour rates, set
+            the unit to <strong>sq ft</strong>, and JamQuote works out the rate.
+          </p>
+          <p style={{ margin: 0 }}>
+            Next time that work comes up, put the job on a quote, type the square footage, and the
+            price is done — as a single line, or itemised so the client sees the breakdown.
+          </p>
+        </div>
       ) : (
         <div className={shared.list}>
-          {assemblies.map((a) => (
+          {jobs.map((a) => (
             <div key={a.id} className={shared.row}>
               <div className={shared.rowMain}>
                 <span className={shared.rowTitle}>{a.name}</span>
@@ -42,7 +56,7 @@ export default function AssembliesListClient({
               <div className={shared.rowRight}>
                 <MoneyText cents={a.unitCostCents} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <EditAssemblyButton job={a} materials={materials} labourRates={labourRates} />
+                  <EditJobButton job={a} materials={materials} labourRates={labourRates} />
                   <DeleteRowButton
                     kind="job"
                     id={a.id}

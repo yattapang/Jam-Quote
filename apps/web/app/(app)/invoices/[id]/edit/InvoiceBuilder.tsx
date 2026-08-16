@@ -58,7 +58,7 @@ export default function InvoiceBuilder({
   invoiceNumber,
   initial,
   favourites = [],
-  assemblies = [],
+  jobs = [],
   labourRates = [],
   clients: initialClients = [],
 }: {
@@ -70,7 +70,7 @@ export default function InvoiceBuilder({
   /** Saved materials offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". */
-  assemblies?: Job[];
+  jobs?: Job[];
   /** The business's labour-rate book, offered via "+ Add labour". */
   labourRates?: LabourRate[];
 }) {
@@ -178,7 +178,7 @@ export default function InvoiceBuilder({
         onLinesChange={setLines}
         initialCustomHeadings={initialCustomHeadings}
         favourites={favourites}
-        assemblies={assemblies}
+        jobs={jobs}
         labourRates={labourRates}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}

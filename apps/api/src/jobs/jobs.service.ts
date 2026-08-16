@@ -6,7 +6,7 @@ import type {
   JobComponentInput,
   CreateJobInput,
   UpdateJobInput,
-} from "./assemblies.dto.js";
+} from "./jobs.dto.js";
 
 const ASSEMBLY_DETAIL_INCLUDE = {
   components: { orderBy: { sort: "asc" as const } },
@@ -48,7 +48,7 @@ function componentCreateData(
 }
 
 @Injectable()
-export class AssembliesService {
+export class JobsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(businessId: string, input: CreateJobInput): Promise<JobWithCost> {
@@ -73,12 +73,12 @@ export class AssembliesService {
   }
 
   async findAll(businessId: string): Promise<JobWithCost[]> {
-    const assemblies = await this.prisma.job.findMany({
+    const jobs = await this.prisma.job.findMany({
       where: { businessId, deletedAt: null },
       include: ASSEMBLY_DETAIL_INCLUDE,
       orderBy: { name: "asc" },
     });
-    return assemblies.map(withUnitCost);
+    return jobs.map(withUnitCost);
   }
 
   async findOne(businessId: string, id: string): Promise<JobWithCost> {

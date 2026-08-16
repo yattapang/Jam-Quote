@@ -8,7 +8,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const [clients, jobs, favourites, assemblies, business] = await Promise.all([
+  const [clients, projects, favourites, jobs, business] = await Promise.all([
     getClients(),
     getProjects(),
     getMaterialFavourites(),
@@ -73,9 +73,9 @@ export default async function EditQuotePage({ params }: { params: { id: string }
         })),
       }}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
-      jobs={jobs.map((j) => ({ id: j.id, name: j.name }))}
+      projects={projects.map((p) => ({ id: p.id, name: p.name }))}
       favourites={favourites}
-      assemblies={assemblies}
+      jobs={jobs}
       gctRatePct={gctRatePct}
     />
   );

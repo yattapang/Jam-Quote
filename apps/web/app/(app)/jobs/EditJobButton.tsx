@@ -15,7 +15,7 @@ import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 /** Per-row edit action on the job-type library — mirrors EditLabourRateButton:
  * pre-fills the builder from the existing job's components and PATCHes
  * (sending `components` replaces the full recipe) instead of POSTing. */
-export default function EditAssemblyButton({
+export default function EditJobButton({
   job,
   materials,
   labourRates,

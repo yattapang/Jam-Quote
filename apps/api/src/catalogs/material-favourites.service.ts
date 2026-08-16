@@ -134,7 +134,7 @@ export class MaterialFavouritesService {
   /**
    * Soft-delete: sets deletedAt rather than removing the row, so offline
    * clients doing a delta-sync can observe the tombstone (matches
-   * LabourRatesService.remove / AssembliesService.remove).
+   * LabourRatesService.remove / JobsService.remove).
    *
    * JobComponent.materialFavouriteId has `onDelete: SetNull`, but that
    * only fires on a real DB-level DELETE — since this is now an UPDATE, any

@@ -323,7 +323,7 @@ export default function LineItemsEditor({
   onLinesChange,
   initialCustomHeadings = [],
   favourites: initialFavourites = [],
-  assemblies = [],
+  jobs = [],
   labourRates,
   detailLevel,
   onDetailLevelChange,
@@ -339,7 +339,7 @@ export default function LineItemsEditor({
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". Each
    * carries a server-computed unitCostCents and its component snapshot. */
-  assemblies?: Job[];
+  jobs?: Job[];
   /** The business's labour-rate book, offered via "+ Add labour". Omitted
    * (rather than empty) hides the button entirely. */
   labourRates?: LabourRate[];
@@ -596,11 +596,11 @@ export default function LineItemsEditor({
     setAddingMaterialKey(null);
   };
 
-  const selectedAssembly = assemblies.find((a) => a.id === jobTypeId);
+  const selectedAssembly = jobs.find((a) => a.id === jobTypeId);
   const selectedLabourRate = labourRates?.find((r) => r.id === labourRateId);
 
   const openJobTypePicker = () => {
-    setJobTypeId(assemblies[0]?.id ?? "");
+    setJobTypeId(jobs[0]?.id ?? "");
     setJobTypeQty("1");
     setAddingJobType(true);
   };
@@ -678,8 +678,8 @@ export default function LineItemsEditor({
             variant="outlineAccent"
             size="sm"
             onClick={openJobTypePicker}
-            disabled={assemblies.length === 0}
-            title={assemblies.length === 0 ? "Create a job type first (Job types in the sidebar)" : "Add a saved job type as a line"}
+            disabled={jobs.length === 0}
+            title={jobs.length === 0 ? "Create a job type first (Job types in the sidebar)" : "Add a saved job type as a line"}
           >
             + Add job type
           </Button>
@@ -772,7 +772,7 @@ export default function LineItemsEditor({
           <div style={{ display: "grid", gap: 12 }}>
             <Select
               label="Job type"
-              options={assemblies.map((a) => ({
+              options={jobs.map((a) => ({
                 value: a.id,
                 label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}`,
               }))}

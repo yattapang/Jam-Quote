@@ -238,8 +238,8 @@ function ComponentRow({
 }
 
 /**
- * The job ("job type") field set shared by AddAssemblyButton and
- * EditAssemblyButton — name/unit/markup plus a component builder (add/
+ * The job ("job type") field set shared by AddJobButton and
+ * EditJobButton — name/unit/markup plus a component builder (add/
  * remove rows, each sourced from the material/labour libraries or freeform),
  * with a live unit-cost readout computed via @jamquote/core's
  * computeJobUnitCostCents so it always matches what the API will save.
@@ -255,7 +255,7 @@ export default function JobForm({
 }: {
   initial?: JobFormValues;
   submitLabel?: string;
-  /** Saved materials/labour rates, fetched server-side by the assemblies
+  /** Saved materials/labour rates, fetched server-side by the jobs
    * page, that populate the per-component pickers. */
   materials: MaterialFavourite[];
   labourRates: LabourRate[];

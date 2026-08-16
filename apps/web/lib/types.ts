@@ -153,7 +153,7 @@ export interface JobComponent {
 
 /** A reusable "job type" (e.g. "Tiling — per sq ft") built from material/
  * labour/other components, with a server-computed unit cost (mirrors the
- * Prisma `Job` model + AssembliesService.withUnitCost). */
+ * Prisma `Job` model + JobsService.withUnitCost). */
 export interface Job {
   id: string;
   name: string;

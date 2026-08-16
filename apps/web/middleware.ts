@@ -12,7 +12,7 @@
  * redirect to /login when the API actually rejects the token).
  *
  * Protected: every route under app/(app)/* — dashboard, quotes, invoices,
- * clients, jobs, assemblies, labour, materials, reports, settings (route
+ * clients, jobs, jobs, labour, materials, reports, settings (route
  * groups don't appear in the URL, so these are matched by their real paths).
  *
  * Deliberately left alone (never redirected to /login by this file):
@@ -40,7 +40,7 @@ const PROTECTED_PREFIXES = [
   "/invoices",
   "/clients",
   "/projects",
-  "/assemblies",
+  "/jobs",
   "/labour",
   "/materials",
   "/reports",

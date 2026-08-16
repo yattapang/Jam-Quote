@@ -15,7 +15,7 @@ import { ProjectsModule } from "./projects/projects.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { InvoicesModule } from "./invoices/invoices.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
-import { AssembliesModule } from "./assemblies/assemblies.module.js";
+import { JobsModule } from "./jobs/jobs.module.js";
 import { PaymentsModule } from "./payments/payments.module.js";
 import { AdminModule } from "./admin/admin.module.js";
 import { SyncModule } from "./sync/sync.module.js";
@@ -48,7 +48,7 @@ import { ReportsModule } from "./reports/reports.module.js";
     QuotesModule,
     InvoicesModule,
     CatalogsModule,
-    AssembliesModule,
+    JobsModule,
     PaymentsModule,
     AdminModule,
     SyncModule,

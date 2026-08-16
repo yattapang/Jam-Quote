@@ -2,30 +2,30 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@n
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
-import { AssembliesService, type JobWithCost } from "./assemblies.service.js";
+import { JobsService, type JobWithCost } from "./jobs.service.js";
 import {
   createJobSchema,
   updateJobSchema,
   type CreateJobInput,
   type UpdateJobInput,
-} from "./assemblies.dto.js";
+} from "./jobs.dto.js";
 
-@Controller("assemblies")
+@Controller("jobs")
 @UseGuards(TenantAuthGuard)
-export class AssembliesController {
-  constructor(private readonly assemblies: AssembliesService) {}
+export class JobsController {
+  constructor(private readonly jobs: JobsService) {}
 
   @Post()
   create(
     @BusinessId() businessId: string,
     @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobInput,
   ): Promise<JobWithCost> {
-    return this.assemblies.create(businessId, body);
+    return this.jobs.create(businessId, body);
   }
 
   @Get()
   findAll(@BusinessId() businessId: string): Promise<JobWithCost[]> {
-    return this.assemblies.findAll(businessId);
+    return this.jobs.findAll(businessId);
   }
 
   @Get(":id")
@@ -33,7 +33,7 @@ export class AssembliesController {
     @BusinessId() businessId: string,
     @Param("id") id: string,
   ): Promise<JobWithCost> {
-    return this.assemblies.findOne(businessId, id);
+    return this.jobs.findOne(businessId, id);
   }
 
   @Patch(":id")
@@ -42,11 +42,11 @@ export class AssembliesController {
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobInput,
   ): Promise<JobWithCost> {
-    return this.assemblies.update(businessId, id, body);
+    return this.jobs.update(businessId, id, body);
   }
 
   @Delete(":id")
   remove(@BusinessId() businessId: string, @Param("id") id: string): Promise<void> {
-    return this.assemblies.remove(businessId, id);
+    return this.jobs.remove(businessId, id);
   }
 }

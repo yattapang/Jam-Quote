@@ -8,7 +8,7 @@ import { createJob } from "@/lib/api-client";
 import JobForm, { jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
 import type { LabourRate, MaterialFavourite } from "@/lib/types";
 
-export default function AddAssemblyButton({
+export default function AddJobButton({
   materials,
   labourRates,
 }: {

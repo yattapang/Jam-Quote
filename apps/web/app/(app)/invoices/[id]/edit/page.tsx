@@ -19,7 +19,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
   // is now shared, plus the client list for the bill-to picker. No jobs (an
   // invoice is billed to a client, not scheduled against a job) and no
   // business (an invoice carries its own gctRatePct).
-  const [favourites, assemblies, labourRates, clients] = await Promise.all([
+  const [favourites, jobs, labourRates, clients] = await Promise.all([
     getMaterialFavourites(),
     getJobs(),
     getLabourRates(),
@@ -31,7 +31,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
       invoiceId={invoice.id}
       invoiceNumber={invoice.num}
       favourites={favourites}
-      assemblies={assemblies}
+      jobs={jobs}
       labourRates={labourRates}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       initial={{

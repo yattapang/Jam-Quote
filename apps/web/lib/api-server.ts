@@ -181,7 +181,7 @@ export async function getBusiness(): Promise<Business> {
  * price. Optional `q`/`category`/`limit` mirror the API's filter params (`q`
  * matches case-insensitively across name, description and specs values) —
  * omit them for the unfiltered full list, which is what every current page
- * (materials, quote builder, assemblies) passes server-side; client
+ * (materials, quote builder, jobs) passes server-side; client
  * components that need to filter as the user types use
  * getMaterialFavouritesClient (api-client.ts) instead, since a browser must
  * go through the same-origin proxy. No fixture backs these, so an
@@ -220,13 +220,13 @@ export async function getLabourRates(): Promise<LabourRate[]> {
   }
 }
 
-/** GET /api/assemblies — the business's job-type library (each with its
+/** GET /api/jobs — the business's job-type library (each with its
  * components and server-computed unitCostCents). No fixture backs these, so
  * an unreachable API returns an empty list (same convention as
  * getMaterialFavourites/getLabourRates). */
 export async function getJobs(): Promise<Job[]> {
   try {
-    return (await serverRequest<ApiJob[]>("/assemblies")).map(mapJob);
+    return (await serverRequest<ApiJob[]>("/jobs")).map(mapJob);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getJobs: API unreachable, using empty list");

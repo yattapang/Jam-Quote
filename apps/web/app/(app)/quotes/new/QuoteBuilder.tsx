@@ -65,21 +65,21 @@ function initialValidDays(initial?: InitialQuote): number {
 
 export default function QuoteBuilder({
   clients: initialClients,
-  jobs: initialProjects,
+  projects: initialProjects,
   favourites: initialFavourites = [],
-  assemblies = [],
+  jobs = [],
   mode = "create",
   quoteId,
   initial,
   gctRatePct = DEFAULT_GCT_RATE,
 }: {
   clients: ClientOption[];
-  jobs: ProjectOption[];
+  projects: ProjectOption[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". Each
    * carries a server-computed unitCostCents and its component snapshot. */
-  assemblies?: Job[];
+  jobs?: Job[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
@@ -105,7 +105,7 @@ export default function QuoteBuilder({
   // Set when save() fails with the API's 402 FREE_LIMIT_REACHED response, so
   // the error banner can add an "Upgrade to Pro" link to /settings.
   const [limitReached, setLimitReached] = useState(false);
-  // Local copies of the clients/jobs lists — seeded from props, then kept in
+  // Local copies of the clients/projects lists — seeded from props, then kept in
   // sync locally when the user creates a new one inline ("+ Add new client…" /
   // "+ Add new job…") so it appears immediately in the picker without
   // navigating away or losing the in-progress quote.
@@ -214,7 +214,7 @@ export default function QuoteBuilder({
         onLinesChange={setLines}
         initialCustomHeadings={initialCustomHeadings}
         favourites={initialFavourites}
-        assemblies={assemblies}
+        jobs={jobs}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
       />
