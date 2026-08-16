@@ -12,7 +12,7 @@ import {
   type TextProps,
   type ImageProps,
 } from "@react-pdf/renderer";
-import { computeTotals, formatJmd, QuoteDetailLevel } from "@jamquote/core";
+import { computeTotals, formatJmd, QuoteDetailLevel, groupJobComponents } from "@jamquote/core";
 import type { Business, Client } from "@/lib/types";
 import type { Invoice } from "@/lib/api-client";
 import {
@@ -254,7 +254,7 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
                 {detailed && line.jobComponents?.length ? (
                   <View style={styles.breakdown}>
                     <Text style={styles.breakdownHead}>{line.jobName ?? "Breakdown"}</Text>
-                    {line.jobComponents.map((c, ci) => (
+                    {groupJobComponents(line.jobComponents).map((c, ci) => (
                       <View key={`${line.id}-c${ci}`} style={styles.breakdownRow}>
                         <Text style={styles.breakdownDesc}>{c.description}</Text>
                         <Text style={styles.breakdownAmt}>

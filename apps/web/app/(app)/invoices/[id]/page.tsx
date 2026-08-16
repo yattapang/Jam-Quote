@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { formatJmd, QuoteDetailLevel } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, groupJobComponents } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
@@ -107,7 +107,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                           >
                             Breakdown{line.jobUnit ? ` (per ${line.jobUnit})` : ""}
                           </div>
-                          {line.jobComponents!.map((c, i) => (
+                          {groupJobComponents(line.jobComponents!).map((c, i) => (
                             <div
                               key={i}
                               style={{
