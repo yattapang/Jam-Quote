@@ -385,6 +385,7 @@ export default function JobForm({
   }
 
   return (
+    <>
     <form className={modalStyles.form} onSubmit={submit}>
       <div className={modalStyles.row2}>
         <Input
@@ -456,6 +457,15 @@ export default function JobForm({
       {/* Creating a material or rate from inside the job builder. The new row
           is applied to the component that asked for it, so the contractor is
           left where they were rather than having to find the row again. */}
+    </form>
+
+      {/* Rendered OUTSIDE the form above, not inside it. Each of these
+          modals contains its own <form>, and nested form elements are invalid
+          HTML — the browser drops the inner one, so the submit button ends up
+          submitting the JOB form and the material/labour rate is never
+          created. It looked like a successful save and silently did nothing.
+          The quote editor's equivalents work because that editor is a section,
+          not a form. */}
       {adding?.kind === "material" && (
         <Modal title="Add material" onClose={() => setAdding(null)}>
           <MaterialForm
@@ -497,6 +507,6 @@ export default function JobForm({
           />
         </Modal>
       )}
-    </form>
+    </>
   );
 }
