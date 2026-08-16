@@ -691,9 +691,15 @@ export interface NewMaterialFavouriteInput {
   category?: string;
 }
 
-/** The attribute tree for the current business (curated + own additions). */
-export async function fetchMaterialSchema(): Promise<ApiMaterialSchema> {
-  return apiClient.get<ApiMaterialSchema>("/catalogs/material-schema");
+/** The attribute tree for the current business (curated + own additions).
+ * `includeHidden` also returns rows this business has hidden (Phase 3) — omit
+ * it (or pass false) for every normal picker, which must never offer a
+ * hidden row; the "Catalog & vocabulary" settings screen is the one caller
+ * that passes true, since a hidden row must stay visible THERE to be
+ * restorable. */
+export async function fetchMaterialSchema(includeHidden = false): Promise<ApiMaterialSchema> {
+  const suffix = includeHidden ? "?includeHidden=true" : "";
+  return apiClient.get<ApiMaterialSchema>(`/catalogs/material-schema${suffix}`);
 }
 
 /** POST /catalogs/material-schema/categories — idempotent, like createTrade:
@@ -1327,6 +1333,36 @@ export async function getTradesClient(): Promise<Trade[]> {
  * is returned as-is rather than duplicated. */
 export async function createTrade(name: string): Promise<Trade> {
   return apiClient.post<Trade>("/trades", { name });
+}
+
+// --- Hidden catalog entries (Phase 3 — "Catalog & vocabulary" settings) -----
+
+/** Mirrors the API's CatalogKind (apps/api/src/catalogs/catalog-hidden.service.ts)
+ * — the only three kinds the API accepts for a hide/unhide. There is
+ * deliberately no SUPPLIER kind. */
+export type CatalogEntryKind = "MATERIAL_CATEGORY" | "MATERIAL_UNIT" | "TRADE";
+
+export interface ApiHiddenCatalogEntry {
+  kind: CatalogEntryKind;
+  rowId: string;
+}
+
+/** POST /catalogs/hidden — idempotent (hiding an already-hidden row is a
+ * no-op server-side). Hiding is NOT deleting: the row stays, still
+ * referenced by existing materials and by documents already sent — it just
+ * stops being offered to this business. Callers must call
+ * invalidateMaterialSchema() (lib/use-material-schema.ts) afterwards, or the
+ * picker keeps offering the row it was just told to hide until a full page
+ * reload — which looks exactly like the hide having failed. */
+export async function hideCatalogEntry(kind: CatalogEntryKind, rowId: string): Promise<void> {
+  await apiClient.post<unknown>("/catalogs/hidden", { kind, rowId });
+}
+
+/** DELETE /catalogs/hidden — idempotent (unhiding a row that isn't hidden is
+ * a no-op server-side). Same invalidateMaterialSchema() requirement as
+ * hideCatalogEntry. */
+export async function unhideCatalogEntry(kind: CatalogEntryKind, rowId: string): Promise<void> {
+  await apiClient.delete<unknown>("/catalogs/hidden", { kind, rowId });
 }
 
 // --- Supplier price comparison (#26 Phase 2b) --------------------------------

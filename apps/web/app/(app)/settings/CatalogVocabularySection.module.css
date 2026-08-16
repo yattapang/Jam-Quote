@@ -1,0 +1,92 @@
+.title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.blurb {
+  font-size: 13px;
+  color: var(--jq-text-muted);
+  margin-bottom: 14px;
+}
+
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groupTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--jq-text-muted);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rowTitle {
+  font-weight: 600;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* A hidden row must read as switched off at a glance, not merely lack a
+   highlight — the label itself is dimmed in addition to the "Hidden" pill. */
+.rowHidden {
+  opacity: 0.55;
+}
+
+.curated {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--jq-text-muted);
+}
+
+.toggle {
+  padding: 6px 12px;
+  border-radius: var(--jq-radius-sm);
+  border: 1.5px solid var(--jq-border);
+  background: var(--jq-surface);
+  color: var(--jq-text);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--jq-font-body);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+  white-space: nowrap;
+}
+
+.toggle:hover:not(:disabled) {
+  border-color: var(--jq-accent);
+  color: var(--jq-accent);
+}
+
+.toggle:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Rows can carry a label, two pills and a button — on a 375px viewport that
+   no longer fits one line, so the row wraps and the button drops under the
+   label rather than being clipped or forcing horizontal scroll. */
+@media (max-width: 480px) {
+  .row {
+    flex-wrap: wrap;
+  }
+}

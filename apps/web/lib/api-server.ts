@@ -50,6 +50,8 @@ import {
   type PricingConfig,
   type ApiRegulatoryUpdate,
   type Trade,
+  type ApiMaterialSchema,
+  type ApiHiddenCatalogEntry,
 } from "./api-client";
 import type { Job, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { ProjectSummary, ProjectDetail } from "./mock-data";
@@ -412,13 +414,52 @@ export async function getReports(from?: string, to?: string): Promise<ReportsSum
  * trades, for populating TradeSelectField from a server component (e.g. the
  * settings page passing the list into EditBusinessButton). Returns an empty
  * list (rather than throwing) when the API is unreachable — the picker still
- * works as a plain free-text field in that case. */
-export async function getTrades(): Promise<Trade[]> {
+ * works as a plain free-text field in that case.
+ *
+ * `includeHidden` also returns trades this business has hidden (Phase 3) —
+ * omit it (or pass false) for every normal picker; the "Catalog &
+ * vocabulary" settings screen is the one caller that passes true, since a
+ * hidden trade must stay visible THERE to be restorable. */
+export async function getTrades(includeHidden = false): Promise<Trade[]> {
   try {
-    return await serverRequest<Trade[]>("/trades");
+    const suffix = includeHidden ? "?includeHidden=true" : "";
+    return await serverRequest<Trade[]>(`/trades${suffix}`);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getTrades: API unreachable, returning empty list");
+    return [];
+  }
+}
+
+/** GET /catalogs/material-schema (server-side read) — the category/unit tree
+ * for the "Catalog & vocabulary" settings screen. `includeHidden=true`
+ * returns rows this business has hidden as well, so they can be shown
+ * (muted) and restored — without it a hidden entry would vanish from the
+ * list with no way back. Returns empty categories/units (rather than
+ * throwing) when the API is unreachable, same convention as getTrades. */
+export async function getMaterialSchema(includeHidden = false): Promise<ApiMaterialSchema> {
+  try {
+    const suffix = includeHidden ? "?includeHidden=true" : "";
+    return await serverRequest<ApiMaterialSchema>(`/catalogs/material-schema${suffix}`);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getMaterialSchema: API unreachable, returning empty schema");
+    return { categories: [], units: [] };
+  }
+}
+
+/** GET /catalogs/hidden (server-side read) — the flat list of catalog rows
+ * (material categories, material units, trades) this business has hidden,
+ * for the "Catalog & vocabulary" settings screen to mark which rows in the
+ * includeHidden=true lists above are currently off. Returns an empty list
+ * (rather than throwing) when the API is unreachable — the screen then shows
+ * every row as visible, which is a safe under-approximation. */
+export async function getHiddenCatalog(): Promise<ApiHiddenCatalogEntry[]> {
+  try {
+    return await serverRequest<ApiHiddenCatalogEntry[]>("/catalogs/hidden");
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getHiddenCatalog: API unreachable, returning empty list");
     return [];
   }
 }

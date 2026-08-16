@@ -1,21 +1,36 @@
 import Card from "@/components/ui/Card";
-import { getBusiness, getBillingStatus, getBillingPlans, getTrades } from "@/lib/api-server";
+import {
+  getBusiness,
+  getBillingStatus,
+  getBillingPlans,
+  getTrades,
+  getMaterialSchema,
+  getHiddenCatalog,
+} from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import BrandingSection from "./BrandingSection";
 import SecuritySection from "./SecuritySection";
 import BillingCard from "./BillingCard";
+import CatalogVocabularySection from "./CatalogVocabularySection";
 import shared from "../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
 
 export const metadata = { title: "Settings · JamQuote" };
 
 export default async function SettingsPage() {
-  const [business, billingStatus, billingPlans, trades] = await Promise.all([
-    getBusiness(),
-    getBillingStatus(),
-    getBillingPlans(),
-    getTrades(),
-  ]);
+  const [business, billingStatus, billingPlans, trades, hiddenTrades, materialSchema, hiddenCatalog] =
+    await Promise.all([
+      getBusiness(),
+      getBillingStatus(),
+      getBillingPlans(),
+      // For EditBusinessButton's trade-type picker — must NOT offer hidden trades.
+      getTrades(),
+      // For the Catalog & vocabulary section below — MUST include hidden
+      // trades, or a hidden one could never be found and restored there.
+      getTrades(true),
+      getMaterialSchema(true),
+      getHiddenCatalog(),
+    ]);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
@@ -60,6 +75,13 @@ export default async function SettingsPage() {
           </div>
         </div>
       </Card>
+
+      <CatalogVocabularySection
+        categories={materialSchema.categories}
+        units={materialSchema.units}
+        trades={hiddenTrades}
+        hiddenEntries={hiddenCatalog}
+      />
 
       {/* Channel connections. The Connection model exists in the schema but
           nothing writes it — there is no connect flow, no OAuth, no webhook —
