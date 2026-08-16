@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { formatJmd, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
+import { QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -14,12 +14,25 @@ import MaterialForm, {
   type MaterialFormValues,
 } from "@/components/forms/MaterialForm";
 import MaterialPickerField from "@/components/forms/MaterialPickerField";
+import LabourRateForm, {
+  labourRatePayloadFromValues,
+  type LabourRateFormValues,
+} from "@/components/forms/LabourRateForm";
+import EquipmentForm, {
+  equipmentPayloadFromValues,
+  type EquipmentFormValues,
+} from "@/components/forms/EquipmentForm";
+import QuickJobForm from "@/components/forms/QuickJobForm";
 import {
+  createEquipmentItem,
+  createJob,
+  createLabourRate,
   createMaterialFavourite,
   createMaterialUnit,
   updateMaterialFavourite,
   type ApiMaterialCategory,
   type ApiMaterialUnit,
+  type Trade,
 } from "@/lib/api-client";
 import { compareCatalogRows, isAddNewOption, mergeCatalogRow } from "@/lib/catalog-options";
 import {
@@ -30,6 +43,8 @@ import {
   applyLabourRatePick,
   applyEquipmentPick,
   equipmentPickerOptions,
+  labourRatePickerOptions,
+  quickJobPayloadFromValues,
   categoryHeadingOptions,
   computeCoverageQuantity,
   coverageConfigForLine,
@@ -51,10 +66,11 @@ import {
   RATE_UNIT_PREFIX,
   LineKind,
   type DraftLine,
+  type QuickJobFormValues,
   type SelectOption,
 } from "@/lib/line-editor";
 import { materialLineDescription } from "@/lib/material-display";
-import { lineUnitLabel, RATE_UNIT_LABEL } from "@/lib/quote-totals";
+import { lineUnitLabel } from "@/lib/quote-totals";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
 import shared from "./shared.module.css";
@@ -119,6 +135,9 @@ function LineRows({
   onCancelAddMaterial,
   onCreateMaterial,
   onAddMaterialBusyChange,
+  onOpenAddLabourRate,
+  onOpenAddJob,
+  onOpenAddEquipment,
   onUnitChange,
   onMeasuredQtyChange,
 }: {
@@ -176,18 +195,18 @@ function LineRows({
     category: ApiMaterialCategory | undefined,
   ) => Promise<void>;
   onAddMaterialBusyChange: (busy: boolean) => void;
+  /** Opens the "+ Add new labour rate…" / "+ Add new job…" / "+ Add new
+   * equipment…" modal for the given line — the other three kinds' answer to
+   * onOpenAddMaterial above. */
+  onOpenAddLabourRate: (key: string) => void;
+  onOpenAddJob: (key: string) => void;
+  onOpenAddEquipment: (key: string) => void;
   onUnitChange: (key: string, value: string) => void;
   onMeasuredQtyChange: (key: string, value: string) => void;
 }) {
   // Hoisted out of the per-line map — the same options for every LABOUR line
   // on this document, so there is no reason to rebuild the list per row.
-  const labourOptions: SelectOption[] = [
-    { value: "", label: labourRates.length > 0 ? "Select a saved rate…" : "No saved labour rates yet" },
-    ...labourRates.map((r) => ({
-      value: r.id,
-      label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${RATE_UNIT_LABEL[r.rateUnit]}`,
-    })),
-  ];
+  const labourOptions: SelectOption[] = labourRatePickerOptions(labourRates);
   const equipmentOptions = equipmentPickerOptions(equipment);
 
   return (
@@ -256,6 +275,7 @@ function LineRows({
                 options={labourOptions}
                 value=""
                 onChange={(e) => {
+                  if (isAddNewOption(e.target.value)) return onOpenAddLabourRate(l.key);
                   if (e.target.value) onPickLabourRate(l.key, e.target.value);
                 }}
               />
@@ -266,6 +286,7 @@ function LineRows({
                 options={jobPickerOptions(l, jobs)}
                 value={l.jobId ?? ""}
                 onChange={(e) => {
+                  if (isAddNewOption(e.target.value)) return onOpenAddJob(l.key);
                   if (e.target.value) onPickJob(l.key, e.target.value);
                 }}
               />
@@ -278,8 +299,14 @@ function LineRows({
                 // picker: a line keeps no equipment id, so there is nothing to
                 // show as "currently selected" without inventing one.
                 value=""
-                onChange={(e) => onPickEquipment(l.key, e.target.value)}
-                disabled={equipment.length === 0}
+                onChange={(e) => {
+                  if (isAddNewOption(e.target.value)) return onOpenAddEquipment(l.key);
+                  onPickEquipment(l.key, e.target.value);
+                }}
+                // No longer disabled when the library is empty — that used to
+                // be the bug: an empty equipment list left no way to add one
+                // from here. The always-present "+ Add new equipment…" row
+                // (equipmentPickerOptions) is exactly that way now.
               />
             )}
           </div>
@@ -435,9 +462,10 @@ export default function LineItemsEditor({
   onLinesChange,
   initialCustomHeadings = [],
   favourites: initialFavourites = [],
-  jobs = [],
-  labourRates = [],
-  equipment = [],
+  jobs: initialJobs = [],
+  labourRates: initialLabourRates = [],
+  equipment: initialEquipment = [],
+  trades = [],
   detailLevel,
   onDetailLevelChange,
 }: {
@@ -462,6 +490,10 @@ export default function LineItemsEditor({
   /** The business's equipment library, offered when a line's kind is
    * EQUIPMENT. Optional so a caller that has not fetched it still renders. */
   equipment?: EquipmentItem[];
+  /** Trades list for the "+ Add new labour rate…" modal's trade picker
+   * (LabourRateForm). Optional/defaulted so a caller that hasn't fetched it
+   * still renders — the trade field just falls back to plain free text. */
+  trades?: Trade[];
   detailLevel: QuoteDetailLevel;
   onDetailLevelChange: (level: QuoteDetailLevel) => void;
 }) {
@@ -477,6 +509,22 @@ export default function LineItemsEditor({
   const [favError, setFavError] = useState("");
   const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
   const [addingMaterialBusy, setAddingMaterialBusy] = useState(false);
+  // Local copies of the job/labour-rate/equipment libraries, seeded from
+  // props exactly like `favourites` above — these three arrive as props too,
+  // so without a local copy a job created via "+ Add new job…" would never
+  // show up in that line's own dropdown (the prop the parent passed down
+  // never changes). Appended to, never replaced, on a successful create.
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [labourRates, setLabourRates] = useState<LabourRate[]>(initialLabourRates);
+  const [equipment, setEquipment] = useState<EquipmentItem[]>(initialEquipment);
+  // Which of the three non-material "+ Add new…" modals is open, and for
+  // which line — mutually exclusive by construction (one state slot, set via
+  // openAddEntity below), and cleared whenever the material modal opens
+  // (openAddMaterial) so the two families can never show at once either.
+  const [addingEntity, setAddingEntity] = useState<
+    { kind: "labour" | "job" | "equipment"; key: string } | null
+  >(null);
+  const [addingEntityBusy, setAddingEntityBusy] = useState(false);
   // Per-line saved-material category filter ("" = all categories). Keyed by
   // line key so each line's picker narrows independently.
   const [materialFilters, setMaterialFilters] = useState<Record<string, string>>({});
@@ -673,6 +721,53 @@ export default function LineItemsEditor({
     setAddingMaterialKey(null);
   };
 
+  /** Opens the material modal from either of its trigger points (the category
+   * filter's "+ New category…" row, or MaterialPickerField's own "+ Add
+   * material…" row), closing the labour/job/equipment modal first so only
+   * one of the four "+ Add new…" modals is ever visible at once. */
+  const openAddMaterial = (key: string) => {
+    setAddingEntity(null);
+    setAddingMaterialKey(key);
+  };
+
+  /** Opens the labour/job/equipment "+ Add new…" modal for a line, closing
+   * the material modal first for the same reason. */
+  const openAddEntity = (kind: "labour" | "job" | "equipment", key: string) => {
+    setAddingMaterialKey(null);
+    setAddingEntity({ kind, key });
+  };
+
+  /** "+ Add new labour rate…" from a LABOUR line's Saved picker: creates a
+   * new rate, appends it to the local book (see the `labourRates` state doc
+   * above — it arrives as a prop, so without this local copy the new rate
+   * would never appear in any line's dropdown), and applies it to the line
+   * that opened the modal exactly like picking an existing one would. */
+  const createLabourRateForLine = async (key: string, values: LabourRateFormValues) => {
+    const created = await createLabourRate(labourRatePayloadFromValues(values));
+    setLabourRates((rs) => (rs.some((r) => r.id === created.id) ? rs : [...rs, created]));
+    patch(key, applyLabourRatePick(created));
+    setAddingEntity(null);
+  };
+
+  /** "+ Add new job…" from a JOB line's Saved picker. The quick-create form's
+   * three fields (name/unit/rate) become a one-component job via
+   * quickJobPayloadFromValues — see that function's doc in lib/line-editor.ts
+   * for why a component is required to avoid saving a job at $0. */
+  const createJobForLine = async (key: string, values: QuickJobFormValues) => {
+    const created = await createJob(quickJobPayloadFromValues(values));
+    setJobs((js) => (js.some((j) => j.id === created.id) ? js : [...js, created]));
+    patch(key, applyJobPick(created));
+    setAddingEntity(null);
+  };
+
+  /** "+ Add new equipment…" from an EQUIPMENT line's Saved picker. */
+  const createEquipmentForLine = async (key: string, values: EquipmentFormValues) => {
+    const created = await createEquipmentItem(equipmentPayloadFromValues(values));
+    setEquipment((es) => (es.some((e) => e.id === created.id) ? es : [...es, created]));
+    patch(key, applyEquipmentPick(created));
+    setAddingEntity(null);
+  };
+
   /** Switches a line's kind (the "Kind" cell) — applyKindChange drops every
    * tie to the old library (materialFavouriteId/jobId/jobComponents/
    * unitLabel) while deliberately keeping description/quantity/price/heading,
@@ -809,10 +904,13 @@ export default function LineItemsEditor({
           onPickEquipment={onPickEquipment}
           onPickJob={onPickJob}
           onSaveFavourite={saveFavourite}
-          onOpenAddMaterial={setAddingMaterialKey}
+          onOpenAddMaterial={openAddMaterial}
           onCancelAddMaterial={() => setAddingMaterialKey(null)}
           onCreateMaterial={createMaterialForLine}
           onAddMaterialBusyChange={setAddingMaterialBusy}
+          onOpenAddLabourRate={(key) => openAddEntity("labour", key)}
+          onOpenAddJob={(key) => openAddEntity("job", key)}
+          onOpenAddEquipment={(key) => openAddEntity("equipment", key)}
           onUnitChange={onUnitChange}
           onMeasuredQtyChange={onMeasuredQtyChange}
         />
@@ -827,6 +925,43 @@ export default function LineItemsEditor({
             errorText="Couldn't add that unit — is the API running?"
             onAdd={(label) => addUnitForLine(addingUnitKey, label)}
             onCancel={() => setAddingUnitKey(null)}
+          />
+        </Modal>
+      )}
+
+      {/* The labour/job/equipment "+ Add new…" modals — one state slot
+          (addingEntity) shared by all three, so opening one always means the
+          other two (and the material modal, via openAddMaterial/openAddEntity
+          above) are closed. Closing is blocked while a create is in flight,
+          same as the material modal's addingMaterialBusy guard. */}
+      {addingEntity?.kind === "labour" && (
+        <Modal title="Add labour rate" onClose={() => (addingEntityBusy ? undefined : setAddingEntity(null))}>
+          <LabourRateForm
+            submitLabel="Add labour rate"
+            trades={trades}
+            onCancel={() => setAddingEntity(null)}
+            onSubmit={(values) => createLabourRateForLine(addingEntity.key, values)}
+            onBusyChange={setAddingEntityBusy}
+          />
+        </Modal>
+      )}
+      {addingEntity?.kind === "job" && (
+        <Modal title="Add job" onClose={() => (addingEntityBusy ? undefined : setAddingEntity(null))}>
+          <QuickJobForm
+            submitLabel="Add job"
+            onCancel={() => setAddingEntity(null)}
+            onSubmit={(values) => createJobForLine(addingEntity.key, values)}
+            onBusyChange={setAddingEntityBusy}
+          />
+        </Modal>
+      )}
+      {addingEntity?.kind === "equipment" && (
+        <Modal title="Add equipment" onClose={() => (addingEntityBusy ? undefined : setAddingEntity(null))}>
+          <EquipmentForm
+            submitLabel="Add equipment"
+            onCancel={() => setAddingEntity(null)}
+            onSubmit={(values) => createEquipmentForLine(addingEntity.key, values)}
+            onBusyChange={setAddingEntityBusy}
           />
         </Modal>
       )}

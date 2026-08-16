@@ -9,8 +9,8 @@
  * the two builders, neither of which can be render-tested in this repo.
  * Money is always integer cents.
  */
-import { coverageBreakdown, formatJmd, GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
-import type { InvoiceLineItemInput, NewQuoteLineInput } from "./api-client";
+import { coverageBreakdown, formatJmd, GctTreatment, JobComponentKind, LineCategory, RateUnit } from "@jamquote/core";
+import type { InvoiceLineItemInput, NewJobInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
 import { materialLineDescription } from "./material-display";
 import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
@@ -314,7 +314,10 @@ export function applyEquipmentPick(
 
 /** Options for the EQUIPMENT "Saved" picker. Mirrors jobPickerOptions' shape
  * but needs no orphan entry: a line keeps no equipment id, so there is no
- * stale reference to reconstruct. */
+ * stale reference to reconstruct. Trailing "+ Add new equipment…" row mirrors
+ * unitOptions' own add-new row, using the same shared sentinel so the editor
+ * can tell "add one" apart from "picked this id" with one predicate
+ * (isAddNewOption) rather than a bespoke string per picker. */
 export function equipmentPickerOptions(
   equipment: readonly Pick<EquipmentItem, "id" | "name" | "rateCents" | "rateUnit">[],
 ): SelectOption[] {
@@ -324,6 +327,24 @@ export function equipmentPickerOptions(
       value: e.id,
       label: `${e.name} — ${formatJmd(e.rateCents)}/${RATE_UNIT_LABEL[e.rateUnit]}`,
     })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new equipment…" },
+  ];
+}
+
+/** Options for the LABOUR "Saved" picker. Same shape as equipmentPickerOptions
+ * (this business's labour-rate book plus a trailing "+ Add new…" row) — kept
+ * as its own function, rather than building the list inline in the editor, so
+ * it is unit-testable without a DOM like every other picker's options here. */
+export function labourRatePickerOptions(
+  labourRates: readonly Pick<LabourRate, "id" | "trade" | "skillTier" | "rateCents" | "rateUnit">[],
+): SelectOption[] {
+  return [
+    { value: "", label: labourRates.length > 0 ? "Select a saved rate…" : "No saved labour rates yet" },
+    ...labourRates.map((r) => ({
+      value: r.id,
+      label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${RATE_UNIT_LABEL[r.rateUnit]}`,
+    })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new labour rate…" },
   ];
 }
 
@@ -370,6 +391,7 @@ export function jobPickerOptions(
     { value: "", label: jobs.length > 0 ? "Select a job…" : "No saved jobs yet" },
     ...orphan,
     ...jobs.map((a) => ({ value: a.id, label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}` })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new job…" },
   ];
 }
 
@@ -382,6 +404,56 @@ export function jobPickerOptions(
  */
 export function applyJobUnitEdit(unit: string): Partial<DraftLine> {
   return { jobUnit: unit, unitLabel: unit.trim() || undefined };
+}
+
+/**
+ * The three fields behind a line's "+ Add new job…" quick-create — a
+ * deliberately small stand-in for the full JobForm (name/unit/markup/
+ * component builder). Stacking that whole recipe editor in a modal on top of
+ * a half-written quote is too much form for the moment a contractor just
+ * wants to price one job on the fly; the full builder stays on the Jobs page
+ * for when there's time to break a job into real components.
+ */
+export interface QuickJobFormValues {
+  name: string;
+  unit: string;
+  rateDollars: string;
+}
+
+export const emptyQuickJobForm: QuickJobFormValues = { name: "", unit: "", rateDollars: "" };
+
+/**
+ * Builds a create-job payload from the quick-create form.
+ *
+ * CRITICAL: a job's unitCostCents is COMPUTED server-side from its components
+ * (computeJobUnitCostCents in @jamquote/core) — createJobSchema defaults
+ * `components` to `[]`, so sending none at all would save the job at $0. A
+ * contractor who typed a rate of 1500 would see the job appear normally and
+ * only discover the zero once it priced a customer's line at nothing.
+ *
+ * So the entered rate rides along as a single OTHER component with
+ * quantityPerUnit 1 and markupPct 0, which makes computeJobUnitCostCents
+ * return exactly the entered rate — see the round-trip test in
+ * line-editor.test.ts, which is the point: this must be verified against the
+ * same cost formula the API uses, not just assumed. The job this creates then
+ * opens on the Jobs page as a normal one-component job, refinable into real
+ * material/labour components whenever there's time for that.
+ */
+export function quickJobPayloadFromValues(values: QuickJobFormValues): NewJobInput {
+  const name = values.name.trim();
+  return {
+    name,
+    unit: values.unit.trim(),
+    markupPct: 0,
+    components: [
+      {
+        kind: JobComponentKind.OTHER,
+        description: name,
+        quantityPerUnit: 1,
+        unitPriceCents: toCents(values.rateDollars),
+      },
+    ],
+  };
 }
 
 /** One line as an existing quote/invoice hands it back for editing. */

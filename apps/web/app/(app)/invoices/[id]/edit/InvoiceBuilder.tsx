@@ -7,7 +7,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
-import { updateInvoice, ApiError } from "@/lib/api-client";
+import { updateInvoice, ApiError, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
@@ -61,6 +61,7 @@ export default function InvoiceBuilder({
   jobs = [],
   labourRates = [],
   equipment = [],
+  trades = [],
   clients: initialClients = [],
 }: {
   invoiceId: string;
@@ -76,6 +77,9 @@ export default function InvoiceBuilder({
   labourRates?: LabourRate[];
   /** The business's equipment library, for EQUIPMENT-kind lines. */
   equipment?: EquipmentItem[];
+  /** Trades list, threaded through to the line editor's "+ Add new labour
+   * rate…" modal (LabourRateForm's trade picker). */
+  trades?: Trade[];
 }) {
   const router = useRouter();
   const backHref = `/invoices/${invoiceId}`;
@@ -184,6 +188,7 @@ export default function InvoiceBuilder({
         jobs={jobs}
         labourRates={labourRates}
         equipment={equipment}
+        trades={trades}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
       />

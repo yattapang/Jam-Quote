@@ -4,6 +4,7 @@ import {
   GctTreatment,
   LineCategory,
   RateUnit,
+  computeJobUnitCostCents,
 } from "@jamquote/core";
 import {
   assemblyLine,
@@ -46,7 +47,10 @@ import {
   materialPickPatch,
   applyEquipmentPick,
   equipmentPickerOptions,
+  labourRatePickerOptions,
+  quickJobPayloadFromValues,
 } from "./line-editor";
+import { ADD_NEW_OPTION_VALUE, isAddNewOption } from "./catalog-options";
 import type { Job, LabourRate, MaterialFavourite } from "./types";
 
 function line(over: Partial<DraftLine> = {}): DraftLine {
@@ -806,10 +810,12 @@ describe("picking a saved row onto an existing line", () => {
       { id: "a2", name: "Painting", unit: "gal", unitCostCents: 12_000 },
     ];
 
-    it("lists the job library plus a leading placeholder", () => {
+    it("lists the job library plus a leading placeholder and a trailing add-new row", () => {
       const opts = jobPickerOptions({ jobId: undefined, jobName: undefined }, jobs);
-      expect(opts.map((o) => o.value)).toEqual(["", "a1", "a2"]);
+      expect(opts.map((o) => o.value)).toEqual(["", "a1", "a2", ADD_NEW_OPTION_VALUE]);
       expect(opts[0]?.label).toBe("Select a job…");
+      expect(opts.at(-1)?.label).toBe("+ Add new job…");
+      expect(isAddNewOption(opts.at(-1)?.value)).toBe(true);
     });
 
     it("says so when the library is empty", () => {
@@ -876,7 +882,7 @@ describe("equipment picking", () => {
   describe("equipmentPickerOptions", () => {
     it("labels each item with its rate so the list is choosable without opening it", () => {
       const opts = equipmentPickerOptions([item]);
-      expect(opts).toHaveLength(2);
+      expect(opts).toHaveLength(3);
       expect(opts[1]?.value).toBe("eq1");
       expect(opts[1]?.label).toContain("Concrete mixer");
       expect(opts[1]?.label).toContain("/day");
@@ -886,5 +892,97 @@ describe("equipment picking", () => {
       expect(equipmentPickerOptions([])[0]?.label).toBe("No saved equipment yet");
       expect(equipmentPickerOptions([item])[0]?.label).toBe("Select equipment…");
     });
+
+    it("always offers a trailing add-new row — an empty library must still let you add one", () => {
+      // This is the bug being fixed: previously an empty equipment list left
+      // no way to create one from the line's Saved picker.
+      const opts = equipmentPickerOptions([]);
+      expect(opts.at(-1)?.label).toBe("+ Add new equipment…");
+      expect(isAddNewOption(opts.at(-1)?.value)).toBe(true);
+      expect(equipmentPickerOptions([item]).at(-1)?.value).toBe(ADD_NEW_OPTION_VALUE);
+    });
+  });
+});
+
+describe("labourRatePickerOptions", () => {
+  const rate: LabourRate = {
+    id: "lr1",
+    trade: "Mason",
+    rateCents: 350_000,
+    rateDollars: 3500,
+    rateUnit: RateUnit.DAY,
+  };
+
+  it("labels each rate with its trade and cadence", () => {
+    const opts = labourRatePickerOptions([rate]);
+    expect(opts[1]?.value).toBe("lr1");
+    expect(opts[1]?.label).toContain("Mason");
+    expect(opts[1]?.label).toContain("/day");
+  });
+
+  it("names the skill tier when the rate has one", () => {
+    expect(labourRatePickerOptions([{ ...rate, skillTier: "Senior" }])[1]?.label).toContain(
+      "Mason — Senior",
+    );
+  });
+
+  it("says the book is empty rather than showing a bare placeholder", () => {
+    expect(labourRatePickerOptions([])[0]?.label).toBe("No saved labour rates yet");
+    expect(labourRatePickerOptions([rate])[0]?.label).toBe("Select a saved rate…");
+  });
+
+  it("always offers a trailing add-new row — an empty book must still let you add one", () => {
+    const opts = labourRatePickerOptions([]);
+    expect(opts.at(-1)?.label).toBe("+ Add new labour rate…");
+    expect(isAddNewOption(opts.at(-1)?.value)).toBe(true);
+  });
+});
+
+/**
+ * The quick job-create form's payload builder. The one thing this MUST get
+ * right: a job's cost is computed server-side from its components
+ * (computeJobUnitCostCents), not stored directly, so the single component
+ * built here has to survive that formula and come out to exactly the rate
+ * the contractor typed — anything else is a silent $0 (or wrong-price) line
+ * on a customer's document.
+ */
+describe("quickJobPayloadFromValues", () => {
+  it("trims the name and unit", () => {
+    const payload = quickJobPayloadFromValues({ name: "  Painting  ", unit: " sq ft ", rateDollars: "12.50" });
+    expect(payload.name).toBe("Painting");
+    expect(payload.unit).toBe("sq ft");
+  });
+
+  it("carries no markup — the entered rate should not be marked up again", () => {
+    expect(quickJobPayloadFromValues({ name: "Painting", unit: "sq ft", rateDollars: "12.50" }).markupPct).toBe(0);
+  });
+
+  it("packs the rate into a single OTHER component with quantity 1", () => {
+    const payload = quickJobPayloadFromValues({ name: "Painting", unit: "sq ft", rateDollars: "12.50" });
+    expect(payload.components).toEqual([
+      {
+        kind: JobComponentKind.OTHER,
+        description: "Painting",
+        quantityPerUnit: 1,
+        unitPriceCents: 1250,
+      },
+    ]);
+  });
+
+  it("round-trips through the API's own cost formula to exactly the entered rate — " +
+    "the $0-job trap this whole function exists to avoid", () => {
+    const payload = quickJobPayloadFromValues({ name: "Painting", unit: "sq ft", rateDollars: "1500" });
+    const computedUnitCostCents = computeJobUnitCostCents({
+      components: payload.components.map((c) => ({
+        quantityPerUnit: c.quantityPerUnit,
+        unitPriceCents: c.unitPriceCents,
+      })),
+      markupPct: payload.markupPct,
+    });
+    expect(computedUnitCostCents).toBe(150_000);
+  });
+
+  it("never sends an empty components array — the server default that causes the $0 trap", () => {
+    expect(quickJobPayloadFromValues({ name: "", unit: "", rateDollars: "" }).components.length).toBeGreaterThan(0);
   });
 });

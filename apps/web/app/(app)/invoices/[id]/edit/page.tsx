@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { InvoiceStatus } from "@jamquote/core";
 import { getJobs, getClients, getInvoice, getLabourRates,
-  getEquipment, getMaterialFavourites } from "@/lib/api-server";
+  getEquipment, getMaterialFavourites, getTrades } from "@/lib/api-server";
 import InvoiceBuilder from "./InvoiceBuilder";
 
 export const metadata = { title: "Edit invoice · JamQuote" };
@@ -20,12 +20,13 @@ export default async function EditInvoicePage({ params }: { params: { id: string
   // is now shared, plus the client list for the bill-to picker. No jobs (an
   // invoice is billed to a client, not scheduled against a job) and no
   // business (an invoice carries its own gctRatePct).
-  const [favourites, jobs, labourRates, equipment, clients] = await Promise.all([
+  const [favourites, jobs, labourRates, equipment, clients, trades] = await Promise.all([
     getMaterialFavourites(),
     getJobs(),
     getLabourRates(),
     getEquipment(),
     getClients(),
+    getTrades(),
   ]);
 
   return (
@@ -36,6 +37,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
       jobs={jobs}
       labourRates={labourRates}
       equipment={equipment}
+      trades={trades}
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
       initial={{
         clientId: invoice.clientId,

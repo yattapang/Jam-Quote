@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates, getBusiness } from "@/lib/api-server";
+import { getQuote, getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates, getEquipment, getBusiness, getTrades } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -8,13 +8,15 @@ export default async function EditQuotePage({ params }: { params: { id: string }
   const quote = await getQuote(params.id);
   if (!quote) notFound();
 
-  const [clients, projects, favourites, jobs, labourRates, business] = await Promise.all([
+  const [clients, projects, favourites, jobs, labourRates, equipment, business, trades] = await Promise.all([
     getClients(),
     getProjects(),
     getMaterialFavourites(),
     getJobs(),
     getLabourRates(),
+    getEquipment(),
     getBusiness(),
+    getTrades(),
   ]);
   // Never hardcode GCT. On EDIT, preserve the rate the quote was originally
   // saved at (don't silently re-tax an existing quote if the business default
@@ -78,6 +80,8 @@ export default async function EditQuotePage({ params }: { params: { id: string }
       favourites={favourites}
       jobs={jobs}
       labourRates={labourRates}
+      equipment={equipment}
+      trades={trades}
       gctRatePct={gctRatePct}
     />
   );

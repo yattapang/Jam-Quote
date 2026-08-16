@@ -8,7 +8,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
-import { createQuote, updateQuote, ApiError } from "@/lib/api-client";
+import { createQuote, updateQuote, ApiError, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
@@ -70,6 +70,7 @@ export default function QuoteBuilder({
   jobs = [],
   labourRates = [],
   equipment = [],
+  trades = [],
   mode = "create",
   quoteId,
   initial,
@@ -88,6 +89,9 @@ export default function QuoteBuilder({
   labourRates?: LabourRate[];
   /** The business's equipment library, for EQUIPMENT-kind lines. */
   equipment?: EquipmentItem[];
+  /** Trades list, threaded through to the line editor's "+ Add new labour
+   * rate…" modal (LabourRateForm's trade picker). */
+  trades?: Trade[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
@@ -225,6 +229,7 @@ export default function QuoteBuilder({
         jobs={jobs}
         labourRates={labourRates}
         equipment={equipment}
+        trades={trades}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
       />
