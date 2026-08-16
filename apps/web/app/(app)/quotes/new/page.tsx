@@ -1,14 +1,17 @@
-import { getClients, getProjects, getMaterialFavourites, getJobs, getBusiness } from "@/lib/api-server";
+import { getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates,
+  getEquipment, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "./QuoteBuilder";
 
 export const metadata = { title: "New quote · JamQuote" };
 
 export default async function NewQuotePage() {
-  const [clients, projects, favourites, jobs, business] = await Promise.all([
+  const [clients, projects, favourites, jobs, labourRates, equipment, business] = await Promise.all([
     getClients(),
     getProjects(),
     getMaterialFavourites(),
     getJobs(),
+    getLabourRates(),
+    getEquipment(),
     getBusiness(),
   ]);
   // Never hardcode GCT — use the business's own default rate, falling back
@@ -21,6 +24,8 @@ export default async function NewQuotePage() {
       projects={projects.map((p) => ({ id: p.id, name: p.name }))}
       favourites={favourites}
       jobs={jobs}
+      labourRates={labourRates}
+      equipment={equipment}
       gctRatePct={gctRatePct}
     />
   );

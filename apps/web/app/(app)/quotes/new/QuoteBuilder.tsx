@@ -12,7 +12,7 @@ import { createQuote, updateQuote, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
-import type { Job, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
 import LineItemsEditor from "../../LineItemsEditor";
 import {
@@ -68,6 +68,8 @@ export default function QuoteBuilder({
   projects: initialProjects,
   favourites: initialFavourites = [],
   jobs = [],
+  labourRates = [],
+  equipment = [],
   mode = "create",
   quoteId,
   initial,
@@ -77,9 +79,15 @@ export default function QuoteBuilder({
   projects: ProjectOption[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
-  /** The business's job-type library, offered via "+ Add job type". Each
-   * carries a server-computed unitCostCents and its component snapshot. */
+  /** The business's job-type library — a line's "Saved" picker offers these
+   * once its kind is JOB. Each carries a server-computed unitCostCents and
+   * its component snapshot. */
   jobs?: Job[];
+  /** The business's labour-rate book — a line's "Saved" picker offers these
+   * once its kind is LABOUR. */
+  labourRates?: LabourRate[];
+  /** The business's equipment library, for EQUIPMENT-kind lines. */
+  equipment?: EquipmentItem[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;
@@ -215,6 +223,8 @@ export default function QuoteBuilder({
         initialCustomHeadings={initialCustomHeadings}
         favourites={initialFavourites}
         jobs={jobs}
+        labourRates={labourRates}
+        equipment={equipment}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
       />

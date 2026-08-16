@@ -1,14 +1,13 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { formatJmd, LineCategory, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
 import fieldStyles from "@/components/ui/Field.module.css";
-import MoneyText from "@/components/ui/MoneyText";
 import MaterialForm, {
   InlineAddRow,
   materialPayloadFromValues,
@@ -25,28 +24,38 @@ import {
 import { compareCatalogRows, isAddNewOption, mergeCatalogRow } from "@/lib/catalog-options";
 import {
   ADD_HEADING_VALUE,
-  assemblyLine,
+  applyJobPick,
+  applyJobUnitEdit,
+  applyKindChange,
+  applyLabourRatePick,
+  applyEquipmentPick,
+  equipmentPickerOptions,
   categoryHeadingOptions,
   computeCoverageQuantity,
   coverageConfigForLine,
   coverageConfigFromFavourite,
   gctOptions,
   headingToValue,
-  labourLine,
+  jobPickerOptions,
+  lineKindOptions,
+  materialPickPatch,
   newLine,
   patchLine,
+  rateUnitOptions,
   removeLineByKey,
   applyUnitChoice,
   unitOptions,
   unitValue,
   toCents,
   valueToHeading,
+  RATE_UNIT_PREFIX,
+  LineKind,
   type DraftLine,
   type SelectOption,
 } from "@/lib/line-editor";
 import { materialLineDescription } from "@/lib/material-display";
 import { lineUnitLabel, RATE_UNIT_LABEL } from "@/lib/quote-totals";
-import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
 import shared from "./shared.module.css";
 import styles from "./LineItemsEditor.module.css";
@@ -67,17 +76,23 @@ const ADD_CATEGORY = "__jq_add_category__";
 export type UnitField = "rate" | "soldBy";
 
 
-/** The editor row markup for one line item. Each line's Heading cell is
- * either the built-in/custom-heading Select, or — while the user is naming
- * a brand-new heading for that line — an inline text input. Desktop keeps
- * the original fixed multi-column grid (LineItemsEditor.module.css
- * `.lineRow`); at <=767px the same markup reflows into a stacked card with
- * small field labels, so nothing overflows a phone viewport. */
+/** The editor row markup for one line item. Kind is the first control — it
+ * decides which library the "Saved" cell offers (Material/Labour/Job) or
+ * whether it offers one at all (Equipment has none), and which vocabulary
+ * the Unit cell offers. Each line's Heading cell is either the
+ * built-in/custom-heading Select, or — while the user is naming a brand-new
+ * heading for that line — an inline text input. Desktop keeps the original
+ * fixed multi-column grid (LineItemsEditor.module.css `.lineRow`); at
+ * <=767px the same markup reflows into a stacked card with small field
+ * labels, so nothing overflows a phone viewport. */
 function LineRows({
   lines,
   headingOptions,
   favouriteCategories,
   materialFilters,
+  jobs,
+  labourRates,
+  equipment,
   unitOptionsFor,
   unitsLoading,
   favourites,
@@ -89,12 +104,16 @@ function LineRows({
   addingMaterialBusy,
   onPatch,
   onRemove,
+  onKindChange,
   onHeadingChange,
   onNewHeadingTextChange,
   onCommitNewHeading,
   onCancelNewHeading,
   onMaterialFilterChange,
   onPickFavourite,
+  onPickLabourRate,
+  onPickEquipment,
+  onPickJob,
   onSaveFavourite,
   onOpenAddMaterial,
   onCancelAddMaterial,
@@ -111,8 +130,16 @@ function LineRows({
   favouriteCategories: string[];
   /** Selected category filter per line key ("" / absent = all categories). */
   materialFilters: Record<string, string>;
+  /** The Job Library — the Saved picker's source once a line's kind is JOB. */
+  jobs: Job[];
+  /** The labour-rate book — the Saved picker's source once a line's kind is
+   * LABOUR. */
+  labourRates: LabourRate[];
+  equipment: EquipmentItem[];
   /** Sold-by options for one line — per line, because a line whose saved unit
-   * is no longer in the vocabulary still has to show it. */
+   * is no longer in the vocabulary still has to show it. Only consulted for
+   * MATERIAL/EQUIPMENT kinds; LABOUR uses rateUnitOptions directly and JOB
+   * edits jobUnit as free text. */
   unitOptionsFor: (line: DraftLine) => SelectOption[];
   unitsLoading: boolean;
   /** Needed to look up a line's picked material's coverage config (see
@@ -130,12 +157,16 @@ function LineRows({
   addingMaterialBusy: boolean;
   onPatch: (key: string, p: Partial<DraftLine>) => void;
   onRemove: (key: string) => void;
+  onKindChange: (key: string, kind: LineKind) => void;
   onHeadingChange: (key: string, value: string) => void;
   onNewHeadingTextChange: (value: string) => void;
   onCommitNewHeading: (key: string) => void;
   onCancelNewHeading: () => void;
   onMaterialFilterChange: (key: string, value: string) => void;
   onPickFavourite: (key: string, favourite: MaterialFavourite) => void;
+  onPickLabourRate: (key: string, rateId: string) => void;
+  onPickEquipment: (key: string, itemId: string) => void;
+  onPickJob: (key: string, jobId: string) => void;
   onSaveFavourite: (key: string) => void;
   onOpenAddMaterial: (key: string) => void;
   onCancelAddMaterial: () => void;
@@ -148,13 +179,26 @@ function LineRows({
   onUnitChange: (key: string, value: string) => void;
   onMeasuredQtyChange: (key: string, value: string) => void;
 }) {
+  // Hoisted out of the per-line map — the same options for every LABOUR line
+  // on this document, so there is no reason to rebuild the list per row.
+  const labourOptions: SelectOption[] = [
+    { value: "", label: labourRates.length > 0 ? "Select a saved rate…" : "No saved labour rates yet" },
+    ...labourRates.map((r) => ({
+      value: r.id,
+      label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${RATE_UNIT_LABEL[r.rateUnit]}`,
+    })),
+  ];
+  const equipmentOptions = equipmentPickerOptions(equipment);
+
   return (
     <div className={styles.linesWrap}>
       {lines.map((l) => {
         const materialFilter = materialFilters[l.key] ?? "";
         // Only offered when the picked material has coverage configured
         // (see coverageConfigForLine) — most lines have none, and this stays
-        // silent for them exactly like sellUnitsRequired does in core.
+        // silent for them exactly like sellUnitsRequired does in core. A kind
+        // change always clears materialFavouriteId (see applyKindChange), so
+        // this is naturally null for every non-MATERIAL line too.
         const coverageConfig = coverageConfigForLine(l, favourites);
         const measuredQtyText = measuredQtyByKey[l.key] ?? "";
         const coverage = coverageConfig
@@ -163,36 +207,81 @@ function LineRows({
         return (
         <div key={l.key} className={styles.lineRow}>
           <div className={`${styles.fieldCell} ${styles.full}`}>
-            <span className={styles.mobileLabel}>Saved material</span>
-            {/* Always rendered, even with no categories yet — previously this
-                disappeared entirely for a business whose materials had none,
-                so the one place categories are visible on this screen was
-                invisible exactly when a contractor had none to see. */}
+            <span className={styles.mobileLabel}>Kind</span>
             <Select
-              aria-label="Filter saved materials by category"
-              options={[
-                { value: "", label: "All categories" },
-                ...favouriteCategories.map((c) => ({ value: c, label: c })),
-                { value: ADD_CATEGORY, label: "+ New category…" },
-              ]}
-              value={materialFilter}
-              onChange={(e) => {
-                // A category exists to classify materials, so creating one
-                // from a FILTER would leave you filtered to an empty set —
-                // the new category would immediately hide every material you
-                // have. Instead this opens the add-material form, where the
-                // category field creates one inline and it lands attached to
-                // a material, which is the only state where it is useful.
-                if (e.target.value === ADD_CATEGORY) onOpenAddMaterial(l.key);
-                else onMaterialFilterChange(l.key, e.target.value);
-              }}
-              style={{ marginBottom: 6 }}
+              aria-label="Line kind"
+              options={lineKindOptions}
+              value={l.kind}
+              onChange={(e) => onKindChange(l.key, e.target.value as LineKind)}
             />
-            <MaterialPickerField
-              category={materialFilter || undefined}
-              onPick={(fav) => onPickFavourite(l.key, fav)}
-              onAddNew={() => onOpenAddMaterial(l.key)}
-            />
+          </div>
+          <div className={`${styles.fieldCell} ${styles.full}`}>
+            <span className={styles.mobileLabel}>Saved</span>
+            {l.kind === LineKind.MATERIAL && (
+              <>
+                {/* Always rendered, even with no categories yet — previously this
+                    disappeared entirely for a business whose materials had none,
+                    so the one place categories are visible on this screen was
+                    invisible exactly when a contractor had none to see. */}
+                <Select
+                  aria-label="Filter saved materials by category"
+                  options={[
+                    { value: "", label: "All categories" },
+                    ...favouriteCategories.map((c) => ({ value: c, label: c })),
+                    { value: ADD_CATEGORY, label: "+ New category…" },
+                  ]}
+                  value={materialFilter}
+                  onChange={(e) => {
+                    // A category exists to classify materials, so creating one
+                    // from a FILTER would leave you filtered to an empty set —
+                    // the new category would immediately hide every material you
+                    // have. Instead this opens the add-material form, where the
+                    // category field creates one inline and it lands attached to
+                    // a material, which is the only state where it is useful.
+                    if (e.target.value === ADD_CATEGORY) onOpenAddMaterial(l.key);
+                    else onMaterialFilterChange(l.key, e.target.value);
+                  }}
+                  style={{ marginBottom: 6 }}
+                />
+                <MaterialPickerField
+                  category={materialFilter || undefined}
+                  onPick={(fav) => onPickFavourite(l.key, fav)}
+                  onAddNew={() => onOpenAddMaterial(l.key)}
+                />
+              </>
+            )}
+            {l.kind === LineKind.LABOUR && (
+              <Select
+                aria-label="Saved labour rate"
+                options={labourOptions}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) onPickLabourRate(l.key, e.target.value);
+                }}
+              />
+            )}
+            {l.kind === LineKind.JOB && (
+              <Select
+                aria-label="Saved job"
+                options={jobPickerOptions(l, jobs)}
+                value={l.jobId ?? ""}
+                onChange={(e) => {
+                  if (e.target.value) onPickJob(l.key, e.target.value);
+                }}
+              />
+            )}
+            {l.kind === LineKind.EQUIPMENT && (
+              <Select
+                aria-label="Saved equipment"
+                options={equipmentOptions}
+                // Resets to the placeholder after each pick, like the labour
+                // picker: a line keeps no equipment id, so there is nothing to
+                // show as "currently selected" without inventing one.
+                value=""
+                onChange={(e) => onPickEquipment(l.key, e.target.value)}
+                disabled={equipment.length === 0}
+              />
+            )}
           </div>
           <div className={`${styles.fieldCell} ${styles.full}`}>
             <span className={styles.mobileLabel}>Heading</span>
@@ -231,13 +320,36 @@ function LineRows({
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Unit</span>
-            <Select
-              aria-label="Unit"
-              options={unitOptionsFor(l)}
-              value={unitValue(l)}
-              onChange={(e) => onUnitChange(l.key, e.target.value)}
-              disabled={unitsLoading}
-            />
+            {l.kind === LineKind.LABOUR ? (
+              // Labour is denominated in the time vocabulary only (hour/day/
+              // week/…) — no sold-by units, no "+ Add new unit". Routed
+              // through the same tested applyUnitChoice used for materials so
+              // there is one rule for "picking a time unit clears unitLabel".
+              <Select
+                aria-label="Unit"
+                options={rateUnitOptions}
+                value={l.rateUnit}
+                onChange={(e) => onPatch(l.key, applyUnitChoice(`${RATE_UNIT_PREFIX}${e.target.value}`))}
+              />
+            ) : l.kind === LineKind.JOB ? (
+              // A job's unit is its own free-text label ("sq ft"), not picked
+              // from a vocabulary — editable in place, kept in sync with
+              // unitLabel by applyJobUnitEdit so it actually prints.
+              <Input
+                aria-label="Unit"
+                placeholder="e.g. sq ft"
+                value={l.jobUnit ?? ""}
+                onChange={(e) => onPatch(l.key, applyJobUnitEdit(e.target.value))}
+              />
+            ) : (
+              <Select
+                aria-label="Unit"
+                options={unitOptionsFor(l)}
+                value={unitValue(l)}
+                onChange={(e) => onUnitChange(l.key, e.target.value)}
+                disabled={unitsLoading}
+              />
+            )}
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Unit price ($)</span>
@@ -324,7 +436,8 @@ export default function LineItemsEditor({
   initialCustomHeadings = [],
   favourites: initialFavourites = [],
   jobs = [],
-  labourRates,
+  labourRates = [],
+  equipment = [],
   detailLevel,
   onDetailLevelChange,
 }: {
@@ -337,12 +450,18 @@ export default function LineItemsEditor({
   initialCustomHeadings?: string[];
   /** Saved materials (name + last price) offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
-  /** The business's job-type library, offered via "+ Add job type". Each
-   * carries a server-computed unitCostCents and its component snapshot. */
+  /** The business's job-type library — a line's "Saved" picker offers these
+   * once its kind is JOB. Each carries a server-computed unitCostCents and
+   * its component snapshot. */
   jobs?: Job[];
-  /** The business's labour-rate book, offered via "+ Add labour". Omitted
-   * (rather than empty) hides the button entirely. */
+  /** The business's labour-rate book — a line's "Saved" picker offers these
+   * once its kind is LABOUR. Every line kind is available on every document
+   * now, so this is always fetched (unlike the old "+ Add labour" button,
+   * which hid itself when the prop was omitted). */
   labourRates?: LabourRate[];
+  /** The business's equipment library, offered when a line's kind is
+   * EQUIPMENT. Optional so a caller that has not fetched it still renders. */
+  equipment?: EquipmentItem[];
   detailLevel: QuoteDetailLevel;
   onDetailLevelChange: (level: QuoteDetailLevel) => void;
 }) {
@@ -361,14 +480,6 @@ export default function LineItemsEditor({
   // Per-line saved-material category filter ("" = all categories). Keyed by
   // line key so each line's picker narrows independently.
   const [materialFilters, setMaterialFilters] = useState<Record<string, string>>({});
-  // "+ Add job type" / "+ Add labour" pickers: the row being previewed and the
-  // quantity to add. Closed unless the matching `adding…` flag is set.
-  const [jobTypeId, setJobTypeId] = useState<string>("");
-  const [jobTypeQty, setJobTypeQty] = useState("1");
-  const [addingJobType, setAddingJobType] = useState(false);
-  const [labourRateId, setLabourRateId] = useState<string>("");
-  const [labourQty, setLabourQty] = useState("1");
-  const [addingLabour, setAddingLabour] = useState(false);
   // The line whose Sold-by cell asked for a unit the vocabulary doesn't have.
   const [addingUnitKey, setAddingUnitKey] = useState<string | null>(null);
   const [addedUnits, setAddedUnits] = useState<ApiMaterialUnit[]>([]);
@@ -477,35 +588,14 @@ export default function LineItemsEditor({
   /** Fills a line's description + unit price from a picked favourite (via
    * the type-ahead MaterialPickerField, which fetches from the API directly
    * rather than the locally-cached `favourites` array, so it hands back the
-   * full favourite object rather than just an id). The description is
-   * composed from the favourite's name + spec values (+ its own description,
-   * if set) via materialLineDescription — previously this used only
-   * `fav.name`, so a variant's Dimension/Length/Grade specs never made it
-   * onto the actual document line, only into the picker's dropdown label. Also
-   * stamps materialFavouriteId so ★ Save-as-favourite can later update this
-   * exact variant precisely (see saveFavourite). Only nudges the heading to
-   * Materials when the line is still on its untouched default heading — an
-   * already-customized heading is left alone. */
+   * full favourite object rather than just an id). Field-setting itself is
+   * materialPickPatch (lib/line-editor.ts) — description composed from the
+   * favourite's name + spec values via materialLineDescription, price, the
+   * sold-by unit snapshot, and materialFavouriteId so ★ Save-as-favourite can
+   * later update this exact variant precisely (see saveFavourite). */
   const pickFavourite = (key: string, fav: MaterialFavourite) => {
     const coveragePatch = coveragePatchForNewMaterial(key, fav);
-    onLinesChange((ls) =>
-      ls.map((l) => {
-        if (l.key !== key) return l;
-        const isDefaultHeading = l.heading.kind === "category" && l.heading.category === LineCategory.MATERIAL;
-        return {
-          ...l,
-          description: materialLineDescription(fav),
-          unitPriceDollars: String(fav.priceDollars),
-          // `fav.unit` is the resolved MaterialUnit label for 2a materials and
-          // the legacy free-text string for older ones; either way it is what
-          // the customer should see next to the quantity.
-          unitLabel: fav.unit,
-          heading: isDefaultHeading ? { kind: "category", category: LineCategory.MATERIAL } : l.heading,
-          materialFavouriteId: fav.id,
-          ...coveragePatch,
-        };
-      }),
-    );
+    patch(key, { ...materialPickPatch(fav), ...coveragePatch });
     // Keep the locally-cached list in sync so favouriteCategories (and any
     // other UI reading `favourites`) knows about a variant the type-ahead
     // found that this business hadn't loaded into it yet.
@@ -579,53 +669,40 @@ export default function LineItemsEditor({
     invalidateMaterialSchema();
     setFavourites((favs) => [...favs, created]);
     const coveragePatch = coveragePatchForNewMaterial(key, created);
-    onLinesChange((ls) =>
-      ls.map((l) =>
-        l.key === key
-          ? {
-              ...l,
-              description: materialLineDescription(created),
-              unitPriceDollars: String(created.priceDollars),
-              unitLabel: created.unit,
-              materialFavouriteId: created.id,
-              ...coveragePatch,
-            }
-          : l,
-      ),
-    );
+    patch(key, { ...materialPickPatch(created), ...coveragePatch });
     setAddingMaterialKey(null);
   };
 
-  const selectedAssembly = jobs.find((a) => a.id === jobTypeId);
-  const selectedLabourRate = labourRates?.find((r) => r.id === labourRateId);
+  /** Switches a line's kind (the "Kind" cell) — applyKindChange drops every
+   * tie to the old library (materialFavouriteId/jobId/jobComponents/
+   * unitLabel) while deliberately keeping description/quantity/price/heading,
+   * since reclassifying a line is not resetting it (see line-editor.ts). */
+  const onKindChange = (key: string, kind: LineKind) => patch(key, applyKindChange(kind));
 
-  const openJobTypePicker = () => {
-    setJobTypeId(jobs[0]?.id ?? "");
-    setJobTypeQty("1");
-    setAddingJobType(true);
-  };
-  /** Drops the picked job type onto the document as a new line, pre-filled
-   * from the job's computed unit cost (still editable) and carrying its
-   * component snapshot for DETAILED rendering. */
-  const confirmAddJobType = () => {
-    if (!selectedAssembly) return;
-    const qty = Number(jobTypeQty) > 0 ? Number(jobTypeQty) : 1;
-    onLinesChange((ls) => [...ls, assemblyLine(selectedAssembly, qty)]);
-    setAddingJobType(false);
+  /** Picks a saved labour rate into a LABOUR-kind line's "Saved" cell —
+   * description, cadence and price come from applyLabourRatePick; quantity
+   * and heading are left exactly as the contractor already had them. */
+  const onPickLabourRate = (key: string, rateId: string) => {
+    const rate = labourRates.find((r) => r.id === rateId);
+    if (rate) patch(key, applyLabourRatePick(rate));
   };
 
-  const openLabourPicker = () => {
-    setLabourRateId(labourRates?.[0]?.id ?? "");
-    setLabourQty("1");
-    setAddingLabour(true);
+  /** Picks a saved equipment item into an EQUIPMENT-kind line — name, hire
+   * cadence and rate come from applyEquipmentPick; quantity and heading stay
+   * as the contractor had them, and the price remains editable because
+   * marking up a hire is their business. */
+  const onPickEquipment = (key: string, itemId: string) => {
+    const item = equipment.find((e) => e.id === itemId);
+    if (item) patch(key, applyEquipmentPick(item));
   };
-  /** Drops the picked labour rate onto the document as a new line, priced at
-   * the rate book's figure and denominated in that rate's own cadence. */
-  const confirmAddLabour = () => {
-    if (!selectedLabourRate) return;
-    const qty = Number(labourQty) > 0 ? Number(labourQty) : 1;
-    onLinesChange((ls) => [...ls, labourLine(selectedLabourRate, qty)]);
-    setAddingLabour(false);
+
+  /** Picks a saved job type into a JOB-kind line's "Saved" cell — description,
+   * computed unit cost and the component snapshot come from applyJobPick;
+   * quantity and heading are left exactly as the contractor already had
+   * them. */
+  const onPickJob = (key: string, jobId: string) => {
+    const job = jobs.find((j) => j.id === jobId);
+    if (job) patch(key, applyJobPick(job));
   };
 
   const headingOptions = useMemo(
@@ -674,26 +751,6 @@ export default function LineItemsEditor({
           <Button variant="outlineAccent" size="sm" onClick={() => onLinesChange((ls) => [...ls, newLine()])}>
             + Add line
           </Button>
-          <Button
-            variant="outlineAccent"
-            size="sm"
-            onClick={openJobTypePicker}
-            disabled={jobs.length === 0}
-            title={jobs.length === 0 ? "Create a job type first (Job types in the sidebar)" : "Add a saved job type as a line"}
-          >
-            + Add job type
-          </Button>
-          {labourRates && (
-            <Button
-              variant="outlineAccent"
-              size="sm"
-              onClick={openLabourPicker}
-              disabled={labourRates.length === 0}
-              title={labourRates.length === 0 ? "Create a labour rate first (Labour in the sidebar)" : "Add a saved labour rate as a line"}
-            >
-              + Add labour
-            </Button>
-          )}
         </div>
       </div>
       {hasAssemblyLine && (
@@ -727,6 +784,9 @@ export default function LineItemsEditor({
           headingOptions={headingOptions}
           favouriteCategories={favouriteCategories}
           materialFilters={materialFilters}
+          jobs={jobs}
+          labourRates={labourRates}
+          equipment={equipment}
           unitOptionsFor={(l) => unitOptions(l, units)}
           unitsLoading={unitsLoading}
           favourites={favourites}
@@ -738,12 +798,16 @@ export default function LineItemsEditor({
           addingMaterialBusy={addingMaterialBusy}
           onPatch={patch}
           onRemove={removeLine}
+          onKindChange={onKindChange}
           onHeadingChange={onHeadingChange}
           onNewHeadingTextChange={setNewHeadingText}
           onCommitNewHeading={commitNewHeading}
           onCancelNewHeading={cancelNewHeading}
           onMaterialFilterChange={setMaterialFilter}
           onPickFavourite={pickFavourite}
+          onPickLabourRate={onPickLabourRate}
+          onPickEquipment={onPickEquipment}
+          onPickJob={onPickJob}
           onSaveFavourite={saveFavourite}
           onOpenAddMaterial={setAddingMaterialKey}
           onCancelAddMaterial={() => setAddingMaterialKey(null)}
@@ -764,90 +828,6 @@ export default function LineItemsEditor({
             onAdd={(label) => addUnitForLine(addingUnitKey, label)}
             onCancel={() => setAddingUnitKey(null)}
           />
-        </Modal>
-      )}
-
-      {addingJobType && (
-        <Modal title="Add job type" onClose={() => setAddingJobType(false)}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <Select
-              label="Job type"
-              options={jobs.map((a) => ({
-                value: a.id,
-                label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}`,
-              }))}
-              value={jobTypeId}
-              onChange={(e) => setJobTypeId(e.target.value)}
-            />
-            <Input
-              label="Quantity"
-              type="number"
-              min={0}
-              step="any"
-              value={jobTypeQty}
-              onChange={(e) => setJobTypeQty(e.target.value)}
-              hint={selectedAssembly ? `Priced per ${selectedAssembly.unit}` : undefined}
-            />
-            {selectedAssembly && (
-              <div className={shared.totalRow} style={{ fontSize: 14 }}>
-                <span>Line total (editable after adding)</span>
-                <MoneyText
-                  cents={Math.round((Number(jobTypeQty) || 0) * selectedAssembly.unitCostCents)}
-                  weight={700}
-                />
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-              <Button variant="ghost" onClick={() => setAddingJobType(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={confirmAddJobType} disabled={!selectedAssembly}>
-                Add to {documentNoun}
-              </Button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {addingLabour && labourRates && (
-        <Modal title="Add labour" onClose={() => setAddingLabour(false)}>
-          <div style={{ display: "grid", gap: 12 }}>
-            <Select
-              label="Labour rate"
-              options={labourRates.map((r) => ({
-                value: r.id,
-                label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${RATE_UNIT_LABEL[r.rateUnit]}`,
-              }))}
-              value={labourRateId}
-              onChange={(e) => setLabourRateId(e.target.value)}
-            />
-            <Input
-              label="Quantity"
-              type="number"
-              min={0}
-              step="any"
-              value={labourQty}
-              onChange={(e) => setLabourQty(e.target.value)}
-              hint={selectedLabourRate ? `Priced per ${RATE_UNIT_LABEL[selectedLabourRate.rateUnit]}` : undefined}
-            />
-            {selectedLabourRate && (
-              <div className={shared.totalRow} style={{ fontSize: 14 }}>
-                <span>Line total (editable after adding)</span>
-                <MoneyText
-                  cents={Math.round((Number(labourQty) || 0) * selectedLabourRate.rateCents)}
-                  weight={700}
-                />
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 4 }}>
-              <Button variant="ghost" onClick={() => setAddingLabour(false)}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={confirmAddLabour} disabled={!selectedLabourRate}>
-                Add to {documentNoun}
-              </Button>
-            </div>
-          </div>
         </Modal>
       )}
     </section>

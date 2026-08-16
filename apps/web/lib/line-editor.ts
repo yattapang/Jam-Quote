@@ -9,11 +9,12 @@
  * the two builders, neither of which can be render-tested in this repo.
  * Money is always integer cents.
  */
-import { coverageBreakdown, GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
+import { coverageBreakdown, formatJmd, GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
 import type { InvoiceLineItemInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
+import { materialLineDescription } from "./material-display";
 import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
-import type { Job, LabourRate, MaterialFavourite, QuoteLineJobComponent } from "./types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite, QuoteLineJobComponent } from "./types";
 
 /** Heading-dropdown sentinel meaning "let me name a new one", never a value. */
 export const ADD_HEADING_VALUE = "__add_heading__";
@@ -204,21 +205,22 @@ export function newLine(): DraftLine {
   };
 }
 
-/** Builds a draft line from a picked job type: description = job name,
- * unit price = its computed unit cost (editable afterwards), and the component
- * snapshot carried for DETAILED rendering. Job lines default to the OTHER
- * heading — a composite job type isn't a single material/labour category — and
- * carry the job's free-text unit (e.g. "sq ft") in jobUnit. */
-export function assemblyLine(a: Job, quantity: number): DraftLine {
+/**
+ * The fields a picked job sets on a line — shared by `assemblyLine` (builds a
+ * brand-new line) and `applyJobPick` (patches a line the kind-first editor
+ * already has). `unitLabel` is set to the job's own unit alongside `jobUnit`
+ * so the printed quantity ("12 sq ft") and the DETAILED breakdown's "per sq
+ * ft" (which reads jobUnit directly — see QuotePdf.tsx) never disagree about
+ * what the job is priced per; see `lineUnitLabel` in quote-totals.ts, which
+ * prefers unitLabel over the rateUnit fallback.
+ */
+function jobPatch(
+  a: Job,
+): Pick<DraftLine, "description" | "unitPriceDollars" | "unitLabel" | "jobId" | "jobName" | "jobUnit" | "jobComponents"> {
   return {
-    key: nextKey(),
-    kind: LineKind.JOB,
-    heading: { kind: "category", category: LineCategory.OTHER },
     description: a.name,
-    quantity: String(quantity),
-    rateUnit: RateUnit.UNIT,
     unitPriceDollars: fromCents(a.unitCostCents),
-    gctTreatment: GctTreatment.STANDARD,
+    unitLabel: a.unit,
     jobId: a.id,
     jobName: a.name,
     jobUnit: a.unit,
@@ -231,21 +233,155 @@ export function assemblyLine(a: Job, quantity: number): DraftLine {
   };
 }
 
-/** Builds a draft line from a saved labour rate. Unlike a material, a labour
- * rate genuinely IS denominated in the rateUnit vocabulary (per hour, per
- * day), so its rateUnit is carried across and unitLabel is left unset — the
- * document then prints "hour", not a sold-by unit that would be a lie. */
+/** Builds a draft line from a picked job type: description = job name,
+ * unit price = its computed unit cost (editable afterwards), and the component
+ * snapshot carried for DETAILED rendering. Job lines default to the OTHER
+ * heading — a composite job type isn't a single material/labour category. */
+export function assemblyLine(a: Job, quantity: number): DraftLine {
+  return {
+    key: nextKey(),
+    kind: LineKind.JOB,
+    heading: { kind: "category", category: LineCategory.OTHER },
+    quantity: String(quantity),
+    rateUnit: RateUnit.UNIT,
+    gctTreatment: GctTreatment.STANDARD,
+    ...jobPatch(a),
+  };
+}
+
+/** Patches an EXISTING line with a picked job — same fields `assemblyLine`
+ * sets on a brand-new one, minus `quantity`/`heading`/`kind`, which the
+ * kind-first editor already owns (kind via `applyKindChange`; quantity and
+ * heading are whatever the contractor already had on the line). Used by the
+ * line's "Saved" picker once its kind is JOB. */
+export function applyJobPick(a: Job): Partial<DraftLine> {
+  return jobPatch(a);
+}
+
+/**
+ * The fields a picked labour rate sets on a line — shared by `labourLine`
+ * (brand-new line) and `applyLabourRatePick` (patches an existing one).
+ * Unlike a material, a labour rate genuinely IS denominated in the rateUnit
+ * vocabulary (per hour, per day), so its rateUnit is carried across and
+ * unitLabel is explicitly cleared — the document then prints "hour", not a
+ * sold-by unit left over from whatever this line was before, which would be
+ * a lie.
+ */
+function labourRatePatch(
+  r: LabourRate,
+): Pick<DraftLine, "description" | "rateUnit" | "unitPriceDollars" | "unitLabel"> {
+  return {
+    description: r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade,
+    rateUnit: r.rateUnit,
+    unitPriceDollars: fromCents(r.rateCents),
+    unitLabel: undefined,
+  };
+}
+
+/** Builds a draft line from a saved labour rate. */
 export function labourLine(r: LabourRate, quantity: number): DraftLine {
   return {
     key: nextKey(),
     kind: LineKind.LABOUR,
     heading: { kind: "category", category: LineCategory.LABOUR },
-    description: r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade,
     quantity: String(quantity),
-    rateUnit: r.rateUnit,
-    unitPriceDollars: fromCents(r.rateCents),
     gctTreatment: GctTreatment.STANDARD,
+    ...labourRatePatch(r),
   };
+}
+
+/**
+ * The fields a picked equipment item sets on a line. Like a labour rate and
+ * unlike a material, equipment is denominated in the rateUnit vocabulary (per
+ * day, per week), so unitLabel is cleared rather than set — otherwise a
+ * sold-by unit left over from whatever the line was before would print
+ * alongside a daily hire rate.
+ *
+ * The rate is what the contractor CHARGES. For hired kit that is usually the
+ * vendor's price, but it stays editable on the line like every other price,
+ * because marking it up is the contractor's business and not ours to assume.
+ */
+export function applyEquipmentPick(
+  e: EquipmentItem,
+): Pick<DraftLine, "description" | "rateUnit" | "unitPriceDollars" | "unitLabel"> {
+  return {
+    description: e.name,
+    rateUnit: e.rateUnit,
+    unitPriceDollars: fromCents(e.rateCents),
+    unitLabel: undefined,
+  };
+}
+
+/** Options for the EQUIPMENT "Saved" picker. Mirrors jobPickerOptions' shape
+ * but needs no orphan entry: a line keeps no equipment id, so there is no
+ * stale reference to reconstruct. */
+export function equipmentPickerOptions(
+  equipment: readonly Pick<EquipmentItem, "id" | "name" | "rateCents" | "rateUnit">[],
+): SelectOption[] {
+  return [
+    { value: "", label: equipment.length > 0 ? "Select equipment…" : "No saved equipment yet" },
+    ...equipment.map((e) => ({
+      value: e.id,
+      label: `${e.name} — ${formatJmd(e.rateCents)}/${RATE_UNIT_LABEL[e.rateUnit]}`,
+    })),
+  ];
+}
+
+/** Patches an EXISTING line with a picked labour rate — same fields
+ * `labourLine` sets on a brand-new one, minus `quantity`/`heading`/`kind`.
+ * Used by the line's "Saved" picker once its kind is LABOUR. */
+export function applyLabourRatePick(r: LabourRate): Partial<DraftLine> {
+  return labourRatePatch(r);
+}
+
+/**
+ * Fields a picked material favourite sets on a line: composed description
+ * (name + specs, via materialLineDescription), price, sold-by unit snapshot,
+ * and the id ★ Save-as-favourite later matches on. Used by the line's
+ * "Saved" picker (and "+ Add material…") once its kind is MATERIAL.
+ */
+export function materialPickPatch(fav: MaterialFavourite): Partial<DraftLine> {
+  return {
+    description: materialLineDescription(fav),
+    unitPriceDollars: String(fav.priceDollars),
+    unitLabel: fav.unit,
+    materialFavouriteId: fav.id,
+  };
+}
+
+/**
+ * Options for a JOB line's "Saved" picker. When the line's own jobId no
+ * longer matches anything in the current Job Library (deleted since, or a
+ * business the caller doesn't have loaded), a synthetic option is added for
+ * it — mirroring unitOptions' orphaned-snapshot handling — so a reopened JOB
+ * line still shows the job it came from rather than reverting to an empty
+ * placeholder that looks like no job was ever picked.
+ */
+export function jobPickerOptions(
+  line: Pick<DraftLine, "jobId" | "jobName">,
+  jobs: readonly Pick<Job, "id" | "name" | "unit" | "unitCostCents">[],
+): SelectOption[] {
+  const known = jobs.some((j) => j.id === line.jobId);
+  const orphan: SelectOption[] =
+    line.jobId && !known
+      ? [{ value: line.jobId, label: `${line.jobName ?? "Job"} (removed from Job Library)` }]
+      : [];
+  return [
+    { value: "", label: jobs.length > 0 ? "Select a job…" : "No saved jobs yet" },
+    ...orphan,
+    ...jobs.map((a) => ({ value: a.id, label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}` })),
+  ];
+}
+
+/**
+ * A JOB line's own unit ("sq ft") doubles as its printed sold-by label —
+ * unlike MATERIAL/LABOUR there is no vocabulary to pick from, just the job's
+ * own free-text unit, editable in place. Kept in sync with unitLabel so the
+ * quantity line and the DETAILED "per sq ft" breakdown (which reads jobUnit
+ * directly) never disagree about what actually prints.
+ */
+export function applyJobUnitEdit(unit: string): Partial<DraftLine> {
+  return { jobUnit: unit, unitLabel: unit.trim() || undefined };
 }
 
 /** One line as an existing quote/invoice hands it back for editing. */

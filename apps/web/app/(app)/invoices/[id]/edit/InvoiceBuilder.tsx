@@ -10,7 +10,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import { updateInvoice, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
-import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../../../shared.module.css";
 import LineItemsEditor from "../../../LineItemsEditor";
 import {
@@ -60,6 +60,7 @@ export default function InvoiceBuilder({
   favourites = [],
   jobs = [],
   labourRates = [],
+  equipment = [],
   clients: initialClients = [],
 }: {
   invoiceId: string;
@@ -73,6 +74,8 @@ export default function InvoiceBuilder({
   jobs?: Job[];
   /** The business's labour-rate book, offered via "+ Add labour". */
   labourRates?: LabourRate[];
+  /** The business's equipment library, for EQUIPMENT-kind lines. */
+  equipment?: EquipmentItem[];
 }) {
   const router = useRouter();
   const backHref = `/invoices/${invoiceId}`;
@@ -180,6 +183,7 @@ export default function InvoiceBuilder({
         favourites={favourites}
         jobs={jobs}
         labourRates={labourRates}
+        equipment={equipment}
         detailLevel={detailLevel}
         onDetailLevelChange={setDetailLevel}
       />

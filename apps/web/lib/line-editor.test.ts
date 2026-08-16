@@ -39,6 +39,13 @@ import {
   categoryForKind,
   kindFromSaved,
   applyKindChange,
+  applyJobPick,
+  applyJobUnitEdit,
+  applyLabourRatePick,
+  jobPickerOptions,
+  materialPickPatch,
+  applyEquipmentPick,
+  equipmentPickerOptions,
 } from "./line-editor";
 import type { Job, LabourRate, MaterialFavourite } from "./types";
 
@@ -689,6 +696,195 @@ describe("line kinds", () => {
       expect("quantity" in patch).toBe(false);
       expect("unitPriceDollars" in patch).toBe(false);
       expect("heading" in patch).toBe(false);
+    });
+  });
+});
+
+/**
+ * Picking a saved row into an EXISTING line — the kind-first "Saved" cell's
+ * counterpart to assemblyLine/labourLine (which build a brand-new line).
+ * These only patch description/price/library-linkage fields; quantity and
+ * heading are the caller's line's own and must not appear in the patch.
+ */
+describe("picking a saved row onto an existing line", () => {
+  const job: Job = {
+    id: "a1",
+    name: "Tiling",
+    unit: "sq ft",
+    markupPct: 20,
+    unitCostCents: 45_000,
+    components: [
+      {
+        id: "c1",
+        kind: JobComponentKind.MATERIAL,
+        description: "Tile",
+        quantityPerUnit: 1.1,
+        unitPriceCents: 30_000,
+        sort: 0,
+      },
+    ],
+  };
+  const rate: LabourRate = {
+    id: "lr1",
+    trade: "Mason",
+    rateCents: 350_000,
+    rateDollars: 3500,
+    rateUnit: RateUnit.DAY,
+  };
+
+  describe("applyJobPick", () => {
+    it("sets description, price, unit snapshot and the component snapshot", () => {
+      const patch = applyJobPick(job);
+      expect(patch).toMatchObject({
+        description: "Tiling",
+        unitPriceDollars: "450",
+        unitLabel: "sq ft",
+        jobId: "a1",
+        jobName: "Tiling",
+        jobUnit: "sq ft",
+      });
+      expect(patch.jobComponents).toHaveLength(1);
+    });
+
+    it("leaves quantity and heading out of the patch — the line's own stay put", () => {
+      const patch = applyJobPick(job);
+      expect("quantity" in patch).toBe(false);
+      expect("heading" in patch).toBe(false);
+    });
+
+    it("sets the same fields assemblyLine sets on a brand-new line", () => {
+      const fresh = assemblyLine(job, 3);
+      const picked = applyJobPick(job);
+      expect(picked.description).toBe(fresh.description);
+      expect(picked.unitPriceDollars).toBe(fresh.unitPriceDollars);
+      expect(picked.unitLabel).toBe(fresh.unitLabel);
+      expect(picked.jobComponents).toEqual(fresh.jobComponents);
+    });
+  });
+
+  describe("applyLabourRatePick", () => {
+    it("sets description, cadence and price, and clears any sold-by snapshot", () => {
+      expect(applyLabourRatePick(rate)).toEqual({
+        description: "Mason",
+        rateUnit: RateUnit.DAY,
+        unitPriceDollars: "3500",
+        unitLabel: undefined,
+      });
+    });
+
+    it("names the skill tier when the rate has one", () => {
+      expect(applyLabourRatePick({ ...rate, skillTier: "Senior" }).description).toBe("Mason — Senior");
+    });
+
+    it("leaves quantity and heading out of the patch", () => {
+      const patch = applyLabourRatePick(rate);
+      expect("quantity" in patch).toBe(false);
+      expect("heading" in patch).toBe(false);
+    });
+  });
+
+  describe("materialPickPatch", () => {
+    it("composes the description, sets price/unit and stamps the favourite id", () => {
+      const fav = favourite({ id: "f1", name: "Tile", unit: "box", priceCents: 250_000, priceDollars: 2500 });
+      expect(materialPickPatch(fav)).toEqual({
+        description: "Tile",
+        unitPriceDollars: "2500",
+        unitLabel: "box",
+        materialFavouriteId: "f1",
+      });
+    });
+
+    it("appends spec values for an uncategorized/legacy material", () => {
+      const fav = favourite({ specs: { Length: "16ft", Grade: "Select" } });
+      expect(materialPickPatch(fav).description).toBe("Tile 16ft x Select");
+    });
+  });
+
+  describe("jobPickerOptions", () => {
+    const jobs = [
+      { id: "a1", name: "Tiling", unit: "sq ft", unitCostCents: 45_000 },
+      { id: "a2", name: "Painting", unit: "gal", unitCostCents: 12_000 },
+    ];
+
+    it("lists the job library plus a leading placeholder", () => {
+      const opts = jobPickerOptions({ jobId: undefined, jobName: undefined }, jobs);
+      expect(opts.map((o) => o.value)).toEqual(["", "a1", "a2"]);
+      expect(opts[0]?.label).toBe("Select a job…");
+    });
+
+    it("says so when the library is empty", () => {
+      expect(jobPickerOptions({ jobId: undefined, jobName: undefined }, []).at(0)?.label).toBe(
+        "No saved jobs yet",
+      );
+    });
+
+    it("adds no synthetic option when the line's jobId is still in the library", () => {
+      const opts = jobPickerOptions({ jobId: "a1", jobName: "Tiling" }, jobs);
+      expect(opts.filter((o) => o.value === "a1")).toHaveLength(1);
+    });
+
+    it("synthesizes an option for a jobId no longer in the library — a reopened JOB " +
+      "line must show the job it came from, not an empty placeholder", () => {
+      const opts = jobPickerOptions({ jobId: "gone", jobName: "Old roofing job" }, jobs);
+      const synthetic = opts.find((o) => o.value === "gone");
+      expect(synthetic?.label).toContain("Old roofing job");
+    });
+  });
+
+  describe("applyJobUnitEdit", () => {
+    it("keeps jobUnit and unitLabel in sync so the edited unit actually prints", () => {
+      expect(applyJobUnitEdit("linear ft")).toEqual({ jobUnit: "linear ft", unitLabel: "linear ft" });
+    });
+
+    it("clears unitLabel (but not jobUnit) when the field is emptied", () => {
+      expect(applyJobUnitEdit("")).toEqual({ jobUnit: "", unitLabel: undefined });
+    });
+  });
+});
+
+describe("equipment picking", () => {
+  const item = {
+    id: "eq1",
+    name: "Concrete mixer",
+    owned: false,
+    rateCents: 450_000,
+    rateDollars: 4500,
+    rateUnit: RateUnit.DAY,
+  };
+
+  it("takes the name, hire cadence and rate from the saved item", () => {
+    const patch = applyEquipmentPick(item);
+    expect(patch.description).toBe("Concrete mixer");
+    expect(patch.rateUnit).toBe(RateUnit.DAY);
+    expect(patch.unitPriceDollars).toBe("4500");
+  });
+
+  it("clears unitLabel, so a leftover sold-by unit cannot print beside a daily rate", () => {
+    // Equipment is denominated in the rateUnit vocabulary like labour, not in
+    // a material's sold-by units. A line that was previously a bag of cement
+    // would otherwise still print "bag" next to a per-day hire.
+    expect(applyEquipmentPick(item).unitLabel).toBeUndefined();
+  });
+
+  it("leaves quantity, heading and kind alone — picking is not resetting", () => {
+    const patch = applyEquipmentPick(item);
+    expect("quantity" in patch).toBe(false);
+    expect("heading" in patch).toBe(false);
+    expect("kind" in patch).toBe(false);
+  });
+
+  describe("equipmentPickerOptions", () => {
+    it("labels each item with its rate so the list is choosable without opening it", () => {
+      const opts = equipmentPickerOptions([item]);
+      expect(opts).toHaveLength(2);
+      expect(opts[1]?.value).toBe("eq1");
+      expect(opts[1]?.label).toContain("Concrete mixer");
+      expect(opts[1]?.label).toContain("/day");
+    });
+
+    it("says the library is empty rather than showing a bare placeholder", () => {
+      expect(equipmentPickerOptions([])[0]?.label).toBe("No saved equipment yet");
+      expect(equipmentPickerOptions([item])[0]?.label).toBe("Select equipment…");
     });
   });
 });

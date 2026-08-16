@@ -11,7 +11,7 @@
 
 .lineRow {
   display: grid;
-  grid-template-columns: 150px 150px 1fr 70px 90px 100px 100px 30px 32px;
+  grid-template-columns: 120px 150px 150px 1fr 70px 90px 100px 100px 30px 32px;
   gap: 8px;
   align-items: end;
   padding-bottom: 12px;
