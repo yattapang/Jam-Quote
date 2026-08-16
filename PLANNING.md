@@ -74,13 +74,18 @@ intentionally untouched until the web app is solid.
 
 Recently landed (all pushed):
 
-- Reports: win rate, invoiced vs collected, receivables by client, sales by
-  month, jobs by stage, top clients.
-- Admin view-as-tenant: read-only, 30 minutes, audited.
-- Rate limiting keyed by caller identity rather than source IP.
-- Coverage math: quote in m², bill in boxes.
-- Invoice bill-to client editable; admin console fits a phone.
-- Production cleaned of seven empty demo tenants.
+- **Vocabulary unified** (0a–0d): `Job` = the reusable priced template,
+  `Project` = client work, in schema, wire and UI. Four steps, zero SQL.
+- **Phase 1 findability**: trade picker offers "+ Add" before you type; the
+  quote line's category dropdown always renders and can create; routes and
+  labels renamed (`/jobs` = Job Library, `/projects` = client work); Job
+  Library empty state teaches the feature.
+- **Phase 2 kind-first line editor**: every line declares what it IS
+  (Material / Labour / Equipment / Job) and the saved picker, units and price
+  follow from that. Fixed a customer-facing bug on the way — job lines printed
+  "12 unit" instead of "12 sq ft".
+- **Equipment library**: the UI for an API that already existed.
+- Reports, view-as-tenant, identity-keyed rate limiting, coverage math.
 
 ---
 
@@ -146,56 +151,97 @@ Then, the findability work:
 **Exit:** a contractor can find the Job Library, build a job type, add a
 trade, and add a material category, without being told where to look.
 
-### Phase 2 — Line editor redesign (the substantial one)
+### Phase 2 — Line editor redesign. DONE (d809180, 1eddd32)
 
-Replace the material-centric line row with a **kind-first** flow:
+Kind-first: pick Material / Labour / Equipment / Job, and the Saved picker,
+Unit vocabulary and prefilled price follow. The old "+ Add labour" /
+"+ Add job type" buttons are gone — any line can be any kind.
 
-1. Pick the line **kind**: Material / Labour / Equipment / Job.
-2. The "Saved" picker then offers rows from the matching library
-   (`MaterialFavourite` / `LabourRate` / equipment / `Assembly`).
-3. Unit options come from that kind (material → sold-by units; labour →
-   hour/day/week; job → the assembly's own unit).
-4. Unit price prefills from the saved record and stays editable — the saved
-   price is a default, never a lock.
+The structural change underneath: a line's `kind` says what it IS; its
+`heading` only says where it PRINTS. Those were previously the same field, so
+filing a bag of cement under a custom heading recorded it as OTHER. Category
+now follows kind.
 
-Constraints carried from existing behaviour:
-- `LineCategory` already exists in core (MATERIAL/LABOUR/EQUIPMENT/…). The
-  line "kind" should map onto it rather than inventing a parallel enum.
-- The saved line quantity must remain in the **billed** unit; see the
-  coverage rule below.
-- The editor is shared by the quote and invoice builders
-  (`app/(app)/LineItemsEditor.tsx`) — both must keep working.
-- Pure logic goes in `lib/line-editor.ts` and is unit-tested there. There is
-  no DOM testing setup in this repo; keep logic out of components.
+### Phase 2b — Inline creation everywhere (IN PROGRESS)
 
-### Phase 3 — Job Library depth
+Reported: only Material lets you create a new entry from the Saved picker.
+Labour, Equipment and Job say "none saved" with no way out except abandoning
+the quote.
 
-1. Job types composed of other job types, if a general contractor needs it.
-   **Open question — not yet decided.** Nesting brings cycle detection and
-   recursive costing; do not build it speculatively.
+- Labour and Equipment open their full form inline — both are small.
+- **Job opens a QUICK create**: name, unit, rate per unit. The full recipe
+  builder stays on the Jobs page. Building a component recipe inside a modal
+  stacked on a half-written quote is too much form for that moment.
+  - **The trap**: `unitCostCents` is COMPUTED server-side from components, so
+    a job created with none saves at $0 — the contractor types 1500 and gets a
+    line priced at zero. Quick-create therefore writes the rate as a single
+    OTHER component (quantityPerUnit 1, no markup), which computes to exactly
+    the entered rate and opens on the Jobs page as an ordinary job to refine.
+
+### Phase 2c — Unit vocabulary for labour and equipment (API DONE: 1fb09a2)
+
+`RateUnit` is a closed Postgres enum of cadences, so its dropdown genuinely
+cannot be extended by a tenant. But labour sold per sq ft, or scaffold per
+lift, is real. Both models gained a free-text `unitLabel`, mirroring materials.
+Migration written, NOT YET APPLIED. Pickers and quote-line plumbing still to do.
+
+### Phase 3 — Archive & hide vocabulary (DECIDED, not started)
+
+Tenants need shorter dropdowns. Decision: **archive, never delete.**
+
+- The goal is a shorter list, not destroyed data — an entry used by forty
+  materials should stop being OFFERED, not vanish.
+- Deleting is already blocked in practice: those FKs are RESTRICT in
+  production (see #40), so deleting an in-use row errors today.
+- Sent documents are safe either way: a quote line snapshots its unit as text.
+
+**The trap that shapes the schema.** Curated rows (`businessId NULL`) are
+shared by every tenant. A `deletedAt` on the curated "Cement" category would
+hide it for EVERYONE — the #19 failure mode again. So:
+
+- Tenant-owned row → archive flag on the row itself.
+- Curated row → a per-tenant "hidden" table (businessId + the hidden row's id).
+  Never write to the curated row.
+
+Managed from a **Settings** screen ("Catalog & vocabulary") rather than an
+inline ×, so archiving is reversible and destructive controls do not sit
+beside selection controls.
+
+### Phase 4 — Job Library depth
+
+1. Jobs composed of other jobs, if a general contractor needs it. **Open —
+   do not build speculatively**; nesting brings cycle detection and recursive
+   costing.
 2. Per-category name templates.
 3. Attribute-based filtering in the material picker.
 4. `pg_trgm` GIN index on `searchText` — the btree only helps prefixes, not
-   the infix `%term%` the picker issues. Irrelevant at current volume;
-   needed once the curated catalog grows.
-5. Admin editor for curated categories/attributes/units (capability
-   mirroring `MANAGE_RULEPACK`).
-6. Curated price-feed ingestion — curated `MaterialPriceEntry` rows are still
-   only written by `prisma/seed.ts`.
+   the infix `%term%` the picker issues. Irrelevant at current volume.
+5. Admin editor for curated categories/attributes/units.
+6. Curated price-feed ingestion.
 
-### Phase 4 — Mobile
+### Phase 5 — Mobile
 
-Only after the web app is solid. `apps/mobile` quote editor, add-material and
-invoice-detail still render mock data. The APIs they need exist. Mobile needs
-a relative-time helper (web has one at `apps/web/lib/relative-time.ts`)
-because the API returns ISO `fetchedAt` where the mock pre-rendered a string.
-
----
+Only after the web app is solid. The client is being REBUILT, which is why the
+wire contract was unfrozen in 0c/0d. `apps/mobile` still renders mock data in
+the quote editor, add-material and invoice detail.
 
 ## 5. Standing outstanding items
 
 | Item | State |
 |---|---|
+| **`npm run build` cannot run here** | `next/font` cannot reach fonts.googleapis.com from this machine (TLS interception). Fails in `app/layout.tsx`, unrelated to any change. **Run the build somewhere with clean egress before deploying.** |
+| **Deploy API and web TOGETHER** | 0c/0d changed JSON field names and Phase 1 moved routes. A new API with an old web (or the reverse) fails those requests. |
+| **Migration 20260816090000 not applied** | Adds `unitLabel` to LabourRate and EquipmentItem. Additive, nullable, non-destructive. |
+| Render migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint. A session advisory lock taken through pgbouncer strands on any failed migration (hit once: P1002). |
+| Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
+| Delete `seed-business-blackwood` | Deferred until Reports has been checked against it — the only tenant with enough data to render. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug. |
+| MaterialFavourite FK drift (#40) | Live is `RESTRICT`, schema says `SET NULL`. Safe direction, but deleting an in-use unit errors instead of nulling. Shapes the Phase 3 archive design. |
+| Quote email has no logo | Invoice email has one. |
+| `Business.logoUrl` | Dead column, superseded by `BusinessLogo`. |
+| Sidebar during view-as-tenant | Shows the admin's own business name; the banner names the tenant. Cosmetic. |
+| Equipment not in mobile/sync | The equipment library is web + API only. |
+
+---|---|
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual payment record + void already work. |
 | Delete `seed-business-blackwood` | Deferred until Reports has been checked against it — it is the only tenant with enough data to render. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug. |
 | Render migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint. A session-level advisory lock taken through the pooler strands on any failed migration (hit once: P1002, objid 72707369). |
