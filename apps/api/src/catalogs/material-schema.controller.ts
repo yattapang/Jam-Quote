@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
@@ -31,9 +31,15 @@ import {
 export class MaterialSchemaController {
   constructor(private readonly schema: MaterialSchemaService) {}
 
+  /** `?includeHidden=true` returns entries this tenant has hidden as well —
+   * the settings screen needs them to offer a restore. Every other caller
+   * (the pickers) omits it and gets the shortened list. */
   @Get()
-  get(@BusinessId() businessId: string): Promise<MaterialSchemaView> {
-    return this.schema.getSchema(businessId);
+  get(
+    @BusinessId() businessId: string,
+    @Query("includeHidden") includeHidden?: string,
+  ): Promise<MaterialSchemaView> {
+    return this.schema.getSchema(businessId, includeHidden === "true");
   }
 
   @Post("categories")

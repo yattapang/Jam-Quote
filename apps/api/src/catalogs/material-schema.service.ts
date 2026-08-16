@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import type { MaterialAttributeKind, MaterialUnit, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type { CreateMaterialCategoryInput, CreateMaterialUnitInput } from "./catalogs.dto.js";
 import {
   buildSearchText,
@@ -138,13 +139,16 @@ function toUnitView(unit: MaterialUnit): UnitView {
 export class MaterialSchemaService {
   private readonly logger = new Logger(MaterialSchemaService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hiddenCatalog: CatalogHiddenService,
+  ) {}
 
   /** Curated + this tenant's own, as one tree for the pickers/forms. */
-  async getSchema(businessId: string): Promise<MaterialSchemaView> {
+  async getSchema(businessId: string, includeHidden = false): Promise<MaterialSchemaView> {
     const visible = { OR: [{ businessId: null }, { businessId }] };
 
-    const [categories, units] = await Promise.all([
+    const [categories, units, hiddenCategories, hiddenUnits] = await Promise.all([
       this.prisma.materialCategoryDef.findMany({
         where: { ...visible, deletedAt: null },
         orderBy: [{ sort: "asc" }, { label: "asc" }],
@@ -154,9 +158,21 @@ export class MaterialSchemaService {
         where: { ...visible, deletedAt: null },
         orderBy: [{ sort: "asc" }, { label: "asc" }],
       }),
+      // Filtered here rather than in the `where`, because a curated row is
+      // shared by every tenant — there is no column on it that could say
+      // "this contractor doesn't lay tile". See CatalogHiddenService.
+      includeHidden
+        ? Promise.resolve(new Set<string>())
+        : this.hiddenCatalog.hiddenIds(businessId, CatalogKind.MATERIAL_CATEGORY),
+      includeHidden
+        ? Promise.resolve(new Set<string>())
+        : this.hiddenCatalog.hiddenIds(businessId, CatalogKind.MATERIAL_UNIT),
     ]);
 
-    return { categories: categories.map(toCategoryView), units: units.map(toUnitView) };
+    return {
+      categories: categories.filter((c) => !hiddenCategories.has(c.id)).map(toCategoryView),
+      units: units.filter((u) => !hiddenUnits.has(u.id)).map(toUnitView),
+    };
   }
 
   /**

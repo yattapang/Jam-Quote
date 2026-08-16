@@ -125,7 +125,7 @@ function withPrisma(category: unknown = LUMBER) {
     materialAttributeOption: { create: vi.fn().mockResolvedValue({}) },
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { svc: new MaterialSchemaService(prisma as any), prisma };
+  return { svc: new MaterialSchemaService(prisma as any, { hiddenIds: vi.fn().mockResolvedValue(new Set<string>()) } as any), prisma };
 }
 
 describe("MaterialSchemaService.normalizeForWrite", () => {

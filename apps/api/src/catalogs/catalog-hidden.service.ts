@@ -10,7 +10,10 @@ export const CatalogKind = {
   MATERIAL_CATEGORY: "MATERIAL_CATEGORY",
   MATERIAL_UNIT: "MATERIAL_UNIT",
   TRADE: "TRADE",
-  SUPPLIER: "SUPPLIER",
+  // NO SUPPLIER. Suppliers are wholly tenant-owned — there are no curated
+  // rows a contractor is stuck with — and they already support delete. A
+  // hideable kind that nothing filters would be accepted by the API and do
+  // nothing, which is precisely the silent no-op assertKind exists to refuse.
 } as const;
 export type CatalogKind = (typeof CatalogKind)[keyof typeof CatalogKind];
 

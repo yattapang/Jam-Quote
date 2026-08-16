@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
@@ -10,9 +10,13 @@ import { createTradeSchema, type CreateTradeInput } from "./trades.dto.js";
 export class TradesController {
   constructor(private readonly trades: TradesService) {}
 
+  /** `?includeHidden=true` for the settings screen — see MaterialSchemaController. */
   @Get()
-  findAll(@BusinessId() businessId: string): Promise<TradeView[]> {
-    return this.trades.findAll(businessId);
+  findAll(
+    @BusinessId() businessId: string,
+    @Query("includeHidden") includeHidden?: string,
+  ): Promise<TradeView[]> {
+    return this.trades.findAll(businessId, includeHidden === "true");
   }
 
   @Post()

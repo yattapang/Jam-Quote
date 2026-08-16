@@ -43,7 +43,7 @@ function harness(over: Record<string, any> = {}) {
     ...over,
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { svc: new MaterialSchemaService(prisma as any), prisma };
+  return { svc: new MaterialSchemaService(prisma as any, { hiddenIds: vi.fn().mockResolvedValue(new Set<string>()) } as any), prisma };
 }
 
 describe("MaterialSchemaService.getSchema", () => {
