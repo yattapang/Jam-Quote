@@ -52,7 +52,17 @@ export default function TradeSelectField({
     return options.filter((t) => t.name.toLowerCase().includes(needle));
   }, [options, trimmed]);
   const hasExactMatch = options.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
-  const showAdd = trimmed !== "" && !hasExactMatch;
+  // The add row shows whenever the list is open, not only once something has
+  // been typed. It used to appear only after a non-matching query, so a
+  // contractor who opened the list, scanned it, and did not see their trade
+  // had no indication that adding one was even possible — the feature existed
+  // and read as absent. Every other picker in the app offers an explicit
+  // "+ Add new…" row up front; this now matches.
+  //
+  // With an empty box there is no name to save, so the row becomes a prompt
+  // rather than an action: still visible, but inert and saying what to do.
+  const canAdd = trimmed !== "" && !hasExactMatch;
+  const showAdd = canAdd || trimmed === "";
   // Combined list the keyboard highlight index walks: filtered options, then
   // the "+ Add" row (if shown).
   const rowCount = filtered.length + (showAdd ? 1 : 0);
@@ -159,9 +169,13 @@ export default function TradeSelectField({
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setHighlight(filtered.length)}
               onClick={() => void addTrade()}
-              disabled={busy}
+              disabled={busy || !canAdd}
             >
-              {busy ? "Adding…" : `+ Add "${trimmed}"`}
+              {busy
+                ? "Adding…"
+                : canAdd
+                  ? `+ Add "${trimmed}"`
+                  : "+ Add a new trade — type its name"}
             </button>
           )}
         </div>

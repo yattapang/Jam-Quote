@@ -66,6 +66,15 @@
   font-weight: 600;
 }
 
+/* Shown with an empty box, where the row is a prompt rather than an action —
+   there is no name to save yet. Muted so it reads as "here is how", not as a
+   button that was clicked and did nothing. */
+.addOption:disabled {
+  color: var(--jq-text-muted);
+  font-weight: 500;
+  cursor: default;
+}
+
 .empty {
   font-size: 12.5px;
   color: var(--jq-text-muted);
