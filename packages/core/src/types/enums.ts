@@ -81,6 +81,10 @@ export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 export const JobComponentKind = {
   MATERIAL: "MATERIAL",
   LABOUR: "LABOUR",
+  /** Plant and hire — a mixer for two days, a truck per trip. Points at the
+   * equipment library, so the rate stays the one the contractor maintains
+   * rather than a number retyped into a recipe and left to drift from it. */
+  EQUIPMENT: "EQUIPMENT",
   OTHER: "OTHER",
 } as const;
 export type JobComponentKind =

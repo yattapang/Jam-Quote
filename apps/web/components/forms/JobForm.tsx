@@ -10,15 +10,17 @@ import MoneyText from "@/components/ui/MoneyText";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import MaterialForm, { materialPayloadFromValues } from "@/components/forms/MaterialForm";
 import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/LabourRateForm";
-import { createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
+import EquipmentForm, { equipmentPayloadFromValues } from "@/components/forms/EquipmentForm";
+import { createEquipmentItem, createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
 import { materialFavouriteLabel } from "@/lib/material-display";
 import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
-import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import styles from "./JobForm.module.css";
 
 const kindOptions = [
   { value: JobComponentKind.MATERIAL, label: "Material" },
   { value: JobComponentKind.LABOUR, label: "Labour" },
+  { value: JobComponentKind.EQUIPMENT, label: "Equipment" },
   { value: JobComponentKind.OTHER, label: "Other" },
 ];
 
@@ -32,6 +34,7 @@ export interface JobComponentDraft {
   kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
+  equipmentItemId?: string;
   description: string;
   quantityPerUnit: string;
   /** What the quantity counts — "trip", "day". Blank prints bare. */
@@ -121,6 +124,12 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
 // though the quote builder's picker told them apart. Both now render the
 // same variant name + unit + price.
 
+function equipmentLabel(e: EquipmentItem): string {
+  const price = `$${e.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const unit = e.unitLabel?.trim() || e.rateUnit.toLowerCase();
+  return `${e.name} (${price}/${unit})`;
+}
+
 function labourLabel(r: LabourRate): string {
   const price = `$${r.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const trade = r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade;
@@ -136,20 +145,24 @@ function ComponentRow({
   draft,
   materials,
   labourRates,
+  equipment,
   onChange,
   onRemove,
   onAddMaterial,
   onAddLabourRate,
+  onAddEquipment,
   isDuplicate,
   onMergeDuplicates,
 }: {
   draft: JobComponentDraft;
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
+  equipment: EquipmentItem[];
   onChange: (patch: Partial<JobComponentDraft>) => void;
   onRemove: () => void;
   onAddMaterial: () => void;
   onAddLabourRate: () => void;
+  onAddEquipment: () => void;
   isDuplicate: boolean;
   onMergeDuplicates: () => void;
 }) {
@@ -167,9 +180,21 @@ function ComponentRow({
     ...labourRates.map((r) => ({ value: r.id, label: labourLabel(r) })),
     { value: ADD_NEW_OPTION_VALUE, label: "+ Add new labour rate…" },
   ];
+  const equipmentOptions = [
+    { value: "", label: equipment.length ? "Select equipment…" : "No saved equipment" },
+    ...equipment.map((e) => ({ value: e.id, label: equipmentLabel(e) })),
+    { value: ADD_NEW_OPTION_VALUE, label: "+ Add new equipment…" },
+  ];
 
   function changeKind(kind: JobComponentKind) {
-    onChange({ kind, materialFavouriteId: undefined, labourRateId: undefined });
+    // Every library link is cleared, not just the one for the old kind — a
+    // stale id would quietly tie this row to a material it no longer is.
+    onChange({
+      kind,
+      materialFavouriteId: undefined,
+      labourRateId: undefined,
+      equipmentItemId: undefined,
+    });
   }
 
   function pickMaterial(id: string) {
@@ -179,6 +204,19 @@ function ComponentRow({
       materialFavouriteId: m.id,
       description: m.name,
       unitPriceDollars: String(m.priceDollars),
+    });
+  }
+
+  function pickEquipment(id: string) {
+    const e = equipment.find((x) => x.id === id);
+    if (!e) return onChange({ equipmentItemId: undefined });
+    // The item's own printed unit rides along, so a recipe line reads
+    // "2 day" or "3 trip" rather than a bare number.
+    onChange({
+      equipmentItemId: e.id,
+      description: e.name,
+      unitLabel: e.unitLabel?.trim() || e.rateUnit.toLowerCase(),
+      unitPriceDollars: String(e.rateDollars),
     });
   }
 
@@ -208,6 +246,15 @@ function ComponentRow({
             value={draft.materialFavouriteId ?? ""}
             onChange={(e) =>
               isAddNewOption(e.target.value) ? onAddMaterial() : pickMaterial(e.target.value)
+            }
+          />
+        ) : draft.kind === JobComponentKind.EQUIPMENT ? (
+          <Select
+            label="Saved equipment"
+            options={equipmentOptions}
+            value={draft.equipmentItemId ?? ""}
+            onChange={(e) =>
+              isAddNewOption(e.target.value) ? onAddEquipment() : pickEquipment(e.target.value)
             }
           />
         ) : draft.kind === JobComponentKind.LABOUR ? (
@@ -302,6 +349,7 @@ export default function JobForm({
   submitLabel = "Save job type",
   materials,
   labourRates,
+  equipment = [],
   trades = [],
   onCancel,
   onSubmit,
@@ -313,6 +361,9 @@ export default function JobForm({
    * page, that populate the per-component pickers. */
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
+  /** The equipment library, for EQUIPMENT components. Optional so a caller
+   * that has not fetched it still renders — the picker is simply empty. */
+  equipment?: EquipmentItem[];
   /** For the inline "+ Add new labour rate" form's trade picker. Optional so
    * a caller that has not fetched them still renders — that picker degrades to
    * type-your-own rather than breaking the job builder. */
@@ -327,7 +378,8 @@ export default function JobForm({
   // a reload, which reads exactly like the create having failed.
   const [materialList, setMaterialList] = useState<MaterialFavourite[]>(materials);
   const [labourList, setLabourList] = useState<LabourRate[]>(labourRates);
-  const [adding, setAdding] = useState<{ kind: "material" | "labour"; componentKey: string } | null>(null);
+  const [equipmentList, setEquipmentList] = useState<EquipmentItem[]>(equipment);
+  const [adding, setAdding] = useState<{ kind: "material" | "labour" | "equipment"; componentKey: string } | null>(null);
   const duplicateKeys = duplicateComponentKeys(values.components);
   const mergeDuplicates = () =>
     setValues((v) => ({ ...v, components: mergeDuplicateComponents(v.components) }));
@@ -430,10 +482,12 @@ export default function JobForm({
             draft={c}
             materials={materialList}
             labourRates={labourList}
+            equipment={equipmentList}
             onChange={(patch) => patchComponent(c.key, patch)}
             onRemove={() => removeComponent(c.key)}
             onAddMaterial={() => setAdding({ kind: "material", componentKey: c.key })}
             onAddLabourRate={() => setAdding({ kind: "labour", componentKey: c.key })}
+            onAddEquipment={() => setAdding({ kind: "equipment", componentKey: c.key })}
             isDuplicate={duplicateKeys.has(c.key)}
             onMergeDuplicates={mergeDuplicates}
           />
@@ -494,6 +548,25 @@ export default function JobForm({
                 materialFavouriteId: created.id,
                 description: materialFavouriteLabel(created),
                 unitPriceDollars: String(created.priceCents / 100),
+              });
+              setAdding(null);
+            }}
+          />
+        </Modal>
+      )}
+      {adding?.kind === "equipment" && (
+        <Modal title="Add equipment" onClose={() => setAdding(null)}>
+          <EquipmentForm
+            submitLabel="Save equipment"
+            onCancel={() => setAdding(null)}
+            onSubmit={async (formValues) => {
+              const created = await createEquipmentItem(equipmentPayloadFromValues(formValues));
+              setEquipmentList((es) => [...es, created]);
+              patchComponent(adding.componentKey, {
+                equipmentItemId: created.id,
+                description: created.name,
+                unitLabel: created.unitLabel?.trim() || created.rateUnit.toLowerCase(),
+                unitPriceDollars: String(created.rateCents / 100),
               });
               setAdding(null);
             }}

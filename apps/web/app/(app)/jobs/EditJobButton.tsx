@@ -10,7 +10,7 @@ import JobForm, {
   jobPayloadFromValues,
   type JobFormValues,
 } from "@/components/forms/JobForm";
-import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 
 /** Per-row edit action on the job-type library — mirrors EditLabourRateButton:
  * pre-fills the builder from the existing job's components and PATCHes
@@ -20,11 +20,13 @@ export default function EditJobButton({
   materials,
   labourRates,
   trades,
+  equipment,
 }: {
   job: Job;
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
   trades: Trade[];
+  equipment: EquipmentItem[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -48,6 +50,7 @@ export default function EditJobButton({
             materials={materials}
             labourRates={labourRates}
             trades={trades}
+            equipment={equipment}
             submitLabel="Save changes"
             onCancel={() => setOpen(false)}
             onSubmit={handleSubmit}

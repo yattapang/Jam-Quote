@@ -40,6 +40,7 @@ function componentCreateData(
     kind: c.kind,
     materialFavouriteId: c.materialFavouriteId,
     labourRateId: c.labourRateId,
+    equipmentItemId: c.equipmentItemId,
     description: c.description,
     quantityPerUnit: c.quantityPerUnit,
     unitLabel: c.unitLabel,

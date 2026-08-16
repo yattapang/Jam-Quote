@@ -1,4 +1,4 @@
-import { getJobs, getLabourRates, getMaterialFavourites, getTrades } from "@/lib/api-server";
+import { getJobs, getLabourRates, getMaterialFavourites, getTrades, getEquipment } from "@/lib/api-server";
 import AddJobButton from "./AddJobButton";
 import JobsListClient from "./JobsListClient";
 import shared from "../shared.module.css";
@@ -6,11 +6,12 @@ import shared from "../shared.module.css";
 export const metadata = { title: "Jobs · JamQuote" };
 
 export default async function AssembliesPage() {
-  const [jobs, materials, labourRates, trades] = await Promise.all([
+  const [jobs, materials, labourRates, trades, equipment] = await Promise.all([
     getJobs(),
     getMaterialFavourites(),
     getLabourRates(),
     getTrades(),
+    getEquipment(),
   ]);
 
   return (
@@ -25,11 +26,11 @@ export default async function AssembliesPage() {
           </span>
         </div>
         <div className={shared.headerActions}>
-          <AddJobButton materials={materials} labourRates={labourRates} trades={trades} />
+          <AddJobButton materials={materials} labourRates={labourRates} trades={trades} equipment={equipment} />
         </div>
       </header>
 
-      <JobsListClient jobs={jobs} materials={materials} labourRates={labourRates} trades={trades} />
+      <JobsListClient jobs={jobs} materials={materials} labourRates={labourRates} trades={trades} equipment={equipment} />
     </div>
   );
 }

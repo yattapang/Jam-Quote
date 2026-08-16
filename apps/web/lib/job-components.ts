@@ -18,6 +18,7 @@ export interface ComponentLike {
   kind: string;
   materialFavouriteId?: string;
   labourRateId?: string;
+  equipmentItemId?: string;
   description: string;
   quantityPerUnit: string;
 }
@@ -29,7 +30,7 @@ export interface ComponentLike {
  * so "Cement" and "cement " still read as one item.
  */
 function identity(c: ComponentLike): string {
-  const libraryId = c.materialFavouriteId ?? c.labourRateId;
+  const libraryId = c.materialFavouriteId ?? c.labourRateId ?? c.equipmentItemId;
   return libraryId ? `${c.kind}:id:${libraryId}` : `${c.kind}:text:${c.description.trim().toLowerCase()}`;
 }
 
@@ -45,7 +46,7 @@ export function duplicateComponentKeys(components: readonly ComponentLike[]): Se
   const seen = new Set<string>();
   const duplicates = new Set<string>();
   for (const c of components) {
-    if (!c.materialFavouriteId && !c.labourRateId && !c.description.trim()) continue;
+    if (!c.materialFavouriteId && !c.labourRateId && !c.equipmentItemId && !c.description.trim()) continue;
     const id = identity(c);
     if (seen.has(id)) duplicates.add(c.key);
     else seen.add(id);
@@ -67,7 +68,7 @@ export function mergeDuplicateComponents<T extends ComponentLike>(components: re
   const passthrough: T[] = [];
 
   for (const c of components) {
-    if (!c.materialFavouriteId && !c.labourRateId && !c.description.trim()) {
+    if (!c.materialFavouriteId && !c.labourRateId && !c.equipmentItemId && !c.description.trim()) {
       passthrough.push(c);
       continue;
     }

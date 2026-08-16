@@ -100,6 +100,7 @@ enum MessageChannel {
 enum JobComponentKind {
   MATERIAL
   LABOUR
+  EQUIPMENT
   OTHER
 
   // Postgres enum type stays "AssemblyComponentKind" — @@map keeps this
@@ -736,6 +737,8 @@ model EquipmentItem {
   deletedAt   DateTime? // soft-delete for offline sync
 
   @@index([businessId])
+
+  jobComponents JobComponent[]
 }
 
 /// A reusable, priced service the contractor sells ("Interior wall painting,
@@ -778,6 +781,11 @@ model JobComponent {
   materialFavourite   MaterialFavourite?    @relation(fields: [materialFavouriteId], references: [id], onDelete: SetNull)
   labourRateId        String?
   labourRate          LabourRate?           @relation(fields: [labourRateId], references: [id], onDelete: SetNull)
+  // SetNull like its two siblings: deleting a hire item must not delete the
+  // recipes that used it. The component keeps its snapshotted description and
+  // price and merely loses the back-reference, which is what a snapshot is for.
+  equipmentItemId     String?
+  equipmentItem       EquipmentItem?        @relation(fields: [equipmentItemId], references: [id], onDelete: SetNull)
   description         String
   quantityPerUnit     Decimal               @db.Decimal(12, 3)
   // What the quantity counts — "trip", "day", "load". Free text, because a
@@ -788,6 +796,7 @@ model JobComponent {
   sort                Int                   @default(0)
 
   @@index([jobId])
+  @@index([equipmentItemId])
   @@map("AssemblyComponent")
 }
 

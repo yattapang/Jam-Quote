@@ -171,6 +171,7 @@ export interface JobComponent {
   kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
+  equipmentItemId?: string;
   description: string;
   quantityPerUnit: number;
   /** What the quantity counts — "trip", "day". Absent prints bare. */

@@ -109,3 +109,33 @@ describe("mergeDuplicateComponents", () => {
     expect(mergeDuplicateComponents(rows)).toHaveLength(2);
   });
 });
+
+describe("equipment components", () => {
+  it("spots the same hire item added twice", () => {
+    // Equipment joined the recipe later than material and labour; the
+    // duplicate check has to know about its link or it silently stops working
+    // for the newest kind.
+    const rows = [
+      comp({ key: "a", kind: "EQUIPMENT", equipmentItemId: "eq1", description: "Mixer" }),
+      comp({ key: "b", kind: "EQUIPMENT", equipmentItemId: "eq1", description: "Mixer" }),
+    ];
+    expect(duplicateComponentKeys(rows).has("b")).toBe(true);
+  });
+
+  it("merges repeated equipment and sums the quantity", () => {
+    const merged = mergeDuplicateComponents([
+      comp({ key: "a", kind: "EQUIPMENT", equipmentItemId: "eq1", quantityPerUnit: "2" }),
+      comp({ key: "b", kind: "EQUIPMENT", equipmentItemId: "eq1", quantityPerUnit: "1" }),
+    ]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.quantityPerUnit).toBe("3");
+  });
+
+  it("does not confuse equipment with a material of the same name", () => {
+    const rows = [
+      comp({ key: "a", kind: "MATERIAL", description: "Scaffold" }),
+      comp({ key: "b", kind: "EQUIPMENT", description: "Scaffold" }),
+    ];
+    expect(duplicateComponentKeys(rows).size).toBe(0);
+  });
+});

@@ -6,16 +6,18 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { createJob, type Trade } from "@/lib/api-client";
 import JobForm, { jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
-import type { LabourRate, MaterialFavourite } from "@/lib/types";
+import type { EquipmentItem, LabourRate, MaterialFavourite } from "@/lib/types";
 
 export default function AddJobButton({
   materials,
   labourRates,
   trades,
+  equipment,
 }: {
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
   trades: Trade[];
+  equipment: EquipmentItem[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -38,6 +40,7 @@ export default function AddJobButton({
             materials={materials}
             labourRates={labourRates}
             trades={trades}
+            equipment={equipment}
             submitLabel="Save job type"
             onCancel={() => setOpen(false)}
             onSubmit={handleSubmit}

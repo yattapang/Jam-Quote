@@ -264,6 +264,7 @@ export interface ApiJobComponent {
   kind: JobComponentKind;
   materialFavouriteId?: string | null;
   labourRateId?: string | null;
+  equipmentItemId?: string | null;
   description: string;
   // Prisma Decimal comes over JSON as a numeric string for quantityPerUnit.
   quantityPerUnit: number | string;
@@ -452,6 +453,7 @@ export function mapJobComponent(c: ApiJobComponent): JobComponent {
     kind: c.kind,
     materialFavouriteId: c.materialFavouriteId ?? undefined,
     labourRateId: c.labourRateId ?? undefined,
+    equipmentItemId: c.equipmentItemId ?? undefined,
     description: c.description,
     quantityPerUnit: Number(c.quantityPerUnit),
     unitLabel: c.unitLabel ?? undefined,
@@ -774,6 +776,7 @@ export interface NewJobComponentInput {
   kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
+  equipmentItemId?: string;
   description: string;
   quantityPerUnit: number;
   unitPriceCents: number;

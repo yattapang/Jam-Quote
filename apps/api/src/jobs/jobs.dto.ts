@@ -7,6 +7,7 @@ export const assemblyComponentInputSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
   materialFavouriteId: z.string().min(1).optional(),
   labourRateId: z.string().min(1).optional(),
+  equipmentItemId: z.string().min(1).optional(),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
   /** What the quantity counts — "trip", "day". Free text; absent prints bare. */
