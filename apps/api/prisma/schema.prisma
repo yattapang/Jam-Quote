@@ -175,6 +175,7 @@ model Business {
   subscription Subscription?
   trades       Trade[]
   jobs         Job[]
+  catalogHidden CatalogHidden[]
 
   materialCategoryDefs     MaterialCategoryDef[]
   materialAttributeDefs    MaterialAttributeDef[]
@@ -676,6 +677,33 @@ model MaterialUnit {
 // (businessId set). No DB-level unique constraint across the null
 // businessId group — de-duping by name (case-insensitive) is handled in
 // TradesService so the global list and custom trades share one path.
+/// One tenant's decision to stop being offered a catalog entry — a category,
+/// unit, trade or supplier they never use. Hiding shortens their pickers; it
+/// never deletes anything and never touches the row itself.
+///
+/// The scoping is the whole point. Curated rows (businessId NULL) are shared
+/// by every tenant, so a tenant's opinion about one cannot live ON it — an
+/// `archived` flag there would hide the entry for the entire platform. Because
+/// a hide is only expressible as (businessId, kind, rowId), that mistake
+/// cannot be written down. See PLANNING.md §1 and the migration's own note.
+///
+/// `rowId` is NOT a foreign key: it points into a different table per `kind`,
+/// which Postgres cannot express. A deleted catalog row leaves an orphan hide,
+/// which is harmless — it hides an id nothing will ever return.
+model CatalogHidden {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// Which catalog the rowId belongs to. A plain string rather than an enum:
+  /// adding a hideable catalog should not need a migration.
+  kind       String
+  rowId      String
+  createdAt  DateTime @default(now())
+
+  @@unique([businessId, kind, rowId])
+  @@index([businessId, kind])
+}
+
 model Trade {
   id         String    @id @default(uuid())
   // businessId NULL identifies a GLOBAL master trade (seeded in migration

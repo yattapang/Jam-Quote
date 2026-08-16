@@ -10,8 +10,10 @@ function withPrisma(trade: Partial<Record<string, unknown>> = {}) {
       ...trade,
     },
   };
+  // Nothing hidden unless a test says so — see the hiding tests below.
+  const hiddenCatalog = { hiddenIds: vi.fn().mockResolvedValue(new Set<string>()) };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { svc: new TradesService(prisma as any), prisma };
+  return { svc: new TradesService(prisma as any, hiddenCatalog as any), prisma, hiddenCatalog };
 }
 
 describe("TradesService.findAll", () => {
@@ -65,5 +67,52 @@ describe("TradesService.create", () => {
       data: { businessId: "biz-1", name: "Pool Installer" },
     });
     expect(result).toEqual({ id: "new-1", name: "Pool Installer", custom: true });
+  });
+});
+
+/**
+ * Hiding a trade shortens THIS tenant's picker and nobody else's. The curated
+ * master trades are shared rows, so the filter cannot live in the SQL `where`
+ * — there is no column on Trade that says "Kenyatta doesn't use plumbers".
+ * These pin that the filtering happens, and that it is scoped.
+ */
+describe("TradesService.findAll — hidden trades", () => {
+  const rows = [
+    { id: "t-mason", name: "Mason", businessId: null },
+    { id: "t-plumber", name: "Plumber", businessId: null },
+    { id: "t-custom", name: "Tiler", businessId: "b1" },
+  ];
+
+  it("drops hidden trades from the picker", async () => {
+    const { svc, hiddenCatalog } = withPrisma({ findMany: vi.fn().mockResolvedValue(rows) });
+    hiddenCatalog.hiddenIds.mockResolvedValue(new Set(["t-plumber"]));
+
+    const names = (await svc.findAll("b1")).map((t) => t.name);
+    expect(names).toContain("Mason");
+    expect(names).not.toContain("Plumber");
+  });
+
+  it("hides a tenant's OWN custom trade just the same", async () => {
+    const { svc, hiddenCatalog } = withPrisma({ findMany: vi.fn().mockResolvedValue(rows) });
+    hiddenCatalog.hiddenIds.mockResolvedValue(new Set(["t-custom"]));
+
+    expect((await svc.findAll("b1")).map((t) => t.name)).not.toContain("Tiler");
+  });
+
+  it("asks only for THIS business's hidden list", async () => {
+    // The scoping is the safety property: an unscoped lookup would hide a
+    // curated trade for every tenant on the platform.
+    const { svc, hiddenCatalog } = withPrisma({ findMany: vi.fn().mockResolvedValue(rows) });
+    await svc.findAll("b1");
+    expect(hiddenCatalog.hiddenIds).toHaveBeenCalledWith("b1", "TRADE");
+  });
+
+  it("returns everything when the caller asks to include hidden rows", async () => {
+    // The settings screen must list hidden entries in order to restore them.
+    const { svc, hiddenCatalog } = withPrisma({ findMany: vi.fn().mockResolvedValue(rows) });
+    hiddenCatalog.hiddenIds.mockResolvedValue(new Set(["t-plumber"]));
+
+    expect(await svc.findAll("b1", true)).toHaveLength(3);
+    expect(hiddenCatalog.hiddenIds).not.toHaveBeenCalled();
   });
 });

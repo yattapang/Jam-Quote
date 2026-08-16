@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { CatalogHiddenService, CatalogKind } from "../catalogs/catalog-hidden.service.js";
 import type { CreateTradeInput } from "./trades.dto.js";
 
 export interface TradeView {
@@ -56,7 +57,10 @@ function dedupeAndSort(trades: TradeView[]): TradeView[] {
 export class TradesService {
   private readonly logger = new Logger(TradesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hiddenCatalog: CatalogHiddenService,
+  ) {}
 
   /**
    * Resilient by design: if the Trade table doesn't exist yet (this
@@ -65,13 +69,23 @@ export class TradesService {
    * a 200 regardless of migration state, same convention as
    * PricingService.get().
    */
-  async findAll(businessId: string): Promise<TradeView[]> {
+  async findAll(businessId: string, includeHidden = false): Promise<TradeView[]> {
     try {
-      const trades = await this.prisma.trade.findMany({
-        where: { OR: [{ businessId: null }, { businessId }] },
-      });
+      const [trades, hidden] = await Promise.all([
+        this.prisma.trade.findMany({
+          where: { OR: [{ businessId: null }, { businessId }] },
+        }),
+        // Filtering happens HERE rather than in the query, because the curated
+        // trades are shared rows and the hide is this tenant's alone — there
+        // is no `where` on Trade that could express it.
+        includeHidden
+          ? Promise.resolve(new Set<string>())
+          : this.hiddenCatalog.hiddenIds(businessId, CatalogKind.TRADE),
+      ]);
       return dedupeAndSort(
-        trades.map((t) => ({ id: t.id, name: t.name, custom: t.businessId !== null })),
+        trades
+          .filter((t) => !hidden.has(t.id))
+          .map((t) => ({ id: t.id, name: t.name, custom: t.businessId !== null })),
       );
     } catch (err) {
       this.logger.warn(

@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module.js";
+import { CatalogHiddenController } from "./catalog-hidden.controller.js";
+import { CatalogHiddenService } from "./catalog-hidden.service.js";
 import { EquipmentController } from "./equipment.controller.js";
 import { EquipmentService } from "./equipment.service.js";
 import { LabourRatesController } from "./labour-rates.controller.js";
@@ -25,6 +27,7 @@ import { MaterialPricesService } from "./material-prices.service.js";
   // by design and stays public).
   imports: [AuthModule],
   controllers: [
+    CatalogHiddenController,
     EquipmentController,
     LabourRatesController,
     MaterialFavouritesController,
@@ -33,6 +36,7 @@ import { MaterialPricesService } from "./material-prices.service.js";
     MaterialPricesController,
   ],
   providers: [
+    CatalogHiddenService,
     EquipmentService,
     LabourRatesService,
     MaterialFavouritesService,
