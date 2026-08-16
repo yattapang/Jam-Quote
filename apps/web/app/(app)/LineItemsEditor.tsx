@@ -914,6 +914,21 @@ export default function LineItemsEditor({
           onUnitChange={onUnitChange}
           onMeasuredQtyChange={onMeasuredQtyChange}
         />
+        {/* The same action repeated at the foot of the list. On a real quote
+            the list is long — especially on a phone, where each line is a
+            stacked card — so after filling in the last one the button that
+            adds the next is a full scroll away, back past everything you just
+            typed. Adding a line is the most repeated action on this screen;
+            it should be where your thumb already is. */}
+        <div className={styles.addLineFooter}>
+          <Button
+            variant="outlineAccent"
+            size="sm"
+            onClick={() => onLinesChange((ls) => [...ls, newLine()])}
+          >
+            + Add line
+          </Button>
+        </div>
       </Card>
       {favError && <div style={{ color: "var(--jq-crit)", fontSize: 13 }}>{favError}</div>}
 

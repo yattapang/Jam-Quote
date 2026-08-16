@@ -113,3 +113,14 @@
     margin-top: 2px;
   }
 }
+
+/* Repeat of the header's "+ Add line", at the foot of the list — see the
+   comment at its usage. Separated by a rule so it reads as an action on the
+   list rather than a control belonging to the last line. */
+.addLineFooter {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--jq-border);
+}
