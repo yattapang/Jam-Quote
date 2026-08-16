@@ -35,6 +35,10 @@ import {
   type DraftLine,
   type Heading,
   type InitialLine,
+  LineKind,
+  categoryForKind,
+  kindFromSaved,
+  applyKindChange,
 } from "./line-editor";
 import type { Job, LabourRate, MaterialFavourite } from "./types";
 
@@ -374,10 +378,23 @@ describe("lineToLineInput", () => {
     expect(input.category).toBe(LineCategory.MATERIAL);
   });
 
-  it("sends a custom heading's line as OTHER — the heading survives as the section title", () => {
-    expect(lineToLineInput(line({ heading: { kind: "custom", title: "Site prep" } })).category).toBe(
-      LineCategory.OTHER,
-    );
+  /**
+   * REPLACES a test that asserted the opposite — that a line under a custom
+   * heading was sent as OTHER. That was the old design, where a line's category
+   * was read off whichever heading it happened to sit under, so a bag of cement
+   * filed under "Site prep" was quietly recorded as OTHER. Heading decides
+   * where a line PRINTS; kind decides what it IS. Choosing a document layout
+   * should not rewrite the data, so category now follows the line's kind and
+   * the heading is free to be anything.
+   */
+  it("keeps the line's own category under a custom heading", () => {
+    const l = line({ kind: LineKind.MATERIAL, heading: { kind: "custom", title: "Site prep" } });
+    expect(lineToLineInput(l).category).toBe(LineCategory.MATERIAL);
+  });
+
+  it("still sends a job line as OTHER — a composite service is no single category", () => {
+    const l = line({ kind: LineKind.JOB, heading: { kind: "custom", title: "Site prep" } });
+    expect(lineToLineInput(l).category).toBe(LineCategory.OTHER);
   });
 
   it("sends unitLabel when the line has one, and omits the key entirely when it does not", () => {
@@ -609,5 +626,69 @@ describe("computeCoverageQuantity", () => {
     const result = computeCoverageQuantity("40", config, "box");
     expect(result?.quantity).not.toBe("40");
     expect(Number(result?.quantity)).toBeLessThan(40);
+  });
+});
+
+/**
+ * The kind/heading split. These pin the distinction the redesign rests on:
+ * a line's kind says what it is and drives its library, units and price;
+ * its heading only says where it prints.
+ */
+describe("line kinds", () => {
+  it("maps each kind to the category it saves as", () => {
+    expect(categoryForKind(LineKind.MATERIAL)).toBe(LineCategory.MATERIAL);
+    expect(categoryForKind(LineKind.LABOUR)).toBe(LineCategory.LABOUR);
+    expect(categoryForKind(LineKind.EQUIPMENT)).toBe(LineCategory.EQUIPMENT);
+    // A composite priced service is not a material or a labour rate; the jobId
+    // it carries is what identifies it, so no DB enum value is needed.
+    expect(categoryForKind(LineKind.JOB)).toBe(LineCategory.OTHER);
+  });
+
+  describe("kindFromSaved — documents predate the kind field", () => {
+    it("treats a jobId as decisive, whatever the saved category says", () => {
+      // Job lines save as OTHER, so category alone cannot identify them.
+      expect(kindFromSaved(LineCategory.OTHER, "job-1")).toBe(LineKind.JOB);
+      expect(kindFromSaved(LineCategory.MATERIAL, "job-1")).toBe(LineKind.JOB);
+    });
+
+    it("infers from the saved category when there is no job", () => {
+      expect(kindFromSaved(LineCategory.LABOUR)).toBe(LineKind.LABOUR);
+      expect(kindFromSaved(LineCategory.MATERIAL)).toBe(LineKind.MATERIAL);
+      // RENTAL has no kind of its own and is equipment in every practical sense.
+      expect(kindFromSaved(LineCategory.EQUIPMENT)).toBe(LineKind.EQUIPMENT);
+      expect(kindFromSaved(LineCategory.RENTAL)).toBe(LineKind.EQUIPMENT);
+    });
+
+    it("falls back to MATERIAL rather than leaving a reopened line kindless", () => {
+      // OTHER covers old custom-heading lines of every sort. Guessing the
+      // common case beats blanking the row on a quote someone is editing.
+      expect(kindFromSaved(LineCategory.OTHER)).toBe(LineKind.MATERIAL);
+      expect(kindFromSaved(LineCategory.SUBCONTRACTOR)).toBe(LineKind.MATERIAL);
+    });
+  });
+
+  describe("applyKindChange", () => {
+    it("drops every tie to the old library", () => {
+      // A job's component snapshot surviving onto a material line would render
+      // a breakdown for work the line no longer represents; a stale
+      // materialFavouriteId would make ★ Save-as-favourite overwrite an
+      // unrelated material.
+      const patch = applyKindChange(LineKind.MATERIAL);
+      expect(patch.jobId).toBeUndefined();
+      expect(patch.jobComponents).toBeUndefined();
+      expect(patch.materialFavouriteId).toBeUndefined();
+      expect(patch.unitLabel).toBeUndefined();
+      expect(patch.kind).toBe(LineKind.MATERIAL);
+    });
+
+    it("does not touch what the user typed", () => {
+      // Reclassifying a line is not resetting it — someone who typed
+      // "Skim coat, 40 @ 1200" and then moved it to Labour keeps their work.
+      const patch = applyKindChange(LineKind.LABOUR);
+      expect("description" in patch).toBe(false);
+      expect("quantity" in patch).toBe(false);
+      expect("unitPriceDollars" in patch).toBe(false);
+      expect("heading" in patch).toBe(false);
+    });
   });
 });

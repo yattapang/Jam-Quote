@@ -73,8 +73,93 @@ export const rateUnitOptions = Object.values(RateUnit).map((v) => ({
 export const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
 export const fromCents = (cents: number) => (cents / 100).toString();
 
+/**
+ * What KIND of thing a line is: which library it comes from, which units make
+ * sense for it, and what its saved LineCategory should be.
+ *
+ * This is deliberately separate from the line's HEADING. Until now the two
+ * were the same field — a line's category was derived from whichever heading
+ * it sat under, so putting a bag of cement under a custom "Preliminaries"
+ * heading silently recorded it as OTHER. Heading is where a line PRINTS on the
+ * document; kind is what the line IS. Conflating them meant choosing a
+ * document layout also rewrote the data.
+ *
+ * JOB has no LineCategory of its own — a composite priced service is not a
+ * material or a labour rate — so it saves as OTHER and is identified by the
+ * jobId it carries. That avoids a database enum migration for a distinction
+ * the jobId already makes.
+ */
+export const LineKind = {
+  MATERIAL: "MATERIAL",
+  LABOUR: "LABOUR",
+  EQUIPMENT: "EQUIPMENT",
+  JOB: "JOB",
+} as const;
+export type LineKind = (typeof LineKind)[keyof typeof LineKind];
+
+export const LINE_KIND_LABEL: Record<LineKind, string> = {
+  MATERIAL: "Material",
+  LABOUR: "Labour",
+  EQUIPMENT: "Equipment",
+  JOB: "Job",
+};
+
+export const lineKindOptions: SelectOption[] = (Object.keys(LINE_KIND_LABEL) as LineKind[]).map(
+  (k) => ({ value: k, label: LINE_KIND_LABEL[k] }),
+);
+
+/** The LineCategory a kind saves as. See LineKind's note on JOB. */
+export function categoryForKind(kind: LineKind): LineCategory {
+  if (kind === LineKind.LABOUR) return LineCategory.LABOUR;
+  if (kind === LineKind.EQUIPMENT) return LineCategory.EQUIPMENT;
+  if (kind === LineKind.MATERIAL) return LineCategory.MATERIAL;
+  return LineCategory.OTHER;
+}
+
+/**
+ * Kind of a line loaded from a saved document, which has no `kind` column.
+ * A jobId is decisive — only a job line carries one — and otherwise the saved
+ * category is the best evidence available. Anything unrecognised lands on
+ * MATERIAL, the overwhelmingly common case and the one whose picker is most
+ * useful to be shown by default.
+ */
+export function kindFromSaved(category: LineCategory, jobId?: string): LineKind {
+  if (jobId) return LineKind.JOB;
+  if (category === LineCategory.LABOUR) return LineKind.LABOUR;
+  if (category === LineCategory.EQUIPMENT || category === LineCategory.RENTAL) {
+    return LineKind.EQUIPMENT;
+  }
+  return LineKind.MATERIAL;
+}
+
+/**
+ * Fields to clear when the user switches a line's kind. Everything tying the
+ * line to its old library goes: a job's component snapshot must not survive on
+ * a line that is now a bag of cement, and a material's id must not survive on
+ * a line that is now labour — ★ Save-as-favourite would then update an
+ * unrelated material.
+ *
+ * The description, quantity and price are deliberately KEPT. Someone who typed
+ * "Skim coat, 40" and then realised it belongs under Labour should not have to
+ * type it again; changing the kind reclassifies the line, it does not reset it.
+ */
+export function applyKindChange(kind: LineKind): Partial<DraftLine> {
+  return {
+    kind,
+    materialFavouriteId: undefined,
+    unitLabel: undefined,
+    jobId: undefined,
+    jobName: undefined,
+    jobUnit: undefined,
+    jobComponents: undefined,
+  };
+}
+
 export interface DraftLine {
   key: string;
+  /** What the line IS — drives which saved library, units and price it
+   * offers. Distinct from `heading`, which is only where it prints. */
+  kind: LineKind;
   heading: Heading;
   description: string;
   quantity: string;
@@ -109,6 +194,7 @@ const nextKey = () => `l${++counter}`;
 export function newLine(): DraftLine {
   return {
     key: nextKey(),
+    kind: LineKind.MATERIAL,
     heading: { kind: "category", category: LineCategory.MATERIAL },
     description: "",
     quantity: "1",
@@ -126,6 +212,7 @@ export function newLine(): DraftLine {
 export function assemblyLine(a: Job, quantity: number): DraftLine {
   return {
     key: nextKey(),
+    kind: LineKind.JOB,
     heading: { kind: "category", category: LineCategory.OTHER },
     description: a.name,
     quantity: String(quantity),
@@ -151,6 +238,7 @@ export function assemblyLine(a: Job, quantity: number): DraftLine {
 export function labourLine(r: LabourRate, quantity: number): DraftLine {
   return {
     key: nextKey(),
+    kind: LineKind.LABOUR,
     heading: { kind: "category", category: LineCategory.LABOUR },
     description: r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade,
     quantity: String(quantity),
@@ -191,6 +279,10 @@ export interface InitialLines {
 export function draftLineFromInitial(l: InitialLine, heading: Heading): DraftLine {
   return {
     key: nextKey(),
+    // Saved documents predate `kind`, so it is inferred — see kindFromSaved.
+    // Reopening an old quote must land every line on a sensible picker rather
+    // than blanking the row.
+    kind: kindFromSaved(l.category, l.jobId),
     heading,
     description: l.description,
     quantity: String(l.quantity),
@@ -357,11 +449,13 @@ export function applyUnitChoice(value: string): Partial<DraftLine> {
   return { unitLabel: value };
 }
 
-/** A draft line as the API takes it. A custom heading has no category of its
- * own, so it is sent as OTHER — the heading survives as the section title. */
+/** A draft line as the API takes it. `category` comes from the line's KIND,
+ * not its heading: the heading only decides where the line prints, and
+ * deriving the category from it meant a bag of cement filed under a custom
+ * "Preliminaries" heading was recorded as OTHER. */
 export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
   return {
-    category: l.heading.kind === "category" ? l.heading.category : LineCategory.OTHER,
+    category: categoryForKind(l.kind),
     description: l.description.trim(),
     quantity: Number(l.quantity),
     rateUnit: l.rateUnit,
