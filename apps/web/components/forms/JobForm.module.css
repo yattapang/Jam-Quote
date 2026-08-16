@@ -31,8 +31,17 @@
 }
 
 @media (max-width: 560px) {
+  /* The row has THREE children — kind, the saved picker, and the remove
+     button. Two columns therefore wrapped the picker into the 32px column
+     meant for the button, which is why the Saved material/labour field was
+     unusably narrow on a phone. Giving the kind select the full width pushes
+     the picker into the 1fr column where it belongs, with the button beside
+     it. */
   .componentTopRow {
     grid-template-columns: 1fr 32px;
+  }
+  .componentTopRow > *:first-child {
+    grid-column: 1 / -1;
   }
   .componentBottomRow {
     grid-template-columns: 1fr 1fr;
