@@ -185,54 +185,33 @@ cannot be extended by a tenant. But labour sold per sq ft, or scaffold per
 lift, is real. Both models gained a free-text `unitLabel`, mirroring materials.
 Migration written, NOT YET APPLIED. Pickers and quote-line plumbing still to do.
 
-### Phase 3 — Archive & hide vocabulary (DECIDED, not started)
+### Phase 3 — Hide vocabulary. DONE (d1bdab4, a3a2794, 2b7989c)
 
-Tenants need shorter dropdowns. Decision: **archive, never delete.**
+Tenants can hide material categories, material units and trades they never
+use, from Settings -> "Catalog & vocabulary". Hiding is not deleting: the row
+stays, still referenced by existing materials and by documents already sent.
 
-- The goal is a shorter list, not destroyed data — an entry used by forty
-  materials should stop being OFFERED, not vanish.
-- Deleting is already blocked in practice: those FKs are RESTRICT in
-  production (see #40), so deleting an in-use row errors today.
-- Sent documents are safe either way: a quote line snapshots its unit as text.
+**The schema decision, worth not relitigating.** Catalog rows use the
+curated/tenant pattern where `businessId NULL` means a row EVERY tenant
+shares. An `archived` flag on the row would hide curated "Cement" for the
+whole platform — the #19 failure mode. So a hide is only expressible as
+`(businessId, kind, rowId)` in `CatalogHidden`: the safe thing is the only
+thing that can be written down.
 
-**The trap that shapes the schema.** Curated rows (`businessId NULL`) are
-shared by every tenant. A `deletedAt` on the curated "Cement" category would
-hide it for EVERYONE — the #19 failure mode again. So:
+`rowId` is not a foreign key — it points into a different table per `kind`.
+An orphan hide after a row is deleted is harmless; four join tables would cost
+more.
 
-- Tenant-owned row → archive flag on the row itself.
-- Curated row → a per-tenant "hidden" table (businessId + the hidden row's id).
-  Never write to the curated row.
+Filtering runs in the SERVICE, not the query, because no column on a shared
+row could say "this contractor does not lay tile". Reads take
+`?includeHidden=true` for the settings screen only.
 
-Managed from a **Settings** screen ("Catalog & vocabulary") rather than an
-inline ×, so archiving is reversible and destructive controls do not sit
-beside selection controls.
+NO SUPPLIER kind, deliberately: suppliers are wholly tenant-owned and already
+delete, so a supplier hide would have been accepted by the API and filtered by
+nothing — a hide that appears to work and does not.
 
-### Support model — how staff help a tenant (READ-ONLY, shipped)
-
-Shipped, not pending: admin console -> tenant -> "View as tenant" opens the
-tenant's own screens. 30 minutes, audited, and **read-only**.
-
-Read-only is a decision, not a limitation to remove later without thought.
-A staff write during such a session would be indistinguishable from the
-contractor's own: they would see a changed price on their quote with nothing
-saying who changed it, and the audit trail would agree with that lie. So the
-guard refuses every non-GET method before it looks anything up, which also
-means a write route added next month is refused without anyone remembering
-this exists.
-
-Consequence to be honest about: staff can diagnose ("why does my report show
-zero") but cannot fix ("please correct it for me"). Today the workflow ends in
-telling the contractor what to change.
-
-Making corrections possible is tracked separately (#41) and needs four things,
-none of which is removing the method check: writes attributed to the STAFF
-member, a per-action audit entry (only session-start is logged today), a
-deliberately narrow scope rather than "everything", and some way for the
-tenant to learn it happened.
-
-**Undecided policy, worth settling before paying customers:** a tenant has no
-visibility that staff viewed their books. The audit log records it; nothing
-surfaces it to them. Defensible, but choose it rather than discover it.
+Toggling invalidates the module-level material-schema cache, or the pickers
+keep offering a category that was just hidden.
 
 ### Phase 4 — Job Library depth
 
