@@ -135,6 +135,10 @@ export interface LabourRate {
   /** Convenience for display/inputs — rateCents / 100. */
   rateDollars: number;
   rateUnit: RateUnit;
+  /** Free-text override for what prints ("sq ft", "window"). RateUnit is a
+   * closed platform enum of cadences; this is the contractor's own wording.
+   * Undefined = print the rateUnit. */
+  unitLabel?: string;
 }
 
 /** A saved piece of equipment — owned plant or a hire item from a vendor
@@ -151,6 +155,10 @@ export interface EquipmentItem {
   /** Convenience for display/inputs — rateCents / 100. */
   rateDollars: number;
   rateUnit: RateUnit;
+  /** Free-text override for what prints ("sq ft", "window"). RateUnit is a
+   * closed platform enum of cadences; this is the contractor's own wording.
+   * Undefined = print the rateUnit. */
+  unitLabel?: string;
 }
 
 /** One recipe line inside an job — either a snapshot of a saved

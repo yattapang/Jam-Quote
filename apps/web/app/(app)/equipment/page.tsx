@@ -58,7 +58,7 @@ export default async function EquipmentPage() {
                 <div className={shared.rowRight}>
                   <span>
                     <MoneyText cents={e.rateCents} /> /{" "}
-                    {RATE_UNIT_LABEL[e.rateUnit] ?? e.rateUnit.toLowerCase()}
+                    {e.unitLabel ?? RATE_UNIT_LABEL[e.rateUnit] ?? e.rateUnit.toLowerCase()}
                   </span>
                   <EditEquipmentButton item={e} />
                   <DeleteRowButton

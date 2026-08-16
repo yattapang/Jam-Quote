@@ -274,7 +274,11 @@ function labourRatePatch(
     description: r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade,
     rateUnit: r.rateUnit,
     unitPriceDollars: fromCents(r.rateCents),
-    unitLabel: undefined,
+    // The rate's own printed unit when it has one ("sq ft"), otherwise
+    // explicitly cleared so the cadence prints instead. Clearing matters as
+    // much as setting: without it a sold-by unit left over from whatever this
+    // line was before would print beside an hourly rate.
+    unitLabel: r.unitLabel?.trim() || undefined,
   };
 }
 
@@ -308,7 +312,9 @@ export function applyEquipmentPick(
     description: e.name,
     rateUnit: e.rateUnit,
     unitPriceDollars: fromCents(e.rateCents),
-    unitLabel: undefined,
+    // As for labour: the item's own printed unit ("lift") when set, otherwise
+    // cleared so the hire cadence prints.
+    unitLabel: e.unitLabel?.trim() || undefined,
   };
 }
 

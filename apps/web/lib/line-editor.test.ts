@@ -986,3 +986,51 @@ describe("quickJobPayloadFromValues", () => {
     expect(quickJobPayloadFromValues({ name: "", unit: "", rateDollars: "" }).components.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The point of LabourRate.unitLabel / EquipmentItem.unitLabel: a painter who
+ * sells labour by the square foot should see "120 sq ft" on the quote, not
+ * "120 unit". These pin that the label survives the trip from the saved
+ * library row onto the line the customer eventually reads.
+ */
+describe("a saved rate's own printed unit reaches the line", () => {
+  const baseRate: LabourRate = {
+    id: "lr1",
+    trade: "Painter",
+    rateCents: 15_000,
+    rateDollars: 150,
+    rateUnit: RateUnit.UNIT,
+  };
+
+  it("carries a labour rate's unitLabel onto the line", () => {
+    expect(applyLabourRatePick({ ...baseRate, unitLabel: "sq ft" }).unitLabel).toBe("sq ft");
+  });
+
+  it("carries an equipment item's unitLabel onto the line", () => {
+    expect(
+      applyEquipmentPick({
+        id: "eq1",
+        name: "Scaffold",
+        owned: false,
+        rateCents: 90_000,
+        rateDollars: 900,
+        rateUnit: RateUnit.UNIT,
+        unitLabel: "lift",
+      }).unitLabel,
+    ).toBe("lift");
+  });
+
+  /**
+   * Clearing matters as much as carrying. Without it, a line that used to be a
+   * bag of cement would keep printing "bag" beside an hourly labour rate — a
+   * unit the customer never agreed to, on a document they are asked to sign.
+   */
+  it("clears the label when the saved row has none, so the cadence prints instead", () => {
+    expect(applyLabourRatePick({ ...baseRate, rateUnit: RateUnit.HOUR }).unitLabel).toBeUndefined();
+  });
+
+  it("treats a blank or whitespace label as absent rather than printing nothing", () => {
+    expect(applyLabourRatePick({ ...baseRate, unitLabel: "" }).unitLabel).toBeUndefined();
+    expect(applyLabourRatePick({ ...baseRate, unitLabel: "   " }).unitLabel).toBeUndefined();
+  });
+});

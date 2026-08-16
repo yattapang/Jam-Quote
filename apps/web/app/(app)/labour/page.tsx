@@ -50,7 +50,7 @@ export default async function LabourPage() {
                 </div>
                 <div className={shared.rowRight}>
                   <span>
-                    <MoneyText cents={r.rateCents} /> / {RATE_UNIT_LABEL[r.rateUnit] ?? r.rateUnit.toLowerCase()}
+                    <MoneyText cents={r.rateCents} /> / {r.unitLabel ?? RATE_UNIT_LABEL[r.rateUnit] ?? r.rateUnit.toLowerCase()}
                   </span>
                   <EditLabourRateButton rate={r} trades={trades} />
                   <DeleteRowButton

@@ -4,26 +4,19 @@ import { useState } from "react";
 import { RateUnit } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
+import RateUnitField from "@/components/forms/RateUnitField";
 import { modalStyles } from "@/components/ui/Modal";
 import TradeSelectField from "@/components/forms/TradeSelectField";
 import type { NewLabourRateInput, Trade } from "@/lib/api-client";
 import type { LabourRate } from "@/lib/types";
-
-const rateUnitOptions = [
-  { value: RateUnit.HOUR, label: "Hour" },
-  { value: RateUnit.DAY, label: "Day" },
-  { value: RateUnit.WEEK, label: "Week" },
-  { value: RateUnit.MONTH, label: "Month" },
-  { value: RateUnit.JOB, label: "Job" },
-  { value: RateUnit.UNIT, label: "Unit" },
-];
 
 export interface LabourRateFormValues {
   trade: string;
   skillTier: string;
   rateDollars: string;
   rateUnit: RateUnit;
+  /** Free-text override for what prints; "" = use the cadence. */
+  unitLabel: string;
 }
 
 export const emptyLabourRateForm: LabourRateFormValues = {
@@ -31,6 +24,7 @@ export const emptyLabourRateForm: LabourRateFormValues = {
   skillTier: "",
   rateDollars: "",
   rateUnit: RateUnit.DAY,
+  unitLabel: "",
 };
 
 export function labourRateFormValuesFromLabourRate(rate: LabourRate): LabourRateFormValues {
@@ -39,6 +33,7 @@ export function labourRateFormValuesFromLabourRate(rate: LabourRate): LabourRate
     skillTier: rate.skillTier ?? "",
     rateDollars: String(rate.rateDollars),
     rateUnit: rate.rateUnit,
+    unitLabel: rate.unitLabel ?? "",
   };
 }
 
@@ -48,6 +43,7 @@ export function labourRatePayloadFromValues(values: LabourRateFormValues): NewLa
     skillTier: values.skillTier.trim() || undefined,
     rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
     rateUnit: values.rateUnit,
+    unitLabel: values.unitLabel.trim() || undefined,
   };
 }
 
@@ -112,11 +108,10 @@ export default function LabourRateForm({
           value={values.rateDollars}
           onChange={(e) => set("rateDollars", e.target.value)}
         />
-        <Select
-          label="Per"
-          options={rateUnitOptions}
-          value={values.rateUnit}
-          onChange={(e) => set("rateUnit", e.target.value as RateUnit)}
+        <RateUnitField
+          rateUnit={values.rateUnit}
+          unitLabel={values.unitLabel}
+          onChange={(next) => setValues((v) => ({ ...v, ...next }))}
         />
       </div>
       {error && <span className={modalStyles.error}>{error}</span>}

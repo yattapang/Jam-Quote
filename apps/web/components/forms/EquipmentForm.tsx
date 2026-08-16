@@ -5,18 +5,10 @@ import { RateUnit } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
+import RateUnitField from "@/components/forms/RateUnitField";
 import { modalStyles } from "@/components/ui/Modal";
 import type { NewEquipmentItemInput } from "@/lib/api-client";
 import type { EquipmentItem } from "@/lib/types";
-
-const rateUnitOptions = [
-  { value: RateUnit.HOUR, label: "Hour" },
-  { value: RateUnit.DAY, label: "Day" },
-  { value: RateUnit.WEEK, label: "Week" },
-  { value: RateUnit.MONTH, label: "Month" },
-  { value: RateUnit.JOB, label: "Job" },
-  { value: RateUnit.UNIT, label: "Unit" },
-];
 
 const ownedOptions = [
   { value: "hired", label: "Hired from a vendor" },
@@ -30,6 +22,8 @@ export interface EquipmentFormValues {
   vendorPhone: string;
   rateDollars: string;
   rateUnit: RateUnit;
+  /** Free-text override for what prints; "" = use the cadence. */
+  unitLabel: string;
 }
 
 export const emptyEquipmentForm: EquipmentFormValues = {
@@ -41,6 +35,7 @@ export const emptyEquipmentForm: EquipmentFormValues = {
   vendorPhone: "",
   rateDollars: "",
   rateUnit: RateUnit.DAY,
+  unitLabel: "",
 };
 
 export function equipmentFormValuesFromItem(item: EquipmentItem): EquipmentFormValues {
@@ -51,6 +46,7 @@ export function equipmentFormValuesFromItem(item: EquipmentItem): EquipmentFormV
     vendorPhone: item.vendorPhone ?? "",
     rateDollars: String(item.rateDollars),
     rateUnit: item.rateUnit,
+    unitLabel: item.unitLabel ?? "",
   };
 }
 
@@ -65,6 +61,7 @@ export function equipmentPayloadFromValues(values: EquipmentFormValues): NewEqui
     vendorPhone: values.owned ? undefined : values.vendorPhone.trim() || undefined,
     rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
     rateUnit: values.rateUnit,
+    unitLabel: values.unitLabel.trim() || undefined,
   };
 }
 
@@ -151,11 +148,10 @@ export default function EquipmentForm({
           value={values.rateDollars}
           onChange={(e) => set("rateDollars", e.target.value)}
         />
-        <Select
-          label="Per"
-          options={rateUnitOptions}
-          value={values.rateUnit}
-          onChange={(e) => set("rateUnit", e.target.value as RateUnit)}
+        <RateUnitField
+          rateUnit={values.rateUnit}
+          unitLabel={values.unitLabel}
+          onChange={(next) => setValues((v) => ({ ...v, ...next }))}
         />
       </div>
       {error && <span className={modalStyles.error}>{error}</span>}

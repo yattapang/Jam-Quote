@@ -246,6 +246,7 @@ export interface ApiLabourRate {
   skillTier?: string | null;
   rateCents: number;
   rateUnit: RateUnit;
+  unitLabel?: string | null;
 }
 export interface ApiEquipmentItem {
   id: string;
@@ -255,6 +256,7 @@ export interface ApiEquipmentItem {
   vendorPhone?: string | null;
   rateCents: number;
   rateUnit: RateUnit;
+  unitLabel?: string | null;
 }
 export interface ApiJobComponent {
   id: string;
@@ -424,6 +426,7 @@ export function mapLabourRate(r: ApiLabourRate): LabourRate {
     rateCents: r.rateCents,
     rateDollars: r.rateCents / 100,
     rateUnit: r.rateUnit,
+    unitLabel: r.unitLabel ?? undefined,
   };
 }
 
@@ -437,6 +440,7 @@ export function mapEquipmentItem(e: ApiEquipmentItem): EquipmentItem {
     rateCents: e.rateCents,
     rateDollars: e.rateCents / 100,
     rateUnit: e.rateUnit,
+    unitLabel: e.unitLabel ?? undefined,
   };
 }
 
@@ -748,6 +752,7 @@ export interface NewLabourRateInput {
   skillTier?: string;
   rateCents: number;
   rateUnit: RateUnit;
+  unitLabel?: string;
 }
 export async function createLabourRate(input: NewLabourRateInput): Promise<LabourRate> {
   return mapLabourRate(
@@ -1002,6 +1007,7 @@ export interface NewEquipmentItemInput {
   vendorPhone?: string;
   rateCents: number;
   rateUnit: RateUnit;
+  unitLabel?: string;
 }
 export type UpdateEquipmentItemInput = Partial<NewEquipmentItemInput>;
 
