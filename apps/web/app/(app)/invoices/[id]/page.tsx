@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { formatJmd, QuoteDetailLevel, groupJobComponents } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
@@ -121,7 +121,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                             >
                               <span>{c.description}</span>
                               <span>
-                                {c.quantityPerUnit} × {formatJmd(c.unitPriceCents)} ={" "}
+                                {componentQuantityLabel(c)} × {formatJmd(c.unitPriceCents)} ={" "}
                                 {formatJmd(Math.round(c.quantityPerUnit * c.unitPriceCents))}
                               </span>
                             </div>

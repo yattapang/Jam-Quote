@@ -12,7 +12,7 @@ import {
   type TextProps,
   type ImageProps,
 } from "@react-pdf/renderer";
-import { formatJmd, QuoteDetailLevel, groupJobComponents } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
 import { getQuoteTotals, groupLinesByHeading, lineUnitLabel, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
 import { formatAddress } from "@/lib/format-address";
@@ -294,7 +294,7 @@ export default function QuotePdf({ quote, client, business, logo }: QuotePdfProp
                         <View key={i} style={styles.breakdownRow}>
                           <Text style={styles.breakdownDesc}>{c.description}</Text>
                           <Text style={styles.breakdownAmt}>
-                            {c.quantityPerUnit} x {formatJmd(c.unitPriceCents)} ={" "}
+                            {componentQuantityLabel(c)} x {formatJmd(c.unitPriceCents)} ={" "}
                             {formatJmd(Math.round(c.quantityPerUnit * c.unitPriceCents))}
                           </Text>
                         </View>

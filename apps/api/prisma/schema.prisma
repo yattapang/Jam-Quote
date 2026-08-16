@@ -780,6 +780,10 @@ model JobComponent {
   labourRate          LabourRate?           @relation(fields: [labourRateId], references: [id], onDelete: SetNull)
   description         String
   quantityPerUnit     Decimal               @db.Decimal(12, 3)
+  // What the quantity counts — "trip", "day", "load". Free text, because a
+  // recipe line can be anything a contractor bills for. NULL prints bare, as
+  // every job did before this existed.
+  unitLabel           String?
   unitPriceCents      Int
   sort                Int                   @default(0)
 

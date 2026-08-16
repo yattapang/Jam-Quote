@@ -17,6 +17,8 @@ export interface QuoteLineJobComponent {
   kind: JobComponentKind;
   description: string;
   quantityPerUnit: number;
+  /** What the quantity counts — "trip", "day". Absent prints bare. */
+  unitLabel?: string;
   unitPriceCents: number;
 }
 
@@ -171,6 +173,8 @@ export interface JobComponent {
   labourRateId?: string;
   description: string;
   quantityPerUnit: number;
+  /** What the quantity counts — "trip", "day". Absent prints bare. */
+  unitLabel?: string;
   unitPriceCents: number;
   sort: number;
 }

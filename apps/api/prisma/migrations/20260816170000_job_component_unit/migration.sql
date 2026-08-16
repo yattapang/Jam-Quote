@@ -1,0 +1,19 @@
+-- A job's recipe line can say what it is counted in.
+--
+-- Reported while auditing the job builder: Material / Labour / Other is too
+-- narrow, "unless the other option allows more customization of qty/unit —
+-- for example it may need some form of transport".
+--
+-- The narrowness was not really the three kinds. A component already carries a
+-- quantity and a price but had nowhere to say WHAT the quantity counts, so a
+-- recipe line read "3 x $1,200" with no way to write "3 trips", "2 days" or
+-- "5 loads". Transport was simply the case that made the gap obvious.
+--
+-- Nullable and free text, matching what LabourRate and EquipmentItem gained in
+-- 20260816090000. NULL means "no unit" and prints exactly as it does today, so
+-- every existing job is untouched.
+--
+-- Physical table is still "AssemblyComponent": the Prisma model was renamed to
+-- JobComponent in the 0b vocabulary work, with @@map keeping the table name so
+-- the rename generated no SQL. See PLANNING.md section 1.
+ALTER TABLE "AssemblyComponent" ADD COLUMN "unitLabel" TEXT;

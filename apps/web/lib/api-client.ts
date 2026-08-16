@@ -149,6 +149,7 @@ export interface ApiLineJobComponent {
   description: string;
   // Prisma Decimal / JSON snapshot — may come over as a numeric string.
   quantityPerUnit: number | string;
+  unitLabel?: string | null;
   unitPriceCents: number;
 }
 export interface ApiLineItem {
@@ -266,6 +267,7 @@ export interface ApiJobComponent {
   description: string;
   // Prisma Decimal comes over JSON as a numeric string for quantityPerUnit.
   quantityPerUnit: number | string;
+  unitLabel?: string | null;
   unitPriceCents: number;
   sort: number;
 }
@@ -452,6 +454,7 @@ export function mapJobComponent(c: ApiJobComponent): JobComponent {
     labourRateId: c.labourRateId ?? undefined,
     description: c.description,
     quantityPerUnit: Number(c.quantityPerUnit),
+    unitLabel: c.unitLabel ?? undefined,
     unitPriceCents: c.unitPriceCents,
     sort: c.sort,
   };
@@ -473,6 +476,7 @@ function mapLineJobComponent(c: ApiLineJobComponent): QuoteLineJobComponent {
     kind: c.kind,
     description: c.description,
     quantityPerUnit: Number(c.quantityPerUnit),
+    unitLabel: c.unitLabel ?? undefined,
     unitPriceCents: c.unitPriceCents,
   };
 }

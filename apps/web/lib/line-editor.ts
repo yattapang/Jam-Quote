@@ -256,6 +256,7 @@ function jobPatch(
       kind: c.kind,
       description: c.description,
       quantityPerUnit: c.quantityPerUnit,
+      unitLabel: c.unitLabel,
       unitPriceCents: c.unitPriceCents,
     })),
   };

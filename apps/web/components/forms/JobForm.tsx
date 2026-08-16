@@ -34,6 +34,8 @@ export interface JobComponentDraft {
   labourRateId?: string;
   description: string;
   quantityPerUnit: string;
+  /** What the quantity counts — "trip", "day". Blank prints bare. */
+  unitLabel: string;
   unitPriceDollars: string;
 }
 
@@ -51,6 +53,7 @@ function newComponentDraft(): JobComponentDraft {
     kind: JobComponentKind.MATERIAL,
     description: "",
     quantityPerUnit: "1",
+    unitLabel: "",
     unitPriceDollars: "",
   };
 }
@@ -79,6 +82,7 @@ export function jobFormValuesFromAssembly(job: Job): JobFormValues {
               labourRateId: c.labourRateId,
               description: c.description,
               quantityPerUnit: String(c.quantityPerUnit),
+              unitLabel: c.unitLabel ?? "",
               unitPriceDollars: String(c.unitPriceCents / 100),
             }))
         : [newComponentDraft()],
@@ -104,6 +108,7 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
       labourRateId: c.kind === JobComponentKind.LABOUR ? c.labourRateId : undefined,
       description: c.description.trim(),
       quantityPerUnit: Number(c.quantityPerUnit) || 0,
+      unitLabel: c.unitLabel.trim() || undefined,
       unitPriceCents: toCents(c.unitPriceDollars),
     })),
   };
@@ -251,6 +256,15 @@ function ComponentRow({
           type="number"
           value={draft.quantityPerUnit}
           onChange={(e) => onChange({ quantityPerUnit: e.target.value })}
+        />
+        {/* What the quantity counts. Without this a recipe line read
+            "3 x $1,200" with no way to say 3 WHAT — reported when a job needed
+            transport priced per trip. */}
+        <Input
+          label="Unit"
+          placeholder="e.g. trip, day"
+          value={draft.unitLabel}
+          onChange={(e) => onChange({ unitLabel: e.target.value })}
         />
         <Input
           label="Unit price $"

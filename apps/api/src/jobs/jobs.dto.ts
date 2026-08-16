@@ -9,6 +9,8 @@ export const assemblyComponentInputSchema = z.object({
   labourRateId: z.string().min(1).optional(),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
+  /** What the quantity counts — "trip", "day". Free text; absent prints bare. */
+  unitLabel: z.string().min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
   sort: z.number().int().nonnegative().optional(),
 });

@@ -42,6 +42,7 @@ function componentCreateData(
     labourRateId: c.labourRateId,
     description: c.description,
     quantityPerUnit: c.quantityPerUnit,
+    unitLabel: c.unitLabel,
     unitPriceCents: c.unitPriceCents,
     sort: c.sort ?? idx,
   };

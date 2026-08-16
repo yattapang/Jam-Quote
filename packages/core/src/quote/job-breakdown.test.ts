@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { groupJobComponents, type JobComponentSnapshot } from "./job-breakdown.js";
+import {
+  componentQuantityLabel,
+  groupJobComponents,
+  type JobComponentSnapshot,
+} from "./job-breakdown.js";
 
 function c(over: Partial<JobComponentSnapshot> = {}): JobComponentSnapshot {
   return {
@@ -65,5 +69,46 @@ describe("groupJobComponents", () => {
 
   it("handles an empty recipe without inventing a row", () => {
     expect(groupJobComponents([])).toEqual([]);
+  });
+});
+
+describe("unit labels", () => {
+  it("reads the quantity with its unit when there is one", () => {
+    expect(componentQuantityLabel(c({ quantityPerUnit: 3, unitLabel: "trip" }))).toBe("3 trip");
+  });
+
+  it("reads bare when there is none, exactly as before this field existed", () => {
+    expect(componentQuantityLabel(c({ quantityPerUnit: 3 }))).toBe("3");
+    expect(componentQuantityLabel(c({ quantityPerUnit: 3, unitLabel: "  " }))).toBe("3");
+    expect(componentQuantityLabel(c({ quantityPerUnit: 3, unitLabel: null }))).toBe("3");
+  });
+
+  /**
+   * Unit is part of identity for grouping. "2 trips" and "2 days" of the same
+   * thing at the same price are different lines; summing them would print a
+   * single quantity counting two different units at once.
+   */
+  it("does not merge the same item measured in different units", () => {
+    const grouped = groupJobComponents([
+      c({ description: "Haulage", unitLabel: "trip" }),
+      c({ description: "Haulage", unitLabel: "day" }),
+    ]);
+    expect(grouped).toHaveLength(2);
+  });
+
+  it("still merges when the unit matches too", () => {
+    const grouped = groupJobComponents([
+      c({ description: "Haulage", unitLabel: "trip" }),
+      c({ description: "Haulage", unitLabel: "trip" }),
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0]?.quantityPerUnit).toBe(2);
+  });
+
+  it("treats absent and blank units as the same thing when merging", () => {
+    // Otherwise a row saved before this field existed would refuse to merge
+    // with an identical one saved after it.
+    const grouped = groupJobComponents([c({ unitLabel: undefined }), c({ unitLabel: "" })]);
+    expect(grouped).toHaveLength(1);
   });
 });

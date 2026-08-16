@@ -14,6 +14,9 @@ export const invoiceLineJobComponentSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
+  // Snapshotted with the rest of the component so a sent document keeps
+  // printing "3 trips" even if the job is later edited.
+  unitLabel: z.string().min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
 });
 export type InvoiceLineJobComponentInput = z.infer<
