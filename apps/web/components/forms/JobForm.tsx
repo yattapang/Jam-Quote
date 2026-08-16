@@ -133,7 +133,6 @@ function ComponentRow({
   labourRates,
   onChange,
   onRemove,
-  canRemove,
   onAddMaterial,
   onAddLabourRate,
   isDuplicate,
@@ -144,7 +143,6 @@ function ComponentRow({
   labourRates: LabourRate[];
   onChange: (patch: Partial<JobComponentDraft>) => void;
   onRemove: () => void;
-  canRemove: boolean;
   onAddMaterial: () => void;
   onAddLabourRate: () => void;
   isDuplicate: boolean;
@@ -235,7 +233,6 @@ function ComponentRow({
             aria-label="Remove component"
             title="Remove this component"
             onClick={onRemove}
-            disabled={!canRemove}
           >
             ×
           </button>
@@ -331,11 +328,21 @@ export default function JobForm({
       ...v,
       components: v.components.map((c) => (c.key === key ? { ...c, ...patch } : c)),
     }));
+  /**
+   * Removing the last component leaves a fresh blank row rather than refusing.
+   *
+   * It used to return the list unchanged when only one component remained, so
+   * the button did nothing and said nothing — reported as "the x removed
+   * nothing when clicked". A job does need at least one component to have a
+   * cost, but that is a reason to keep a ROW, not a reason to ignore a click:
+   * clearing the row you have is a perfectly reasonable thing to want, and
+   * silence is the worst possible answer to it.
+   */
   const removeComponent = (key: string) =>
-    setValues((v) => ({
-      ...v,
-      components: v.components.length > 1 ? v.components.filter((c) => c.key !== key) : v.components,
-    }));
+    setValues((v) => {
+      const remaining = v.components.filter((c) => c.key !== key);
+      return { ...v, components: remaining.length > 0 ? remaining : [newComponentDraft()] };
+    });
   const addComponent = () =>
     setValues((v) => ({ ...v, components: [...v.components, newComponentDraft()] }));
 
@@ -410,7 +417,6 @@ export default function JobForm({
             labourRates={labourList}
             onChange={(patch) => patchComponent(c.key, patch)}
             onRemove={() => removeComponent(c.key)}
-            canRemove={values.components.length > 1}
             onAddMaterial={() => setAdding({ kind: "material", componentKey: c.key })}
             onAddLabourRate={() => setAdding({ kind: "labour", componentKey: c.key })}
             isDuplicate={duplicateKeys.has(c.key)}
