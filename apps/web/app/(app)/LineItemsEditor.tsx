@@ -51,6 +51,10 @@ import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-
 import shared from "./shared.module.css";
 import styles from "./LineItemsEditor.module.css";
 
+/** Sentinel value for the category filter's "+ New category…" row. Namespaced
+ * so it can never collide with a real category label a contractor typed. */
+const ADD_CATEGORY = "__jq_add_category__";
+
 /**
  * Which vocabulary a line's Unit cell edits.
  *
@@ -160,15 +164,30 @@ function LineRows({
         <div key={l.key} className={styles.lineRow}>
           <div className={`${styles.fieldCell} ${styles.full}`}>
             <span className={styles.mobileLabel}>Saved material</span>
-            {favouriteCategories.length > 0 && (
-              <Select
-                aria-label="Filter saved materials by category"
-                options={[{ value: "", label: "All categories" }, ...favouriteCategories.map((c) => ({ value: c, label: c }))]}
-                value={materialFilter}
-                onChange={(e) => onMaterialFilterChange(l.key, e.target.value)}
-                style={{ marginBottom: 6 }}
-              />
-            )}
+            {/* Always rendered, even with no categories yet — previously this
+                disappeared entirely for a business whose materials had none,
+                so the one place categories are visible on this screen was
+                invisible exactly when a contractor had none to see. */}
+            <Select
+              aria-label="Filter saved materials by category"
+              options={[
+                { value: "", label: "All categories" },
+                ...favouriteCategories.map((c) => ({ value: c, label: c })),
+                { value: ADD_CATEGORY, label: "+ New category…" },
+              ]}
+              value={materialFilter}
+              onChange={(e) => {
+                // A category exists to classify materials, so creating one
+                // from a FILTER would leave you filtered to an empty set —
+                // the new category would immediately hide every material you
+                // have. Instead this opens the add-material form, where the
+                // category field creates one inline and it lands attached to
+                // a material, which is the only state where it is useful.
+                if (e.target.value === ADD_CATEGORY) onOpenAddMaterial(l.key);
+                else onMaterialFilterChange(l.key, e.target.value);
+              }}
+              style={{ marginBottom: 6 }}
+            />
             <MaterialPickerField
               category={materialFilter || undefined}
               onPick={(fav) => onPickFavourite(l.key, fav)}
