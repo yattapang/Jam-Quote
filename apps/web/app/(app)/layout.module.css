@@ -6,8 +6,14 @@
 
 .main {
   flex: 1;
-  overflow-y: auto;
   min-width: 0;
+  /* Deliberately NOT overflow-y: auto. It made .main a scroll container while
+     the WINDOW is what actually scrolls (.shell is min-height, so content
+     grows the page rather than this box). Nothing ever scrolled inside it, so
+     the only effect was on position: sticky descendants, which resolved
+     against a scrollport that never moved — that is why the read-only
+     view-as-tenant banner scrolled away despite being sticky. The sidebar's
+     own sticky works because it sits outside this box. */
 }
 
 /* On mobile the sidebar is an off-canvas drawer and a fixed top bar takes its
