@@ -207,6 +207,33 @@ Managed from a **Settings** screen ("Catalog & vocabulary") rather than an
 inline ×, so archiving is reversible and destructive controls do not sit
 beside selection controls.
 
+### Support model — how staff help a tenant (READ-ONLY, shipped)
+
+Shipped, not pending: admin console -> tenant -> "View as tenant" opens the
+tenant's own screens. 30 minutes, audited, and **read-only**.
+
+Read-only is a decision, not a limitation to remove later without thought.
+A staff write during such a session would be indistinguishable from the
+contractor's own: they would see a changed price on their quote with nothing
+saying who changed it, and the audit trail would agree with that lie. So the
+guard refuses every non-GET method before it looks anything up, which also
+means a write route added next month is refused without anyone remembering
+this exists.
+
+Consequence to be honest about: staff can diagnose ("why does my report show
+zero") but cannot fix ("please correct it for me"). Today the workflow ends in
+telling the contractor what to change.
+
+Making corrections possible is tracked separately (#41) and needs four things,
+none of which is removing the method check: writes attributed to the STAFF
+member, a per-action audit entry (only session-start is logged today), a
+deliberately narrow scope rather than "everything", and some way for the
+tenant to learn it happened.
+
+**Undecided policy, worth settling before paying customers:** a tenant has no
+visibility that staff viewed their books. The audit log records it; nothing
+surfaces it to them. Defensible, but choose it rather than discover it.
+
 ### Phase 4 — Job Library depth
 
 1. Jobs composed of other jobs, if a general contractor needs it. **Open —
