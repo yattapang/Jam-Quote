@@ -482,10 +482,25 @@ export default function MaterialForm({
       {unitNote && <span className={fieldStyles.hint}>{unitNote}</span>}
 
       <div className={styles.coverageGroup}>
+        {/* The abstract explanation was not enough — reported as "I do not know
+            how to properly apply the coverage aspect". A worked example in a
+            trade the contractor recognises beats a description of the feature,
+            because the hard part is not what the fields mean but what to TYPE
+            in them. */}
+        <span className={styles.coverageTitle}>
+          Coverage — optional, for materials you measure one way and buy another
+        </span>
         <span className={fieldStyles.hint}>
-          Lets you enter a measured quantity on a quote (e.g. 40 m²) and have
-          JamQuote work out how many {soldByUnit ? soldByUnit.label : "sell units"} to
-          buy. Optional — fill in any of these, or none.
+          Example: tile measured in <strong>m²</strong>, sold by the{" "}
+          <strong>{soldByUnit ? soldByUnit.label : "box"}</strong>, where one{" "}
+          {soldByUnit ? soldByUnit.label : "box"} covers <strong>4</strong> m², with{" "}
+          <strong>10</strong>% waste. On a quote you then type 40 m² and JamQuote
+          works out 11 {soldByUnit ? `${soldByUnit.label}es` : "boxes"} — 40 plus 10%
+          is 44, divided by 4, rounded up.
+        </span>
+        <span className={fieldStyles.hint}>
+          Leave all three blank for anything you simply buy and count, like a bag
+          of cement.
         </span>
         <div className={styles.coverageRow}>
           <Input

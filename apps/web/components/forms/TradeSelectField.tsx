@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import fieldStyles from "@/components/ui/Field.module.css";
 import styles from "./TradeSelectField.module.css";
 import { createTrade, type Trade } from "@/lib/api-client";
@@ -40,6 +40,7 @@ export default function TradeSelectField({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [highlight, setHighlight] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Keep the displayed text in sync when the caller's value changes from
   // outside (e.g. the form loading a different business record).
@@ -124,6 +125,7 @@ export default function TradeSelectField({
     <div className={styles.wrap}>
       {label && <span className={styles.label}>{label}</span>}
       <input
+        ref={inputRef}
         className={fieldStyles.control}
         placeholder={placeholder}
         value={query}
@@ -165,11 +167,16 @@ export default function TradeSelectField({
           {showAdd && (
             <button
               type="button"
-              className={`${styles.addOption} ${highlight === filtered.length ? styles.active : ""}`}
+              className={`${styles.addOption} ${canAdd ? "" : styles.addPrompt} ${highlight === filtered.length ? styles.active : ""}`}
               onMouseDown={(e) => e.preventDefault()}
               onMouseEnter={() => setHighlight(filtered.length)}
-              onClick={() => void addTrade()}
-              disabled={busy || !canAdd}
+              // Clicking the prompt focuses the box rather than doing nothing.
+              // Disabled, it invited a click and ignored it — reported as "the
+              // new row was not created", which is precisely what it looked
+              // like. A control that explains what to do should also help you
+              // do it.
+              onClick={() => (canAdd ? void addTrade() : inputRef.current?.focus())}
+              disabled={busy}
             >
               {busy
                 ? "Adding…"

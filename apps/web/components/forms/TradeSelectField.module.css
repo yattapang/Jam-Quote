@@ -66,10 +66,11 @@
   font-weight: 600;
 }
 
-/* Shown with an empty box, where the row is a prompt rather than an action —
-   there is no name to save yet. Muted so it reads as "here is how", not as a
-   button that was clicked and did nothing. */
-.addOption:disabled {
+/* Shown with an empty box, where the row explains what to do rather than
+   doing it. Muted so it reads as guidance — but it stays CLICKABLE and focuses
+   the input, because a disabled control that invites a click and ignores it
+   reads as broken. */
+.addPrompt {
   color: var(--jq-text-muted);
   font-weight: 500;
   cursor: default;
