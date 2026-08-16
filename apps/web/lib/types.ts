@@ -137,6 +137,22 @@ export interface LabourRate {
   rateUnit: RateUnit;
 }
 
+/** A saved piece of equipment — owned plant or a hire item from a vendor
+ * (mirrors the Prisma `EquipmentItem` model). rateCents is always integer JMD
+ * cents. `owned` matters commercially: kit you own has no vendor to chase and
+ * its rate is what you charge for it, not what you were charged. */
+export interface EquipmentItem {
+  id: string;
+  name: string;
+  owned: boolean;
+  vendor?: string;
+  vendorPhone?: string;
+  rateCents: number;
+  /** Convenience for display/inputs — rateCents / 100. */
+  rateDollars: number;
+  rateUnit: RateUnit;
+}
+
 /** One recipe line inside an job — either a snapshot of a saved
  * material/labour rate (materialFavouriteId/labourRateId set) or a freeform
  * "OTHER" line (mirrors the Prisma `JobComponent` model). */

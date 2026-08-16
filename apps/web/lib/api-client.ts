@@ -12,7 +12,7 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Job, JobComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
+import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
 import type { JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
@@ -247,6 +247,15 @@ export interface ApiLabourRate {
   rateCents: number;
   rateUnit: RateUnit;
 }
+export interface ApiEquipmentItem {
+  id: string;
+  name: string;
+  owned: boolean;
+  vendor?: string | null;
+  vendorPhone?: string | null;
+  rateCents: number;
+  rateUnit: RateUnit;
+}
 export interface ApiJobComponent {
   id: string;
   kind: JobComponentKind;
@@ -415,6 +424,19 @@ export function mapLabourRate(r: ApiLabourRate): LabourRate {
     rateCents: r.rateCents,
     rateDollars: r.rateCents / 100,
     rateUnit: r.rateUnit,
+  };
+}
+
+export function mapEquipmentItem(e: ApiEquipmentItem): EquipmentItem {
+  return {
+    id: e.id,
+    name: e.name,
+    owned: e.owned,
+    vendor: e.vendor ?? undefined,
+    vendorPhone: e.vendorPhone ?? undefined,
+    rateCents: e.rateCents,
+    rateDollars: e.rateCents / 100,
+    rateUnit: e.rateUnit,
   };
 }
 
@@ -968,6 +990,34 @@ export async function deleteMaterialFavourite(id: string): Promise<void> {
 /** DELETE /api/catalogs/labour-rates/:id — soft delete (API sets deletedAt). */
 export async function deleteLabourRate(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/catalogs/labour-rates/${id}`);
+}
+
+/** The equipment library. The API (catalogs/equipment) has existed since the
+ * schema was written; until now nothing in the web app called it, so a
+ * contractor had no way to save a mixer or a scaffold rate. */
+export interface NewEquipmentItemInput {
+  name: string;
+  owned: boolean;
+  vendor?: string;
+  vendorPhone?: string;
+  rateCents: number;
+  rateUnit: RateUnit;
+}
+export type UpdateEquipmentItemInput = Partial<NewEquipmentItemInput>;
+
+export async function createEquipmentItem(input: NewEquipmentItemInput): Promise<EquipmentItem> {
+  return mapEquipmentItem(await apiClient.post<ApiEquipmentItem>("/catalogs/equipment", input));
+}
+export async function updateEquipmentItem(
+  id: string,
+  input: UpdateEquipmentItemInput,
+): Promise<EquipmentItem> {
+  return mapEquipmentItem(
+    await apiClient.patch<ApiEquipmentItem>(`/catalogs/equipment/${id}`, input),
+  );
+}
+export async function deleteEquipmentItem(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/catalogs/equipment/${id}`);
 }
 
 /** DELETE /api/jobs/:id — soft delete (API sets deletedAt). */

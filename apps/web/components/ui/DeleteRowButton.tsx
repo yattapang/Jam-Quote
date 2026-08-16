@@ -10,6 +10,7 @@ import {
   deleteInvoice,
   deleteProject,
   deleteLabourRate,
+  deleteEquipmentItem,
   deleteMaterialFavourite,
   deleteQuote,
 } from "@/lib/api-client";
@@ -21,11 +22,12 @@ const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   quote: deleteQuote,
   material: deleteMaterialFavourite,
   labourRate: deleteLabourRate,
+  equipment: deleteEquipmentItem,
   job: deleteJob,
   invoice: deleteInvoice,
 };
 
-export type DeleteKind = "client" | "project" | "quote" | "material" | "labourRate" | "job" | "invoice";
+export type DeleteKind = "client" | "project" | "quote" | "material" | "labourRate" | "equipment" | "job" | "invoice";
 
 /**
  * Small, unobtrusive per-row delete affordance. Always confirms via a Modal

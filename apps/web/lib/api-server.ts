@@ -23,6 +23,7 @@ import {
   mapClient,
   mapInvoice,
   mapLabourRate,
+  mapEquipmentItem,
   mapMaterialFavourite,
   mapQuote,
   type ApiJob,
@@ -31,6 +32,7 @@ import {
   type ApiInvoice,
   type ApiProject,
   type ApiLabourRate,
+  type ApiEquipmentItem,
   type ApiMaterialFavourite,
   type ApiQuote,
   type Invoice,
@@ -49,7 +51,7 @@ import {
   type ApiRegulatoryUpdate,
   type Trade,
 } from "./api-client";
-import type { Job, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
+import type { Job, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { ProjectSummary, ProjectDetail } from "./mock-data";
 import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
 import { IMPERSONATION_COOKIE } from "./session";
@@ -216,6 +218,19 @@ export async function getLabourRates(): Promise<LabourRate[]> {
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getLabourRates: API unreachable, using empty list");
+    return [];
+  }
+}
+
+/** GET /api/catalogs/equipment — the business's equipment library (owned plant
+ * and hire items). Same unreachable-API convention as its siblings: an empty
+ * list rather than a thrown page. */
+export async function getEquipment(): Promise<EquipmentItem[]> {
+  try {
+    return (await serverRequest<ApiEquipmentItem[]>("/catalogs/equipment")).map(mapEquipmentItem);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getEquipment: API unreachable, using empty list");
     return [];
   }
 }
