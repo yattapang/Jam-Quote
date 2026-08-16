@@ -113,33 +113,21 @@ work to `Project`, 0b then gave `job` to the template. Every stale reference
 was a compile error rather than a reference that still compiled while meaning
 something else. Both verified to generate zero SQL.
 
-**Steps 0c/0d — finish the rename through the wire and the view types.**
+**Steps 0c/0d — DONE (dc36f8a, 185e544, 67593f2).** The wire, the view types
+and the template naming all follow the vocabulary now. Every step carried
+`@map`, so no step generated SQL.
 
-Now unblocked: the deployed mobile client is being rebuilt, so the API field
-names are no longer pinned by a client we cannot change. Same two-step
-vacate-then-occupy discipline, for the same reason — `jobId` is about to
-change meaning, and a swap done in one pass would leave code that compiles
-while referring to the wrong thing.
+**The lesson worth carrying forward.** Vacate-then-occupy makes the compiler
+enumerate stale references — but only for identifiers. It does NOT protect
+STRING LITERALS crossing a renamed union: three `kind="job"` call sites stayed
+valid after the swap while now pointing at the template's deleter, so a
+project delete would have hit the wrong table. Found by reading the call sites,
+not by a green typecheck. Whenever a rename touches a string-keyed union or a
+discriminant, grep the literals by hand.
 
-- **0c — vacate `job` in the wire and the view types.** `Quote.jobId` /
-  `Attachment.jobId` → `projectId` (Prisma field with `@map("jobId")` so the
-  column is untouched and no SQL is generated), the matching API DTO and
-  JSON keys, the sync payload's `jobs` table key → `projects`, and the view
-  types that mean client work: `ReportJob` → `ReportProject`, `JobsSummary`,
-  `jobsByStage`, `ClientJobCount`, `DemoJob`/`demoJobs`, and web's `JobForm`,
-  `JobRow`, `JobSummary`, `JobDetail`, `jobStagePill`.
-- **0d — give `job` to the template.** Line-item snapshot fields
-  `assemblyId` / `assemblyName` / `assemblyUnit` / `assemblyComponents` →
-  `jobId` / `jobName` / `jobUnit` / `jobComponents`; `JobComponent.assemblyId`
-  → `jobId` (again `@map`, no SQL); web's `Assembly`/`AssemblyComponent` view
-  types → `Job`/`JobComponent`; `AssemblyForm` → `JobForm` (the name freed by
-  0c).
-
-**Deployment note.** These change the JSON contract, so the API and web must
-ship together. During any window where one is new and the other is old,
-affected requests fail. Acceptable here — three tenants, one of them ours,
-pre-launch — but it is a real window and should not be assumed away. Deploy
-API and web in the same push and check a quote round-trips afterwards.
+Same shape as the other hole found this round: `prisma/` scripts were never
+type-checked at all, so the destructive cleanup scripts silently kept calling
+a renamed accessor. Now covered by `tsconfig.scripts.json`.
 
 Then, the findability work:
 
