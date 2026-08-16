@@ -45,7 +45,7 @@ describe("middleware", () => {
   });
 
   it("does not treat a route that merely starts with a protected word as protected (no false-positive prefix match)", () => {
-    // "/jobsomething" must not be caught by the "/jobs" prefix.
+    // "/jobsomething" must not be caught by the "/projects" prefix.
     const res = middleware(makeRequest("/jobsomething"));
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();

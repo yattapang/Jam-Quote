@@ -13,16 +13,16 @@ import ProjectForm, {
 import type { ClientOption } from "@/components/forms/types";
 import type { ProjectDetail } from "@/lib/mock-data";
 
-/** Header action on the job detail page — mirrors AddJobButton but pre-fills
- * from the existing job and PATCHes instead of POSTing. `clients` comes from
- * the server detail page, same as AddJobButton receives it. */
-export default function EditJobButton({ job, clients }: { job: ProjectDetail; clients: ClientOption[] }) {
+/** Header action on the project detail page — mirrors AddProjectButton but pre-fills
+ * from the existing project and PATCHes instead of POSTing. `clients` comes from
+ * the server detail page, same as AddProjectButton receives it. */
+export default function EditProjectButton({ project, clients }: { project: ProjectDetail; clients: ClientOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: ProjectFormValues) {
-    await updateProject(job.id, projectPayloadFromValues(values));
+    await updateProject(project.id, projectPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }
@@ -33,10 +33,10 @@ export default function EditJobButton({ job, clients }: { job: ProjectDetail; cl
         Edit
       </Button>
       {open && (
-        <Modal title="Edit job" onClose={() => (busy ? undefined : setOpen(false))}>
+        <Modal title="Edit project" onClose={() => (busy ? undefined : setOpen(false))}>
           <ProjectForm
             clients={clients}
-            initial={projectFormValuesFromProject(job)}
+            initial={projectFormValuesFromProject(project)}
             submitLabel="Save changes"
             onCancel={() => setOpen(false)}
             onSubmit={handleSubmit}

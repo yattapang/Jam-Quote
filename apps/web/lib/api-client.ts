@@ -641,7 +641,7 @@ export interface NewProjectInput {
   progressPct?: number;
 }
 export async function createProject(input: NewProjectInput): Promise<{ id: string }> {
-  return apiClient.post<{ id: string }>("/jobs", input);
+  return apiClient.post<{ id: string }>("/projects", input);
 }
 
 export interface NewMaterialFavouriteInput {
@@ -813,10 +813,10 @@ export async function updateClient(id: string, input: UpdateClientInput): Promis
   return mapClient(await apiClient.patch<ApiClientRow>(`/clients/${id}`, input));
 }
 
-/** PATCH /api/jobs/:id — same shape as create, all fields optional. */
+/** PATCH /api/projects/:id — same shape as create, all fields optional. */
 export type UpdateProjectInput = Partial<NewProjectInput>;
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<{ id: string }> {
-  return apiClient.patch<{ id: string }>(`/jobs/${id}`, input);
+  return apiClient.patch<{ id: string }>(`/projects/${id}`, input);
 }
 
 /** PATCH /api/catalogs/material-favourites/:id — same shape as create, all fields optional. */
@@ -949,7 +949,7 @@ export async function deleteClient(id: string): Promise<void> {
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  await apiClient.delete<unknown>(`/jobs/${id}`);
+  await apiClient.delete<unknown>(`/projects/${id}`);
 }
 
 export async function deleteQuote(id: string): Promise<void> {

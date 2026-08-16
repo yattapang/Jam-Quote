@@ -7,19 +7,19 @@ import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
 import { getProject, getClients, getQuotes } from "@/lib/api-server";
-import EditJobButton from "./EditJobButton";
+import EditProjectButton from "./EditProjectButton";
 import shared from "../../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
 
-export const metadata = { title: "Job · JamQuote" };
+export const metadata = { title: "Project · JamQuote" };
 
 export default async function JobDetailPage({ params }: { params: { id: string } }) {
-  const job = await getProject(params.id);
-  if (!job) notFound();
+  const project = await getProject(params.id);
+  if (!project) notFound();
 
   const [clients, quotes] = await Promise.all([
     getClients(),
-    getQuotes().then((qs) => qs.filter((q) => q.projectId === job.id)),
+    getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
   ]);
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 
@@ -28,22 +28,22 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       <header className={shared.header}>
         <div className={shared.headings}>
           <span className={shared.eyebrow}>
-            <Link href="/jobs" style={{ color: "inherit" }}>
+            <Link href="/projects" style={{ color: "inherit" }}>
               ← Jobs
             </Link>
           </span>
-          <h1 className={shared.title}>{job.name}</h1>
+          <h1 className={shared.title}>{project.name}</h1>
           <span className={shared.subtitle}>
-            {job.clientName} · {PROJECT_STAGE_LABELS[job.stage]}
+            {project.clientName} · {PROJECT_STAGE_LABELS[project.stage]}
           </span>
         </div>
         <div className={shared.headerActions}>
-          <EditJobButton job={job} clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
+          <EditProjectButton project={project} clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
           <DeleteRowButton
             kind="project"
-            id={job.id}
-            confirmMessage={`Delete ${job.name}? This can't be undone.`}
-            redirectTo="/jobs"
+            id={project.id}
+            confirmMessage={`Delete ${project.name}? This can't be undone.`}
+            redirectTo="/projects"
           />
         </div>
       </header>
@@ -55,7 +55,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           </div>
           <Card>
             <div className={shared.list}>
-              {quotes.length === 0 && <div className={shared.empty}>No quotes for this job yet.</div>}
+              {quotes.length === 0 && <div className={shared.empty}>No quotes for this project yet.</div>}
               {quotes.map((q) => {
                 const pill = quoteStatusPill(q.status);
                 return (
@@ -85,26 +85,26 @@ export default async function JobDetailPage({ params }: { params: { id: string }
             <div className={shared.list}>
               <div className={shared.totalRowMuted}>
                 <span>Client</span>
-                <span>{job.clientName}</span>
+                <span>{project.clientName}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Address</span>
-                <span>{job.addressLine || "—"}</span>
+                <span>{project.addressLine || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Parish</span>
-                <span>{formatAddress([job.town, job.parish]) || "—"}</span>
+                <span>{formatAddress([project.town, project.parish]) || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>Stage</span>
-                <span>{PROJECT_STAGE_LABELS[job.stage]}</span>
+                <span>{PROJECT_STAGE_LABELS[project.stage]}</span>
               </div>
               {/* Same rule as the list: the stored percentage is kept, but a
-                  cancelled or not-yet-won job showing "40%" reads as a bug. */}
-              {projectStageTracksProgress(job.stage) && (
+                  cancelled or not-yet-won project showing "40%" reads as a bug. */}
+              {projectStageTracksProgress(project.stage) && (
                 <div className={shared.totalRowMuted}>
                   <span>Progress</span>
-                  <span>{job.progressPct}% complete</span>
+                  <span>{project.progressPct}% complete</span>
                 </div>
               )}
               <div className={shared.totalRowGrand}>

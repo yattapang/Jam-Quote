@@ -39,7 +39,7 @@ const PROTECTED_PREFIXES = [
   "/quotes",
   "/invoices",
   "/clients",
-  "/jobs",
+  "/projects",
   "/assemblies",
   "/labour",
   "/materials",

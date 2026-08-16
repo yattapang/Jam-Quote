@@ -1,13 +1,13 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
-import type { CreateJobInput, UpdateJobInput } from "./jobs.dto.js";
+import type { CreateProjectInput, UpdateProjectInput } from "./projects.dto.js";
 
 @Injectable()
-export class JobsService {
+export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(businessId: string, input: CreateJobInput): Promise<Project> {
+  create(businessId: string, input: CreateProjectInput): Promise<Project> {
     return this.prisma.project.create({ data: { ...input, businessId } });
   }
 
@@ -24,7 +24,7 @@ export class JobsService {
     return project;
   }
 
-  async update(businessId: string, id: string, input: UpdateJobInput): Promise<Project> {
+  async update(businessId: string, id: string, input: UpdateProjectInput): Promise<Project> {
     await this.findOne(businessId, id);
     return this.prisma.project.update({ where: { id }, data: input });
   }

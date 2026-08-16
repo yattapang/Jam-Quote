@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ProjectStage, PARISHES } from "@jamquote/core";
 
-export const createJobSchema = z.object({
+export const createProjectSchema = z.object({
   clientId: z.string().min(1).optional(),
   name: z.string().min(1),
   addressLine: z.string().optional(),
@@ -12,7 +12,7 @@ export const createJobSchema = z.object({
   stage: z.nativeEnum(ProjectStage).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),
 });
-export type CreateJobInput = z.infer<typeof createJobSchema>;
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
-export const updateJobSchema = createJobSchema.partial();
-export type UpdateJobInput = z.infer<typeof updateJobSchema>;
+export const updateProjectSchema = createProjectSchema.partial();
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

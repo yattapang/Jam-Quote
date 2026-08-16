@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/quotes", label: "Quotes" },
   { href: "/clients", label: "Clients" },
-  { href: "/jobs", label: "Jobs" },
+  { href: "/projects", label: "Projects" },
   { href: "/materials", label: "Materials" },
   { href: "/labour", label: "Labour" },
   { href: "/assemblies", label: "Job types" },

@@ -8,7 +8,7 @@ import { createProject } from "@/lib/api-client";
 import ProjectForm, { projectPayloadFromValues, type ProjectFormValues } from "@/components/forms/ProjectForm";
 import type { ClientOption } from "@/components/forms/types";
 
-export default function AddJobButton({ clients }: { clients: ClientOption[] }) {
+export default function AddProjectButton({ clients }: { clients: ClientOption[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -22,10 +22,10 @@ export default function AddJobButton({ clients }: { clients: ClientOption[] }) {
   return (
     <>
       <Button variant="primary" onClick={() => setOpen(true)}>
-        New job
+        New project
       </Button>
       {open && (
-        <Modal title="New job" onClose={() => (busy ? undefined : setOpen(false))}>
+        <Modal title="New project" onClose={() => (busy ? undefined : setOpen(false))}>
           <ProjectForm clients={clients} submitLabel="Save job" onCancel={() => setOpen(false)} onSubmit={handleSubmit} onBusyChange={setBusy} />
         </Modal>
       )}

@@ -74,7 +74,7 @@ export function projectPayloadFromValues(values: ProjectFormValues): NewProjectI
 }
 
 /**
- * The job field set shared by AddJobButton, EditJobButton, and the inline
+ * The job field set shared by AddProjectButton, EditProjectButton, and the inline
  * "+ Add new job…" modal opened from QuoteBuilder's job picker. The client
  * field is itself a ClientSelectField, so every entry point into this form
  * also gets "+ Add new client…" inline for free.

@@ -252,7 +252,7 @@ export async function fetchQuoteRows(): Promise<QuoteListRow[]> {
     const [quotes, clients, jobs] = await Promise.all([
       get<ApiQuote[]>("/quotes"),
       get<ApiClientRow[]>("/clients"),
-      get<ApiProject[]>("/jobs"),
+      get<ApiProject[]>("/projects"),
     ]);
     const clientName = new Map(clients.map((c) => [c.id, c.name]));
     const jobName = new Map(jobs.map((j) => [j.id, j.name]));
@@ -289,7 +289,7 @@ export async function fetchClientRows(): Promise<ClientRow[]> {
 export async function fetchProjectRows(): Promise<ProjectRow[]> {
   try {
     const [jobs, clients, quotes] = await Promise.all([
-      get<ApiProject[]>("/jobs"),
+      get<ApiProject[]>("/projects"),
       get<ApiClientRow[]>("/clients"),
       get<ApiQuote[]>("/quotes"),
     ]);
@@ -313,7 +313,7 @@ export function deleteClient(id: string): Promise<void> {
 }
 
 export function deleteProject(id: string): Promise<void> {
-  return del(`/jobs/${id}`);
+  return del(`/projects/${id}`);
 }
 
 export function deleteQuote(id: string): Promise<void> {

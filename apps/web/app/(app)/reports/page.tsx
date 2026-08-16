@@ -193,7 +193,7 @@ export default async function ReportsPage({
       </section>
 
       <section className={shared.section}>
-        <h2 className={shared.sectionTitle}>Jobs</h2>
+        <h2 className={shared.sectionTitle}>Projects</h2>
         <div className={shared.grid2}>
           <Card>
             <div className={shared.statLabel}>Jobs created</div>

@@ -3,23 +3,23 @@ import type { Project } from "@prisma/client";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
-import { JobsService } from "./jobs.service.js";
+import { ProjectsService } from "./projects.service.js";
 import {
-  createJobSchema,
-  updateJobSchema,
-  type CreateJobInput,
-  type UpdateJobInput,
-} from "./jobs.dto.js";
+  createProjectSchema,
+  updateProjectSchema,
+  type CreateProjectInput,
+  type UpdateProjectInput,
+} from "./projects.dto.js";
 
-@Controller("jobs")
+@Controller("projects")
 @UseGuards(TenantAuthGuard)
-export class JobsController {
-  constructor(private readonly jobs: JobsService) {}
+export class ProjectsController {
+  constructor(private readonly jobs: ProjectsService) {}
 
   @Post()
   create(
     @BusinessId() businessId: string,
-    @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobInput,
+    @Body(new ZodValidationPipe(createProjectSchema)) body: CreateProjectInput,
   ): Promise<Project> {
     return this.jobs.create(businessId, body);
   }
@@ -41,7 +41,7 @@ export class JobsController {
   update(
     @BusinessId() businessId: string,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobInput,
+    @Body(new ZodValidationPipe(updateProjectSchema)) body: UpdateProjectInput,
   ): Promise<Project> {
     return this.jobs.update(businessId, id, body);
   }

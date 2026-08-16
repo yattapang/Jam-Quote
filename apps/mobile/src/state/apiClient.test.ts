@@ -128,7 +128,7 @@ describe("fetchQuoteRows", () => {
     stubFetch({
       "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140" }],
       "/clients": [apiClientRow],
-      "/jobs": [apiProject],
+      "/projects": [apiProject],
     });
     const rows = await fetchQuoteRows();
     expect(rows.map((r) => r.num)).toEqual(["QT-0142", "QT-0140"]);
@@ -177,7 +177,7 @@ describe("fetchClientRows", () => {
 
 describe("fetchProjectRows", () => {
   it("joins client names and sums quote totals", async () => {
-    stubFetch({ "/jobs": [apiProject], "/clients": [apiClientRow], "/quotes": [apiQuote] });
+    stubFetch({ "/projects": [apiProject], "/clients": [apiClientRow], "/quotes": [apiQuote] });
     const rows = await fetchProjectRows();
     expect(rows[0]?.name).toBe("Retaining wall, Spanish Town");
     expect(rows[0]?.clientName).toBe("Basil Reid");
@@ -219,7 +219,7 @@ describe("delete helpers", () => {
     const fetchMock = stubDelete();
     await deleteProject("job-0142");
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://10.0.0.5:3001/api/jobs/job-0142",
+      "http://10.0.0.5:3001/api/projects/job-0142",
       expect.objectContaining({ method: "DELETE" }),
     );
   });

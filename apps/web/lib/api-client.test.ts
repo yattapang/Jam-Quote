@@ -438,7 +438,7 @@ describe("getBusiness", () => {
 
 describe("getProject", () => {
   it("fetches a single job and joins the client name", async () => {
-    stubFetch({ "/jobs/job-0142": apiProject, "/clients": [apiClientRow] });
+    stubFetch({ "/projects/job-0142": apiProject, "/clients": [apiClientRow] });
     const j = await getProject("job-0142");
     expect(j?.name).toBe("Retaining wall, Spanish Town");
     expect(j?.clientId).toBe("cl-basil-reid");
@@ -459,7 +459,7 @@ describe("getQuotes", () => {
   it("maps quotes, attaches projectLabel, and sorts newest-first", async () => {
     stubFetch({
       "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140", projectId: "job-0142" }],
-      "/jobs": [apiProject],
+      "/projects": [apiProject],
     });
     const quotes = await getQuotes();
     expect(quotes.map((q) => q.num)).toEqual(["QT-0142", "QT-0140"]); // desc
@@ -476,7 +476,7 @@ describe("getQuotes", () => {
 
 describe("getQuote", () => {
   it("returns a detail quote with line items", async () => {
-    stubFetch({ "/quotes/qt-0142": apiQuote, "/jobs/job-0142": apiProject });
+    stubFetch({ "/quotes/qt-0142": apiQuote, "/projects/job-0142": apiProject });
     const q = await getQuote("qt-0142");
     expect(q?.num).toBe("QT-0142");
     expect(q?.projectLabel).toBe("Retaining wall, Spanish Town");
@@ -535,7 +535,7 @@ describe("create (write path)", () => {
   });
 
   it("createProject POSTs the job body", async () => {
-    const spy = stubFetch({ "/jobs": { id: "job-new" } });
+    const spy = stubFetch({ "/projects": { id: "job-new" } });
     const r = await createProject({ name: "New wall", clientId: "cl-basil-reid" });
     expect(r.id).toBe("job-new");
     expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
@@ -545,7 +545,7 @@ describe("create (write path)", () => {
   });
 
   it("createProject carries the stage and progress the form set", async () => {
-    const spy = stubFetch({ "/jobs": { id: "job-new" } });
+    const spy = stubFetch({ "/projects": { id: "job-new" } });
     await createProject({ name: "New wall", stage: ProjectStage.WON, progressPct: 10 });
     expect(JSON.parse((spy.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
       stage: "WON",
@@ -649,11 +649,11 @@ describe("update (write path)", () => {
   });
 
   it("updateProject PATCHes the job body to /jobs/:id", async () => {
-    const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
+    const spy = stubFetch({ "/projects/job-0142": { id: "job-0142" } });
     const r = await updateProject("job-0142", { name: "Retaining wall, phase 2" });
     expect(r.id).toBe("job-0142");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
-    expect(String(url)).toContain("/jobs/job-0142");
+    expect(String(url)).toContain("/projects/job-0142");
     expect(init.method).toBe("PATCH");
     expect((init.headers as Record<string, string>)["x-business-id"]).toBeUndefined();
     expect(JSON.parse(init.body as string)).toEqual({ name: "Retaining wall, phase 2" });
@@ -662,7 +662,7 @@ describe("update (write path)", () => {
   it("updateProject can PATCH the stage on its own", async () => {
     // Before #36 nothing could set this at all — the field rendered on three
     // screens and no writer existed.
-    const spy = stubFetch({ "/jobs/job-0142": { id: "job-0142" } });
+    const spy = stubFetch({ "/projects/job-0142": { id: "job-0142" } });
     await updateProject("job-0142", { stage: ProjectStage.COMPLETE, progressPct: 100 });
     const [, init] = spy.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ stage: "COMPLETE", progressPct: 100 });
@@ -774,7 +774,7 @@ describe("delete (write path)", () => {
     const spy = stubEmptyOk();
     await deleteProject("job-0142");
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
-    expect(String(url)).toContain("/jobs/job-0142");
+    expect(String(url)).toContain("/projects/job-0142");
     expect(init.method).toBe("DELETE");
   });
 
@@ -873,7 +873,7 @@ describe("getMaterialFavouritesClient", () => {
 
 describe("getProjects", () => {
   it("computes per-job value and quote count", async () => {
-    stubFetch({ "/jobs": [apiProject], "/quotes": [apiQuote], "/clients": [apiClientRow] });
+    stubFetch({ "/projects": [apiProject], "/quotes": [apiQuote], "/clients": [apiClientRow] });
     const jobs = await getProjects();
     expect(jobs[0]?.name).toBe("Retaining wall, Spanish Town");
     expect(jobs[0]?.clientName).toBe("Basil Reid");

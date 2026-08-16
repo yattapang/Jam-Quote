@@ -58,7 +58,7 @@ export function clientPayloadFromValues(values: ClientFormValues): NewClientInpu
 /**
  * The client field set shared by AddClientButton, EditClientButton, and the
  * inline "+ Add new client…" modal opened from a client picker (QuoteBuilder,
- * AddJobButton/ProjectForm). Owns its own saving/error state so every caller gets
+ * AddProjectButton/ProjectForm). Owns its own saving/error state so every caller gets
  * identical validation + failure messaging; the caller only supplies what
  * happens on success (create vs. update, append-and-select vs. refresh).
  */

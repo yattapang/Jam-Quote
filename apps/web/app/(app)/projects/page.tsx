@@ -6,47 +6,47 @@ import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { projectStagePill } from "@/lib/status";
 import { getProjects, getClients } from "@/lib/api-server";
-import AddJobButton from "./AddJobButton";
+import AddProjectButton from "./AddProjectButton";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Jobs · JamQuote" };
+export const metadata = { title: "Projects · JamQuote" };
 
-export default async function JobsPage() {
-  const [jobs, clients] = await Promise.all([getProjects(), getClients()]);
+export default async function ProjectsPage() {
+  const [projects, clients] = await Promise.all([getProjects(), getClients()]);
   return (
     <div className={shared.page}>
       <header className={shared.header}>
         <div className={shared.headings}>
           <span className={shared.eyebrow}>Work</span>
-          <h1 className={shared.title}>Jobs</h1>
-          <span className={shared.subtitle}>{jobs.length} active jobs</span>
+          <h1 className={shared.title}>Projects</h1>
+          <span className={shared.subtitle}>{projects.length} active projects</span>
         </div>
         <div className={shared.headerActions}>
-          <AddJobButton clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
+          <AddProjectButton clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
         </div>
       </header>
 
       <Card>
         <div className={shared.list}>
-          {jobs.length === 0 && (
-            <div className={shared.empty}>No jobs yet — add one to get started.</div>
+          {projects.length === 0 && (
+            <div className={shared.empty}>No projects yet — add one to get started.</div>
           )}
-          {jobs.map((job) => {
-            const pill = projectStagePill(job.stage);
+          {projects.map((project) => {
+            const pill = projectStagePill(project.stage);
             return (
-              <div key={job.id} className={shared.row}>
+              <div key={project.id} className={shared.row}>
                 <div className={shared.rowMain}>
                   {/* Title + stage pill, the same row shape the quotes and
                       invoices lists use — the stage used to be plain grey text
                       here, which read as an afterthought rather than status. */}
                   <span className={shared.rowTitle}>
-                    <Link href={`/jobs/${job.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                      {job.name}
+                    <Link href={`/projects/${project.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+                      {project.name}
                     </Link>
                     <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                   </span>
                   <span className={shared.rowSub}>
-                    {job.clientName} · {job.addressLine}
+                    {project.clientName} · {project.addressLine}
                   </span>
                   {/* Progress belongs on the LIST: someone checking several
                       jobs should not have to open each one. Muted text in the
@@ -54,19 +54,19 @@ export default async function JobsPage() {
                       draws one, and an empty track at 0% reads as broken when 0
                       is simply where every job starts. Hidden at stages where
                       the number would mislead (projectStageTracksProgress). */}
-                  {projectStageTracksProgress(job.stage) && (
-                    <span className={shared.rowSub}>{job.progressPct}% complete</span>
+                  {projectStageTracksProgress(project.stage) && (
+                    <span className={shared.rowSub}>{project.progressPct}% complete</span>
                   )}
                 </div>
                 <div className={shared.rowRight}>
-                  <MoneyText cents={job.valueCents} />
+                  <MoneyText cents={project.valueCents} />
                   <span className={shared.rowSub}>
-                    {job.quoteCount} {job.quoteCount === 1 ? "quote" : "quotes"}
+                    {project.quoteCount} {project.quoteCount === 1 ? "quote" : "quotes"}
                   </span>
                   <DeleteRowButton
                     kind="project"
-                    id={job.id}
-                    confirmMessage={`Delete ${job.name}? This can't be undone.`}
+                    id={project.id}
+                    confirmMessage={`Delete ${project.name}? This can't be undone.`}
                   />
                 </div>
               </div>

@@ -237,7 +237,7 @@ export async function getJobs(): Promise<Job[]> {
 export async function getProjects(): Promise<ProjectSummary[]> {
   try {
     const [projects, quotes, clients] = await Promise.all([
-      serverRequest<ApiProject[]>("/jobs"),
+      serverRequest<ApiProject[]>("/projects"),
       serverRequest<ApiQuote[]>("/quotes"),
       serverRequest<ApiClientRow[]>("/clients"),
     ]);
@@ -266,7 +266,7 @@ export async function getProjects(): Promise<ProjectSummary[]> {
 export async function getProject(id: string): Promise<ProjectDetail | undefined> {
   try {
     const [project, clients] = await Promise.all([
-      serverRequest<ApiProject>(`/jobs/${id}`),
+      serverRequest<ApiProject>(`/projects/${id}`),
       serverRequest<ApiClientRow[]>("/clients"),
     ]);
     const client = clients.find((c) => c.id === project.clientId);
@@ -292,7 +292,7 @@ export async function getQuotes(): Promise<Quote[]> {
   try {
     const [quotes, projects] = await Promise.all([
       serverRequest<ApiQuote[]>("/quotes"),
-      serverRequest<ApiProject[]>("/jobs"),
+      serverRequest<ApiProject[]>("/projects"),
     ]);
     const jobName = new Map(projects.map((j) => [j.id, j.name]));
     return quotes
@@ -311,7 +311,7 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
     let projectLabel = "";
     if (q.projectId) {
       try {
-        projectLabel = (await serverRequest<ApiProject>(`/jobs/${q.projectId}`)).name;
+        projectLabel = (await serverRequest<ApiProject>(`/projects/${q.projectId}`)).name;
       } catch {
         /* job label is best-effort */
       }

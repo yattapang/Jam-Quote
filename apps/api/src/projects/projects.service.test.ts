@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { ProjectStage } from "@jamquote/core";
-import { JobsService } from "./jobs.service.js";
-import { createJobSchema, updateJobSchema } from "./jobs.dto.js";
+import { ProjectsService } from "./projects.service.js";
+import { createProjectSchema, updateProjectSchema } from "./projects.dto.js";
 
 function withPrisma(job: Partial<Record<string, unknown>> = {}) {
   const prisma = {
@@ -16,12 +16,12 @@ function withPrisma(job: Partial<Record<string, unknown>> = {}) {
     },
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return { svc: new JobsService(prisma as any), prisma };
+  return { svc: new ProjectsService(prisma as any), prisma };
 }
 
 describe("job DTOs accept the workflow fields", () => {
   it("takes a ProjectStage and a 0–100 progress on create", () => {
-    const parsed = createJobSchema.parse({
+    const parsed = createProjectSchema.parse({
       name: "Retaining wall",
       stage: ProjectStage.IN_PROGRESS,
       progressPct: 62,
@@ -33,23 +33,23 @@ describe("job DTOs accept the workflow fields", () => {
   it("rejects the legacy free-text stages the column used to hold", () => {
     // The whole point of #36: 'In progress' and 'Invoiced' are no longer
     // things a client may invent — the enum is the vocabulary.
-    expect(() => createJobSchema.parse({ name: "x", stage: "In progress" })).toThrow();
-    expect(() => createJobSchema.parse({ name: "x", stage: "Invoiced" })).toThrow();
+    expect(() => createProjectSchema.parse({ name: "x", stage: "In progress" })).toThrow();
+    expect(() => createProjectSchema.parse({ name: "x", stage: "Invoiced" })).toThrow();
   });
 
   it("rejects an out-of-range or fractional progress", () => {
-    expect(() => createJobSchema.parse({ name: "x", progressPct: 101 })).toThrow();
-    expect(() => createJobSchema.parse({ name: "x", progressPct: -1 })).toThrow();
-    expect(() => createJobSchema.parse({ name: "x", progressPct: 62.5 })).toThrow();
+    expect(() => createProjectSchema.parse({ name: "x", progressPct: 101 })).toThrow();
+    expect(() => createProjectSchema.parse({ name: "x", progressPct: -1 })).toThrow();
+    expect(() => createProjectSchema.parse({ name: "x", progressPct: 62.5 })).toThrow();
   });
 
   it("allows a stage-only update — stage is settable on its own", () => {
-    const parsed = updateJobSchema.parse({ stage: ProjectStage.COMPLETE });
+    const parsed = updateProjectSchema.parse({ stage: ProjectStage.COMPLETE });
     expect(parsed).toEqual({ stage: ProjectStage.COMPLETE });
   });
 });
 
-describe("JobsService tenant scoping", () => {
+describe("ProjectsService tenant scoping", () => {
   it("writes the stage and progress straight through on create, under the caller's businessId", () => {
     const { svc, prisma } = withPrisma();
     void svc.create("biz-1", { name: "Retaining wall", stage: ProjectStage.WON, progressPct: 10 });

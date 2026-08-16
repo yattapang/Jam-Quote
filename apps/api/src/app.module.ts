@@ -11,7 +11,7 @@ import { AuthContextMiddleware } from "./auth/auth-context.middleware.js";
 import { BusinessModule } from "./business/business.module.js";
 import { ClientsModule } from "./clients/clients.module.js";
 import { TradesModule } from "./trades/trades.module.js";
-import { JobsModule } from "./jobs/jobs.module.js";
+import { ProjectsModule } from "./projects/projects.module.js";
 import { QuotesModule } from "./quotes/quotes.module.js";
 import { InvoicesModule } from "./invoices/invoices.module.js";
 import { CatalogsModule } from "./catalogs/catalogs.module.js";
@@ -44,7 +44,7 @@ import { ReportsModule } from "./reports/reports.module.js";
     BusinessModule,
     ClientsModule,
     TradesModule,
-    JobsModule,
+    ProjectsModule,
     QuotesModule,
     InvoicesModule,
     CatalogsModule,
