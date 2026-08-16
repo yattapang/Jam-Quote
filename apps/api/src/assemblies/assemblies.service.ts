@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Job, JobComponent, Prisma } from "@prisma/client";
-import { computeAssemblyUnitCostCents } from "@jamquote/core";
+import { computeJobUnitCostCents } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type {
-  AssemblyComponentInput,
-  CreateAssemblyInput,
-  UpdateAssemblyInput,
+  JobComponentInput,
+  CreateJobInput,
+  UpdateJobInput,
 } from "./assemblies.dto.js";
 
 const ASSEMBLY_DETAIL_INCLUDE = {
@@ -16,27 +16,27 @@ type AssemblyWithComponents = Prisma.JobGetPayload<{
   include: typeof ASSEMBLY_DETAIL_INCLUDE;
 }>;
 
-export type AssemblyWithCost = AssemblyWithComponents & { unitCostCents: number };
+export type JobWithCost = AssemblyWithComponents & { unitCostCents: number };
 
-/** Attach the computed unit cost (via @jamquote/core) to an assembly + its components. */
-function withUnitCost(assembly: AssemblyWithComponents): AssemblyWithCost {
-  const unitCostCents = computeAssemblyUnitCostCents({
-    components: assembly.components.map((c) => ({
+/** Attach the computed unit cost (via @jamquote/core) to an job + its components. */
+function withUnitCost(job: AssemblyWithComponents): JobWithCost {
+  const unitCostCents = computeJobUnitCostCents({
+    components: job.components.map((c) => ({
       quantityPerUnit: Number(c.quantityPerUnit),
       unitPriceCents: c.unitPriceCents,
     })),
-    markupPct: Number(assembly.markupPct),
+    markupPct: Number(job.markupPct),
   });
-  return { ...assembly, unitCostCents };
+  return { ...job, unitCostCents };
 }
 
 function componentCreateData(
-  assemblyId: string,
-  c: AssemblyComponentInput,
+  jobId: string,
+  c: JobComponentInput,
   idx: number,
 ): Prisma.JobComponentUncheckedCreateInput {
   return {
-    assemblyId,
+    jobId,
     kind: c.kind,
     materialFavouriteId: c.materialFavouriteId,
     labourRateId: c.labourRateId,
@@ -51,9 +51,9 @@ function componentCreateData(
 export class AssembliesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(businessId: string, input: CreateAssemblyInput): Promise<AssemblyWithCost> {
-    const assemblyId = await this.prisma.$transaction(async (tx) => {
-      const assembly = await tx.job.create({
+  async create(businessId: string, input: CreateJobInput): Promise<JobWithCost> {
+    const jobId = await this.prisma.$transaction(async (tx) => {
+      const job = await tx.job.create({
         data: {
           businessId,
           name: input.name,
@@ -63,16 +63,16 @@ export class AssembliesService {
       });
       for (const [idx, c] of input.components.entries()) {
         await tx.jobComponent.create({
-          data: componentCreateData(assembly.id, c, idx),
+          data: componentCreateData(job.id, c, idx),
         });
       }
-      return assembly.id;
+      return job.id;
     });
 
-    return this.findOne(businessId, assemblyId);
+    return this.findOne(businessId, jobId);
   }
 
-  async findAll(businessId: string): Promise<AssemblyWithCost[]> {
+  async findAll(businessId: string): Promise<JobWithCost[]> {
     const assemblies = await this.prisma.job.findMany({
       where: { businessId, deletedAt: null },
       include: ASSEMBLY_DETAIL_INCLUDE,
@@ -81,29 +81,29 @@ export class AssembliesService {
     return assemblies.map(withUnitCost);
   }
 
-  async findOne(businessId: string, id: string): Promise<AssemblyWithCost> {
-    const assembly = await this.prisma.job.findFirst({
+  async findOne(businessId: string, id: string): Promise<JobWithCost> {
+    const job = await this.prisma.job.findFirst({
       where: { id, businessId, deletedAt: null },
       include: ASSEMBLY_DETAIL_INCLUDE,
     });
-    if (!assembly) throw new NotFoundException("Assembly not found");
-    return withUnitCost(assembly);
+    if (!job) throw new NotFoundException("Job not found");
+    return withUnitCost(job);
   }
 
-  /** Throws NotFoundException via findOne if the assembly doesn't exist (or isn't this business's). */
+  /** Throws NotFoundException via findOne if the job doesn't exist (or isn't this business's). */
   private async assertExists(businessId: string, id: string): Promise<Job> {
-    const assembly = await this.prisma.job.findFirst({
+    const job = await this.prisma.job.findFirst({
       where: { id, businessId, deletedAt: null },
     });
-    if (!assembly) throw new NotFoundException("Assembly not found");
-    return assembly;
+    if (!job) throw new NotFoundException("Job not found");
+    return job;
   }
 
   async update(
     businessId: string,
     id: string,
-    input: UpdateAssemblyInput,
-  ): Promise<AssemblyWithCost> {
+    input: UpdateJobInput,
+  ): Promise<JobWithCost> {
     const existing = await this.assertExists(businessId, id);
     const replacingComponents = input.components !== undefined;
 
@@ -118,7 +118,7 @@ export class AssembliesService {
       });
 
       if (replacingComponents) {
-        await tx.jobComponent.deleteMany({ where: { assemblyId: id } });
+        await tx.jobComponent.deleteMany({ where: { jobId: id } });
         for (const [idx, c] of (input.components ?? []).entries()) {
           await tx.jobComponent.create({ data: componentCreateData(id, c, idx) });
         }

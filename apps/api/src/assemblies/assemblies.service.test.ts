@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
-import { JobComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
+import { JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
 import { AssembliesService } from "./assemblies.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -29,8 +29,8 @@ function tileAssemblyRow(overrides: Partial<Record<string, unknown>> = {}) {
     updatedAt: new Date(),
     deletedAt: null,
     components: [
-      { id: "c1", assemblyId: "a1", sort: 0, ...materialComponent },
-      { id: "c2", assemblyId: "a1", sort: 1, ...labourComponent },
+      { id: "c1", jobId: "a1", sort: 0, ...materialComponent },
+      { id: "c2", jobId: "a1", sort: 1, ...labourComponent },
     ],
     ...overrides,
   };
@@ -55,7 +55,7 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("AssembliesService.create", () => {
-  it("creates the assembly + components in a transaction and returns the computed unitCostCents", async () => {
+  it("creates the job + components in a transaction and returns the computed unitCostCents", async () => {
     const { svc, prisma, tx } = withPrisma();
     prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
 
@@ -72,13 +72,13 @@ describe("AssembliesService.create", () => {
     expect(tx.jobComponent.create).toHaveBeenCalledTimes(2);
     expect(tx.jobComponent.create).toHaveBeenNthCalledWith(1, {
       data: expect.objectContaining({
-        assemblyId: "a1",
+        jobId: "a1",
         kind: JobComponentKind.MATERIAL,
         sort: 0,
       }),
     });
 
-    const expectedCost = computeAssemblyUnitCostCents({
+    const expectedCost = computeJobUnitCostCents({
       components: [materialComponent, labourComponent],
       markupPct: 20,
     });
@@ -115,7 +115,7 @@ describe("AssembliesService.findAll", () => {
     });
     expect(result).toHaveLength(1);
     expect(result[0]!.unitCostCents).toBe(
-      computeAssemblyUnitCostCents({
+      computeJobUnitCostCents({
         components: [materialComponent, labourComponent],
         markupPct: 20,
       }),
@@ -155,11 +155,11 @@ describe("AssembliesService.update", () => {
       data: { name: "Tiling — per sq ft", unit: "sq ft", markupPct: 25 },
     });
     expect(tx.jobComponent.deleteMany).toHaveBeenCalledWith({
-      where: { assemblyId: "a1" },
+      where: { jobId: "a1" },
     });
     expect(tx.jobComponent.create).toHaveBeenCalledTimes(1);
     expect(tx.jobComponent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ assemblyId: "a1", kind: JobComponentKind.OTHER }),
+      data: expect.objectContaining({ jobId: "a1", kind: JobComponentKind.OTHER }),
     });
   });
 

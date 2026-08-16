@@ -127,7 +127,7 @@ export default async function DashboardPage() {
                           <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                         </span>
                         <span className={shared.rowSub}>
-                          {clientNames[q.clientId] ?? "Unknown client"} · {q.jobLabel}
+                          {clientNames[q.clientId] ?? "Unknown client"} · {q.projectLabel}
                         </span>
                       </div>
                       <div className={shared.rowRight}>
@@ -156,7 +156,7 @@ export default async function DashboardPage() {
                         {clientNames[q.clientId] ?? "Unknown client"}
                       </span>
                       <span className={shared.rowSub}>
-                        {q.jobLabel} · {q.createdLabel} · awaiting response
+                        {q.projectLabel} · {q.createdLabel} · awaiting response
                       </span>
                     </div>
                   </Link>

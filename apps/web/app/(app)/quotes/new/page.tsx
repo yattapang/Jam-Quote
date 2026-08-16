@@ -1,4 +1,4 @@
-import { getClients, getProjects, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
+import { getClients, getProjects, getMaterialFavourites, getJobs, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "./QuoteBuilder";
 
 export const metadata = { title: "New quote · JamQuote" };
@@ -8,7 +8,7 @@ export default async function NewQuotePage() {
     getClients(),
     getProjects(),
     getMaterialFavourites(),
-    getAssemblies(),
+    getJobs(),
     getBusiness(),
   ]);
   // Never hardcode GCT — use the business's own default rate, falling back

@@ -19,7 +19,7 @@ const quote: Quote = {
   id: "q1",
   num: "QT-0001",
   clientId: "c1",
-  jobLabel: "Retaining wall",
+  projectLabel: "Retaining wall",
   status: QuoteStatus.DRAFT,
   gctRatePct: 15,
   discountPct: 0,

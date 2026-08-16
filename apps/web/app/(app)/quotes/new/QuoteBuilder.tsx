@@ -12,7 +12,7 @@ import { createQuote, updateQuote, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
-import type { Assembly, MaterialFavourite } from "@/lib/types";
+import type { Job, MaterialFavourite } from "@/lib/types";
 import shared from "../../shared.module.css";
 import LineItemsEditor from "../../LineItemsEditor";
 import {
@@ -79,7 +79,7 @@ export default function QuoteBuilder({
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". Each
    * carries a server-computed unitCostCents and its component snapshot. */
-  assemblies?: Assembly[];
+  assemblies?: Job[];
   mode?: "create" | "edit";
   quoteId?: string;
   initial?: InitialQuote;

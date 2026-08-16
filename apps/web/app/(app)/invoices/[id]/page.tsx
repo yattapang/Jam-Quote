@@ -77,7 +77,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                   <span className={shared.groupName}>{g.title}</span>
                 </div>
                 {g.lines.map((line) => {
-                  const showBreakdown = detailed && !!line.assemblyComponents?.length;
+                  const showBreakdown = detailed && !!line.jobComponents?.length;
                   return (
                     <div key={line.id}>
                       <div className={shared.lineRow}>
@@ -105,9 +105,9 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                               padding: "2px 0",
                             }}
                           >
-                            Breakdown{line.assemblyUnit ? ` (per ${line.assemblyUnit})` : ""}
+                            Breakdown{line.jobUnit ? ` (per ${line.jobUnit})` : ""}
                           </div>
-                          {line.assemblyComponents!.map((c, i) => (
+                          {line.jobComponents!.map((c, i) => (
                             <div
                               key={i}
                               style={{

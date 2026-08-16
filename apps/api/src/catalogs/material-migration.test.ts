@@ -143,7 +143,7 @@ describe("material catalog Phase 2a migration", () => {
       expect(mat("m8").specs).toBeNull();
     });
 
-    it("migrates soft-deleted rows too (AssemblyComponent can still reference them)", () => {
+    it("migrates soft-deleted rows too (JobComponent can still reference them)", () => {
       expect(mat("m9").cat_key).toBe("blocks");
       expect(mat("m9").specs).toEqual({ size: "6in", type: "Hollow" });
     });

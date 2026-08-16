@@ -387,10 +387,10 @@ model QuoteLineItem {
   // (quantity x unitPriceCents, unchanged); assemblyComponents is a
   // display-only snapshot ([{kind, description, quantityPerUnit,
   // unitPriceCents}]) for DETAILED rendering, never used in totals math.
-  assemblyId         String?
-  assemblyName       String?
-  assemblyUnit       String?
-  assemblyComponents Json?
+  jobId              String?  @map("assemblyId")
+  jobName            String?  @map("assemblyName")
+  jobUnit            String?  @map("assemblyUnit")
+  jobComponents      Json?    @map("assemblyComponents")
   sort               Int           @default(0)
   updatedAt          DateTime      @default(now()) @updatedAt // delta-sync cursor
   deletedAt          DateTime? // soft-delete for offline sync
@@ -734,10 +734,9 @@ model Job {
 // away.
 model JobComponent {
   id                  String                @id @default(uuid())
-  // Scalar stays `assemblyId`: it is the existing column name and appears in
-  // the public API line-item snapshot. Only the accessor is `job`.
-  assemblyId          String
-  job                 Job                   @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  // @map keeps the physical column "assemblyId" — code-only rename.
+  jobId               String                @map("assemblyId")
+  job                 Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
   kind                JobComponentKind
   materialFavouriteId String?
   materialFavourite   MaterialFavourite?    @relation(fields: [materialFavouriteId], references: [id], onDelete: SetNull)
@@ -748,7 +747,7 @@ model JobComponent {
   unitPriceCents      Int
   sort                Int                   @default(0)
 
-  @@index([assemblyId])
+  @@index([jobId])
   @@map("AssemblyComponent")
 }
 
@@ -828,10 +827,10 @@ model InvoiceLineItem {
   overrideNote       String?
   // Assembly ("job type") snapshot fields — see QuoteLineItem for semantics.
   // Display-only in DETAILED mode; assemblyComponents is never used in totals.
-  assemblyId         String?
-  assemblyName       String?
-  assemblyUnit       String?
-  assemblyComponents Json?
+  jobId              String?  @map("assemblyId")
+  jobName            String?  @map("assemblyName")
+  jobUnit            String?  @map("assemblyUnit")
+  jobComponents      Json?    @map("assemblyComponents")
   sort               Int             @default(0)
   updatedAt          DateTime        @default(now()) @updatedAt // delta-sync cursor
   deletedAt          DateTime? // soft-delete for offline sync

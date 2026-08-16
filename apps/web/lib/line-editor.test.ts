@@ -36,7 +36,7 @@ import {
   type Heading,
   type InitialLine,
 } from "./line-editor";
-import type { Assembly, LabourRate, MaterialFavourite } from "./types";
+import type { Job, LabourRate, MaterialFavourite } from "./types";
 
 function line(over: Partial<DraftLine> = {}): DraftLine {
   return { ...newLine(), ...over };
@@ -141,7 +141,7 @@ describe("newLine", () => {
 });
 
 describe("assemblyLine", () => {
-  const assembly: Assembly = {
+  const job: Job = {
     id: "a1",
     name: "Tiling",
     unit: "sq ft",
@@ -159,18 +159,18 @@ describe("assemblyLine", () => {
     ],
   };
 
-  it("prices the line from the assembly's computed unit cost", () => {
-    const l = assemblyLine(assembly, 12);
+  it("prices the line from the job's computed unit cost", () => {
+    const l = assemblyLine(job, 12);
     expect(l.description).toBe("Tiling");
     expect(l.quantity).toBe("12");
     expect(l.unitPriceDollars).toBe("450");
     expect(l.heading).toEqual({ kind: "category", category: LineCategory.OTHER });
-    expect(l.assemblyId).toBe("a1");
-    expect(l.assemblyUnit).toBe("sq ft");
+    expect(l.jobId).toBe("a1");
+    expect(l.jobUnit).toBe("sq ft");
   });
 
   it("snapshots the components without their database ids or sort", () => {
-    expect(assemblyLine(assembly, 1).assemblyComponents).toEqual([
+    expect(assemblyLine(job, 1).jobComponents).toEqual([
       {
         kind: JobComponentKind.MATERIAL,
         description: "Tile",
@@ -234,15 +234,15 @@ describe("linesFromInitial", () => {
 });
 
 describe("draftLineFromInitial", () => {
-  it("converts cents to a dollar string and keeps the assembly snapshot", () => {
+  it("converts cents to a dollar string and keeps the job snapshot", () => {
     const l = draftLineFromInitial(
       initial({
         unitPriceCents: 125_050,
         quantity: 2.5,
-        assemblyId: "a1",
-        assemblyName: "Tiling",
-        assemblyUnit: "sq ft",
-        assemblyComponents: [
+        jobId: "a1",
+        jobName: "Tiling",
+        jobUnit: "sq ft",
+        jobComponents: [
           {
             kind: JobComponentKind.LABOUR,
             description: "Fixing",
@@ -256,7 +256,7 @@ describe("draftLineFromInitial", () => {
     expect(l.unitPriceDollars).toBe("1250.5");
     expect(l.quantity).toBe("2.5");
     expect(l.heading).toEqual({ kind: "custom", title: "Site prep" });
-    expect(l.assemblyComponents).toHaveLength(1);
+    expect(l.jobComponents).toHaveLength(1);
   });
 });
 
@@ -387,19 +387,19 @@ describe("lineToLineInput", () => {
     expect("unitLabel" in lineToLineInput(line({ unitLabel: "" }))).toBe(false);
   });
 
-  it("omits every assembly field on a plain line", () => {
+  it("omits every job field on a plain line", () => {
     const input = lineToLineInput(line());
-    expect("assemblyId" in input).toBe(false);
-    expect("assemblyComponents" in input).toBe(false);
+    expect("jobId" in input).toBe(false);
+    expect("jobComponents" in input).toBe(false);
   });
 
-  it("carries the whole assembly snapshot on a job-type line", () => {
+  it("carries the whole job snapshot on a job-type line", () => {
     const input = lineToLineInput(
       line({
-        assemblyId: "a1",
-        assemblyName: "Tiling",
-        assemblyUnit: "sq ft",
-        assemblyComponents: [
+        jobId: "a1",
+        jobName: "Tiling",
+        jobUnit: "sq ft",
+        jobComponents: [
           {
             kind: JobComponentKind.MATERIAL,
             description: "Tile",
@@ -409,8 +409,8 @@ describe("lineToLineInput", () => {
         ],
       }),
     );
-    expect(input).toMatchObject({ assemblyId: "a1", assemblyName: "Tiling", assemblyUnit: "sq ft" });
-    expect(input.assemblyComponents).toHaveLength(1);
+    expect(input).toMatchObject({ jobId: "a1", jobName: "Tiling", jobUnit: "sq ft" });
+    expect(input.jobComponents).toHaveLength(1);
   });
 });
 

@@ -28,7 +28,7 @@ export const quoteLineItemSchema = z.object({
    * (HOUR/DAY/WEEK/MONTH/JOB/UNIT) and cannot express these, so a material
    * sold by the bag printed as "UNIT" on the customer's quote (#26).
    *
-   * A plain string, not a MaterialUnit FK, for the same reason assemblyName
+   * A plain string, not a MaterialUnit FK, for the same reason jobName
    * and supplierId are snapshots here: a quote already sent to a customer must
    * not change because the contractor later renamed or deleted the unit.
    * Falls back to rateUnit's label when unset.

@@ -67,7 +67,7 @@ describe("QuotesService.create", () => {
   });
 });
 
-describe("QuotesService.create — assembly lines + detail level", () => {
+describe("QuotesService.create — job lines + detail level", () => {
   const assemblyLine = {
     category: LineCategory.LABOUR,
     description: "Tiling — per sq ft",
@@ -76,10 +76,10 @@ describe("QuotesService.create — assembly lines + detail level", () => {
     unitPriceCents: 2_500,
     priceSource: PriceSource.MANUAL,
     gctTreatment: GctTreatment.STANDARD,
-    assemblyId: "asm-1",
-    assemblyName: "Tiling — per sq ft",
-    assemblyUnit: "sq ft",
-    assemblyComponents: [
+    jobId: "asm-1",
+    jobName: "Tiling — per sq ft",
+    jobUnit: "sq ft",
+    jobComponents: [
       {
         kind: JobComponentKind.MATERIAL,
         description: "Tile, 12x12",
@@ -96,7 +96,7 @@ describe("QuotesService.create — assembly lines + detail level", () => {
   };
 
   // Priced identically to assemblyLine (same category/quantity/unitPriceCents/
-  // gctTreatment) but with no assembly fields at all — the plain-line case.
+  // gctTreatment) but with no job fields at all — the plain-line case.
   const plainEquivalentLine = {
     category: LineCategory.LABOUR,
     description: "Tiling — per sq ft",
@@ -149,21 +149,21 @@ describe("QuotesService.create — assembly lines + detail level", () => {
     return { svc };
   }
 
-  it("round-trips detailLevel + the assembly snapshot, with totals unchanged vs an equivalent plain line", async () => {
+  it("round-trips detailLevel + the job snapshot, with totals unchanged vs an equivalent plain line", async () => {
     const assemblyQuote = await harness().svc.create("b1", {
       sections: [],
       lineItems: [assemblyLine],
       detailLevel: QuoteDetailLevel.DETAILED,
     } as any);
 
-    // Round-trip: detailLevel and the assembly fields come back as given.
+    // Round-trip: detailLevel and the job fields come back as given.
     expect(assemblyQuote.detailLevel).toBe(QuoteDetailLevel.DETAILED);
     expect(assemblyQuote.lineItems).toHaveLength(1);
     expect(assemblyQuote.lineItems[0]).toMatchObject({
-      assemblyId: "asm-1",
-      assemblyName: "Tiling — per sq ft",
-      assemblyUnit: "sq ft",
-      assemblyComponents: assemblyLine.assemblyComponents,
+      jobId: "asm-1",
+      jobName: "Tiling — per sq ft",
+      jobUnit: "sq ft",
+      jobComponents: assemblyLine.jobComponents,
     });
 
     const plainQuote = await harness().svc.create("b1", {
@@ -171,13 +171,13 @@ describe("QuotesService.create — assembly lines + detail level", () => {
       lineItems: [plainEquivalentLine],
     } as any);
 
-    // A normal (non-assembly) line leaves the assembly fields unset, and
+    // A normal (non-job) line leaves the job fields unset, and
     // detailLevel defaults to SUMMARY when not supplied.
     expect(plainQuote.detailLevel).toBe(QuoteDetailLevel.SUMMARY);
-    expect(plainQuote.lineItems[0]?.assemblyId).toBeUndefined();
-    expect(plainQuote.lineItems[0]?.assemblyComponents).toBeUndefined();
+    expect(plainQuote.lineItems[0]?.jobId).toBeUndefined();
+    expect(plainQuote.lineItems[0]?.jobComponents).toBeUndefined();
 
-    // Totals math is UNCHANGED by the assembly snapshot: an assembly line
+    // Totals math is UNCHANGED by the job snapshot: an job line
     // is priced like any line (quantity x unitPriceCents), the component
     // snapshot is display-only and never fed into computeTotals, so the two
     // quotes' totals are identical despite one being DETAILED with a

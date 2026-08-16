@@ -2,12 +2,12 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@n
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
-import { AssembliesService, type AssemblyWithCost } from "./assemblies.service.js";
+import { AssembliesService, type JobWithCost } from "./assemblies.service.js";
 import {
-  createAssemblySchema,
-  updateAssemblySchema,
-  type CreateAssemblyInput,
-  type UpdateAssemblyInput,
+  createJobSchema,
+  updateJobSchema,
+  type CreateJobInput,
+  type UpdateJobInput,
 } from "./assemblies.dto.js";
 
 @Controller("assemblies")
@@ -18,13 +18,13 @@ export class AssembliesController {
   @Post()
   create(
     @BusinessId() businessId: string,
-    @Body(new ZodValidationPipe(createAssemblySchema)) body: CreateAssemblyInput,
-  ): Promise<AssemblyWithCost> {
+    @Body(new ZodValidationPipe(createJobSchema)) body: CreateJobInput,
+  ): Promise<JobWithCost> {
     return this.assemblies.create(businessId, body);
   }
 
   @Get()
-  findAll(@BusinessId() businessId: string): Promise<AssemblyWithCost[]> {
+  findAll(@BusinessId() businessId: string): Promise<JobWithCost[]> {
     return this.assemblies.findAll(businessId);
   }
 
@@ -32,7 +32,7 @@ export class AssembliesController {
   findOne(
     @BusinessId() businessId: string,
     @Param("id") id: string,
-  ): Promise<AssemblyWithCost> {
+  ): Promise<JobWithCost> {
     return this.assemblies.findOne(businessId, id);
   }
 
@@ -40,8 +40,8 @@ export class AssembliesController {
   update(
     @BusinessId() businessId: string,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(updateAssemblySchema)) body: UpdateAssemblyInput,
-  ): Promise<AssemblyWithCost> {
+    @Body(new ZodValidationPipe(updateJobSchema)) body: UpdateJobInput,
+  ): Promise<JobWithCost> {
     return this.assemblies.update(businessId, id, body);
   }
 

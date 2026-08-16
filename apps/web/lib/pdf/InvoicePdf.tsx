@@ -251,10 +251,10 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
                     {formatJmd(amountByLineId.get(line.id) ?? 0)}
                   </Text>
                 </View>
-                {detailed && line.assemblyComponents?.length ? (
+                {detailed && line.jobComponents?.length ? (
                   <View style={styles.breakdown}>
-                    <Text style={styles.breakdownHead}>{line.assemblyName ?? "Breakdown"}</Text>
-                    {line.assemblyComponents.map((c, ci) => (
+                    <Text style={styles.breakdownHead}>{line.jobName ?? "Breakdown"}</Text>
+                    {line.jobComponents.map((c, ci) => (
                       <View key={`${line.id}-c${ci}`} style={styles.breakdownRow}>
                         <Text style={styles.breakdownDesc}>{c.description}</Text>
                         <Text style={styles.breakdownAmt}>

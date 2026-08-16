@@ -4,11 +4,11 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import EditAssemblyButton from "./EditAssemblyButton";
-import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../shared.module.css";
 
 /**
- * Job-type ("assembly") library list — name, unit, component count and the
+ * Job-type ("job") library list — name, unit, component count and the
  * server-computed unit cost, mirroring MaterialsListClient's row shape.
  * Materials/labour rates are passed through so Edit can re-populate the
  * component builder's pickers without an extra fetch.
@@ -18,7 +18,7 @@ export default function AssembliesListClient({
   materials,
   labourRates,
 }: {
-  assemblies: Assembly[];
+  assemblies: Job[];
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
 }) {
@@ -42,9 +42,9 @@ export default function AssembliesListClient({
               <div className={shared.rowRight}>
                 <MoneyText cents={a.unitCostCents} />
                 <div style={{ display: "flex", gap: 8 }}>
-                  <EditAssemblyButton assembly={a} materials={materials} labourRates={labourRates} />
+                  <EditAssemblyButton job={a} materials={materials} labourRates={labourRates} />
                   <DeleteRowButton
-                    kind="assembly"
+                    kind="job"
                     id={a.id}
                     confirmMessage={`Delete ${a.name}? This can't be undone.`}
                   />

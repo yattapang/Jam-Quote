@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { InvoiceStatus } from "@jamquote/core";
-import { getAssemblies, getClients, getInvoice, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
+import { getJobs, getClients, getInvoice, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
 import InvoiceBuilder from "./InvoiceBuilder";
 
 export const metadata = { title: "Edit invoice · JamQuote" };
@@ -21,7 +21,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
   // business (an invoice carries its own gctRatePct).
   const [favourites, assemblies, labourRates, clients] = await Promise.all([
     getMaterialFavourites(),
-    getAssemblies(),
+    getJobs(),
     getLabourRates(),
     getClients(),
   ]);
@@ -55,10 +55,10 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
-            assemblyId: l.assemblyId,
-            assemblyName: l.assemblyName,
-            assemblyUnit: l.assemblyUnit,
-            assemblyComponents: l.assemblyComponents,
+            jobId: l.jobId,
+            jobName: l.jobName,
+            jobUnit: l.jobUnit,
+            jobComponents: l.jobComponents,
           })),
         sections: invoice.sections?.map((s) => ({
           title: s.title,
@@ -70,10 +70,10 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
-            assemblyId: l.assemblyId,
-            assemblyName: l.assemblyName,
-            assemblyUnit: l.assemblyUnit,
-            assemblyComponents: l.assemblyComponents,
+            jobId: l.jobId,
+            jobName: l.jobName,
+            jobUnit: l.jobUnit,
+            jobComponents: l.jobComponents,
           })),
         })),
       }}

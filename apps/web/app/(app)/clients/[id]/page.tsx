@@ -62,7 +62,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
                           {q.num}
                           <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                         </span>
-                        <span className={shared.rowSub}>{q.jobLabel}</span>
+                        <span className={shared.rowSub}>{q.projectLabel}</span>
                       </div>
                       <div className={shared.rowRight}>
                         <MoneyText cents={q.totalCents ?? 0} />

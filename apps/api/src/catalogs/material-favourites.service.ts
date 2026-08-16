@@ -136,14 +136,14 @@ export class MaterialFavouritesService {
    * clients doing a delta-sync can observe the tombstone (matches
    * LabourRatesService.remove / AssembliesService.remove).
    *
-   * AssemblyComponent.materialFavouriteId has `onDelete: SetNull`, but that
+   * JobComponent.materialFavouriteId has `onDelete: SetNull`, but that
    * only fires on a real DB-level DELETE — since this is now an UPDATE, any
-   * assembly component still referencing this material keeps its
+   * job component still referencing this material keeps its
    * materialFavouriteId pointing at the (soft-deleted) row. That's safe:
-   * AssemblyComponent stores its own unitPriceCents/description snapshot at
+   * JobComponent stores its own unitPriceCents/description snapshot at
    * add-time and never re-reads the live MaterialFavourite for costing (see
-   * the comment on AssemblyComponent in schema.prisma), so no existing
-   * assembly's cost changes. The soft-deleted material just stops showing
+   * the comment on JobComponent in schema.prisma), so no existing
+   * job's cost changes. The soft-deleted material just stops showing
    * up here (findAll/findOne both filter deletedAt: null) and in the
    * material picker.
    */

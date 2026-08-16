@@ -4,23 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { updateAssembly } from "@/lib/api-client";
-import AssemblyForm, {
-  assemblyFormValuesFromAssembly,
-  assemblyPayloadFromValues,
-  type AssemblyFormValues,
-} from "@/components/forms/AssemblyForm";
-import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
+import { updateJob } from "@/lib/api-client";
+import JobForm, {
+  jobFormValuesFromAssembly,
+  jobPayloadFromValues,
+  type JobFormValues,
+} from "@/components/forms/JobForm";
+import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 
 /** Per-row edit action on the job-type library — mirrors EditLabourRateButton:
- * pre-fills the builder from the existing assembly's components and PATCHes
+ * pre-fills the builder from the existing job's components and PATCHes
  * (sending `components` replaces the full recipe) instead of POSTing. */
 export default function EditAssemblyButton({
-  assembly,
+  job,
   materials,
   labourRates,
 }: {
-  assembly: Assembly;
+  job: Job;
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
 }) {
@@ -28,8 +28,8 @@ export default function EditAssemblyButton({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(values: AssemblyFormValues) {
-    await updateAssembly(assembly.id, assemblyPayloadFromValues(values));
+  async function handleSubmit(values: JobFormValues) {
+    await updateJob(job.id, jobPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }
@@ -41,8 +41,8 @@ export default function EditAssemblyButton({
       </Button>
       {open && (
         <Modal title="Edit job type" onClose={() => (busy ? undefined : setOpen(false))} wide>
-          <AssemblyForm
-            initial={assemblyFormValuesFromAssembly(assembly)}
+          <JobForm
+            initial={jobFormValuesFromAssembly(job)}
             materials={materials}
             labourRates={labourRates}
             submitLabel="Save changes"

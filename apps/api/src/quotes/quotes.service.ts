@@ -90,13 +90,13 @@ function lineItemCreateData(
     gctTreatment: li.gctTreatment,
     markupPct: li.markupPct,
     overrideNote: li.overrideNote,
-    // Assembly ("job type") snapshot — all optional/undefined on a normal
+    // Job ("job type") snapshot — all optional/undefined on a normal
     // line. Priced like any line (quantity x unitPriceCents above, unchanged);
     // these are display-only, never read by computeTotals.
-    assemblyId: li.assemblyId,
-    assemblyName: li.assemblyName,
-    assemblyUnit: li.assemblyUnit,
-    assemblyComponents: li.assemblyComponents as Prisma.InputJsonValue | undefined,
+    jobId: li.jobId,
+    jobName: li.jobName,
+    jobUnit: li.jobUnit,
+    jobComponents: li.jobComponents as Prisma.InputJsonValue | undefined,
     sort: li.sort ?? idx,
   };
 }
@@ -383,10 +383,10 @@ export class QuotesService {
             gctTreatment: li.gctTreatment,
             markupPct: li.markupPct ?? undefined,
             overrideNote: li.overrideNote ?? undefined,
-            assemblyId: li.assemblyId ?? undefined,
-            assemblyName: li.assemblyName ?? undefined,
-            assemblyUnit: li.assemblyUnit ?? undefined,
-            assemblyComponents: (li.assemblyComponents ?? undefined) as
+            jobId: li.jobId ?? undefined,
+            jobName: li.jobName ?? undefined,
+            jobUnit: li.jobUnit ?? undefined,
+            jobComponents: (li.jobComponents ?? undefined) as
               | Prisma.InputJsonValue
               | undefined,
             sort: li.sort,

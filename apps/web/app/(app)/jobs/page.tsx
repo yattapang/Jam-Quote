@@ -64,7 +64,7 @@ export default async function JobsPage() {
                     {job.quoteCount} {job.quoteCount === 1 ? "quote" : "quotes"}
                   </span>
                   <DeleteRowButton
-                    kind="job"
+                    kind="project"
                     id={job.id}
                     confirmMessage={`Delete ${job.name}? This can't be undone.`}
                   />

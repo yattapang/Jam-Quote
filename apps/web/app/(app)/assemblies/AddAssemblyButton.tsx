@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { createAssembly } from "@/lib/api-client";
-import AssemblyForm, { assemblyPayloadFromValues, type AssemblyFormValues } from "@/components/forms/AssemblyForm";
+import { createJob } from "@/lib/api-client";
+import JobForm, { jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
 import type { LabourRate, MaterialFavourite } from "@/lib/types";
 
 export default function AddAssemblyButton({
@@ -19,8 +19,8 @@ export default function AddAssemblyButton({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(values: AssemblyFormValues) {
-    await createAssembly(assemblyPayloadFromValues(values));
+  async function handleSubmit(values: JobFormValues) {
+    await createJob(jobPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }
@@ -32,7 +32,7 @@ export default function AddAssemblyButton({
       </Button>
       {open && (
         <Modal title="Add job type" onClose={() => (busy ? undefined : setOpen(false))} wide>
-          <AssemblyForm
+          <JobForm
             materials={materials}
             labourRates={labourRates}
             submitLabel="Save job type"

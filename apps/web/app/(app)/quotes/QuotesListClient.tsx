@@ -74,7 +74,7 @@ export default function QuotesListClient({
                     <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                   </span>
                   <span className={shared.rowSub}>
-                    {clientNames[q.clientId] ?? "Unknown client"} · {q.jobLabel}
+                    {clientNames[q.clientId] ?? "Unknown client"} · {q.projectLabel}
                   </span>
                 </div>
                 <div className={shared.rowRight}>

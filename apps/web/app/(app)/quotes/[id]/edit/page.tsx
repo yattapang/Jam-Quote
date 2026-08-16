@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getQuote, getClients, getProjects, getMaterialFavourites, getAssemblies, getBusiness } from "@/lib/api-server";
+import { getQuote, getClients, getProjects, getMaterialFavourites, getJobs, getBusiness } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
 export const metadata = { title: "Edit quote · JamQuote" };
@@ -12,7 +12,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
     getClients(),
     getProjects(),
     getMaterialFavourites(),
-    getAssemblies(),
+    getJobs(),
     getBusiness(),
   ]);
   // Never hardcode GCT. On EDIT, preserve the rate the quote was originally
@@ -48,10 +48,10 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
-            assemblyId: l.assemblyId,
-            assemblyName: l.assemblyName,
-            assemblyUnit: l.assemblyUnit,
-            assemblyComponents: l.assemblyComponents,
+            jobId: l.jobId,
+            jobName: l.jobName,
+            jobUnit: l.jobUnit,
+            jobComponents: l.jobComponents,
           })),
         sections: quote.sections?.map((s) => ({
           title: s.title,
@@ -65,10 +65,10 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             unitLabel: l.unitLabel,
             unitPriceCents: l.unitPriceCents,
             gctTreatment: l.gctTreatment,
-            assemblyId: l.assemblyId,
-            assemblyName: l.assemblyName,
-            assemblyUnit: l.assemblyUnit,
-            assemblyComponents: l.assemblyComponents,
+            jobId: l.jobId,
+            jobName: l.jobName,
+            jobUnit: l.jobUnit,
+            jobComponents: l.jobComponents,
           })),
         })),
       }}

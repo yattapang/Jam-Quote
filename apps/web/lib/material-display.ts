@@ -4,9 +4,9 @@
  * which is what tells two same-named variants apart (2x4x8 cedar vs
  * 2x4x16 mahogany). Every place a favourite's identity is rendered — the quote
  * builder's type-ahead picker/dropdown label, the quote line description
- * composed when a favourite is picked, and the assembly builder's material
+ * composed when a favourite is picked, and the job builder's material
  * picker — goes through these so they can't drift apart from each other
- * (previously AssemblyForm had its own `materialLabel` that ignored specs
+ * (previously JobForm had its own `materialLabel` that ignored specs
  * entirely).
  */
 export interface MaterialLike {

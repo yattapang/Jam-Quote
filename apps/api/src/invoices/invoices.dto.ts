@@ -6,33 +6,33 @@ import {
 } from "@jamquote/core";
 
 /**
- * Display-only snapshot of one assembly component, captured at the moment
- * the assembly was dropped onto the quote/invoice. Never used in totals math
+ * Display-only snapshot of one job component, captured at the moment
+ * the job was dropped onto the quote/invoice. Never used in totals math
  * — only for DETAILED rendering. Mirrors quotes.dto.ts exactly.
  */
-export const invoiceLineAssemblyComponentSchema = z.object({
+export const invoiceLineJobComponentSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
   description: z.string().min(1),
   quantityPerUnit: z.number().positive(),
   unitPriceCents: z.number().int().nonnegative(),
 });
-export type InvoiceLineAssemblyComponentInput = z.infer<
-  typeof invoiceLineAssemblyComponentSchema
+export type InvoiceLineJobComponentInput = z.infer<
+  typeof invoiceLineJobComponentSchema
 >;
 
 /**
  * An invoice line item, plus display ordering within its section/invoice and
- * optional assembly ("job type") fields. Same shape as a quote line item —
+ * optional job ("job type") fields. Same shape as a quote line item —
  * invoice lines are copied from the quote at convert time and edited
  * independently thereafter.
  */
 export const invoiceLineItemInputSchema = quoteLineItemSchema.and(
   z.object({
     sort: z.number().int().nonnegative().optional(),
-    assemblyId: z.string().min(1).optional(),
-    assemblyName: z.string().min(1).optional(),
-    assemblyUnit: z.string().min(1).optional(),
-    assemblyComponents: z.array(invoiceLineAssemblyComponentSchema).optional(),
+    jobId: z.string().min(1).optional(),
+    jobName: z.string().min(1).optional(),
+    jobUnit: z.string().min(1).optional(),
+    jobComponents: z.array(invoiceLineJobComponentSchema).optional(),
   }),
 );
 export type InvoiceLineItemInput = z.infer<typeof invoiceLineItemInputSchema>;

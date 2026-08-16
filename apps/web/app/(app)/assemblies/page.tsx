@@ -1,4 +1,4 @@
-import { getAssemblies, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
+import { getJobs, getLabourRates, getMaterialFavourites } from "@/lib/api-server";
 import AddAssemblyButton from "./AddAssemblyButton";
 import AssembliesListClient from "./AssembliesListClient";
 import shared from "../shared.module.css";
@@ -7,7 +7,7 @@ export const metadata = { title: "Job types · JamQuote" };
 
 export default async function AssembliesPage() {
   const [assemblies, materials, labourRates] = await Promise.all([
-    getAssemblies(),
+    getJobs(),
     getMaterialFavourites(),
     getLabourRates(),
   ]);

@@ -281,7 +281,7 @@ describe("pure mappers", () => {
   it("mapQuote carries the denormalized total and maps lines", () => {
     const q = mapQuote(apiQuote as MapQuoteArg, "Retaining wall, Spanish Town");
     expect(q.num).toBe("QT-0142");
-    expect(q.jobLabel).toBe("Retaining wall, Spanish Town");
+    expect(q.projectLabel).toBe("Retaining wall, Spanish Town");
     expect(q.totalCents).toBe(18_354_000);
     expect(q.createdAt).toBe("2026-07-10T00:00:00.000Z");
     expect(q.gctRatePct).toBe(15);
@@ -456,14 +456,14 @@ describe("getProject", () => {
 });
 
 describe("getQuotes", () => {
-  it("maps quotes, attaches jobLabel, and sorts newest-first", async () => {
+  it("maps quotes, attaches projectLabel, and sorts newest-first", async () => {
     stubFetch({
       "/quotes": [apiQuote, { ...apiQuote, id: "qt-0140", number: "QT-0140", projectId: "job-0142" }],
       "/jobs": [apiProject],
     });
     const quotes = await getQuotes();
     expect(quotes.map((q) => q.num)).toEqual(["QT-0142", "QT-0140"]); // desc
-    expect(quotes[0]?.jobLabel).toBe("Retaining wall, Spanish Town");
+    expect(quotes[0]?.projectLabel).toBe("Retaining wall, Spanish Town");
     expect(quotes[0]?.totalCents).toBe(18_354_000);
   });
 
@@ -479,7 +479,7 @@ describe("getQuote", () => {
     stubFetch({ "/quotes/qt-0142": apiQuote, "/jobs/job-0142": apiProject });
     const q = await getQuote("qt-0142");
     expect(q?.num).toBe("QT-0142");
-    expect(q?.jobLabel).toBe("Retaining wall, Spanish Town");
+    expect(q?.projectLabel).toBe("Retaining wall, Spanish Town");
     expect(q?.lines).toHaveLength(1);
   });
 

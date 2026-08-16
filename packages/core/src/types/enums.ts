@@ -87,7 +87,7 @@ export type JobComponentKind =
   (typeof JobComponentKind)[keyof typeof JobComponentKind];
 
 /**
- * Per-quote rendering detail level: SUMMARY shows an assembly line as a
+ * Per-quote rendering detail level: SUMMARY shows an job line as a
  * single priced row; DETAILED expands it into its component snapshot.
  * Purely a display setting — pricing/totals are identical either way.
  */

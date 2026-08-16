@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { computeAssemblyUnitCostCents } from "./assembly.js";
+import { computeJobUnitCostCents } from "./job.js";
 
-describe("computeAssemblyUnitCostCents", () => {
+describe("computeJobUnitCostCents", () => {
   it("sums component qty*unitPrice with no markup", () => {
-    const cents = computeAssemblyUnitCostCents({
+    const cents = computeJobUnitCostCents({
       components: [
         // 0.1 bags cement/sq ft @ $1,200.00 = $120.00
         { quantityPerUnit: 0.1, unitPriceCents: 120_000 },
@@ -15,7 +15,7 @@ describe("computeAssemblyUnitCostCents", () => {
   });
 
   it("applies markup on top of the summed component cost", () => {
-    const cents = computeAssemblyUnitCostCents({
+    const cents = computeJobUnitCostCents({
       components: [{ quantityPerUnit: 1, unitPriceCents: 100_000 }],
       markupPct: 20,
     });
@@ -23,7 +23,7 @@ describe("computeAssemblyUnitCostCents", () => {
   });
 
   it("rounds each component half-up before summing, then rounds the markup", () => {
-    const cents = computeAssemblyUnitCostCents({
+    const cents = computeJobUnitCostCents({
       components: [
         // 0.125 * 100 = 12.5 -> rounds to 13 cents
         { quantityPerUnit: 0.125, unitPriceCents: 100 },
@@ -35,14 +35,14 @@ describe("computeAssemblyUnitCostCents", () => {
   });
 
   it("treats a missing/zero markup as no markup", () => {
-    const cents = computeAssemblyUnitCostCents({
+    const cents = computeJobUnitCostCents({
       components: [{ quantityPerUnit: 2, unitPriceCents: 50_000 }],
       markupPct: 0,
     });
     expect(cents).toBe(100_000);
   });
 
-  it("returns 0 for an assembly with no components", () => {
-    expect(computeAssemblyUnitCostCents({ components: [] })).toBe(0);
+  it("returns 0 for an job with no components", () => {
+    expect(computeJobUnitCostCents({ components: [] })).toBe(0);
   });
 });

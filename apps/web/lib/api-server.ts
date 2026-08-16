@@ -18,14 +18,14 @@ import { redirect } from "next/navigation";
 import {
   API_BASE_URL,
   ApiError,
-  mapAssembly,
+  mapJob,
   mapBusiness,
   mapClient,
   mapInvoice,
   mapLabourRate,
   mapMaterialFavourite,
   mapQuote,
-  type ApiAssembly,
+  type ApiJob,
   type ApiBusiness,
   type ApiClientRow,
   type ApiInvoice,
@@ -49,7 +49,7 @@ import {
   type ApiRegulatoryUpdate,
   type Trade,
 } from "./api-client";
-import type { Assembly, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
+import type { Job, Business, Client, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { ProjectSummary, ProjectDetail } from "./mock-data";
 import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
 import { IMPERSONATION_COOKIE } from "./session";
@@ -224,12 +224,12 @@ export async function getLabourRates(): Promise<LabourRate[]> {
  * components and server-computed unitCostCents). No fixture backs these, so
  * an unreachable API returns an empty list (same convention as
  * getMaterialFavourites/getLabourRates). */
-export async function getAssemblies(): Promise<Assembly[]> {
+export async function getJobs(): Promise<Job[]> {
   try {
-    return (await serverRequest<ApiAssembly[]>("/assemblies")).map(mapAssembly);
+    return (await serverRequest<ApiJob[]>("/assemblies")).map(mapJob);
   } catch (err) {
     redirectOnAuthError(err);
-    console.warn("[api-server] getAssemblies: API unreachable, using empty list");
+    console.warn("[api-server] getJobs: API unreachable, using empty list");
     return [];
   }
 }
@@ -308,15 +308,15 @@ export async function getQuotes(): Promise<Quote[]> {
 export async function getQuote(id: string): Promise<Quote | undefined> {
   try {
     const q = await serverRequest<ApiQuote>(`/quotes/${id}`);
-    let jobLabel = "";
+    let projectLabel = "";
     if (q.projectId) {
       try {
-        jobLabel = (await serverRequest<ApiProject>(`/jobs/${q.projectId}`)).name;
+        projectLabel = (await serverRequest<ApiProject>(`/jobs/${q.projectId}`)).name;
       } catch {
         /* job label is best-effort */
       }
     }
-    return mapQuote(q, jobLabel);
+    return mapQuote(q, projectLabel);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);

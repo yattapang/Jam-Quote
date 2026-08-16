@@ -10,7 +10,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import { updateInvoice, ApiError } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
-import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import shared from "../../../shared.module.css";
 import LineItemsEditor from "../../../LineItemsEditor";
 import {
@@ -70,7 +70,7 @@ export default function InvoiceBuilder({
   /** Saved materials offered as a reuse picker per line. */
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". */
-  assemblies?: Assembly[];
+  assemblies?: Job[];
   /** The business's labour-rate book, offered via "+ Add labour". */
   labourRates?: LabourRate[];
 }) {

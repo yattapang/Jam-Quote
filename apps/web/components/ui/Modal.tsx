@@ -12,7 +12,7 @@ export default function Modal({
   onClose: () => void;
   children: React.ReactNode;
   /** Widens the modal card (460px -> 680px) for content that needs more
-   * horizontal room, e.g. the assembly component builder's per-row fields. */
+   * horizontal room, e.g. the job component builder's per-row fields. */
   wide?: boolean;
 }) {
   return (

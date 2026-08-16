@@ -9,11 +9,11 @@ import type {
   RateUnit,
 } from "@jamquote/core";
 
-/** Display-only snapshot of one assembly component, captured on the quote
+/** Display-only snapshot of one job component, captured on the quote
  * line at the moment a job type was dropped onto the quote. Never used for
  * totals math — only to expand a line in DETAILED view. Mirrors the API's
- * `quoteLineAssemblyComponentSchema` (quotes.dto.ts). */
-export interface QuoteLineAssemblyComponent {
+ * `quoteLineJobComponentSchema` (quotes.dto.ts). */
+export interface QuoteLineJobComponent {
   kind: JobComponentKind;
   description: string;
   quantityPerUnit: number;
@@ -24,13 +24,13 @@ export interface QuoteLine extends QuoteLineItemInput {
   id: string;
   // NOTE: `unitLabel` (the sold-by display snapshot, e.g. "bag") is inherited
   // from QuoteLineItemInput rather than redeclared — see the core validator.
-  /** Set only on lines created from an assembly ("job type"). assemblyId is a
-   * plain reference back to the source Assembly (not an FK — the snapshot
-   * fields keep historical quotes stable even if the assembly later changes). */
-  assemblyId?: string;
-  assemblyName?: string;
-  assemblyUnit?: string;
-  assemblyComponents?: QuoteLineAssemblyComponent[];
+  /** Set only on lines created from an job ("job type"). jobId is a
+   * plain reference back to the source Job (not an FK — the snapshot
+   * fields keep historical quotes stable even if the job later changes). */
+  jobId?: string;
+  jobName?: string;
+  jobUnit?: string;
+  jobComponents?: QuoteLineJobComponent[];
 }
 
 export interface Quote {
@@ -38,7 +38,7 @@ export interface Quote {
   num: string;
   clientId: string;
   projectId?: string;
-  jobLabel: string;
+  projectLabel: string;
   status: QuoteStatus;
   lines: QuoteLine[];
   gctRatePct: number;
@@ -58,7 +58,7 @@ export interface Quote {
   /** Denormalized total from the API (computed via computeTotals). Set on list
    * rows where `lines` may be omitted; detail rows carry both. */
   totalCents?: number;
-  /** Per-quote presentation setting: SUMMARY renders each assembly line as a
+  /** Per-quote presentation setting: SUMMARY renders each job line as a
    * single priced row; DETAILED expands it into its component snapshot beneath
    * the line. Display only — never affects totals. Defaults to SUMMARY. */
   detailLevel?: QuoteDetailLevel;
@@ -137,10 +137,10 @@ export interface LabourRate {
   rateUnit: RateUnit;
 }
 
-/** One recipe line inside an assembly — either a snapshot of a saved
+/** One recipe line inside an job — either a snapshot of a saved
  * material/labour rate (materialFavouriteId/labourRateId set) or a freeform
- * "OTHER" line (mirrors the Prisma `AssemblyComponent` model). */
-export interface AssemblyComponent {
+ * "OTHER" line (mirrors the Prisma `JobComponent` model). */
+export interface JobComponent {
   id: string;
   kind: JobComponentKind;
   materialFavouriteId?: string;
@@ -153,14 +153,14 @@ export interface AssemblyComponent {
 
 /** A reusable "job type" (e.g. "Tiling — per sq ft") built from material/
  * labour/other components, with a server-computed unit cost (mirrors the
- * Prisma `Assembly` model + AssembliesService.withUnitCost). */
-export interface Assembly {
+ * Prisma `Job` model + AssembliesService.withUnitCost). */
+export interface Job {
   id: string;
   name: string;
   unit: string;
   markupPct: number;
   unitCostCents: number;
-  components: AssemblyComponent[];
+  components: JobComponent[];
 }
 
 export interface Payment {

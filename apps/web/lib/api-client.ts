@@ -12,7 +12,7 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
-import type { Assembly, AssemblyComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineAssemblyComponent } from "./types";
+import type { Job, JobComponent, Business, Client, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
 import type { JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
@@ -144,7 +144,7 @@ export interface ApiProject {
   stage: ProjectStage;
   progressPct: number;
 }
-export interface ApiLineAssemblyComponent {
+export interface ApiLineJobComponent {
   kind: JobComponentKind;
   description: string;
   // Prisma Decimal / JSON snapshot — may come over as a numeric string.
@@ -164,13 +164,13 @@ export interface ApiLineItem {
   priceSource: QuoteLineItemInput["priceSource"];
   gctTreatment: QuoteLineItemInput["gctTreatment"];
   markupPct?: number | string | null;
-  // Assembly ("job type") provenance — present only on lines built from an
-  // assembly. assemblyComponents is a display-only snapshot (see
-  // quotes.dto.ts quoteLineAssemblyComponentSchema).
-  assemblyId?: string | null;
-  assemblyName?: string | null;
-  assemblyUnit?: string | null;
-  assemblyComponents?: ApiLineAssemblyComponent[] | null;
+  // Job ("job type") provenance — present only on lines built from an
+  // job. jobComponents is a display-only snapshot (see
+  // quotes.dto.ts quoteLineJobComponentSchema).
+  jobId?: string | null;
+  jobName?: string | null;
+  jobUnit?: string | null;
+  jobComponents?: ApiLineJobComponent[] | null;
 }
 export interface ApiMaterialFavourite {
   id: string;
@@ -247,7 +247,7 @@ export interface ApiLabourRate {
   rateCents: number;
   rateUnit: RateUnit;
 }
-export interface ApiAssemblyComponent {
+export interface ApiJobComponent {
   id: string;
   kind: JobComponentKind;
   materialFavouriteId?: string | null;
@@ -258,16 +258,16 @@ export interface ApiAssemblyComponent {
   unitPriceCents: number;
   sort: number;
 }
-export interface ApiAssembly {
+export interface ApiJob {
   id: string;
   name: string;
   unit: string;
   // Prisma Decimal comes over JSON as a numeric string, e.g. "20.00".
   markupPct: number | string;
   // Attached server-side by AssembliesService.withUnitCost via
-  // computeAssemblyUnitCostCents — never computed here from stale data.
+  // computeJobUnitCostCents — never computed here from stale data.
   unitCostCents: number;
-  components: ApiAssemblyComponent[];
+  components: ApiJobComponent[];
 }
 export interface ApiBusiness {
   id: string;
@@ -418,7 +418,7 @@ export function mapLabourRate(r: ApiLabourRate): LabourRate {
   };
 }
 
-export function mapAssemblyComponent(c: ApiAssemblyComponent): AssemblyComponent {
+export function mapJobComponent(c: ApiJobComponent): JobComponent {
   return {
     id: c.id,
     kind: c.kind,
@@ -431,18 +431,18 @@ export function mapAssemblyComponent(c: ApiAssemblyComponent): AssemblyComponent
   };
 }
 
-export function mapAssembly(a: ApiAssembly): Assembly {
+export function mapJob(a: ApiJob): Job {
   return {
     id: a.id,
     name: a.name,
     unit: a.unit,
     markupPct: Number(a.markupPct),
     unitCostCents: a.unitCostCents,
-    components: a.components.map(mapAssemblyComponent),
+    components: a.components.map(mapJobComponent),
   };
 }
 
-function mapLineAssemblyComponent(c: ApiLineAssemblyComponent): QuoteLineAssemblyComponent {
+function mapLineJobComponent(c: ApiLineJobComponent): QuoteLineJobComponent {
   return {
     kind: c.kind,
     description: c.description,
@@ -463,15 +463,15 @@ function mapLine(l: ApiLineItem): Quote["lines"][number] {
     priceSource: l.priceSource,
     gctTreatment: l.gctTreatment,
     markupPct: l.markupPct == null ? undefined : Number(l.markupPct),
-    assemblyId: l.assemblyId ?? undefined,
-    assemblyName: l.assemblyName ?? undefined,
-    assemblyUnit: l.assemblyUnit ?? undefined,
-    assemblyComponents: l.assemblyComponents?.map(mapLineAssemblyComponent) ?? undefined,
+    jobId: l.jobId ?? undefined,
+    jobName: l.jobName ?? undefined,
+    jobUnit: l.jobUnit ?? undefined,
+    jobComponents: l.jobComponents?.map(mapLineJobComponent) ?? undefined,
   };
 }
 
 /** Map an API quote to the view Quote. `lines`/`sections` are populated only for detail. */
-export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
+export function mapQuote(q: ApiQuote, projectLabel: string): Quote {
   const lines = [
     ...(q.lineItems ?? []),
     ...(q.sections ?? []).flatMap((s) => s.lineItems),
@@ -485,7 +485,7 @@ export function mapQuote(q: ApiQuote, jobLabel: string): Quote {
     num: q.number,
     clientId: q.clientId ?? "",
     projectId: q.projectId ?? undefined,
-    jobLabel,
+    projectLabel,
     status: q.status,
     lines,
     sections,
@@ -733,7 +733,7 @@ export async function createLabourRate(input: NewLabourRateInput): Promise<Labou
   );
 }
 
-export interface NewAssemblyComponentInput {
+export interface NewJobComponentInput {
   kind: JobComponentKind;
   materialFavouriteId?: string;
   labourRateId?: string;
@@ -741,24 +741,24 @@ export interface NewAssemblyComponentInput {
   quantityPerUnit: number;
   unitPriceCents: number;
 }
-export interface NewAssemblyInput {
+export interface NewJobInput {
   name: string;
   unit: string;
   markupPct?: number;
-  components: NewAssemblyComponentInput[];
+  components: NewJobComponentInput[];
 }
 /** GET /api/assemblies (client-side, via the proxy) — this business's job
  * types, each with its components and server-computed unitCostCents. */
-export async function getAssembliesClient(): Promise<Assembly[]> {
-  return (await apiClient.get<ApiAssembly[]>("/assemblies")).map(mapAssembly);
+export async function getJobsClient(): Promise<Job[]> {
+  return (await apiClient.get<ApiJob[]>("/assemblies")).map(mapJob);
 }
-export async function createAssembly(input: NewAssemblyInput): Promise<Assembly> {
-  return mapAssembly(await apiClient.post<ApiAssembly>("/assemblies", input));
+export async function createJob(input: NewJobInput): Promise<Job> {
+  return mapJob(await apiClient.post<ApiJob>("/assemblies", input));
 }
 
-/** Display-only assembly component snapshot sent with an assembly-backed line
- * (mirrors the API's quoteLineAssemblyComponentSchema). */
-export interface NewQuoteLineAssemblyComponentInput {
+/** Display-only job component snapshot sent with an job-backed line
+ * (mirrors the API's quoteLineJobComponentSchema). */
+export interface NewQuoteLineJobComponentInput {
   kind: JobComponentKind;
   description: string;
   quantityPerUnit: number;
@@ -776,12 +776,12 @@ export interface NewQuoteLineInput {
   unitLabel?: string;
   unitPriceCents: number;
   gctTreatment: QuoteLineItemInput["gctTreatment"];
-  /** Assembly ("job type") provenance — set only when this line was built
-   * from an assembly. The snapshot keeps historical quotes stable. */
-  assemblyId?: string;
-  assemblyName?: string;
-  assemblyUnit?: string;
-  assemblyComponents?: NewQuoteLineAssemblyComponentInput[];
+  /** Job ("job type") provenance — set only when this line was built
+   * from an job. The snapshot keeps historical quotes stable. */
+  jobId?: string;
+  jobName?: string;
+  jobUnit?: string;
+  jobComponents?: NewQuoteLineJobComponentInput[];
 }
 export interface NewQuoteInput {
   clientId?: string;
@@ -842,11 +842,11 @@ export async function updateLabourRate(
 }
 
 /** PATCH /api/assemblies/:id — same shape as create, all fields optional;
- * sending `components` replaces the assembly's full recipe (see
+ * sending `components` replaces the job's full recipe (see
  * AssembliesService.update). */
-export type UpdateAssemblyInput = Partial<NewAssemblyInput>;
-export async function updateAssembly(id: string, input: UpdateAssemblyInput): Promise<Assembly> {
-  return mapAssembly(await apiClient.patch<ApiAssembly>(`/assemblies/${id}`, input));
+export type UpdateJobInput = Partial<NewJobInput>;
+export async function updateJob(id: string, input: UpdateJobInput): Promise<Job> {
+  return mapJob(await apiClient.patch<ApiJob>(`/assemblies/${id}`, input));
 }
 
 /** PATCH /api/business/:id — editable fields mirror updateBusinessSchema
@@ -971,7 +971,7 @@ export async function deleteLabourRate(id: string): Promise<void> {
 }
 
 /** DELETE /api/assemblies/:id — soft delete (API sets deletedAt). */
-export async function deleteAssembly(id: string): Promise<void> {
+export async function deleteJob(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/assemblies/${id}`);
 }
 

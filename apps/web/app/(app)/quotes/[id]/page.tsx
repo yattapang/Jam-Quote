@@ -50,7 +50,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
           </h1>
           <span className={shared.subtitle}>
-            {client?.name ?? "Unknown client"} · {quote.jobLabel}
+            {client?.name ?? "Unknown client"} · {quote.projectLabel}
           </span>
         </div>
         <div className={shared.headerActions}>
@@ -81,7 +81,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
                   <span className={shared.groupName}>{g.title}</span>
                 </div>
                 {g.lines.map((line) => {
-                  const showBreakdown = detailed && !!line.assemblyComponents?.length;
+                  const showBreakdown = detailed && !!line.jobComponents?.length;
                   return (
                     <div key={line.id}>
                       <div className={shared.lineRow}>
@@ -109,9 +109,9 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
                               padding: "2px 0",
                             }}
                           >
-                            Breakdown{line.assemblyUnit ? ` (per ${line.assemblyUnit})` : ""}
+                            Breakdown{line.jobUnit ? ` (per ${line.jobUnit})` : ""}
                           </div>
-                          {line.assemblyComponents!.map((c, i) => (
+                          {line.jobComponents!.map((c, i) => (
                             <div
                               key={i}
                               style={{

@@ -38,7 +38,7 @@ function acceptedQuote(overrides: Partial<{ status: QuoteStatus }> = {}) {
     depositCents: 0,
     terms: "Net 30",
     lineItems: [
-      { ...line, id: "li1", sectionId: null, sort: 0, markupPct: null, supplierId: null, overrideNote: null, unitLabel: "bag", assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
+      { ...line, id: "li1", sectionId: null, sort: 0, markupPct: null, supplierId: null, overrideNote: null, unitLabel: "bag", jobId: null, jobName: null, jobUnit: null, jobComponents: null },
     ],
     sections: [
       {
@@ -46,7 +46,7 @@ function acceptedQuote(overrides: Partial<{ status: QuoteStatus }> = {}) {
         title: "Foundation",
         sort: 0,
         lineItems: [
-          { ...line, id: "li2", sectionId: "s1", sort: 0, quantity: 5, markupPct: null, supplierId: null, overrideNote: null, unitLabel: null, assemblyId: null, assemblyName: null, assemblyUnit: null, assemblyComponents: null },
+          { ...line, id: "li2", sectionId: "s1", sort: 0, quantity: 5, markupPct: null, supplierId: null, overrideNote: null, unitLabel: null, jobId: null, jobName: null, jobUnit: null, jobComponents: null },
         ],
       },
     ],

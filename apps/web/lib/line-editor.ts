@@ -13,7 +13,7 @@ import { coverageBreakdown, GctTreatment, LineCategory, RateUnit } from "@jamquo
 import type { InvoiceLineItemInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
 import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
-import type { Assembly, LabourRate, MaterialFavourite, QuoteLineAssemblyComponent } from "./types";
+import type { Job, LabourRate, MaterialFavourite, QuoteLineJobComponent } from "./types";
 
 /** Heading-dropdown sentinel meaning "let me name a new one", never a value. */
 export const ADD_HEADING_VALUE = "__add_heading__";
@@ -89,11 +89,11 @@ export interface DraftLine {
   /** Set only on a line dropped in from a job type ("+ Add job type"). The
    * unit price stays editable like any other line; these fields ride along as
    * a snapshot so the line can render its component breakdown in DETAILED view
-   * and stay stable even if the source assembly later changes. */
-  assemblyId?: string;
-  assemblyName?: string;
-  assemblyUnit?: string;
-  assemblyComponents?: QuoteLineAssemblyComponent[];
+   * and stay stable even if the source job later changes. */
+  jobId?: string;
+  jobName?: string;
+  jobUnit?: string;
+  jobComponents?: QuoteLineJobComponent[];
   /** Set when this line's description/price were populated from a picked or
    * newly-created favourite — the precise identity ★ Save-as-favourite uses to
    * update that exact variant rather than guessing from text. Cleared as soon
@@ -118,12 +118,12 @@ export function newLine(): DraftLine {
   };
 }
 
-/** Builds a draft line from a picked job type: description = assembly name,
+/** Builds a draft line from a picked job type: description = job name,
  * unit price = its computed unit cost (editable afterwards), and the component
- * snapshot carried for DETAILED rendering. Assembly lines default to the OTHER
+ * snapshot carried for DETAILED rendering. Job lines default to the OTHER
  * heading — a composite job type isn't a single material/labour category — and
- * carry the assembly's free-text unit (e.g. "sq ft") in assemblyUnit. */
-export function assemblyLine(a: Assembly, quantity: number): DraftLine {
+ * carry the job's free-text unit (e.g. "sq ft") in jobUnit. */
+export function assemblyLine(a: Job, quantity: number): DraftLine {
   return {
     key: nextKey(),
     heading: { kind: "category", category: LineCategory.OTHER },
@@ -132,10 +132,10 @@ export function assemblyLine(a: Assembly, quantity: number): DraftLine {
     rateUnit: RateUnit.UNIT,
     unitPriceDollars: fromCents(a.unitCostCents),
     gctTreatment: GctTreatment.STANDARD,
-    assemblyId: a.id,
-    assemblyName: a.name,
-    assemblyUnit: a.unit,
-    assemblyComponents: a.components.map((c) => ({
+    jobId: a.id,
+    jobName: a.name,
+    jobUnit: a.unit,
+    jobComponents: a.components.map((c) => ({
       kind: c.kind,
       description: c.description,
       quantityPerUnit: c.quantityPerUnit,
@@ -172,10 +172,10 @@ export interface InitialLine {
   unitPriceCents: number;
   gctTreatment: GctTreatment;
   /** Carried through on edit so a job-type line keeps its breakdown snapshot. */
-  assemblyId?: string;
-  assemblyName?: string;
-  assemblyUnit?: string;
-  assemblyComponents?: QuoteLineAssemblyComponent[];
+  jobId?: string;
+  jobName?: string;
+  jobUnit?: string;
+  jobComponents?: QuoteLineJobComponent[];
 }
 export interface InitialSection {
   title: string;
@@ -198,10 +198,10 @@ export function draftLineFromInitial(l: InitialLine, heading: Heading): DraftLin
     unitLabel: l.unitLabel,
     unitPriceDollars: fromCents(l.unitPriceCents),
     gctTreatment: l.gctTreatment,
-    assemblyId: l.assemblyId,
-    assemblyName: l.assemblyName,
-    assemblyUnit: l.assemblyUnit,
-    assemblyComponents: l.assemblyComponents,
+    jobId: l.jobId,
+    jobName: l.jobName,
+    jobUnit: l.jobUnit,
+    jobComponents: l.jobComponents,
   };
 }
 
@@ -368,14 +368,14 @@ export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
     ...(l.unitLabel ? { unitLabel: l.unitLabel } : {}),
     unitPriceCents: toCents(l.unitPriceDollars),
     gctTreatment: l.gctTreatment,
-    // Assembly provenance rides along only for job-type lines; a plain line
+    // Job provenance rides along only for job-type lines; a plain line
     // omits all of these entirely.
-    ...(l.assemblyId
+    ...(l.jobId
       ? {
-          assemblyId: l.assemblyId,
-          assemblyName: l.assemblyName,
-          assemblyUnit: l.assemblyUnit,
-          assemblyComponents: l.assemblyComponents,
+          jobId: l.jobId,
+          jobName: l.jobName,
+          jobUnit: l.jobUnit,
+          jobComponents: l.jobComponents,
         }
       : {}),
   };

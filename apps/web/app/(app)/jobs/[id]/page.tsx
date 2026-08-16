@@ -40,7 +40,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
         <div className={shared.headerActions}>
           <EditJobButton job={job} clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
           <DeleteRowButton
-            kind="job"
+            kind="project"
             id={job.id}
             confirmMessage={`Delete ${job.name}? This can't be undone.`}
             redirectTo="/jobs"

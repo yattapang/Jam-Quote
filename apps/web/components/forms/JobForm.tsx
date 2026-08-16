@@ -1,16 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { JobComponentKind, computeAssemblyUnitCostCents } from "@jamquote/core";
+import { JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import { modalStyles } from "@/components/ui/Modal";
-import type { NewAssemblyInput } from "@/lib/api-client";
+import type { NewJobInput } from "@/lib/api-client";
 import { materialFavouriteLabel } from "@/lib/material-display";
-import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
-import styles from "./AssemblyForm.module.css";
+import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import styles from "./JobForm.module.css";
 
 const kindOptions = [
   { value: JobComponentKind.MATERIAL, label: "Material" },
@@ -23,7 +23,7 @@ const kindOptions = [
  * that item's current name/price into them (matches the API: components
  * store their own unitPriceCents, materialFavouriteId/labourRateId are only
  * an optional back-reference, not a live link). */
-export interface AssemblyComponentDraft {
+export interface JobComponentDraft {
   key: string;
   kind: JobComponentKind;
   materialFavouriteId?: string;
@@ -33,15 +33,15 @@ export interface AssemblyComponentDraft {
   unitPriceDollars: string;
 }
 
-export interface AssemblyFormValues {
+export interface JobFormValues {
   name: string;
   unit: string;
   markupPct: string;
-  components: AssemblyComponentDraft[];
+  components: JobComponentDraft[];
 }
 
 let draftCounter = 0;
-function newComponentDraft(): AssemblyComponentDraft {
+function newComponentDraft(): JobComponentDraft {
   return {
     key: `c${++draftCounter}`,
     kind: JobComponentKind.MATERIAL,
@@ -51,21 +51,21 @@ function newComponentDraft(): AssemblyComponentDraft {
   };
 }
 
-export const emptyAssemblyForm: AssemblyFormValues = {
+export const emptyJobForm: JobFormValues = {
   name: "",
   unit: "",
   markupPct: "0",
   components: [newComponentDraft()],
 };
 
-export function assemblyFormValuesFromAssembly(assembly: Assembly): AssemblyFormValues {
+export function jobFormValuesFromAssembly(job: Job): JobFormValues {
   return {
-    name: assembly.name,
-    unit: assembly.unit,
-    markupPct: String(assembly.markupPct),
+    name: job.name,
+    unit: job.unit,
+    markupPct: String(job.markupPct),
     components:
-      assembly.components.length > 0
-        ? assembly.components
+      job.components.length > 0
+        ? job.components
             .slice()
             .sort((a, b) => a.sort - b.sort)
             .map((c) => ({
@@ -85,11 +85,11 @@ const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
 
 /** Component drafts with a description and a positive quantity — blank rows
  * left over from "+ Add component" are dropped rather than saved/costed. */
-function validComponents(components: AssemblyComponentDraft[]): AssemblyComponentDraft[] {
+function validComponents(components: JobComponentDraft[]): JobComponentDraft[] {
   return components.filter((c) => c.description.trim() && (Number(c.quantityPerUnit) || 0) > 0);
 }
 
-export function assemblyPayloadFromValues(values: AssemblyFormValues): NewAssemblyInput {
+export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
   return {
     name: values.name.trim(),
     unit: values.unit.trim(),
@@ -131,10 +131,10 @@ function ComponentRow({
   onRemove,
   canRemove,
 }: {
-  draft: AssemblyComponentDraft;
+  draft: JobComponentDraft;
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
-  onChange: (patch: Partial<AssemblyComponentDraft>) => void;
+  onChange: (patch: Partial<JobComponentDraft>) => void;
   onRemove: () => void;
   canRemove: boolean;
 }) {
@@ -238,14 +238,14 @@ function ComponentRow({
 }
 
 /**
- * The assembly ("job type") field set shared by AddAssemblyButton and
+ * The job ("job type") field set shared by AddAssemblyButton and
  * EditAssemblyButton — name/unit/markup plus a component builder (add/
  * remove rows, each sourced from the material/labour libraries or freeform),
  * with a live unit-cost readout computed via @jamquote/core's
- * computeAssemblyUnitCostCents so it always matches what the API will save.
+ * computeJobUnitCostCents so it always matches what the API will save.
  */
-export default function AssemblyForm({
-  initial = emptyAssemblyForm,
+export default function JobForm({
+  initial = emptyJobForm,
   submitLabel = "Save job type",
   materials,
   labourRates,
@@ -253,24 +253,24 @@ export default function AssemblyForm({
   onSubmit,
   onBusyChange,
 }: {
-  initial?: AssemblyFormValues;
+  initial?: JobFormValues;
   submitLabel?: string;
   /** Saved materials/labour rates, fetched server-side by the assemblies
    * page, that populate the per-component pickers. */
   materials: MaterialFavourite[];
   labourRates: LabourRate[];
   onCancel: () => void;
-  onSubmit: (values: AssemblyFormValues) => Promise<void> | void;
+  onSubmit: (values: JobFormValues) => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
 }) {
-  const [values, setValues] = useState<AssemblyFormValues>(initial);
+  const [values, setValues] = useState<JobFormValues>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const set = <K extends keyof AssemblyFormValues>(key: K, value: AssemblyFormValues[K]) =>
+  const set = <K extends keyof JobFormValues>(key: K, value: JobFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  const patchComponent = (key: string, patch: Partial<AssemblyComponentDraft>) =>
+  const patchComponent = (key: string, patch: Partial<JobComponentDraft>) =>
     setValues((v) => ({
       ...v,
       components: v.components.map((c) => (c.key === key ? { ...c, ...patch } : c)),
@@ -293,11 +293,11 @@ export default function AssemblyForm({
   );
   const markupPct = Number(values.markupPct) || 0;
   const subtotalCents = useMemo(
-    () => computeAssemblyUnitCostCents({ components: costInputComponents, markupPct: 0 }),
+    () => computeJobUnitCostCents({ components: costInputComponents, markupPct: 0 }),
     [costInputComponents],
   );
   const unitCostCents = useMemo(
-    () => computeAssemblyUnitCostCents({ components: costInputComponents, markupPct }),
+    () => computeJobUnitCostCents({ components: costInputComponents, markupPct }),
     [costInputComponents, markupPct],
   );
   const markupCents = unitCostCents - subtotalCents;

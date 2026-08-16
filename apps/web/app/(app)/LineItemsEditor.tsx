@@ -46,7 +46,7 @@ import {
 } from "@/lib/line-editor";
 import { materialLineDescription } from "@/lib/material-display";
 import { lineUnitLabel, RATE_UNIT_LABEL } from "@/lib/quote-totals";
-import type { Assembly, LabourRate, MaterialFavourite } from "@/lib/types";
+import type { Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
 import shared from "./shared.module.css";
 import styles from "./LineItemsEditor.module.css";
@@ -320,7 +320,7 @@ export default function LineItemsEditor({
   favourites?: MaterialFavourite[];
   /** The business's job-type library, offered via "+ Add job type". Each
    * carries a server-computed unitCostCents and its component snapshot. */
-  assemblies?: Assembly[];
+  assemblies?: Job[];
   /** The business's labour-rate book, offered via "+ Add labour". Omitted
    * (rather than empty) hides the button entirely. */
   labourRates?: LabourRate[];
@@ -586,7 +586,7 @@ export default function LineItemsEditor({
     setAddingJobType(true);
   };
   /** Drops the picked job type onto the document as a new line, pre-filled
-   * from the assembly's computed unit cost (still editable) and carrying its
+   * from the job's computed unit cost (still editable) and carrying its
    * component snapshot for DETAILED rendering. */
   const confirmAddJobType = () => {
     if (!selectedAssembly) return;
@@ -620,7 +620,7 @@ export default function LineItemsEditor({
 
   // Drives whether the summary/detailed toggle is offered — the setting only
   // affects job-type lines, so it's hidden until the document has at least one.
-  const hasAssemblyLine = lines.some((l) => l.assemblyId);
+  const hasAssemblyLine = lines.some((l) => l.jobId);
 
   const onHeadingChange = (key: string, value: string) => {
     if (value === ADD_HEADING_VALUE) {

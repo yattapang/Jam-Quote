@@ -96,7 +96,7 @@ export const quotes: Quote[] = demoQuotes.map((q) => ({
   num: q.number,
   clientId: q.clientId,
   projectId: q.projectId,
-  jobLabel: findDemoProject(q.projectId)?.name ?? "",
+  projectLabel: findDemoProject(q.projectId)?.name ?? "",
   status: q.status,
   lines: q.lines.map((l) => ({
     id: l.id,

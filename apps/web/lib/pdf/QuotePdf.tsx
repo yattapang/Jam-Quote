@@ -270,7 +270,7 @@ export default function QuotePdf({ quote, client, business, logo }: QuotePdfProp
               <Text style={[styles.colAmt, styles.headCell]}>Amount</Text>
             </View>
             {g.lines.map((line) => {
-              const showBreakdown = detailed && !!line.assemblyComponents?.length;
+              const showBreakdown = detailed && !!line.jobComponents?.length;
               return (
                 <View key={line.id} wrap={false}>
                   <View style={styles.row}>
@@ -288,9 +288,9 @@ export default function QuotePdf({ quote, client, business, logo }: QuotePdfProp
                   {showBreakdown && (
                     <View style={styles.breakdown}>
                       <Text style={styles.breakdownHead}>
-                        Breakdown{line.assemblyUnit ? ` (per ${line.assemblyUnit})` : ""}
+                        Breakdown{line.jobUnit ? ` (per ${line.jobUnit})` : ""}
                       </Text>
-                      {line.assemblyComponents!.map((c, i) => (
+                      {line.jobComponents!.map((c, i) => (
                         <View key={i} style={styles.breakdownRow}>
                           <Text style={styles.breakdownDesc}>{c.description}</Text>
                           <Text style={styles.breakdownAmt}>
