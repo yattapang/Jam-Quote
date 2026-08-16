@@ -22,6 +22,8 @@ import {
   lineToLineInput,
   linesFromInitial,
   savableLines,
+  incompleteLines,
+  describeIncompleteLine,
   toCents,
   type DraftLine,
   type InitialLine,
@@ -145,6 +147,16 @@ export default function QuoteBuilder({
   );
 
   async function save() {
+    // Refuse rather than silently discard. A line the contractor worked on but
+    // left incomplete used to be filtered out on save and discovered missing
+    // when they reopened the document — indistinguishable from the app losing
+    // their work, and on a bill it is money quietly absent.
+    const unfinished = incompleteLines(lines);
+    const firstUnfinished = unfinished[0];
+    if (firstUnfinished) {
+      return setError(`${describeIncompleteLine(lines, firstUnfinished)} before saving.`);
+    }
+
     const validLines = savableLines(lines);
     if (validLines.length === 0) return setError("Add at least one line item with a description and quantity.");
 

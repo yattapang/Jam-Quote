@@ -144,9 +144,37 @@ export function kindFromSaved(category: LineCategory, jobId?: string): LineKind 
  * "Skim coat, 40" and then realised it belongs under Labour should not have to
  * type it again; changing the kind reclassifies the line, it does not reset it.
  */
-export function applyKindChange(kind: LineKind): Partial<DraftLine> {
+/** The heading a line starts on for a given kind. JOB has no category of its
+ * own, so it lands on OTHER — the same place assemblyLine has always put it. */
+export function defaultHeadingForKind(kind: LineKind): Heading {
+  return { kind: "category", category: categoryForKind(kind) };
+}
+
+/** True when the heading is one of the built-in category headings that some
+ * kind defaults to — i.e. the contractor has not chosen it deliberately.
+ * A custom heading, or a built-in one no kind defaults to, is left alone. */
+export function isDefaultHeadingForSomeKind(h: Heading): boolean {
+  if (h.kind !== "category") return false;
+  return (Object.values(LineKind) as LineKind[]).some((k) => categoryForKind(k) === h.category);
+}
+
+export function applyKindChange(kind: LineKind, currentHeading?: Heading): Partial<DraftLine> {
   return {
     kind,
+    // The heading follows the kind, but only while it is still a default one.
+    // Kind and heading are genuinely different things — heading is where a
+    // line PRINTS — so a contractor who wrote "Site prep" keeps it. But a line
+    // left on the default "Materials" heading and then switched to Labour was
+    // filing labour under Materials on the customer's document, purely because
+    // nothing moved it. Reported on an invoice showing material and labour
+    // under one heading.
+    // Only when the caller tells us what the heading currently is AND it is
+    // still a default. A caller that omits it does not know whether the
+    // contractor chose that heading, and not knowing is not a licence to
+    // overwrite it.
+    ...(currentHeading !== undefined && isDefaultHeadingForSomeKind(currentHeading)
+      ? { heading: defaultHeadingForKind(kind) }
+      : {}),
     materialFavouriteId: undefined,
     unitLabel: undefined,
     jobId: undefined,
@@ -565,6 +593,54 @@ export function removeLineByKey(lines: DraftLine[], key: string): DraftLine[] {
  * in is dropped rather than rejected. */
 export function savableLines(lines: DraftLine[]): DraftLine[] {
   return lines.filter((l) => l.description.trim() && Number(l.quantity) > 0);
+}
+
+/**
+ * A line the contractor has not started: no description, no price, nothing
+ * picked from a library, and the quantity still at its default. The editor
+ * always keeps a spare row at the bottom, so discarding these on save is
+ * expected and silent.
+ */
+export function isUntouchedLine(l: DraftLine): boolean {
+  return (
+    !l.description.trim() &&
+    !l.unitPriceDollars.trim() &&
+    !l.materialFavouriteId &&
+    !l.jobId &&
+    !l.unitLabel &&
+    (l.quantity === "" || l.quantity === "1")
+  );
+}
+
+/**
+ * Lines the contractor clearly WORKED ON but which savableLines would drop —
+ * a price typed with no description, a description with a zero quantity.
+ *
+ * These used to vanish without a word: save filtered them out, and the only
+ * error appeared when NO line survived. Someone who filled in three lines and
+ * left one without a description got a saved document with two, discovered on
+ * reopening it. From the contractor's side that is indistinguishable from the
+ * app losing their work, and on an invoice it is money quietly missing.
+ *
+ * Callers should refuse to save while this is non-empty and say which line,
+ * rather than dropping them.
+ */
+export function incompleteLines(lines: DraftLine[]): DraftLine[] {
+  return lines.filter((l) => {
+    if (isUntouchedLine(l)) return false;
+    return !(l.description.trim() && Number(l.quantity) > 0);
+  });
+}
+
+/** Human description of why a worked-on line cannot be saved, for the error
+ * banner. Ordinal position because a line the user cannot name still has a
+ * place they can count to. */
+export function describeIncompleteLine(lines: DraftLine[], line: DraftLine): string {
+  const position = lines.indexOf(line) + 1;
+  const missing = !line.description.trim()
+    ? "needs a description"
+    : "needs a quantity above zero";
+  return `Line ${position} ${missing}`;
 }
 
 export interface HeadingSection {

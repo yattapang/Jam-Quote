@@ -45,6 +45,9 @@ import {
   applyLabourRatePick,
   jobPickerOptions,
   materialPickPatch,
+  isUntouchedLine,
+  incompleteLines,
+  describeIncompleteLine,
   applyEquipmentPick,
   equipmentPickerOptions,
   labourRatePickerOptions,
@@ -695,11 +698,13 @@ describe("line kinds", () => {
     it("does not touch what the user typed", () => {
       // Reclassifying a line is not resetting it — someone who typed
       // "Skim coat, 40 @ 1200" and then moved it to Labour keeps their work.
+      // No heading passed: the caller has not said whether the contractor
+      // chose it, so applyKindChange leaves it entirely alone.
       const patch = applyKindChange(LineKind.LABOUR);
+      expect("heading" in patch).toBe(false);
       expect("description" in patch).toBe(false);
       expect("quantity" in patch).toBe(false);
       expect("unitPriceDollars" in patch).toBe(false);
-      expect("heading" in patch).toBe(false);
     });
   });
 });
@@ -1032,5 +1037,75 @@ describe("a saved rate's own printed unit reaches the line", () => {
   it("treats a blank or whitespace label as absent rather than printing nothing", () => {
     expect(applyLabourRatePick({ ...baseRate, unitLabel: "" }).unitLabel).toBeUndefined();
     expect(applyLabourRatePick({ ...baseRate, unitLabel: "   " }).unitLabel).toBeUndefined();
+  });
+});
+
+/**
+ * Reported: "I added a third line and saved, and when I reopened the invoice
+ * it had disappeared." savableLines filtered out any line without a
+ * description AND a positive quantity, and the only error appeared when NO
+ * line survived — so a partly-filled line vanished without a word. On an
+ * invoice that is money quietly missing from a bill.
+ */
+describe("incomplete lines are refused, not silently dropped", () => {
+  it("treats the editor's spare trailing row as untouched", () => {
+    // The editor always keeps a blank row at the bottom; discarding it on save
+    // is expected and must stay silent.
+    expect(isUntouchedLine(newLine())).toBe(true);
+    expect(incompleteLines([newLine()])).toEqual([]);
+  });
+
+  it("flags a line with a price but no description", () => {
+    const l = line({ unitPriceDollars: "1200", quantity: "3" });
+    expect(isUntouchedLine(l)).toBe(false);
+    expect(incompleteLines([l])).toHaveLength(1);
+  });
+
+  it("flags a described line whose quantity is zero", () => {
+    expect(incompleteLines([line({ description: "Cement", quantity: "0" })])).toHaveLength(1);
+  });
+
+  it("flags a line where only a saved material was picked", () => {
+    // Picking a material sets materialFavouriteId; if the description were
+    // then cleared, the line still represents work the contractor did.
+    const l = line({ materialFavouriteId: "m1", description: "" });
+    expect(incompleteLines([l])).toHaveLength(1);
+  });
+
+  it("passes a complete line", () => {
+    expect(incompleteLines([line({ description: "Cement", quantity: "2" })])).toEqual([]);
+  });
+
+  it("names the line by position and says what is missing", () => {
+    const lines = [line({ description: "Cement", quantity: "1" }), line({ unitPriceDollars: "50" })];
+    const bad = incompleteLines(lines)[0]!;
+    expect(describeIncompleteLine(lines, bad)).toBe("Line 2 needs a description");
+    const zeroQty = line({ description: "Sand", quantity: "0" });
+    expect(describeIncompleteLine([zeroQty], zeroQty)).toBe("Line 1 needs a quantity above zero");
+  });
+});
+
+/**
+ * Reported: switching a line to Labour left it filed under the "Materials"
+ * heading, so an invoice showed material and labour under one heading.
+ */
+describe("the heading follows the kind, unless it was chosen", () => {
+  it("moves a default heading to match the new kind", () => {
+    const patch = applyKindChange(LineKind.LABOUR, {
+      kind: "category",
+      category: LineCategory.MATERIAL,
+    });
+    expect(patch.heading).toEqual({ kind: "category", category: LineCategory.LABOUR });
+  });
+
+  it("leaves a heading the contractor typed alone", () => {
+    // Heading is where a line PRINTS; someone who wrote "Site prep" meant it.
+    const custom: Heading = { kind: "custom", title: "Site prep" };
+    expect(applyKindChange(LineKind.LABOUR, custom).heading).toBeUndefined();
+  });
+
+  it("puts a job line on OTHER, where job lines have always gone", () => {
+    const patch = applyKindChange(LineKind.JOB, { kind: "category", category: LineCategory.MATERIAL });
+    expect(patch.heading).toEqual({ kind: "category", category: LineCategory.OTHER });
   });
 });

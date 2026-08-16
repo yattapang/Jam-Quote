@@ -772,7 +772,12 @@ export default function LineItemsEditor({
    * tie to the old library (materialFavouriteId/jobId/jobComponents/
    * unitLabel) while deliberately keeping description/quantity/price/heading,
    * since reclassifying a line is not resetting it (see line-editor.ts). */
-  const onKindChange = (key: string, kind: LineKind) => patch(key, applyKindChange(kind));
+  const onKindChange = (key: string, kind: LineKind) => {
+    // Pass the current heading so a deliberately-chosen one survives; only a
+    // default heading moves to match the new kind.
+    const line = lines.find((l) => l.key === key);
+    patch(key, applyKindChange(kind, line?.heading));
+  };
 
   /** Picks a saved labour rate into a LABOUR-kind line's "Saved" cell —
    * description, cadence and price come from applyLabourRatePick; quantity
