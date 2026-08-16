@@ -6,6 +6,10 @@ export const createLabourRateSchema = z.object({
   skillTier: z.string().optional(),
   rateCents: z.number().int().nonnegative(),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
+  // Free-text override for what prints on the document ("sq ft", "window").
+  // RateUnit is a closed platform-wide enum of cadences; this is where a
+  // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
+  unitLabel: z.string().min(1).optional(),
 });
 export type CreateLabourRateInput = z.infer<typeof createLabourRateSchema>;
 export const updateLabourRateSchema = createLabourRateSchema.partial();
@@ -95,6 +99,10 @@ export const createEquipmentItemSchema = z.object({
   vendorPhone: z.string().optional(),
   rateCents: z.number().int().nonnegative(),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
+  // Free-text override for what prints on the document ("sq ft", "window").
+  // RateUnit is a closed platform-wide enum of cadences; this is where a
+  // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
+  unitLabel: z.string().min(1).optional(),
 });
 export type CreateEquipmentItemInput = z.infer<typeof createEquipmentItemSchema>;
 export const updateEquipmentItemSchema = createEquipmentItemSchema.partial();

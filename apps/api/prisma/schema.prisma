@@ -487,6 +487,11 @@ model LabourRate {
   skillTier  String? // helper / journeyman / master
   rateCents  Int
   rateUnit   RateUnit  @default(DAY)
+  // Free-text override for what actually prints ("sq ft", "window"). RateUnit
+  // is a closed platform-wide enum of cadences, so it has no room for the way
+  // a painter or glazier really sells labour. NULL = print the rateUnit.
+  // Mirrors QuoteLineItem.unitLabel, which the document already reads.
+  unitLabel  String?
   updatedAt  DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt  DateTime? // soft-delete for offline sync
 
@@ -696,6 +701,9 @@ model EquipmentItem {
   vendorPhone String?
   rateCents   Int
   rateUnit    RateUnit  @default(DAY)
+  // Free-text override for what prints ("lift", "m³ pumped") — see
+  // LabourRate.unitLabel for why the RateUnit enum cannot carry this.
+  unitLabel   String?
   updatedAt   DateTime  @default(now()) @updatedAt // delta-sync cursor
   deletedAt   DateTime? // soft-delete for offline sync
 
