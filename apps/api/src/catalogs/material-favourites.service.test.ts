@@ -54,14 +54,16 @@ describe("MaterialFavouritesService.create", () => {
       specs: { dimension: "2x4" },
     });
 
-    expect(prisma.materialFavourite.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        businessId: "biz-1",
-        name: "Lumber 2x4 16ft Cedar Select",
-        specs: { dimension: "2x4", length: "16ft", species: "Cedar", grade: "Select" },
-        searchText: "lumber 2x4 16ft cedar select",
+    expect(prisma.materialFavourite.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          businessId: "biz-1",
+          name: "Lumber 2x4 16ft Cedar Select",
+          specs: { dimension: "2x4", length: "16ft", species: "Cedar", grade: "Select" },
+          searchText: "lumber 2x4 16ft cedar select",
+        }),
       }),
-    });
+    );
   });
 
   it("checks a supplied unitId is visible to this business before writing", async () => {
@@ -81,9 +83,11 @@ describe("MaterialFavouritesService.create", () => {
   it("still accepts a bare name + price (pre-2a clients)", async () => {
     const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
     await svc.create("biz-1", { name: "Cement", priceCents: 1200 });
-    expect(prisma.materialFavourite.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ name: "Cement", priceCents: 1200, businessId: "biz-1" }),
-    });
+    expect(prisma.materialFavourite.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: "Cement", priceCents: 1200, businessId: "biz-1" }),
+      }),
+    );
   });
 });
 
@@ -129,10 +133,12 @@ describe("MaterialFavouritesService.update", () => {
 
     await svc.update("biz-1", "mat-1", { specs: { dimension: "2x4", length: "20ft" } });
 
-    expect(prisma.materialFavourite.update).toHaveBeenCalledWith({
-      where: { id: "mat-1" },
-      data: expect.objectContaining({ name: "Lumber 2x4 20ft", searchText: "lumber 2x4 20ft" }),
-    });
+    expect(prisma.materialFavourite.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "mat-1" },
+        data: expect.objectContaining({ name: "Lumber 2x4 20ft", searchText: "lumber 2x4 20ft" }),
+      }),
+    );
   });
 
   it("allows clearing description with an empty string", async () => {
@@ -141,16 +147,47 @@ describe("MaterialFavouritesService.update", () => {
       update: vi.fn().mockResolvedValue({}),
     });
     await svc.update("biz-1", "mat-1", { description: "" });
-    expect(prisma.materialFavourite.update).toHaveBeenCalledWith({
-      where: { id: "mat-1" },
-      data: expect.objectContaining({ description: "" }),
-    });
+    expect(prisma.materialFavourite.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "mat-1" },
+        data: expect.objectContaining({ description: "" }),
+      }),
+    );
   });
 
   it("refuses to update a row belonging to another business", async () => {
     const { svc, prisma } = withPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
     await expect(svc.update("biz-1", "mat-1", { priceCents: 1 })).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.materialFavourite.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("every endpoint returns the same material shape", () => {
+  // The client resolves a material's sold-by unit as `unitRef?.label ?? unit`.
+  // For a post-2a material the legacy `unit` column is null, so any endpoint
+  // that omits this join returns a material with no unit at all. That is not a
+  // cosmetic difference: a create response is piped straight onto the quote
+  // line the contractor is building, so the unit they just picked disappeared
+  // and the line printed the bare rate cadence instead ("1 unit" for rebar
+  // sold by the linear foot). Read paths had the join and writes did not,
+  // which is why it only ever bit freshly created and freshly edited rows.
+  it("create joins unitRef", async () => {
+    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    await svc.create("biz-1", { name: "Rebar", priceCents: 100 });
+    expect(prisma.materialFavourite.create).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { unitRef: true } }),
+    );
+  });
+
+  it("update joins unitRef", async () => {
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue({ id: "mat-1", businessId: "biz-1", specs: null }),
+      update: vi.fn().mockResolvedValue({}),
+    });
+    await svc.update("biz-1", "mat-1", { priceCents: 1 });
+    expect(prisma.materialFavourite.update).toHaveBeenCalledWith(
+      expect.objectContaining({ include: { unitRef: true } }),
+    );
   });
 });
 

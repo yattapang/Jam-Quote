@@ -36,6 +36,13 @@ export class MaterialFavouritesService {
         specs: normalized.specs ?? undefined,
         searchText: normalized.searchText,
       },
+      // MUST match findAll/findOne. The client resolves a material's sold-by
+      // unit as `unitRef?.label ?? unit`, and for any post-2a material the
+      // legacy `unit` column is null — so omitting this join hands back a
+      // material with NO unit. The caller that pipes a create response
+      // straight onto a quote line then silently drops the unit the
+      // contractor just chose, and the line prints the bare rate cadence.
+      include: { unitRef: true },
     });
   }
 
@@ -128,6 +135,10 @@ export class MaterialFavouritesService {
         specs: normalized.specs ?? undefined,
         searchText: normalized.searchText,
       },
+      // Same reason as create(): every endpoint returning a material must
+      // return the same shape, or the unit survives a list fetch and
+      // vanishes on a write.
+      include: { unitRef: true },
     });
   }
 
