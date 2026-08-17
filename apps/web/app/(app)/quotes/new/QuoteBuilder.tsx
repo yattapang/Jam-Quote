@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { computeTotals, QuoteDetailLevel } from "@jamquote/core";
+import { computeTotals, depositCentsFrom, DepositMode, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import { createQuote, updateQuote, ApiError, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
@@ -109,7 +110,12 @@ export default function QuoteBuilder({
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
   const [projectId, setProjectId] = useState(initial?.projectId ?? "");
   const [discountPct, setDiscountPct] = useState(String(initial?.discountPct ?? 0));
-  const [depositDollars, setDepositDollars] = useState(fromCents(initial?.depositCents ?? 0));
+  // Raw field value: dollars in AMOUNT mode, percent in PERCENT mode. Only the
+  // resolved depositCents is ever saved (see @jamquote/core deposit.ts), so an
+  // existing quote always reopens in AMOUNT mode — there is no stored
+  // percentage to restore, by design.
+  const [depositMode, setDepositMode] = useState<DepositMode>(DepositMode.AMOUNT);
+  const [depositInput, setDepositInput] = useState(fromCents(initial?.depositCents ?? 0));
   const [validDays, setValidDays] = useState(String(initialValidDays(initial)));
   const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
   // Only read on the line editor's first render, to seed its heading dropdown.
@@ -133,17 +139,26 @@ export default function QuoteBuilder({
   );
   const totals = useMemo(
     () =>
-      computeTotals({
-        lines: lines.map((l) => ({
-          quantity: Number(l.quantity) || 0,
-          unitPriceCents: toCents(l.unitPriceDollars),
-          gctTreatment: l.gctTreatment,
-        })),
-        gctRatePct,
-        discountPct: Number(discountPct) || 0,
-        depositCents: toCents(depositDollars),
-      }),
-    [lines, discountPct, depositDollars, gctRatePct],
+      (() => {
+        const base = {
+          lines: lines.map((l) => ({
+            quantity: Number(l.quantity) || 0,
+            unitPriceCents: toCents(l.unitPriceDollars),
+            gctTreatment: l.gctTreatment,
+          })),
+          gctRatePct,
+          discountPct: Number(discountPct) || 0,
+        };
+        // A percentage deposit needs the total to resolve against. Not
+        // circular: computeTotals derives totalCents before the deposit and
+        // uses the deposit only for balanceDueCents.
+        const { totalCents } = computeTotals(base);
+        return computeTotals({
+          ...base,
+          depositCents: depositCentsFrom(depositMode, depositInput, totalCents),
+        });
+      })(),
+    [lines, discountPct, depositInput, depositMode, gctRatePct],
   );
 
   async function save() {
@@ -178,7 +193,10 @@ export default function QuoteBuilder({
       projectId: projectId || undefined,
       gctRatePct,
       discountPct: Number(discountPct) || 0,
-      depositCents: toCents(depositDollars),
+      // Already resolved from the mode + raw input against the total, and it is
+      // the figure shown in the panel — reading it back guarantees the saved
+      // deposit is the one the contractor was looking at.
+      depositCents: totals.depositCents,
       validUntil: new Date(Date.now() + days * DAY_MS).toISOString(),
       detailLevel,
       lineItems: [],
@@ -253,7 +271,33 @@ export default function QuoteBuilder({
         <Card>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <Input label="Discount %" type="number" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
-            <Input label="Deposit $" type="number" value={depositDollars} onChange={(e) => setDepositDollars(e.target.value)} />
+            {/* Deposit takes a dollar amount or a percentage of the total —
+                "half up front" is as common as a flat figure, and working the
+                percentage out by hand is where a wrong number gets quoted. */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "end" }}>
+              <Input
+                label={depositMode === DepositMode.PERCENT ? "Deposit %" : "Deposit $"}
+                type="number"
+                min={0}
+                {...(depositMode === DepositMode.PERCENT ? { max: 100 } : {})}
+                value={depositInput}
+                onChange={(e) => setDepositInput(e.target.value)}
+              />
+              <Select
+                // A non-breaking space, not "&nbsp;": a JSX string attribute is
+                // not HTML, so the entity would print literally. This keeps the
+                // control baseline-aligned with the labelled Input beside it
+                // while aria-label carries the real name.
+                label={" "}
+                aria-label="Deposit as amount or percent"
+                options={[
+                  { value: DepositMode.AMOUNT, label: "$" },
+                  { value: DepositMode.PERCENT, label: "%" },
+                ]}
+                value={depositMode}
+                onChange={(e) => setDepositMode(e.target.value as DepositMode)}
+              />
+            </div>
             <Input label="Valid for (days)" type="number" min={1} value={validDays} onChange={(e) => setValidDays(e.target.value)} />
           </div>
         </Card>
