@@ -4,7 +4,11 @@ import { useState } from "react";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
 import { createProject } from "@/lib/api-client";
-import ProjectForm, { projectPayloadFromValues, type ProjectFormValues } from "./ProjectForm";
+import ProjectForm, {
+  emptyProjectForm,
+  projectPayloadFromValues,
+  type ProjectFormValues,
+} from "./ProjectForm";
 import type { ClientOption, ProjectOption } from "./types";
 
 const ADD_NEW = "__add_new_job__";
@@ -24,6 +28,7 @@ export default function ProjectSelectField({
   onChange,
   onCreated,
   onClientCreated,
+  defaultClientId,
 }: {
   label?: string;
   placeholder?: string;
@@ -33,6 +38,13 @@ export default function ProjectSelectField({
   onChange: (projectId: string) => void;
   onCreated: (project: ProjectOption) => void;
   onClientCreated?: (client: ClientOption) => void;
+  /**
+   * The client the surrounding document has already chosen. Pre-fills the new
+   * job's client so the contractor is not asked for it a second time on the
+   * same screen — being asked twice invites picking a near-duplicate client
+   * (or creating one), and then the job hangs off the wrong record.
+   */
+  defaultClientId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -66,6 +78,12 @@ export default function ProjectSelectField({
         <Modal title="Add new job" onClose={() => (busy ? undefined : setOpen(false))}>
           <ProjectForm
             clients={clients}
+            // Re-keyed on the client so re-opening the modal after changing the
+            // quote's client starts from the new one, not the stale first mount.
+            key={defaultClientId ?? ""}
+            initial={
+              defaultClientId ? { ...emptyProjectForm, clientId: defaultClientId } : emptyProjectForm
+            }
             submitLabel="Add job"
             onCancel={() => setOpen(false)}
             onSubmit={handleCreate}

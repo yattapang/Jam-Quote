@@ -227,6 +227,9 @@ export default function QuoteBuilder({
               onChange={setProjectId}
               onCreated={(j) => setProjects((js) => [...js, j])}
               onClientCreated={(c) => setClients((cs) => [...cs, c])}
+              // The client picked to the left is the client this job belongs
+              // to — don't ask for it again in the modal.
+              defaultClientId={clientId}
             />
           </div>
         </div>
