@@ -104,6 +104,31 @@ feature are the same thing to a contractor — but the fix is different.
 
 ---
 
+## 3b. Tenant audit results (AUDIT.md, run by the owner 2026-08-16/17)
+
+### Part 1 — Libraries
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| Labour: new rate row not created, but typing a new trade saved it | Real | Trade "+ Add" prompt was `disabled`, so it invited a click and ignored it — now focuses the input |
+| Material/Labour/Other is too narrow — transport, equipment don't fit | Real, by omission | EQUIPMENT is now a job component kind (`0a20681`) |
+| Component rows had no unit of their own | Real | `JobComponent.unitLabel` added |
+| "Didn't know how to apply coverage" | Not a defect | Coverage needs a material with coverage configured; the field is discoverable only from the material. **Still worth a hint on the line.** |
+
+### Part 2 — New Quote
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| Steel/rebar prints "1 unit" though linear foot was chosen | **Real, root cause found** | `create`/`update` on materials did not join `unitRef`, so a written material came back with no unit and the create response is piped straight onto the line. Read paths had the join; writes did not — which is why only fresh rows were affected and older rows with a legacy `unit` string ("Bag") kept theirs. Fixed `ee0ec0a` |
+| Creating a job from the quote asks for the client again | Real | `defaultClientId` pre-fills the modal from the quote's client. Fixed `000e8e8` |
+| Deposit should offer percent or dollars | Accepted | `depositCentsFrom` in core; $/% selector. Only resolved cents persist. Done `1168ff9` |
+| Equipment "did not group" — 1 day and 10 days stayed separate | **Working as designed** | `groupJobComponents` consolidates the *component snapshot inside one job line*. Two equipment lines the contractor added separately are never merged — quote lines are theirs, and silently folding two into "11 days" would rewrite what they typed. If merging is wanted it belongs in the editor as an offer, like the job builder's duplicate notice. |
+| Coverage did not calculate or show | Unconfirmed | Almost certainly no coverage configured on the material used. Needs a re-test with one that has it. |
+| Custom unit under Job came back as "day" | Open | Not yet reproduced. Rate was correct, only the unit fell back. |
+| Deposit/discount/GCT match panel vs PDF; reopen preserved every line; email + PDF good; status auto-SENT; accept offered | **Passed** | — |
+
+---
+
 ## 4. Phases
 
 Sequence chosen: **quick wins first, redesign second.** Working software
@@ -286,7 +311,7 @@ Worth walking specifically, since these are new and unexercised:
 |---|---|
 | **`npm run build` cannot run here** | `next/font` cannot reach fonts.googleapis.com from this machine (TLS interception). Fails in `app/layout.tsx`, unrelated to any change. **Run the build somewhere with clean egress before deploying.** |
 | **Deploy API and web TOGETHER** | 0c/0d changed JSON field names and Phase 1 moved routes. A new API with an old web (or the reverse) fails those requests. |
-| **Migration 20260816090000 not applied** | Adds `unitLabel` to LabourRate and EquipmentItem. Additive, nullable, non-destructive. |
+| Migrations | Render runs `prisma migrate deploy` on boot, so a pushed migration applies itself — there is no separate "apply" step to remember. `..._labour_rate_unit_label` and `..._catalog_hidden` confirmed applied against live. |
 | Render migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint. A session advisory lock taken through pgbouncer strands on any failed migration (hit once: P1002). |
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
 | Delete `seed-business-blackwood` | Deferred until Reports has been checked against it — the only tenant with enough data to render. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug. |
@@ -295,14 +320,6 @@ Worth walking specifically, since these are new and unexercised:
 | `Business.logoUrl` | Dead column, superseded by `BusinessLogo`. |
 | Sidebar during view-as-tenant | Shows the admin's own business name; the banner names the tenant. Cosmetic. |
 | Equipment not in mobile/sync | The equipment library is web + API only. |
-
----|---|
-| Card checkout (WiPay) | **Blocked** on API credentials. Manual payment record + void already work. |
-| Delete `seed-business-blackwood` | Deferred until Reports has been checked against it — it is the only tenant with enough data to render. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug. |
-| Render migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint. A session-level advisory lock taken through the pooler strands on any failed migration (hit once: P1002, objid 72707369). |
-| Quote email has no logo | Invoice email has one; quote email does not. |
-| `Business.logoUrl` | Dead column, superseded by `BusinessLogo`. |
-| Sidebar during view-as-tenant | Shows the admin's own business name; banner names the tenant. Cosmetic. |
 
 ---
 
