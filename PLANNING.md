@@ -445,6 +445,21 @@ contractors, and use it.
 Neither is blocking a contractor from quoting, and mobile is a rebuild that
 should not start until the web app has survived real use.
 
+## 4d. Open work — raised 2026-08-18, recorded before starting
+
+Written down first so none of it is lost mid-session.
+
+| # | Item | State |
+|---|---|---|
+| 1 | **MRR is 100x too big on the Platform overview** | `$400,000` on overview vs `$4,000` on Financials. MY regression: `money()` only formats, it does not convert cents, and when the hardcoded MRR was replaced with the real `mrrCents` the wrapper stayed. Financials uses `formatJmd`, which divides. **Fix: one helper for money everywhere in the console.** |
+| 2 | **"Couldn't load 1 section from the admin API"** | Root cause found: the deployed API selected `RulePackConfig.statutoryCustom/statutoryRetired/sources` before the migration had run, so every rule-pack query threw. The migration is now applied. Re-check after the next deploy. |
+| 3 | **Stranded advisory lock on the production DB** | pid 21382, `application_name=pgbouncer`, idle, still holding `pg_advisory_lock(72707369)`. Taken by a boot-time `migrate deploy` on a pooled connection that pgbouncer then reused for app queries; being session-scoped it never released. **It will block Render's boot migration on every future deploy.** Cleared only by terminating that backend or restarting the Neon compute — needs a human. Workaround used for the pending migration: `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1`. |
+| 4 | **Tenant management options still not visible** | Owner reports the controls are still absent after the mock removal. Not yet diagnosed — likely a consequence of #2 (a failed section) or a capability gate. |
+| 5 | **Annual subscription with a long-term discount** | New requirement. Plan pricing is monthly-only today (`proMonthlyPriceCents`). Needs a billing interval on the plan, an annual price, and the tenant plan-change path to carry it. |
+| 6 | **Run the deployment** | Render and Vercel both auto-deploy on push, so pushing IS deploying. What is missing is a way to confirm a deploy succeeded from here. |
+
+---
+
 ---
 
 ## 5. Standing outstanding items
