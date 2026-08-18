@@ -27,13 +27,17 @@ export class MaterialFavouritesController {
     return this.materialFavourites.create(businessId, body);
   }
 
+  /** `?includeHidden=true` for the settings screen — see TradesController. It
+   * is read off the raw query rather than the validated DTO because it is a
+   * view concern, not a filter on the material data itself. */
   @Get()
   findAll(
     @BusinessId() businessId: string,
     @Query(new ZodValidationPipe(materialFavouriteQuerySchema))
     query: MaterialFavouriteQuery,
+    @Query("includeHidden") includeHidden?: string,
   ): Promise<MaterialFavourite[]> {
-    return this.materialFavourites.findAll(businessId, query);
+    return this.materialFavourites.findAll(businessId, query, includeHidden === "true");
   }
 
   @Get(":id")

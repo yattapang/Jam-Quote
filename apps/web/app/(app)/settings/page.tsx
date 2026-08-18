@@ -6,6 +6,9 @@ import {
   getTrades,
   getMaterialSchema,
   getHiddenCatalog,
+  getMaterialFavourites,
+  getLabourRates,
+  getEquipment,
 } from "@/lib/api-server";
 import EditBusinessButton from "./EditBusinessButton";
 import BrandingSection from "./BrandingSection";
@@ -18,8 +21,18 @@ import { formatAddress } from "@/lib/format-address";
 export const metadata = { title: "Settings · JamQuote" };
 
 export default async function SettingsPage() {
-  const [business, billingStatus, billingPlans, trades, hiddenTrades, materialSchema, hiddenCatalog] =
-    await Promise.all([
+  const [
+    business,
+    billingStatus,
+    billingPlans,
+    trades,
+    hiddenTrades,
+    materialSchema,
+    hiddenCatalog,
+    allMaterials,
+    allLabourRates,
+    allEquipment,
+  ] = await Promise.all([
       getBusiness(),
       getBillingStatus(),
       getBillingPlans(),
@@ -30,6 +43,11 @@ export default async function SettingsPage() {
       getTrades(true),
       getMaterialSchema(true),
       getHiddenCatalog(),
+      // Same reason as getTrades(true): the settings screen is the only place a
+      // hidden item is still listed, so it is the only place it can be restored.
+      getMaterialFavourites({ includeHidden: true }),
+      getLabourRates(true),
+      getEquipment(true),
     ]);
   return (
     <div className={shared.page}>
@@ -80,6 +98,9 @@ export default async function SettingsPage() {
         categories={materialSchema.categories}
         units={materialSchema.units}
         trades={hiddenTrades}
+        materials={allMaterials}
+        labourRates={allLabourRates}
+        equipment={allEquipment}
         hiddenEntries={hiddenCatalog}
       />
 

@@ -31,11 +31,21 @@ function withPrisma(materialFavourite: Partial<Record<string, unknown>> = {}) {
       }),
     ),
   };
+  // Nothing hidden unless a test says so; hiddenIds is the only method the
+  // service calls.
+  const hiddenCatalog = { hiddenIds: vi.fn().mockResolvedValue(new Set<string>()) };
   return {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    svc: new MaterialFavouritesService(prisma as any, schema as unknown as MaterialSchemaService),
+    svc: new MaterialFavouritesService(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+      schema as unknown as MaterialSchemaService,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hiddenCatalog as any,
+    ),
     prisma,
     schema,
+    hiddenCatalog,
   };
 }
 
@@ -240,12 +250,43 @@ describe("MaterialFavouritesService.findAll", () => {
     );
   });
 
-  it("applies `limit` via Prisma `take`", async () => {
-    const { svc, prisma } = withPrisma({ findMany: vi.fn().mockResolvedValue([]) });
-    await svc.findAll("biz-1", { limit: 5 });
+  it("applies `limit` AFTER the hidden filter, not as a Prisma `take`", async () => {
+    // Order matters. Taking 5 rows in SQL and then dropping the hidden ones
+    // returns fewer than 5 — the picker silently loses entries, and which ones
+    // depends on alphabetical position. Fetch, filter, then trim.
+    const rows = Array.from({ length: 8 }, (_, i) => ({ id: `m${i}`, name: `m${i}` }));
+    const { svc, prisma, hiddenCatalog } = withPrisma({
+      findMany: vi.fn().mockResolvedValue(rows),
+    });
+    hiddenCatalog.hiddenIds.mockResolvedValue(new Set(["m0", "m1", "m2"]));
+
+    const result = await svc.findAll("biz-1", { limit: 5 });
+
     expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 5 }),
+      expect.not.objectContaining({ take: 5 }),
     );
+    expect(result).toHaveLength(5);
+    expect(result.map((r) => r.id)).toEqual(["m3", "m4", "m5", "m6", "m7"]);
+  });
+
+  it("omits materials this business has hidden", async () => {
+    const { svc, hiddenCatalog } = withPrisma({
+      findMany: vi.fn().mockResolvedValue([{ id: "keep" }, { id: "gone" }]),
+    });
+    hiddenCatalog.hiddenIds.mockResolvedValue(new Set(["gone"]));
+    const result = await svc.findAll("biz-1");
+    expect(result.map((r) => r.id)).toEqual(["keep"]);
+  });
+
+  it("includeHidden returns them, so settings can offer a restore", async () => {
+    // A material that vanished the moment it was hidden could never be brought
+    // back — the settings screen is the one place it must still be listed.
+    const { svc, hiddenCatalog } = withPrisma({
+      findMany: vi.fn().mockResolvedValue([{ id: "keep" }, { id: "gone" }]),
+    });
+    const result = await svc.findAll("biz-1", {}, true);
+    expect(result.map((r) => r.id)).toEqual(["keep", "gone"]);
+    expect(hiddenCatalog.hiddenIds).not.toHaveBeenCalled();
   });
 
   it("searches the denormalized searchText, lowercased to match how it is stored", async () => {

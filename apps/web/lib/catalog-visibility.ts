@@ -14,7 +14,12 @@
 
 /** Mirrors the API's CatalogKind (apps/api/src/catalogs/catalog-hidden.service.ts)
  * — the only three values the API accepts for a hidden-catalog entry. */
-export type CatalogEntryKind = "MATERIAL_CATEGORY" | "MATERIAL_UNIT" | "TRADE";
+// Re-exported, not redeclared. Two independent copies of this union drifted
+// the moment the library-item kinds were added: the api-client half
+// accepted "MATERIAL" and this half did not, and every call between them
+// stopped typechecking. One definition, in the module that talks to the API.
+export type { CatalogEntryKind } from "./api-client";
+import type { CatalogEntryKind } from "./api-client";
 
 export interface HiddenCatalogEntry {
   kind: CatalogEntryKind;

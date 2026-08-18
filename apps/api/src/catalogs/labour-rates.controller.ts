@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import type { LabourRate } from "@prisma/client";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
@@ -24,9 +24,13 @@ export class LabourRatesController {
     return this.labourRates.create(businessId, body);
   }
 
+  /** `?includeHidden=true` for the settings screen — see TradesController. */
   @Get()
-  findAll(@BusinessId() businessId: string): Promise<LabourRate[]> {
-    return this.labourRates.findAll(businessId);
+  findAll(
+    @BusinessId() businessId: string,
+    @Query("includeHidden") includeHidden?: string,
+  ): Promise<LabourRate[]> {
+    return this.labourRates.findAll(businessId, includeHidden === "true");
   }
 
   @Get(":id")

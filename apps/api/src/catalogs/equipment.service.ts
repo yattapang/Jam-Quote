@@ -1,21 +1,33 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { EquipmentItem } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type { CreateEquipmentItemInput, UpdateEquipmentItemInput } from "./catalogs.dto.js";
 
 @Injectable()
 export class EquipmentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly hiddenCatalog: CatalogHiddenService,
+  ) {}
 
   create(businessId: string, input: CreateEquipmentItemInput): Promise<EquipmentItem> {
     return this.prisma.equipmentItem.create({ data: { ...input, businessId } });
   }
 
-  findAll(businessId: string): Promise<EquipmentItem[]> {
-    return this.prisma.equipmentItem.findMany({
-      where: { businessId },
-      orderBy: { name: "asc" },
-    });
+  /** See LabourRatesService.findAll — `includeHidden` is the settings screen's
+    * restore path and nothing else. */
+  async findAll(businessId: string, includeHidden = false): Promise<EquipmentItem[]> {
+    const [rows, hidden] = await Promise.all([
+      this.prisma.equipmentItem.findMany({
+        where: { businessId },
+        orderBy: { name: "asc" },
+      }),
+      includeHidden
+        ? Promise.resolve(new Set<string>())
+        : this.hiddenCatalog.hiddenIds(businessId, CatalogKind.EQUIPMENT),
+    ]);
+    return hidden.size === 0 ? rows : rows.filter((r) => !hidden.has(r.id));
   }
 
   async findOne(businessId: string, id: string): Promise<EquipmentItem> {

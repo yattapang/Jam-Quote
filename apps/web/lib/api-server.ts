@@ -194,12 +194,16 @@ export async function getMaterialFavourites(params?: {
   q?: string;
   category?: string;
   limit?: number;
+  /** Settings only — a hidden material must still be listed there to be
+   * restored. Everywhere else hidden means absent from the pickers. */
+  includeHidden?: boolean;
 }): Promise<MaterialFavourite[]> {
   try {
     const qs = new URLSearchParams();
     if (params?.q) qs.set("q", params.q);
     if (params?.category) qs.set("category", params.category);
     if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.includeHidden) qs.set("includeHidden", "true");
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return (
       await serverRequest<ApiMaterialFavourite[]>(`/catalogs/material-favourites${suffix}`)
@@ -214,9 +218,10 @@ export async function getMaterialFavourites(params?: {
 /** GET /api/catalogs/labour-rates — the business's labour rate book. No
  * fixture backs these, so an unreachable API returns an empty list (same
  * convention as getMaterialFavourites). */
-export async function getLabourRates(): Promise<LabourRate[]> {
+export async function getLabourRates(includeHidden = false): Promise<LabourRate[]> {
   try {
-    return (await serverRequest<ApiLabourRate[]>("/catalogs/labour-rates")).map(mapLabourRate);
+    const suffix = includeHidden ? "?includeHidden=true" : "";
+    return (await serverRequest<ApiLabourRate[]>(`/catalogs/labour-rates${suffix}`)).map(mapLabourRate);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getLabourRates: API unreachable, using empty list");
@@ -227,9 +232,10 @@ export async function getLabourRates(): Promise<LabourRate[]> {
 /** GET /api/catalogs/equipment — the business's equipment library (owned plant
  * and hire items). Same unreachable-API convention as its siblings: an empty
  * list rather than a thrown page. */
-export async function getEquipment(): Promise<EquipmentItem[]> {
+export async function getEquipment(includeHidden = false): Promise<EquipmentItem[]> {
   try {
-    return (await serverRequest<ApiEquipmentItem[]>("/catalogs/equipment")).map(mapEquipmentItem);
+    const suffix = includeHidden ? "?includeHidden=true" : "";
+    return (await serverRequest<ApiEquipmentItem[]>(`/catalogs/equipment${suffix}`)).map(mapEquipmentItem);
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getEquipment: API unreachable, using empty list");

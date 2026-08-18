@@ -51,11 +51,19 @@ export default function CatalogVocabularySection({
   categories,
   units,
   trades,
+  materials,
+  labourRates,
+  equipment,
   hiddenEntries,
 }: {
   categories: ApiMaterialCategory[];
   units: ApiMaterialUnit[];
   trades: Trade[];
+  /** The library items themselves. All three arrive with hidden rows INCLUDED
+   * — a row that vanished the moment it was hidden could never be restored. */
+  materials: { id: string; name: string }[];
+  labourRates: { id: string; trade: string; skillTier?: string | null }[];
+  equipment: { id: string; name: string }[];
   hiddenEntries: ApiHiddenCatalogEntry[];
 }) {
   const [hiddenSet, setHiddenSet] = useState(() => buildHiddenSet(hiddenEntries));
@@ -69,6 +77,28 @@ export default function CatalogVocabularySection({
   const tradeRows = useMemo(
     () => toRows(trades.map((t) => ({ id: t.id, label: t.name, custom: t.custom }))),
     [trades],
+  );
+
+  // `custom: true` on all three: these are the contractor's OWN rows, never
+  // curated platform ones, so the "Yours" badge is always right.
+  const materialRows = useMemo(
+    () => toRows(materials.map((m) => ({ id: m.id, label: m.name, custom: true }))),
+    [materials],
+  );
+  const labourRateRows = useMemo(
+    () =>
+      toRows(
+        labourRates.map((r) => ({
+          id: r.id,
+          label: r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade,
+          custom: true,
+        })),
+      ),
+    [labourRates],
+  );
+  const equipmentRows = useMemo(
+    () => toRows(equipment.map((e) => ({ id: e.id, label: e.name, custom: true }))),
+    [equipment],
   );
 
   async function toggle(kind: CatalogEntryKind, rowId: string, currentlyHidden: boolean) {
@@ -101,9 +131,12 @@ export default function CatalogVocabularySection({
     <Card>
       <h2 className={styles.title}>Catalog &amp; vocabulary</h2>
       <p className={styles.blurb}>
-        Hide categories, units or trades you never use to shorten your dropdowns. Hiding does not
-        delete anything — the entry stays available to quotes you&apos;ve already sent, and you can
-        restore it here any time.
+        Hide anything you never use to shorten your dropdowns — the words you pick from
+        (categories, units, trades) or the saved items themselves. Hiding one does not hide the
+        other: hiding the trade &ldquo;Tiler&rdquo; shortens the trade list, while hiding the rate
+        &ldquo;Tiler — Master&rdquo; takes it out of the quote line picker. Hiding never deletes
+        anything — it stays on quotes you&apos;ve already sent, and you can restore it here any
+        time.
       </p>
 
       {error && <span className={fieldStyles.error}>{error}</span>}
@@ -129,6 +162,30 @@ export default function CatalogVocabularySection({
           title="Trades"
           rows={tradeRows}
           kind="TRADE"
+          hiddenSet={hiddenSet}
+          busyKeys={busyKeys}
+          onToggle={toggle}
+        />
+        <CatalogGroup
+          title="Saved materials"
+          rows={materialRows}
+          kind="MATERIAL"
+          hiddenSet={hiddenSet}
+          busyKeys={busyKeys}
+          onToggle={toggle}
+        />
+        <CatalogGroup
+          title="Labour rates"
+          rows={labourRateRows}
+          kind="LABOUR_RATE"
+          hiddenSet={hiddenSet}
+          busyKeys={busyKeys}
+          onToggle={toggle}
+        />
+        <CatalogGroup
+          title="Equipment"
+          rows={equipmentRows}
+          kind="EQUIPMENT"
           hiddenSet={hiddenSet}
           busyKeys={busyKeys}
           onToggle={toggle}

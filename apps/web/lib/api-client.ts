@@ -1360,7 +1360,16 @@ export async function createTrade(name: string): Promise<Trade> {
 /** Mirrors the API's CatalogKind (apps/api/src/catalogs/catalog-hidden.service.ts)
  * — the only three kinds the API accepts for a hide/unhide. There is
  * deliberately no SUPPLIER kind. */
-export type CatalogEntryKind = "MATERIAL_CATEGORY" | "MATERIAL_UNIT" | "TRADE";
+/** Mirrors CatalogKind in the API. The last three are the library items
+ * themselves — hiding the vocabulary behind an item never removed the item,
+ * which read as the hide being ignored. */
+export type CatalogEntryKind =
+  | "MATERIAL_CATEGORY"
+  | "MATERIAL_UNIT"
+  | "TRADE"
+  | "MATERIAL"
+  | "LABOUR_RATE"
+  | "EQUIPMENT";
 
 export interface ApiHiddenCatalogEntry {
   kind: CatalogEntryKind;

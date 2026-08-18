@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { MaterialFavourite } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { MaterialSchemaService } from "./material-schema.service.js";
+import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type {
   CreateMaterialFavouriteInput,
   MaterialFavouriteQuery,
@@ -13,6 +14,7 @@ export class MaterialFavouritesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly schema: MaterialSchemaService,
+    private readonly hiddenCatalog: CatalogHiddenService,
   ) {}
 
   /**
@@ -67,11 +69,18 @@ export class MaterialFavouritesService {
   async findAll(
     businessId: string,
     filters: MaterialFavouriteQuery = {},
+    /** The settings screen passes true so a hidden material is still listed
+     * there to be restored — everywhere else, hidden means gone from pickers. */
+    includeHidden = false,
   ): Promise<MaterialFavourite[]> {
     const { q, category, categoryDefId, limit } = filters;
     const insensitive = { mode: "insensitive" } as const;
 
-    return this.prisma.materialFavourite.findMany({
+    const hidden = includeHidden
+      ? new Set<string>()
+      : await this.hiddenCatalog.hiddenIds(businessId, CatalogKind.MATERIAL);
+
+    const rows = await this.prisma.materialFavourite.findMany({
       where: {
         businessId,
         deletedAt: null,
@@ -92,8 +101,13 @@ export class MaterialFavouritesService {
       // render "(bag)" without separately fetching the schema and joining by
       // hand. Same reason findOne includes it.
       include: { unitRef: true },
-      ...(limit !== undefined ? { take: limit } : {}),
+      // `take` is applied AFTER the hidden filter below, not here: taking 20
+      // rows and then removing the hidden ones returns fewer than asked for
+      // and, worse, silently truncates the picker's list.
     });
+
+    const visible = hidden.size === 0 ? rows : rows.filter((r) => !hidden.has(r.id));
+    return limit !== undefined ? visible.slice(0, limit) : visible;
   }
 
   async findOne(businessId: string, id: string): Promise<MaterialFavourite> {

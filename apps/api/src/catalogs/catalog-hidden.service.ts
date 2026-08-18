@@ -10,6 +10,17 @@ export const CatalogKind = {
   MATERIAL_CATEGORY: "MATERIAL_CATEGORY",
   MATERIAL_UNIT: "MATERIAL_UNIT",
   TRADE: "TRADE",
+  // The library items themselves, not just the vocabulary behind them.
+  //
+  // Hiding the trade "Tiler" only shortens the list you pick a trade FROM; the
+  // saved rate "Tiler — Master" is a different row and kept appearing in the
+  // quote-line picker, which read as the hide being ignored. Deliberately does
+  // NOT cascade from the vocabulary: one click withdrawing several priced
+  // items at once is not something to do silently, and restoring the word
+  // would then have to guess which items to bring back.
+  MATERIAL: "MATERIAL",
+  LABOUR_RATE: "LABOUR_RATE",
+  EQUIPMENT: "EQUIPMENT",
   // NO SUPPLIER. Suppliers are wholly tenant-owned — there are no curated
   // rows a contractor is stuck with — and they already support delete. A
   // hideable kind that nothing filters would be accepted by the API and do
