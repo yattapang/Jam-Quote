@@ -45,6 +45,11 @@ export interface AdminTenant {
   name: string;
   parish: string | null;
   plan: string;
+  /** "monthly" | "annual" — the term. Free tenants report "monthly". */
+  interval: string;
+  /** Negotiated per-term price in cents, or null for the standard price. */
+  priceCents: number | null;
+  renewsAt: Date | null;
   trn: string | null;
   status: string;
   createdAt: Date;
@@ -77,6 +82,8 @@ export interface AdminUpcomingRenewal {
 export interface AdminFinancials {
   freeCount: number;
   proCount: number;
+  /** How many of the pro tenants are on a yearly term. */
+  annualCount: number;
   currency: string;
   proMonthlyPriceCents: number;
   mrrCents: number;
@@ -84,6 +91,32 @@ export interface AdminFinancials {
 }
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** One term from today. Uses setMonth/setFullYear rather than adding a fixed
+ * number of days, so a renewal lands on the same calendar date and does not
+ * drift a day each year over a leap year. */
+function nextRenewal(interval: string, from: Date = new Date()): Date {
+  const d = new Date(from);
+  if (interval === "annual") d.setFullYear(d.getFullYear() + 1);
+  else d.setMonth(d.getMonth() + 1);
+  return d;
+}
+
+/**
+ * What one pro subscription is worth PER MONTH.
+ *
+ * A negotiated price wins over the list price; an annual term is divided by
+ * twelve. Rounded to the cent so a sum of these is a payable figure rather
+ * than carrying fractions.
+ */
+function monthlyValueCents(
+  sub: { interval: string; priceCents: number | null },
+  pricing: { proMonthlyPriceCents: number; proAnnualPriceCents: number },
+): number {
+  const annual = sub.interval === "annual";
+  const agreed = sub.priceCents ?? (annual ? pricing.proAnnualPriceCents : pricing.proMonthlyPriceCents);
+  return annual ? Math.round(agreed / 12) : agreed;
+}
 
 /** One select for every regulatory read and write. Separate literals drift —
  * the material catalog lost a unit that way when its writes omitted a join its
@@ -195,6 +228,9 @@ export class AdminService {
       name: b.name,
       parish: b.parish,
       plan: b.subscription?.plan ?? "Free",
+      interval: b.subscription?.interval ?? "monthly",
+      priceCents: b.subscription?.priceCents ?? null,
+      renewsAt: b.subscription?.renewsAt ?? null,
       trn: b.trn,
       status: b.subscription?.status ?? "active",
       createdAt: b.createdAt,
@@ -435,17 +471,36 @@ export class AdminService {
     const business = await this.prisma.business.findUnique({ where: { id: businessId } });
     if (!business) throw new NotFoundException("Business not found");
 
+    const interval = input.interval ?? "monthly";
+    // Downgrading to free ends the commercial terms with it — leaving an
+    // annual term and a negotiated price on a free tenant would resurface the
+    // moment anyone put them back on pro, quietly restoring a deal that had
+    // ended.
+    const priceCents = input.plan === "free" ? null : (input.priceCents ?? null);
+
+    // An explicit date wins; otherwise a paid plan renews one term out, which
+    // is what makes "annual" mean anything. Free plans do not renew.
+    const renewsAt = input.renewsAt
+      ? new Date(input.renewsAt)
+      : input.plan === "free"
+        ? null
+        : nextRenewal(interval);
+
     const subscription = await this.prisma.subscription.upsert({
       where: { businessId },
       create: {
         businessId,
         plan: input.plan,
         status: "active",
-        renewsAt: input.renewsAt ? new Date(input.renewsAt) : null,
+        interval,
+        priceCents,
+        renewsAt,
       },
       update: {
         plan: input.plan,
-        renewsAt: input.renewsAt ? new Date(input.renewsAt) : null,
+        interval,
+        priceCents,
+        renewsAt,
       },
     });
 
@@ -454,7 +509,12 @@ export class AdminService {
       action: "tenant.setPlan",
       targetType: "Business",
       targetId: businessId,
-      details: { plan: input.plan, renewsAt: input.renewsAt ?? null },
+      details: {
+        plan: input.plan,
+        interval,
+        priceCents,
+        renewsAt: renewsAt ? renewsAt.toISOString() : null,
+      },
     });
 
     return subscription;
@@ -478,11 +538,22 @@ export class AdminService {
     const cutoff = new Date(now + SIXTY_DAYS_MS);
 
     let proCount = 0;
+    let mrrCents = 0;
+    let annualCount = 0;
     const upcomingRenewals: AdminUpcomingRenewal[] = [];
 
     for (const b of businesses) {
       const isPro = b.subscription?.plan === "pro";
-      if (isPro) proCount += 1;
+      if (isPro) {
+        proCount += 1;
+        if (b.subscription!.interval === "annual") annualCount += 1;
+        // MRR is a MONTHLY figure, so an annual term contributes a twelfth of
+        // its price. Counting it in full would overstate revenue by 12x in the
+        // month it renews and report zero for the other eleven; counting it at
+        // the monthly list price would ignore the annual discount the tenant
+        // was actually given.
+        mrrCents += monthlyValueCents(b.subscription!, pricing);
+      }
 
       if (
         isPro &&
@@ -504,9 +575,12 @@ export class AdminService {
     return {
       freeCount: businesses.length - proCount,
       proCount,
+      annualCount,
       currency: pricing.currency,
       proMonthlyPriceCents: pricing.proMonthlyPriceCents,
-      mrrCents: proCount * pricing.proMonthlyPriceCents,
+      // Summed per tenant rather than proCount x list price, so an annual term
+      // or a negotiated rate is reported at what that tenant actually pays.
+      mrrCents,
       upcomingRenewals,
     };
   }

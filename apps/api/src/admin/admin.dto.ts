@@ -7,6 +7,19 @@ const capabilityEnum = z.enum(ADMIN_CAPABILITIES as [string, ...string[]]);
 
 export const setTenantPlanSchema = z.object({
   plan: z.enum(["free", "pro"]),
+  /**
+   * The term. Annual is the long-term option: it renews a year out and is
+   * priced from proAnnualPriceCents, which is deliberately below twelve
+   * monthly payments — that discount IS the incentive to commit for a year.
+   */
+  interval: z.enum(["monthly", "annual"]).optional(),
+  /**
+   * A negotiated price for THIS tenant, per term, in cents. Omit to charge the
+   * standard price for the interval; null clears a previous negotiation and
+   * returns them to standard. Kept separate from the global pricing config so
+   * one tenant's deal never moves everyone else's bill.
+   */
+  priceCents: z.number().int().nonnegative().nullable().optional(),
   renewsAt: z.string().datetime().optional(),
 });
 export type SetTenantPlanInput = z.infer<typeof setTenantPlanSchema>;

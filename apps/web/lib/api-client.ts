@@ -1070,6 +1070,11 @@ export interface AdminTenant {
   name: string;
   parish: string | null;
   plan: string;
+  /** "monthly" | "annual" — the term. Free tenants report "monthly". */
+  interval: string;
+  /** Negotiated per-term price in cents, or null for the standard price. */
+  priceCents: number | null;
+  renewsAt: string | null;
   trn: string | null;
   status: string;
   createdAt: string;
@@ -1354,6 +1359,12 @@ export async function updateAdminPricing(input: UpdateAdminPricingInput): Promis
 }
 
 export interface SetTenantPlanInput {
+  /** "annual" is the long-term option — priced from proAnnualPriceCents,
+   * which sits below twelve monthly payments. */
+  interval?: "monthly" | "annual";
+  /** A negotiated per-term price for THIS tenant, in cents. Omit for the
+   * standard price; null clears a previous negotiation. */
+  priceCents?: number | null;
   plan: "free" | "pro";
   renewsAt?: string;
 }

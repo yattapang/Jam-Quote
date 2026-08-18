@@ -72,7 +72,14 @@ function dollarsStrToCents(v: string): number {
   return Math.round(Number(v) * 100);
 }
 
-const money = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// NOTE: there is deliberately no local `money()` helper any more.
+//
+// It formatted a number as currency WITHOUT converting from cents, and sat one
+// character away from formatJmd, which does convert. Every money value in this
+// console is cents, so the two were interchangeable to read and produced a
+// 100x error to run: the Platform overview showed MRR as $400,000 while
+// Financials showed the same figure as $4,000. formatJmd (from core, used by
+// every other screen in the app) is now the only way money is rendered here.
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
 const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", borderRadius: 999,
@@ -297,6 +304,37 @@ export default function AdminConsole({
   const [tenantPlanBusy, setTenantPlanBusy] = useState<Record<string, boolean>>({});
   const [tenantPlanError, setTenantPlanError] = useState<Record<string, boolean>>({});
 
+  /**
+   * Set a tenant's plan AND term in one call.
+   *
+   * Replaces a Free/Pro toggle that could not express a yearly commitment at
+   * all. `annual` renews a year out and is priced from proAnnualPriceCents,
+   * which sits below twelve monthly payments — that discount is the incentive
+   * to commit for a year.
+   */
+  function planChoiceOf(id: string, plan: string, interval: string): string {
+    const pending = tenantPlanOverride[id];
+    if (pending === "free" || pending === "pro-monthly" || pending === "pro-annual") return pending;
+    if (!isPro(plan)) return "free";
+    return interval === "annual" ? "pro-annual" : "pro-monthly";
+  }
+
+  async function setTenantPlanChoice(id: string, choice: string) {
+    const plan = choice === "free" ? "free" : "pro";
+    const interval = choice === "pro-annual" ? "annual" : "monthly";
+    setTenantPlanBusy((b) => ({ ...b, [id]: true }));
+    setTenantPlanError((e) => ({ ...e, [id]: false }));
+    try {
+      await setTenantPlan(id, { plan, interval });
+      setTenantPlanOverride((o) => ({ ...o, [id]: choice }));
+      router.refresh();
+    } catch {
+      setTenantPlanError((e) => ({ ...e, [id]: true }));
+    } finally {
+      setTenantPlanBusy((b) => ({ ...b, [id]: false }));
+    }
+  }
+
   async function toggleTenantPlan(id: string, currentPlan: string) {
     const nextPlan = isPro(currentPlan) ? "free" : "pro";
     setTenantPlanBusy((b) => ({ ...b, [id]: true }));
@@ -517,7 +555,7 @@ export default function AdminConsole({
     { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "—" },
     {
       label: "MRR",
-      value: data.financials ? money(data.financials.mrrCents) : "—",
+      value: data.financials ? formatJmd(data.financials.mrrCents) : "—",
     },
     // "feeds" was accurate when suppliers were a curated platform directory
     // with price feeds. They are tenant-owned now (#31), so this counts the
@@ -551,6 +589,8 @@ export default function AdminConsole({
   // rows carried a null id and silently rendered no actions at all, which is
   // why the console looked like it had no tenant controls.
   const tenantIds: string[] = data.tenants.map((t) => t.id);
+  const tenantIntervals: string[] = data.tenants.map((t) => t.interval);
+  const tenantRenewals: (string | null)[] = data.tenants.map((t) => t.renewsAt);
   const tenantSuspendedBase: boolean[] = data.tenants.map((t) => t.suspended);
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
@@ -767,7 +807,19 @@ export default function AdminConsole({
               style={{ margin: "0 auto 16px", maxWidth: 1240, padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--critical) 12%, var(--surface))", border: "1px solid var(--critical)", fontSize: 13 }}
             >
               Couldn&apos;t load {data.failed.length} section{data.failed.length > 1 ? "s" : ""} from the
-              admin API ({data.failed.join(", ")}). Anything below may be incomplete.
+              admin API: <strong>{data.failed.join(", ")}</strong>. Anything below may be incomplete.
+              {/* Called out separately because it does not look like a
+                  failure. When /admin/me is the one that fails, the console
+                  falls back to "no permissions" and every action — suspend,
+                  delete, change plan — simply stops rendering. The screen then
+                  looks read-only by design rather than broken, which is
+                  exactly how it was reported. */}
+              {data.failed.some((f) => f.includes("/admin/me")) && (
+                <div style={{ marginTop: 6, fontWeight: 600 }}>
+                  Your permissions could not be confirmed, so every management action is hidden.
+                  This is not a permissions change — reload, and check the API is reachable.
+                </div>
+              )}
             </div>
           )}
           {/* OVERVIEW */}
@@ -787,7 +839,7 @@ export default function AdminConsole({
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Monthly recurring revenue</div>
                       <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", marginTop: 3 }}>
-                        {data.financials ? money(data.financials.mrrCents) : "—"}
+                        {data.financials ? formatJmd(data.financials.mrrCents) : "—"}
                       </div>
                     </div>
                     {/* Net new and churn are NOT shown. Both need a history of
@@ -871,7 +923,16 @@ export default function AdminConsole({
                     {tenantsRaw.map((t, i) => {
                       const [sl, st] = statusMap[t[4]] ?? ["Active", "good"];
                       const id = tenantIds[i];
-                      const currentPlan = (id && tenantPlanOverride[id]) || t[2];
+                      // The override holds a CHOICE ("pro-annual"); the plan
+                      // pill still wants a plan, so map it back.
+                      const pendingChoice = id ? tenantPlanOverride[id] : undefined;
+                      const currentPlan = pendingChoice
+                        ? pendingChoice === "free"
+                          ? "free"
+                          : "pro"
+                        : t[2];
+                      const tenantInterval = tenantIntervals[i] ?? "monthly";
+                      const renewsAt = tenantRenewals[i] ?? null;
                       const busy = id ? !!tenantPlanBusy[id] : false;
                       const rowError = id ? !!tenantPlanError[id] : false;
                       const suspended = id ? tenantSuspendOverride[id] ?? tenantSuspendedBase[i] ?? false : false;
@@ -891,7 +952,20 @@ export default function AdminConsole({
                         >
                           <td style={td}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
                           <td style={{ ...td, color: "var(--muted)" }}>{t[1]}</td>
-                          <td style={td}><span style={pill(planTone[planDisplay(currentPlan)] ?? "muted")}>{planDisplay(currentPlan)}</span></td>
+                          <td style={td}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                              <span style={pill(planTone[planDisplay(currentPlan)] ?? "muted")}>{planDisplay(currentPlan)}</span>
+                              {/* The term and renewal ARE the account status —
+                                  without them "Pro" says nothing about what
+                                  this tenant pays or when they next will. */}
+                              {isPro(currentPlan) && (
+                                <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                                  {tenantInterval === "annual" ? "Annual" : "Monthly"}
+                                  {renewsAt ? ` · renews ${renewsAt.slice(0, 10)}` : ""}
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ ...td, ...archivo, fontVariantNumeric: "tabular-nums", color: "var(--muted)" }}>{t[3]}</td>
                           <td style={td}>
                             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -904,13 +978,20 @@ export default function AdminConsole({
                             {id && canManageTenants ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                                  <button
+                                  {/* A select, not a toggle: a toggle cannot
+                                      express a yearly term, and the term is
+                                      what carries the long-term discount. */}
+                                  <select
+                                    aria-label={`Plan for ${t[0]}`}
                                     disabled={busy}
-                                    onClick={() => toggleTenantPlan(id, currentPlan)}
-                                    style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
+                                    value={planChoiceOf(id, currentPlan, tenantInterval)}
+                                    onChange={(e) => setTenantPlanChoice(id, e.target.value)}
+                                    style={{ height: 28, padding: "0 7px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
                                   >
-                                    {busy ? "Saving…" : isPro(currentPlan) ? "Set Free" : "Set Pro"}
-                                  </button>
+                                    <option value="free">Free</option>
+                                    <option value="pro-monthly">Pro · monthly</option>
+                                    <option value="pro-annual">Pro · annual</option>
+                                  </select>
                                   <button
                                     disabled={lifecycleBusy}
                                     onClick={() => toggleTenantSuspend(id, suspended)}
@@ -1756,7 +1837,7 @@ function TenantDrawer({
   const metrics = [
     { label: "Quotes created", value: String(q) },
     { label: "This month", value: String(qm) },
-    { label: "Value quoted", value: mrr === "—" ? "—" : money(Number(mrr)) },
+    { label: "Value quoted", value: mrr === "—" ? "—" : formatJmd(Number(mrr)) },
     { label: "Invoices sent", value: String(Math.round(q * 0.6)) },
   ];
   const usage = [
@@ -1764,7 +1845,7 @@ function TenantDrawer({
     { label: "Team seats", text: `${usedSeats} / ${seats}`, w: (usedSeats / seats) * 100, tone: "info" },
     { label: "Document storage", text: "2.1 / 10 GB", w: 21, tone: "good" },
   ];
-  const sub = [["Plan", shown], ["MRR", money(mrrPlan)], ["Started", "2024-08-19"], ["Renews", "2025-05-19"], ["Payment rail", "Lynk"]];
+  const sub = [["Plan", shown], ["MRR", formatJmd(mrrPlan)], ["Started", "2024-08-19"], ["Renews", "2025-05-19"], ["Payment rail", "Lynk"]];
 
   return (
     <>

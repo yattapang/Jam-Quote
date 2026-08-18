@@ -65,6 +65,11 @@ describe("AdminService.tenants", () => {
         name: "Blackwood Construction",
         parish: "St. Catherine",
         plan: "Pro",
+        // The term is part of the tenant row now — "Pro" alone says nothing
+        // about what they pay or when they next will.
+        interval: "monthly",
+        priceCents: null,
+        renewsAt: null,
         trn: "102458963",
         status: "active",
         createdAt: now,
@@ -76,6 +81,9 @@ describe("AdminService.tenants", () => {
         name: "No Sub Yet Ltd",
         parish: null,
         plan: "Free",
+        interval: "monthly",
+        priceCents: null,
+        renewsAt: null,
         trn: null,
         status: "active",
         createdAt: now,
@@ -470,5 +478,83 @@ describe("AdminService — regulatory feed CRUD", () => {
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: "regulatory.delete", details: expect.objectContaining({ title: "T" }) }),
     );
+  });
+});
+
+describe("AdminService.financials — annual terms and negotiated prices", () => {
+  const pricing = { proMonthlyPriceCents: 200_000, proAnnualPriceCents: 2_000_000, currency: "JMD", freeQuotesPerMonth: 15 };
+
+  function withSubs(subs: Array<{ plan: string; interval?: string; priceCents?: number | null; renewsAt?: Date | null }>) {
+    const prisma = {
+      business: {
+        findMany: vi.fn().mockResolvedValue(
+          subs.map((s, i) => ({
+            id: `b${i}`,
+            name: `Biz ${i}`,
+            subscription: {
+              plan: s.plan,
+              interval: s.interval ?? "monthly",
+              priceCents: s.priceCents ?? null,
+              renewsAt: s.renewsAt ?? null,
+            },
+          })),
+        ),
+      },
+    };
+    const pricingService = { get: vi.fn().mockResolvedValue(pricing) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, pricingService as any, { record: vi.fn() } as any, {} as any);
+    return { svc };
+  }
+
+  it("counts a monthly pro tenant at the monthly price", async () => {
+    const { svc } = withSubs([{ plan: "pro" }]);
+    expect((await svc.financials()).mrrCents).toBe(200_000);
+  });
+
+  it("divides an annual term by twelve — MRR is a monthly figure", async () => {
+    // Counting the whole annual price would overstate revenue 12x in the month
+    // it renews and report zero for the other eleven.
+    const { svc } = withSubs([{ plan: "pro", interval: "annual" }]);
+    expect((await svc.financials()).mrrCents).toBe(Math.round(2_000_000 / 12));
+  });
+
+  it("does not report an annual tenant at the monthly list price", async () => {
+    // That would ignore the discount they were actually given, which is the
+    // whole point of offering a yearly term.
+    const { svc } = withSubs([{ plan: "pro", interval: "annual" }]);
+    expect((await svc.financials()).mrrCents).not.toBe(200_000);
+  });
+
+  it("honours a negotiated price over the list price", async () => {
+    const { svc } = withSubs([{ plan: "pro", priceCents: 150_000 }]);
+    expect((await svc.financials()).mrrCents).toBe(150_000);
+  });
+
+  it("honours a negotiated ANNUAL price, still per month", async () => {
+    const { svc } = withSubs([{ plan: "pro", interval: "annual", priceCents: 1_200_000 }]);
+    expect((await svc.financials()).mrrCents).toBe(100_000);
+  });
+
+  it("ignores free tenants entirely", async () => {
+    const { svc } = withSubs([{ plan: "free" }, { plan: "free", priceCents: 999_999 }]);
+    const f = await svc.financials();
+    expect(f.mrrCents).toBe(0);
+    expect(f.proCount).toBe(0);
+    expect(f.freeCount).toBe(2);
+  });
+
+  it("sums a mixed book and reports how many are annual", async () => {
+    const { svc } = withSubs([
+      { plan: "pro" },
+      { plan: "pro", interval: "annual" },
+      { plan: "pro", interval: "annual", priceCents: 1_200_000 },
+      { plan: "free" },
+    ]);
+    const f = await svc.financials();
+    expect(f.proCount).toBe(3);
+    expect(f.annualCount).toBe(2);
+    expect(f.freeCount).toBe(1);
+    expect(f.mrrCents).toBe(200_000 + Math.round(2_000_000 / 12) + 100_000);
   });
 });

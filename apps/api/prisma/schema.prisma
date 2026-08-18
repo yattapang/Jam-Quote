@@ -977,9 +977,18 @@ model Subscription {
   business   Business  @relation(fields: [businessId], references: [id])
   plan       String    @default("free") // free | pro
   status     String    @default("active")
+  /// "monthly" | "annual" — the term this tenant is on. Plain text like plan
+  /// and status beside it, so adding a term needs no enum migration.
+  interval   String    @default("monthly")
+  /// What THIS tenant agreed to pay per term, in cents. NULL means the
+  /// standard price for the interval — so only a negotiated discount is
+  /// stored per tenant and the common case stays driven by pricing config.
+  priceCents Int?
   renewsAt   DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+
+  @@index([plan, interval])
 }
 
 // Singleton row (fixed id "default") holding admin-editable Phase-1 pricing.
