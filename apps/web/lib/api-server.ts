@@ -511,10 +511,17 @@ export async function getRegulatoryUpdates(): Promise<ApiRegulatoryUpdate[]> {
  * failure each section returns empty/null independently, so the console keeps
  * rendering with whichever sections did load. */
 export async function getAdminData(): Promise<AdminData> {
+  // Which sections failed to load. The console used to be unable to tell a
+  // section that returned NOTHING from one that FAILED, and papered over both
+  // with design-mock rows. With the mocks gone the ambiguity would be just as
+  // misleading in the other direction — a failed tenant fetch would render
+  // "No tenants yet" — so failures are now recorded and surfaced.
+  const failed: string[] = [];
   const safe = async <T>(path: string, empty: T): Promise<T> => {
     try {
       return await serverRequest<T>(path);
     } catch {
+      failed.push(path);
       return empty;
     }
   };
@@ -537,7 +544,7 @@ export async function getAdminData(): Promise<AdminData> {
     safe<EffectiveRulePack | null>("/admin/rulepack", null),
   ]);
   // Cap the audit feed the console renders, even if the API ever returns more.
-  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack };
+  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack, failed };
 }
 
 /**

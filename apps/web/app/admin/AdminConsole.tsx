@@ -420,7 +420,7 @@ export default function AdminConsole({
 
   const titles: Record<Screen, [string, string]> = {
     overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
-    tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "1,284"} contractor businesses across ${jm.regions.length} parishes`],
+    tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "—"} contractor businesses across ${jm.regions.length} parishes`],
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
     pricing: ["Pricing", "Free-tier limit & Pro pricing for the whole platform"],
@@ -438,80 +438,75 @@ export default function AdminConsole({
   });
 
   // --- data ---
+  //
+  // Everything on this screen comes from the API or renders as "—". It used to
+  // fall back to design-mock values when a section failed to load, which meant
+  // a broken or unauthorized admin fetch produced a full, confident-looking
+  // console of invented numbers — including an MRR that was hardcoded and
+  // never real at all. In a financial console that is worse than an error,
+  // because it is actionable. Deltas ("+42 this month", "+4.7% MoM"), the
+  // 12-month revenue series, the recent-signup list and the system alerts were
+  // all fabricated with no data source behind them; the ones the API cannot
+  // answer are gone rather than guessed.
   const stats = [
-    { label: "Total businesses", value: ov ? ov.businesses.toLocaleString() : "1,284", delta: "+42", sub: "this month", tone: "good" },
-    { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "892", delta: "+18", sub: "net new", tone: "good" },
-    { label: "MRR", value: money(2418540), delta: "+4.7%", sub: "MoM", tone: "good" },
+    { label: "Total businesses", value: ov ? ov.businesses.toLocaleString() : "—" },
+    { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "—" },
+    {
+      label: "MRR",
+      value: data.financials ? money(data.financials.mrrCents) : "—",
+    },
     // "feeds" was accurate when suppliers were a curated platform directory
     // with price feeds. They are tenant-owned now (#31), so this counts the
     // sum of every contractor's own merchant list — a usage metric, not a
     // directory the platform maintains.
-    { label: "Suppliers added", value: ov ? String(ov.suppliersTracked) : "37", delta: "all tenants", sub: "merchant lists", tone: "info" },
-    { label: "Jurisdictions live", value: ov ? String(ov.jurisdictionsLive) : "3", delta: jm.countryCode, sub: "", tone: "info" },
+    { label: "Suppliers added", value: ov ? String(ov.suppliersTracked) : "—" },
+    { label: "Jurisdictions live", value: ov ? String(ov.jurisdictionsLive) : "—" },
   ];
-  const rv: [string, number][] = [["J", 1.28], ["F", 1.35], ["M", 1.42], ["A", 1.55], ["M", 1.63], ["J", 1.74], ["J", 1.88], ["A", 1.97], ["S", 2.08], ["O", 2.19], ["N", 2.31], ["D", 2.42]];
-  const signups = [
-    ["Blue Mountain Builders", "St. Andrew", "Core", "12m"],
-    ["Reef & Rock Masonry", "St. James", "Starter", "48m"],
-    ["Portmore Concrete Co.", "St. Catherine", "Pro", "2h"],
-    ["Yallahs Roofing Ltd", "St. Thomas", "Free", "3h"],
-    ["Falmouth Fit-Out", "Trelawny", "Core", "5h"],
-  ];
-  const alerts = [
-    { tone: "critical", text: "Supplier 'ARC Systems' feed stale — 26h since last OK fetch", time: "triggered 1h ago" },
-    { tone: "warn", text: "3 regulatory changes awaiting review (1 past effective date)", time: "updated 20m ago" },
-    { tone: "good", text: "Payments reconciled — 892 active subscriptions matched", time: "2h ago" },
-    { tone: "info", text: published ? "Rule-pack JM v2025.4 published to production" : "Rule-pack JM v2025.3 live in production", time: "today 09:14" },
-  ];
-  const tenantsMock: TenantRow[] = [
-    ["Blue Mountain Builders", "St. Andrew", "Core", "128-540-991", "active", "4m ago", 3820000, 214, 18],
-    ["Portmore Concrete Co.", "St. Catherine", "Pro", "094-118-330", "active", "22m ago", 9140500, 486, 41],
-    ["Reef & Rock Masonry", "St. James", "Starter", "551-902-114", "trial", "1h ago", 612000, 38, 6],
-    ["Falmouth Fit-Out", "Trelawny", "Core", "203-771-845", "active", "3h ago", 2455000, 151, 12],
-    ["Spanish Town Steelworks", "St. Catherine", "Pro", "337-220-676", "active", "5h ago", 7788000, 402, 33],
-    ["Yallahs Roofing Ltd", "St. Thomas", "Free", "480-114-209", "trial", "8h ago", 88000, 9, 2],
-    ["Mandeville Millwork", "Manchester", "Starter", "661-903-552", "past_due", "2d ago", "—", 72, 7],
-    ["Negril Coastal Homes", "Westmoreland", "Core", "775-241-018", "active", "1d ago", 3010000, 168, 14],
-    ["Ocho Rios Renovations", "St. Ann", "Pro", "118-663-490", "active", "6h ago", 6420000, 357, 29],
-    ["Old Harbour Plumbing", "St. Catherine", "Free", "902-556-103", "churned", "34d ago", "—", 24, 3],
-  ];
-  const tenantsRaw: TenantRow[] = data.tenants.length
-    ? data.tenants.map((t): TenantRow => [t.name, t.parish ?? "—", t.plan, t.trn ?? "—", t.status, relativeTime(t.createdAt), "—", t.quoteCount, t.quoteCount])
-    : tenantsMock;
-  // Real business ids, index-aligned with tenantsRaw — null for the
-  // design-mock rows (no real business behind them, so no plan toggle).
-  const tenantIds: (string | null)[] = data.tenants.length ? data.tenants.map((t) => t.id) : tenantsMock.map(() => null);
-  // Suspended flag, index-aligned with tenantsRaw (from GET
-  // /admin/tenants?includeSuspended=true) — mock rows are never suspended.
-  const tenantSuspendedBase: boolean[] = data.tenants.length ? data.tenants.map((t) => t.suspended) : tenantsMock.map(() => false);
+
+  // The five most recently created tenants. Real rows, or nothing — there is
+  // no signup feed to invent one from.
+  const recentSignups = [...data.tenants]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  // Real rows only. There is no mock fallback: an empty list means this
+  // platform genuinely has no tenants, and saying so is the point.
+  const tenantsRaw: TenantRow[] = data.tenants.map((t): TenantRow => [
+    t.name,
+    t.parish ?? "—",
+    t.plan,
+    t.trn ?? "—",
+    t.status,
+    relativeTime(t.createdAt),
+    "—",
+    t.quoteCount,
+    t.quoteCount,
+  ]);
+  // Real business ids, index-aligned with tenantsRaw. Every row now has one,
+  // so every row gets its plan/suspend/delete controls — previously the mock
+  // rows carried a null id and silently rendered no actions at all, which is
+  // why the console looked like it had no tenant controls.
+  const tenantIds: string[] = data.tenants.map((t) => t.id);
+  const tenantSuspendedBase: boolean[] = data.tenants.map((t) => t.suspended);
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
-  const tenantFilters = [["All", "1,284", true], ["Active", cnt("active")], ["Trial", cnt("trial")], ["Past due", cnt("past_due")], ["Churned", cnt("churned")]];
+  const tenantFilters = [["All", String(tenantsRaw.length), true], ["Active", cnt("active")], ["Trial", cnt("trial")], ["Past due", cnt("past_due")], ["Churned", cnt("churned")]];
 
 
   const regMap: Record<string, [string, string]> = { needs: ["Needs review", "warn"], monitoring: ["Monitoring", "info"], applied: ["Applied", "good"] };
-  const regMock: RegRow[] = [
-    ["Tourism-sector GCT sub-rate (10%)", "TAJ", "2025-04-01", "2025-03-28", "needs"],
-    ["Minimum wage revision — Gazette No. 42", "Jamaica Gazette", "2025-06-01", "2025-03-25", "needs"],
-    ["NHT contribution ceiling adjustment", "NHT", "2025-05-15", "2025-03-20", "monitoring"],
-    ["HEART Trust levy clarification", "HEART/NSTA", "2025-03-01", "2025-02-14", "monitoring"],
-    ["Education Tax rate confirmation", "TAJ", "2025-01-01", "2024-12-10", "applied"],
+  const regChanges: RegRow[] = data.regulatory.map((r): RegRow => [
+    r.title,
+    r.category,
+    r.effectiveDate ? r.effectiveDate.slice(0, 10) : "—",
+    r.actionNeeded ? "action needed" : "—",
+    r.actionNeeded ? "needs" : "monitoring",
+  ]);
+  const regStats = [
+    { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
+    { value: String(regChanges.filter((r) => r[4] === "monitoring").length), label: "Monitoring", tone: "info" },
+    { value: String(regChanges.filter((r) => r[4] === "applied").length), label: "Applied (YTD)", tone: "good" },
   ];
-  const regChanges: RegRow[] = data.regulatory.length
-    ? data.regulatory.map((r): RegRow => [r.title, r.category, r.effectiveDate ? r.effectiveDate.slice(0, 10) : "—", r.actionNeeded ? "action needed" : "—", r.actionNeeded ? "needs" : "monitoring"])
-    : regMock;
-  const regStats = data.regulatory.length
-    ? [
-        { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
-        { value: String(regChanges.filter((r) => r[4] === "monitoring").length), label: "Monitoring", tone: "info" },
-        { value: String(regChanges.filter((r) => r[4] === "applied").length), label: "Applied (YTD)", tone: "good" },
-      ]
-    : [
-        { value: "2", label: "Needs review", tone: "warn" },
-        { value: "2", label: "Monitoring", tone: "info" },
-        { value: "31", label: "Applied (YTD)", tone: "good" },
-      ];
 
   // rule-pack — the editable consumption-tax + provenance + statutory rates come
   // from the effective pack (GET /admin/rulepack; live `rulepack` state); the
@@ -604,7 +599,7 @@ export default function AdminConsole({
           <button className={styles.navBtn} onClick={() => go("tenants")} style={navBtn("tenants")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
             <span>Tenants</span>
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{ov ? ov.businesses.toLocaleString() : "1,284"}</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{ov ? ov.businesses.toLocaleString() : "—"}</span>
           </button>
           {canViewFinancials && (
             <button className={styles.navBtn} onClick={() => go("financials")} style={navBtn("financials")}>
@@ -684,6 +679,17 @@ export default function AdminConsole({
         </header>
 
         <div className={styles.scr} style={{ flex: 1, overflowY: "auto", position: "relative" }}>
+          {/* Says so plainly when a section could not be reached, so an empty
+              table is never mistaken for an empty platform. */}
+          {data.failed.length > 0 && (
+            <div
+              role="alert"
+              style={{ margin: "0 auto 16px", maxWidth: 1240, padding: "10px 14px", borderRadius: 10, background: "color-mix(in srgb, var(--critical) 12%, var(--surface))", border: "1px solid var(--critical)", fontSize: 13 }}
+            >
+              Couldn&apos;t load {data.failed.length} section{data.failed.length > 1 ? "s" : ""} from the
+              admin API ({data.failed.join(", ")}). Anything below may be incomplete.
+            </div>
+          )}
           {/* OVERVIEW */}
           {screen === "overview" && (
             <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1240, margin: "0 auto" }}>
@@ -692,10 +698,6 @@ export default function AdminConsole({
                   <div key={s.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 16px 15px", boxShadow: "var(--shadow)" }}>
                     <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>{s.label}</div>
                     <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ marginTop: 9, fontSize: 12, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ color: `var(--${s.tone})`, fontWeight: 700 }}>{s.delta}</span>
-                      <span style={{ color: "var(--muted)", fontWeight: 500 }}>{s.sub}</span>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -704,57 +706,68 @@ export default function AdminConsole({
                   <div className={styles.mrrHead} style={{ marginBottom: 18 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Monthly recurring revenue</div>
-                      <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", marginTop: 3 }}>{money(2418540)}</div>
-                    </div>
-                    <div style={{ display: "flex", gap: 16, textAlign: "right" }}>
-                      <div><div style={{ fontSize: 11, color: "var(--muted)" }}>Net new</div><div style={{ ...archivo, fontWeight: 700, fontSize: 15, color: "var(--good)" }}>+$108,420</div></div>
-                      <div><div style={{ fontSize: 11, color: "var(--muted)" }}>Churn</div><div style={{ ...archivo, fontWeight: 700, fontSize: 15 }}>1.9%</div></div>
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 150 }}>
-                    {rv.map((r, i) => (
-                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 7, height: "100%", justifyContent: "flex-end" }}>
-                        <div style={{ width: "100%", height: `${(r[1] / 2.5) * 100}%`, borderRadius: "5px 5px 2px 2px", background: i === rv.length - 1 ? "var(--accent)" : "color-mix(in srgb, var(--info) 55%, var(--surface-alt))", transition: "height .4s" }} />
-                        <div style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 600 }}>{r[0]}</div>
+                      <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", marginTop: 3 }}>
+                        {data.financials ? money(data.financials.mrrCents) : "—"}
                       </div>
-                    ))}
+                    </div>
+                    {/* Net new and churn are NOT shown. Both need a history of
+                        subscription changes, and nothing records one — the
+                        figures that used to sit here were typed in. */}
                   </div>
+                  {/* Was a 12-month revenue series with no data behind it —
+                      invented month by month. Nothing stores subscription
+                      history, so the honest chart is the CURRENT plan mix,
+                      which the API does report. */}
+                  {data.financials ? (
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 18, height: 150 }}>
+                      {([
+                        ["Free", data.financials.freeCount, "color-mix(in srgb, var(--info) 55%, var(--surface-alt))"],
+                        ["Pro", data.financials.proCount, "var(--accent)"],
+                      ] as [string, number, string][]).map(([label, count, fill]) => {
+                        const peak = Math.max(1, data.financials!.freeCount, data.financials!.proCount);
+                        return (
+                          <div key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 7, height: "100%", justifyContent: "flex-end" }}>
+                            <div style={{ ...archivo, fontWeight: 700, fontSize: 13 }}>{count}</div>
+                            <div style={{ width: "100%", height: `${(count / peak) * 100}%`, minHeight: 2, borderRadius: "5px 5px 2px 2px", background: fill, transition: "height .4s" }} />
+                            <div style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 600 }}>{label}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ height: 150, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, color: "var(--muted)" }}>
+                      Couldn&apos;t load financials.
+                    </div>
+                  )}
                 </div>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)", display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Recent signups</div>
                     <a className={styles.link} href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }} style={{ fontSize: 12, fontWeight: 600 }}>View all</a>
                   </div>
-                  {signups.map((g) => (
-                    <div key={g[0]} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 12, color: "var(--muted)" }}>{initOf(g[0]!)}</div>
+                  {recentSignups.length === 0 && (
+                    <div style={{ fontSize: 12.5, color: "var(--muted)", padding: "12px 0" }}>
+                      No tenants yet.
+                    </div>
+                  )}
+                  {recentSignups.map((t) => (
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 0", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 12, color: "var(--muted)" }}>{initOf(t.name)}</div>
                       <div style={{ minWidth: 0, flex: 1, lineHeight: 1.25 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{g[0]}</div>
-                        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{g[1]}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+                        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{t.parish ?? "—"}</div>
                       </div>
-                      <span style={pill(planTone[g[2]!]!)}>{g[2]}</span>
-                      <div style={{ fontSize: 11, color: "var(--muted)", width: 44, textAlign: "right" }}>{g[3]}</div>
+                      <span style={pill(planTone[planDisplay(t.plan)] ?? "muted")}>{planDisplay(t.plan)}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "6px 8px", boxShadow: "var(--shadow)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px 6px" }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9 16H3z" /><path d="M12 10v4M12 17h.01" /></svg>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: ".02em", color: "var(--muted)" }}>SYSTEM ALERTS</span>
-                </div>
-                <div className={styles.alertGrid} style={{ padding: "2px 6px 6px" }}>
-                  {alerts.map((a, i) => (
-                    <div key={i} style={{ display: "flex", gap: 10, padding: "11px 12px", borderRadius: 10, background: "var(--surface-alt)" }}>
-                      <span style={dot(a.tone)} />
-                      <div style={{ lineHeight: 1.3 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 500 }}>{a.text}</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }}>{a.time}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* The SYSTEM ALERTS card was removed, not rebuilt. All four
+                  entries were hardcoded prose — a stale supplier feed, a count
+                  of regulatory changes awaiting review, "892 active
+                  subscriptions matched" — and nothing in the platform raises,
+                  stores or clears an alert. A monitoring panel that cannot go
+                  red is worse than none: it reads as an all-clear. */}
             </div>
           )}
 

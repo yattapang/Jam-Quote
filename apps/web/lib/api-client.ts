@@ -1186,6 +1186,11 @@ export interface AdminData {
   /** The effective jurisdiction rule-pack (baseline + override); null if the
    * API was unreachable. */
   rulepack: EffectiveRulePack | null;
+  /** Admin paths whose fetch failed. Empty means every section loaded, so an
+   * empty list genuinely means empty — without this the console cannot tell
+   * "no tenants" from "could not reach the API", and it used to resolve that
+   * ambiguity by showing invented rows. */
+  failed: string[];
 }
 
 // --- Admin management writes (MANAGE_ADMINS) ---------------------------------
