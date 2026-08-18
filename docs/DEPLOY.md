@@ -12,14 +12,66 @@ enter secrets). Everything below is exact.
 
 ---
 
-## 1. Database — Neon
+## 1. Database — Neon, provisioned THROUGH VERCEL
 
-1. Create a Neon account → **New Project** (name it `jamquote`, region near JM
-   e.g. US East).
-2. Copy the **pooled** connection string (Dashboard → Connection Details →
-   "Pooled connection"). It looks like
-   `postgresql://USER:PASSWORD@ep-xxx-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require`.
-   Keep it — this is `DATABASE_URL`.
+**This project's database was created via Vercel's Postgres integration, which
+is Neon underneath.** That matters for finding it: it lives in the Vercel
+account, NOT in a standalone Neon account. Signing in to neon.tech directly
+shows an empty project list, which looks exactly like the database having
+vanished. It has not.
+
+To reach it: **Vercel → your project → Storage → the Postgres store.** From
+there, "Open in Neon" reaches the Neon console (SQL editor, monitoring) when
+you need it.
+
+The store's settings expose both connection strings, and the distinction is
+load-bearing:
+
+| Variable | Host | Use |
+|---|---|---|
+| pooled (`POSTGRES_URL` / `DATABASE_URL`) | `ep-xxx-pooler...` | The app. Set as `DATABASE_URL` on Render. |
+| unpooled (`POSTGRES_URL_NON_POOLING` / `DATABASE_URL_UNPOOLED`) | `ep-xxx...` (no `-pooler`) | **Migrations.** See below. |
+
+### Migrations must not run through the pooler
+
+`prisma migrate deploy` takes a SESSION-level advisory lock. Through pgbouncer
+the connection is returned to the pool and reused for ordinary queries, so the
+lock is never released — a new stranded lock on every boot, each one blocking
+the next migration with `P1002: Timed out trying to acquire a postgres advisory
+lock`.
+
+That is an outage, not a slow deploy: `startCommand` is
+`migrate deploy && node main.js`, so a timed-out migration means the API never
+starts. On Render's free tier the service spins down and re-runs that command
+on every cold start, so it does not take a deploy to trigger.
+
+Two fixes, in order of preference:
+
+1. **Give migrations a direct connection.** Set `DIRECT_URL` on Render to the
+   UNPOOLED string, then add to `apps/api/prisma/schema.prisma`:
+
+   ```prisma
+   datasource db {
+     provider  = "postgresql"
+     url       = env("DATABASE_URL")
+     directUrl = env("DIRECT_URL")
+   }
+   ```
+
+   Set the env var FIRST: an unset `DIRECT_URL` fails Prisma schema validation
+   and breaks the deploy outright.
+
+2. **Disable the lock** (currently in effect, see `render.yaml`):
+   `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1`. Safe only because this service runs
+   a single instance, so there is no concurrent migration for the lock to
+   guard. Drop it once option 1 is in place.
+
+To clear a lock that is already stranded, either restart the compute endpoint
+from the Neon console, or run there:
+
+    SELECT pg_terminate_backend(l.pid)
+    FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+    WHERE l.locktype = 'advisory' AND a.state = 'idle';
 
 ## 2. API — Render (from the blueprint)
 
