@@ -596,13 +596,80 @@ same time — it counts a state nothing sets.
 | Partial payments | Not allowed — whole terms only. |
 | Trial | None. Free tier is 3 quotes/month. |
 
-### Still open
+### Notification schedule — SETTLED (owner, 2026-08-18)
 
-- Reminder timing: 14 / 3 / 0 days before cutoff, plus one after reverting?
-- Does reverting to free need its own email ("your account is now on Free"),
-  separate from the pre-cutoff reminders? Assumed yes.
-- Annual renewals: same reminder cadence, or earlier (30 days) given the size
-  of the payment?
+| Kind | When | Sent to |
+|---|---|---|
+| `RENEWAL_30` | 30 days before cutoff — **annual terms only** | billing contact |
+| `RENEWAL_14` | 14 days before cutoff | billing contact |
+| `RENEWAL_3` | 3 days before cutoff | billing contact |
+| `RENEWAL_0` | on the cutoff date | billing contact |
+| `REVERTED` | when the term ends unpaid and the plan drops | billing contact |
+| `RECEIPT` | on every recorded payment | billing contact |
+
+The 30-day notice is annual-only: a year's fee is a budgeting decision, and a
+fortnight is not enough warning for it. Monthly terms start at 14 days, where a
+30-day notice would arrive before the previous term had even been paid for.
+
+`REVERTED` is deliberately its own message rather than a fifth reminder. The
+reminders ask for something; this one reports a change that has already
+happened, and the two must not read alike.
+
+Each row is one `SubscriptionNotice` keyed `(businessId, kind, periodEnd)` with
+a UNIQUE constraint. That is what makes the sweep safe to run repeatedly —
+which it must be, because a cron on a service that sleeps cannot be trusted to
+fire exactly once (see 4).
+
+---
+
+## 4f. Phase A — the build order, ready to start
+
+Everything here is decided; no further input needed. Written as a checklist so
+a fresh session can pick it up without re-deriving anything.
+
+**1. Schema + migration**
+- `SubscriptionPayment`: `id, businessId, amountCents, currency, method,
+  reference?, paidAt, coversFrom, coversUntil, recordedByUserId, note?,
+  voidedAt?, createdAt`. Index `(businessId, paidAt)`.
+- `SubscriptionNotice`: `id, businessId, kind, periodEnd, sentAt`.
+  `@@unique([businessId, kind, periodEnd])`.
+- `Business`: `billingContactName?`, `billingContactEmail?`.
+- Both new tables need `onDelete: Cascade` on `businessId` — the #19 failure
+  mode, and a tenant hard-delete must not strand billing rows.
+
+**2. Core (`packages/core`), pure + unit-tested**
+- `subscriptionStanding(renewsAt, plan, now) -> CURRENT | DUE_SOON | PAST_DUE`
+  (`DUE_SOON` inside 14 days). Mirrors `rulePackVerification` in shape.
+- `nextTermEnd(from, interval)` — advance one term from the LATER of today and
+  the current `renewsAt`, so paying early never costs days.
+- `dueNotices(sub, now, alreadySent) -> NoticeKind[]` — the whole schedule as
+  one pure function, so the cadence is testable without a clock or a mailbox.
+
+**3. API**
+- `POST /admin/tenants/:id/subscription-payments` — record. Advances
+  `renewsAt`, sets `plan = "pro"`, writes the ledger row, audits, queues
+  `RECEIPT`. Amount defaults to the term price; whole terms only.
+- `POST /admin/subscription-payments/:id/void` — void, never delete.
+- `GET /admin/tenants/:id/subscription-payments` — history for the drawer.
+- All gated on `MANAGE_TENANTS`.
+
+**4. Free tier to 3**
+- `pricing.service.ts` default 5 -> 3, AND update the live `PricingConfig` row
+  (the default only applies when no row exists).
+
+**5. Tenant-facing**
+- Billing contact fields in the tenant's own Settings, beside the business
+  details. Falls back to the owner's email while unset, so a reminder is never
+  silently undeliverable.
+
+**Explicitly NOT in Phase A:** the sweep, the emails, and the revert
+transition. Those are Phase C and depend on `dueNotices` existing first. Phase
+A ends with a working money loop that staff drive by hand.
+
+**Invariant to carry into Phase C:** the revert path sets `plan = "free"` and
+NOTHING else. It must not touch `Business.deletedAt`. Suspension and deletion
+are conduct sanctions, never billing ones.
+
 
 ---
 
