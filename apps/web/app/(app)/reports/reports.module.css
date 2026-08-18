@@ -173,3 +173,67 @@
     min-width: 480px;
   }
 }
+
+/* Custom date window, inline with the preset chips. */
+.customRange {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rangeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted, #666);
+}
+
+.rangeLabel input {
+  font: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--border, #d8d8d8);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: inherit;
+}
+
+/* The range the figures cover, stated in words. On screen it is useful; on
+   paper it is essential — a printed sheet of numbers with no period on it
+   cannot be filed or checked against anything later. */
+.rangeCaption {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted, #666);
+}
+
+/*
+ * Printing.
+ *
+ * The page prints itself rather than rendering a separate print-only view, so
+ * there is no second copy of the figures that could disagree with the screen.
+ * Everything that is chrome rather than content is dropped: the app shell's
+ * nav, and the controls that only do something when clicked.
+ */
+@media print {
+  /* Controls are interactive; on paper they are just ink. */
+  [data-print-hide],
+  .customRange {
+    display: none !important;
+  }
+
+  /* Bars are drawn with backgrounds — without this most browsers strip them
+     and the chart prints as a row of empty outlines. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Keep a card and its heading together rather than splitting one across a
+     page break mid-figure. */
+  section,
+  table {
+    break-inside: avoid;
+  }
+}

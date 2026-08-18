@@ -41,7 +41,10 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
   return (
     <>
       {/* Mobile top bar — hidden on desktop via CSS. */}
-      <header className={styles.topbar}>
+      {/* data-print-hide: navigation is chrome, not content — see the print
+          rules in globals.css. Marked here rather than wrapping the shell so
+          the layout grid keeps exactly the children it expects. */}
+      <header className={styles.topbar} data-print-hide>
         <button
           type="button"
           className={styles.hamburger}
@@ -62,7 +65,7 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
       {/* Backdrop behind the open drawer (mobile only). */}
       {open && <div className={styles.backdrop} onClick={close} aria-hidden="true" />}
 
-      <nav className={`${styles.sidebar} ${open ? styles.sidebarOpen : ""}`}>
+      <nav className={`${styles.sidebar} ${open ? styles.sidebarOpen : ""}`} data-print-hide>
         <div className={styles.brand}>
           <BrandMark />
           <div className={styles.brandName}>JamQuote</div>

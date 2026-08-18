@@ -68,3 +68,21 @@ textarea {
   background: var(--jq-border);
   border-radius: 8px;
 }
+
+/*
+ * Printing, app-wide.
+ *
+ * Anything marked data-print-hide is chrome: navigation, and controls that
+ * only do something when clicked. Pages print their own content as it appears
+ * on screen — there is no separate print view anywhere, so a printed figure
+ * cannot disagree with the one the contractor was looking at.
+ */
+@media print {
+  [data-print-hide] {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+}

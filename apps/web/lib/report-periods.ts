@@ -23,6 +23,7 @@ function jamaicaYearMonth(now: Date): { year: number; month: number } {
 }
 
 export const REPORT_PERIODS = [
+  { value: "week", label: "This week" },
   { value: "month", label: "This month" },
   { value: "quarter", label: "Last 3 months" },
   { value: "year", label: "This year" },
@@ -48,6 +49,22 @@ export function periodRange(period: ReportPeriod, now: Date = new Date()): { fro
   if (period === "month") return {};
 
   const { year, month } = jamaicaYearMonth(now);
+
+  if (period === "week") {
+    // Monday-start: a contractor's week runs Mon-Sun, and a Sunday-start week
+    // would split a normal working week across two reports.
+    const shifted = new Date(now.getTime() + JAMAICA_UTC_OFFSET_MS);
+    const dayOfWeek = shifted.getUTCDay(); // 0 = Sunday
+    const daysSinceMonday = (dayOfWeek + 6) % 7;
+    const startOfWeek = jamaicaLocalMidnightUtc(
+      shifted.getUTCFullYear(),
+      shifted.getUTCMonth(),
+      shifted.getUTCDate() - daysSinceMonday,
+    );
+    // Exclusive end: next Monday, so today is always inside the window.
+    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return { from: startOfWeek.toISOString(), to: endOfWeek.toISOString() };
+  }
   // Exclusive end: start of the month AFTER the current one, Jamaica-local.
   const endYear = month === 11 ? year + 1 : year;
   const endMonth = month === 11 ? 0 : month + 1;
@@ -71,4 +88,32 @@ export function periodRange(period: ReportPeriod, now: Date = new Date()): { fro
   // separate unbounded code path through computeReportsSummary (which always
   // expects a concrete range).
   return { from: "2000-01-01T00:00:00.000Z", to };
+}
+
+/**
+ * A contractor-chosen window from two `yyyy-mm-dd` values, as the date inputs
+ * on the Reports page produce them.
+ *
+ * Both edges are read as Jamaica-local midnight and `to` is pushed to the END
+ * of the chosen day, because a person picking "1 Jul to 31 Jul" means July
+ * inclusive. Taking `to` literally would make the range half-open at midnight
+ * on the 31st and silently drop that whole day's invoices — the kind of
+ * off-by-one that shows up as money missing from a report.
+ *
+ * Returns null when either side is absent or unparseable, or when the range is
+ * backwards, so the caller can fall back to a preset rather than render a
+ * window that means nothing.
+ */
+export function customRange(from?: string, to?: string): { from: string; to: string } | null {
+  if (!from || !to) return null;
+  const f = /^(\d{4})-(\d{2})-(\d{2})$/.exec(from);
+  const t = /^(\d{4})-(\d{2})-(\d{2})$/.exec(to);
+  if (!f || !t) return null;
+
+  const start = jamaicaLocalMidnightUtc(Number(f[1]), Number(f[2]) - 1, Number(f[3]));
+  // Midnight on the day AFTER `to` — the range is [start, end).
+  const end = jamaicaLocalMidnightUtc(Number(t[1]), Number(t[2]) - 1, Number(t[3]) + 1);
+  if (end.getTime() <= start.getTime()) return null;
+
+  return { from: start.toISOString(), to: end.toISOString() };
 }

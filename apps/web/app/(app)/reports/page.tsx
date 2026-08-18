@@ -3,9 +3,10 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import { getReports } from "@/lib/api-server";
-import { REPORT_PERIODS, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
+import { REPORT_PERIODS, customRange, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
+import PrintReportButton from "./PrintReportButton";
 import { projectStagePill } from "@/lib/status";
-import { PROJECT_STAGES } from "@jamquote/core";
+import { JAMAICA_UTC_OFFSET_MS, PROJECT_STAGES } from "@jamquote/core";
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
 
@@ -24,13 +25,36 @@ function formatMonthLabel(monthIso: string): string {
   return `${label} '${yearStr.slice(2)}`;
 }
 
+
+/**
+ * The window the figures cover, in words — "1 Jul 2026 to 31 Jul 2026".
+ *
+ * Reads the range's edges back in Jamaica time and steps the exclusive end
+ * back one day, so it names the last day actually included. Printing an
+ * exclusive end would tell the contractor the report covers a day it does not.
+ */
+function rangeCaption(fromIso: string, toIso: string): string {
+  const fmt = (d: Date) =>
+    new Date(d.getTime() + JAMAICA_UTC_OFFSET_MS).toLocaleDateString("en-JM", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  const lastDay = new Date(new Date(toIso).getTime() - 24 * 60 * 60 * 1000);
+  return `${fmt(new Date(fromIso))} to ${fmt(lastDay)}`;
+}
+
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams: { period?: string };
+  searchParams: { period?: string; from?: string; to?: string };
 }) {
+  // A valid custom window wins over any preset; an invalid one (backwards, or
+  // half-filled) falls back rather than rendering a window that means nothing.
+  const custom = customRange(searchParams.from, searchParams.to);
   const period: ReportPeriod = isReportPeriod(searchParams.period) ? searchParams.period : "month";
-  const { from, to } = periodRange(period);
+  const { from, to } = custom ?? periodRange(period);
   const reports = await getReports(from, to);
 
   // Scales both series against one shared maximum so invoiced/collected bars
@@ -49,6 +73,7 @@ export default async function ReportsPage({
           <span className={shared.eyebrow}>Insights</span>
           <h1 className={shared.title}>Reports</h1>
           <span className={shared.subtitle}>Pipeline, win rate &amp; revenue reporting</span>
+          <p className={styles.rangeCaption}>{rangeCaption(reports.range.fromIso, reports.range.toIso)}</p>
         </div>
       </header>
 
@@ -57,11 +82,28 @@ export default async function ReportsPage({
           <Link
             key={p.value}
             href={`/reports?period=${p.value}`}
-            className={p.value === period ? shared.chipActive : shared.chip}
+            className={!custom && p.value === period ? shared.chipActive : shared.chip}
           >
             {p.label}
           </Link>
         ))}
+        {/* A plain GET form: the range stays in the URL like the presets do, so
+            a chosen window survives a reload and can be bookmarked or shared —
+            and printing it gives the same page the contractor is looking at. */}
+        <form method="GET" action="/reports" className={styles.customRange}>
+          <label className={styles.rangeLabel}>
+            From
+            <input type="date" name="from" defaultValue={searchParams.from ?? ""} required />
+          </label>
+          <label className={styles.rangeLabel}>
+            To
+            <input type="date" name="to" defaultValue={searchParams.to ?? ""} required />
+          </label>
+          <button type="submit" className={shared.chip}>
+            Apply
+          </button>
+        </form>
+        <PrintReportButton className={shared.chip} />
       </div>
 
       <section className={shared.statGrid}>
