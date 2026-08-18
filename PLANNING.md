@@ -358,12 +358,23 @@ has met a real user. The audit found eleven substantive issues in a single
 pass, and the great majority were invisible to the test suite. More code is not
 what reduces that number.
 
-**1. Verify the build somewhere with clean egress.**
-`npm run build` has never succeeded on the dev machine — `next/font` cannot
-reach fonts.googleapis.com (TLS interception). Typecheck, lint and ~810 tests
-pass, but the production build is genuinely unverified. Vercel's build is the
-first real run; watch it. The print stylesheet and the admin console changes
-are also unverified in a browser for the same reason.
+**1. The production build RUNS here now (`c20c64a`).**
+The long-standing "next/font cannot reach fonts.googleapis.com" diagnosis was
+wrong — fonts fetch fine. The build was failing on a CSS Module violation in
+the print rules: a selector containing no local class ("Selector is not pure")
+is a hard error, and `:global()` in a comma list does not help because it makes
+the whole list impure. Element-level print rules now live in globals.css.
+
+**Run it before every deploy** — it catches a class of error that typecheck and
+tests do not:
+
+```
+npm run -w @jamquote/web build
+```
+
+Two harmless noises in the output: an `ENOWORKSPACES` npm warning and a
+`TypeError: ... reading 'os'` from Next's lockfile patcher. Neither fails the
+build; look for `✓ Compiled successfully` and `✓ Generating static pages`.
 
 **2. Migrations: nothing to remember.**
 Render runs `prisma migrate deploy` on boot, so a pushed migration applies
@@ -372,9 +383,11 @@ been removed. `invoice_issue_date` was applied and verified against live —
 every existing invoice backfilled to the date reports already used, so no
 figure moved.
 
-**Still true:** whatever runs migrations must use a DIRECT, non-pooled Neon
-endpoint. Through the pooler a failed migration strands a session-level
-advisory lock and every retry then times out (hit once as P1002).
+**Advisory-lock timeouts are usually just contention.** P1002 on
+`pg_advisory_lock(72707369)` hit again while applying the regulatory migration,
+on a DIRECT endpoint — the holder was Render running its own boot-time
+`migrate deploy` after a push moments earlier. Retrying a minute later worked.
+So: if you have just pushed, wait and retry before assuming the pooler.
 
 **3. Deploy API and web TOGETHER.**
 Non-negotiable. 0c/0d renamed JSON fields, Phase 1 moved routes, and
@@ -412,18 +425,11 @@ not signposted as its own route.
 
 Then, in order:
 
-1. **Regulatory updates: admin CRUD.** Reported as "static" and it is — the
-   feed is real but read-only, with no way to add, edit or mark reviewed. Small,
-   self-contained, and it closes an audit finding properly rather than leaving
-   a screen that looks broken.
-2. **Rule-pack verify / check-for-updates.** The larger of the two open admin
-   items. "Automated search" needs a source of truth to check against, which
-   does not exist yet — so scope this deliberately: probably a manual
-   "reviewed on <date> by <admin>" stamp first, and automation only if a
-   machine-readable source turns up.
+1. ~~Regulatory admin CRUD~~ — **done** (`847c9dc`).
+2. ~~Rule-pack verify~~ — **done** (`4f52af7`), manual by design.
 3. **The small open audit items** — a coverage hint on the quote line, the job
    custom unit defaulting to "day", and weekly bars on the sales chart when the
-   range is short.
+   range is short. These are the last open findings; none blocks a contractor.
 
 **Explicitly not next:** Phase 4 (Job Library depth) and Phase 5 (mobile).
 Neither is blocking a contractor from quoting, and mobile is a rebuild that
@@ -450,6 +456,7 @@ should not start until the web app has survived real use.
 | Regulatory updates: admin CRUD | Feed is real and read-only. No create/edit/mark-reviewed. **Recommended next** (§4c). |
 | Rule-pack verify / check-for-updates | `PATCH /admin/rulepack` publishes an override, but nothing verifies or checks for updates. Needs a source of truth before "automated" means anything. |
 | Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table; nothing records one. |
+| Automated rule-pack update check | **Deliberately not built.** Needs a machine-readable feed of Jamaican tax/statutory rates; none exists (TAJ publishes prose). A scraper over a page that can be reworded would give confident wrong answers about tax rates — worse than an honest "last checked 14 months ago". Revisit only if a real feed appears. |
 | Coverage hint on the quote line | Coverage only calculates when the material has it configured, and that is discoverable only from the material. Reported as "didn't calculate". |
 | Job custom unit shows "day" | Reported in audit part 2, not yet reproduced. Rate was correct; only the unit fell back. |
 | Weekly bars on the sales chart | The chart buckets by month, so a weekly range renders one bar. |
