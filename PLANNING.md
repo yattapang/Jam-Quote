@@ -660,14 +660,19 @@ persist whatever it returns.
 - `pricing.service.ts` default 5 -> 3, AND update the live `PricingConfig` row
   (the default only applies when no row exists).
 
-**5. Tenant-facing — REMAINING**
+**5. Tenant-facing — DONE (`ce8e3f4`)**
 - Billing contact fields in the tenant's own Settings, beside the business
   details. Falls back to the owner's email while unset, so a reminder is never
   silently undeliverable.
 
-**Remaining in Phase A:** the billing-contact fields in tenant Settings (5),
-and a "Record payment" form + payment history in the admin tenant drawer. The
-API for both is done and verified; what is left is UI.
+**PHASE A COMPLETE** (`4be35c7` backend, `ce8e3f4` UI). Staff can record a
+payment and the account state follows: term extended, plan set, ledger written,
+audited. Void retracts the term only when nothing has happened since.
+
+**Phase B next** (visibility): Financials gains *collected* from the ledger
+beside *MRR* (contracted), and the tenants table's status pill switches to the
+DERIVED standing from `subscriptionStanding` — which also finally kills the
+Trial/Past due/Churned filters that count states nothing sets.
 
 **Explicitly NOT in Phase A:** the sweep, the emails, and the revert
 transition. Those are Phase C and depend on `dueNotices` existing first. Phase
