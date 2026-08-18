@@ -716,9 +716,36 @@ capturing purchases at all.** Options, in increasing order of commitment:
    answer "did this job make money?" — the question contractors actually ask.
    The largest, and the most valuable to the user rather than their accountant.
 
-Recommend starting at 1, because it ships value without committing to a
-bookkeeping product, and 2 can follow without rework if expenses are modelled
-as their own ledger rather than bolted onto materials.
+**DECIDED (owner, 2026-08-18): option 3 — purchases attach to a Project.**
+
+I recommended 1 and was talked out of it, correctly. Option 3 is barely more
+work than 2 *provided it is done now*: a nullable `projectId` on the purchase
+ledger. Building 2 first and adding job attribution later means migrating rows
+and reworking every report that reads them. And 3 answers the question the
+contractor actually has — an accountant's file is a by-product of job costing,
+not the other way round.
+
+Three constraints it depends on:
+
+**a. `Purchase.projectId` must be NULLABLE.** Fuel, phone, insurance and tools
+are business costs with no job behind them. A required project would force
+contractors to invent a fake one, which poisons every job-profit figure
+afterwards. Unattached purchases still count towards input tax and overheads;
+they just do not land on a job.
+
+**b. `Invoice` needs its own `projectId` — it does NOT have one today.** Only
+`Quote` carries it. So project REVENUE is currently reachable only via
+invoice -> quote -> project, and an invoice raised from scratch (the #27
+from-nothing path) has no route to a project at all. Costs would be
+attributable and revenue would not, which makes "did this job make money?"
+unanswerable for exactly the invoices most likely to be ad-hoc extras. Add a
+nullable `Invoice.projectId`, backfilled from `quote.projectId` where a source
+quote exists, and defaulted from the quote at convert time.
+
+**c. Purchases are their own ledger, never a field on MaterialFavourite.** A
+material is a price list entry; a purchase is an event with a date, a supplier,
+an amount and a tax treatment. Conflating them is how a price list starts
+lying about history.
 
 ### Design rules for the exports themselves
 
