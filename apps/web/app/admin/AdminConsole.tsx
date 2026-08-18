@@ -30,6 +30,7 @@ import {
   type RegulatoryInput,
   type AdminUser,
   type PricingConfig,
+  type UpdateRulePackInput,
   type EffectiveRulePack,
 } from "@/lib/api-client";
 import { logout } from "@/lib/auth-actions";
@@ -211,6 +212,19 @@ export default function AdminConsole({
   // in via server props (data.rulepack); edits PATCH the override and swap the
   // returned effective pack into local state so the screen re-renders. ---
   const [rulepack, setRulepack] = useState<EffectiveRulePack | null>(data.rulepack);
+
+  // --- Rule-pack maintenance: contributions and sources ---
+  // Lists the admin edits as a whole and submits with the rest of the pack, so
+  // a new levy, a withdrawn one, or a changed set of pages to check needs no
+  // release. Declared here — above the save handler that closes over them.
+  const [rpCustom, setRpCustom] = useState<NonNullable<UpdateRulePackInput["statutoryCustom"]>>([]);
+  const [rpRetired, setRpRetired] = useState<string[]>([]);
+  const [rpSourcesDraft, setRpSourcesDraft] = useState(
+    () => (data.rulepack?.sources ?? []).join("\n"),
+  );
+  // Only send `sources` when it has actually been edited, so an ordinary rate
+  // save does not rewrite the pack's source list as a side effect.
+  const [rpSourcesTouched, setRpSourcesTouched] = useState(false);
   const rpToForm = (rp: EffectiveRulePack) => ({
     taxLabel: rp.taxLabel,
     defaultTaxRatePct: String(rp.defaultTaxRatePct),
@@ -252,6 +266,19 @@ export default function AdminConsole({
         verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
         sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
         statutoryRates,
+        // Complete lists, not patches — see UpdateRulePackInput. Sent only
+        // when the admin has actually touched them, so an ordinary rate edit
+        // does not rewrite the pack's structure as a side effect.
+        ...(rpCustom.length > 0 ? { statutoryCustom: rpCustom } : {}),
+        ...(rpRetired.length > 0 ? { statutoryRetired: rpRetired } : {}),
+        ...(rpSourcesTouched
+          ? {
+              sources: rpSourcesDraft
+                .split("\n")
+                .map((u) => u.trim())
+                .filter(Boolean),
+            }
+          : {}),
       });
       setRulepack(updated);
       setRpForm(rpToForm(updated));
@@ -1141,6 +1168,97 @@ export default function AdminConsole({
                         </div>
                       ))}
                     </div>
+                    {/* --- Maintenance, no release required ---
+                        Rates for the contributions the CODE knows about were
+                        always editable. The SET of contributions was not: a new
+                        levy, a withdrawal, or a rename meant a deploy. A tax
+                        authority introducing a charge should not be blocked on
+                        one, so the set and the check-sources are editable here.
+
+                        Retiring hides a baseline entry rather than deleting it,
+                        so the code stays documented and the decision reverses. */}
+                    {canManageRulepack && (
+                      <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 4 }}>
+                          MAINTAIN CONTRIBUTIONS
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 11 }}>
+                          Add a levy this jurisdiction has introduced, or retire one that has been withdrawn. No release needed.
+                        </div>
+
+                        {(rp?.statutory ?? []).length > 0 && (
+                          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 12 }}>
+                            {(rp?.statutory ?? []).map((st) => {
+                              const isRetired = rpRetired.includes(st.code);
+                              return (
+                                <button
+                                  key={st.code}
+                                  type="button"
+                                  onClick={() =>
+                                    setRpRetired((r) =>
+                                      isRetired ? r.filter((c) => c !== st.code) : [...r, st.code],
+                                    )
+                                  }
+                                  title={isRetired ? "Bring this contribution back" : "Retire this contribution"}
+                                  style={{ height: 29, padding: "0 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: isRetired ? "color-mix(in srgb, var(--critical) 12%, var(--surface))" : "var(--surface)", color: isRetired ? "var(--critical)" : "var(--text)", textDecoration: isRetired ? "line-through" : "none" }}
+                                >
+                                  {st.code} {isRetired ? "· retired" : "×"}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {rpCustom.map((c, i) => (
+                          <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <input placeholder="CODE" value={c.code}
+                              onChange={(e) => setRpCustom((list) => list.map((x, j) => (j === i ? { ...x, code: e.target.value } : x)))}
+                              style={{ width: 120, height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }} />
+                            <input placeholder="Label shown to staff" value={c.label}
+                              onChange={(e) => setRpCustom((list) => list.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
+                              style={{ flex: 1, minWidth: 160, height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }} />
+                            <select value={c.appliesTo}
+                              onChange={(e) => setRpCustom((list) => list.map((x, j) => (j === i ? { ...x, appliesTo: e.target.value as typeof x.appliesTo } : x)))}
+                              style={{ height: 32, padding: "0 8px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }}>
+                              <option value="EMPLOYEE">Employee</option>
+                              <option value="EMPLOYER">Employer</option>
+                              <option value="BOTH">Both</option>
+                              <option value="SELF_EMPLOYED">Self-employed</option>
+                            </select>
+                            <input type="number" min={0} max={100} step="0.01" placeholder="Employee %" value={c.employeePct ?? ""}
+                              onChange={(e) => setRpCustom((list) => list.map((x, j) => (j === i ? { ...x, employeePct: e.target.value === "" ? null : Number(e.target.value) } : x)))}
+                              style={{ width: 96, height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                            <input type="number" min={0} max={100} step="0.01" placeholder="Employer %" value={c.employerPct ?? ""}
+                              onChange={(e) => setRpCustom((list) => list.map((x, j) => (j === i ? { ...x, employerPct: e.target.value === "" ? null : Number(e.target.value) } : x)))}
+                              style={{ width: 96, height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
+                            <button type="button" onClick={() => setRpCustom((list) => list.filter((_, j) => j !== i))}
+                              aria-label="Remove this contribution"
+                              style={{ height: 32, padding: "0 10px", borderRadius: 7, border: "1px solid var(--critical)", background: "var(--surface)", color: "var(--critical)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+
+                        <button type="button"
+                          onClick={() => setRpCustom((list) => [...list, { code: "", label: "", appliesTo: "BOTH", employeePct: null, employerPct: null }])}
+                          style={{ height: 31, padding: "0 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+                          + Add a contribution
+                        </button>
+
+                        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", margin: "16px 0 4px" }}>
+                          SOURCES TO CHECK
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+                          One URL per line. These are the links offered on the verification card above.
+                        </div>
+                        <textarea
+                          value={rpSourcesDraft}
+                          onChange={(e) => { setRpSourcesDraft(e.target.value); setRpSourcesTouched(true); }}
+                          style={{ width: "100%", minHeight: 72, resize: "vertical", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }}
+                        />
+                      </div>
+                    )}
+
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <button onClick={saveRulepack} disabled={rpSaving || !canManageRulepack}
                         title={canManageRulepack ? undefined : "You don't have the Manage rule-packs capability"}

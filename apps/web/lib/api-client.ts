@@ -1263,6 +1263,21 @@ export interface UpdateRulePackInput {
   verifiedAsOf?: string | null;
   sourceUrl?: string | null;
   statutoryRates?: Record<string, { employeePct?: number | null; employerPct?: number | null }>;
+  /** Contributions the in-code baseline does not know about — this is what
+   * makes the pack maintainable without a release. Sent as the complete list;
+   * it replaces rather than merges, or removing one would be impossible. */
+  statutoryCustom?: {
+    code: string;
+    label: string;
+    appliesTo: "EMPLOYEE" | "EMPLOYER" | "BOTH" | "SELF_EMPLOYED";
+    employeePct?: number | null;
+    employerPct?: number | null;
+    note?: string;
+  }[];
+  /** Baseline codes to stop showing. Complete list, same reason. */
+  statutoryRetired?: string[];
+  /** Pages to check when verifying. Complete list, same reason. */
+  sources?: string[];
 }
 
 /** PATCH /admin/rulepack — edit the jurisdiction pack's editable slice. */

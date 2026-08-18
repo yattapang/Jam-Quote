@@ -1008,6 +1008,15 @@ model RulePackConfig {
   verifiedAsOf      DateTime? // date the pack was last human-verified
   sourceUrl         String? // primary provenance link
   statutoryRates    Json? // { [code]: { employeePct: number|null, employerPct: number|null } }
+  /// Contributions the in-code baseline does not know about, so a new levy can
+  /// be recorded without a release. A custom entry whose code matches a
+  /// baseline one replaces it in place (a rename, not a duplicate).
+  statutoryCustom   Json? // StatutoryContributionDef[]
+  /// Baseline codes to stop showing. A withdrawal is a retirement rather than
+  /// an edit to the baseline, so the code stays documented and it is reversible.
+  statutoryRetired  String[] @default([])
+  /// Pages to check when verifying the pack. sourceUrl above stays the primary.
+  sources           String[] @default([])
   updatedByUserId   String?
   updatedAt         DateTime  @updatedAt
 }

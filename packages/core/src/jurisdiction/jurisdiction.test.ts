@@ -110,3 +110,87 @@ describe("supportedJurisdictions / jurisdictionCurrency", () => {
     expect(jurisdictionCurrency("JM").code).toBe("JMD");
   });
 });
+
+describe("applyRulePackOverride — maintaining the pack without a release", () => {
+  /**
+   * The set of statutory contributions used to be code-owned: an admin could
+   * edit rates for the four known codes, but a new levy could not be recorded
+   * without a deploy. A tax authority introducing a charge should not be
+   * blocked on a release.
+   */
+  const base = getJurisdiction("JM");
+
+  it("adds a contribution the baseline has never heard of", () => {
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [
+        {
+          code: "NEW_LEVY",
+          label: "New Infrastructure Levy",
+          appliesTo: "EMPLOYER",
+          employeePct: null,
+          employerPct: 1.5,
+        },
+      ],
+      verifiedAsOf: "2026-08-18",
+    });
+    const added = merged.statutory.find((s) => s.code === "NEW_LEVY");
+    expect(added?.employerPct).toBe(1.5);
+    // Entered by an admin against a source, so it counts as verified and
+    // carries the pack's verification date rather than a baseline one it was
+    // never part of.
+    expect(added?.verified).toBe(true);
+    expect(added?.asOf).toBe("2026-08-18");
+  });
+
+  it("keeps every baseline contribution alongside a new one", () => {
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [
+        { code: "X", label: "X", appliesTo: "BOTH" },
+      ],
+    });
+    expect(merged.statutory.length).toBe(base.statutory.length + 1);
+  });
+
+  it("replaces a baseline entry in place when the code matches, rather than duplicating", () => {
+    const first = base.statutory[0]!;
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [{ ...first, label: "Renamed contribution" }],
+    });
+    const matching = merged.statutory.filter((s) => s.code === first.code);
+    expect(matching).toHaveLength(1);
+    expect(matching[0]?.label).toBe("Renamed contribution");
+    // Position is preserved — a rename should not reorder the table.
+    expect(merged.statutory[0]?.code).toBe(first.code);
+  });
+
+  it("retires a withdrawn contribution without deleting it from the baseline", () => {
+    const victim = base.statutory[0]!.code;
+    const merged = applyRulePackOverride(base, { statutoryRetired: [victim] });
+    expect(merged.statutory.some((s) => s.code === victim)).toBe(false);
+    // Reversible: the baseline still knows about it.
+    expect(base.statutory.some((s) => s.code === victim)).toBe(true);
+  });
+
+  it("retiring wins over a rate edit for the same code", () => {
+    const victim = base.statutory[0]!.code;
+    const merged = applyRulePackOverride(base, {
+      statutoryRetired: [victim],
+      statutoryRates: { [victim]: { employeePct: 5 } },
+    });
+    expect(merged.statutory.some((s) => s.code === victim)).toBe(false);
+  });
+
+  it("replaces the sources list, so the URLs to check are maintainable", () => {
+    const merged = applyRulePackOverride(base, {
+      sources: ["https://example.gov.jm/rates", "https://example.gov.jm/gazette"],
+    });
+    expect(merged.sources).toEqual([
+      "https://example.gov.jm/rates",
+      "https://example.gov.jm/gazette",
+    ]);
+  });
+
+  it("leaves the baseline untouched when nothing is overridden", () => {
+    expect(applyRulePackOverride(base, {}).statutory).toEqual(base.statutory);
+  });
+});

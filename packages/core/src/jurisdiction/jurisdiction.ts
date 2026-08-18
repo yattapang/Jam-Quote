@@ -175,6 +175,21 @@ export interface StatutoryRateOverride {
 /** The editable slice of a rule-pack. Any omitted field falls back to the
  * static baseline; the shape is deliberately a strict subset of what a full
  * versioned engine would own. */
+/**
+ * What an admin actually types when adding a contribution. Deliberately NOT
+ * StatutoryContributionDef: `verified`, `asOf`, `ratePct` and `source` are
+ * provenance the merge derives, not fields to fill in — asking for them would
+ * invite an entry that claims to be verified because someone ticked a box.
+ */
+export interface StatutoryContributionInput {
+  code: string;
+  label: string;
+  appliesTo: StatutoryContributionDef["appliesTo"];
+  employeePct?: number | null;
+  employerPct?: number | null;
+  note?: string;
+}
+
 export interface RulePackOverride {
   taxLabel?: string;
   defaultTaxRatePct?: number;
@@ -183,6 +198,24 @@ export interface RulePackOverride {
   sources?: string[];
   /** Keyed by statutory code (NIS / NHT / EDUCATION_TAX / HEART). */
   statutoryRates?: Record<string, StatutoryRateOverride>;
+  /**
+   * Contributions the baseline does not know about, added by an admin.
+   *
+   * Without this the SET of statutory items was code-owned: rates for the four
+   * known codes could be edited, but a new levy could not be recorded without
+   * a release. A tax authority introducing a charge should not be blocked on a
+   * deploy — that is precisely the maintenance the console exists to do.
+   *
+   * A custom entry whose code matches a baseline one REPLACES it, so a
+   * renamed contribution is a rename rather than a duplicate row.
+   */
+  statutoryCustom?: StatutoryContributionInput[];
+  /**
+   * Baseline codes to stop showing — a contribution that has been withdrawn.
+   * Removal is expressed as a retirement rather than by deleting from the
+   * baseline, so the code stays documented and the decision is reversible.
+   */
+  statutoryRetired?: string[];
   rulePackVersion?: string;
 }
 
@@ -194,6 +227,8 @@ export const EDITABLE_RULEPACK_FIELDS = [
   "verifiedAsOf",
   "sources",
   "statutoryRates",
+  "statutoryCustom",
+  "statutoryRetired",
   "rulePackVersion",
 ] as const;
 
@@ -216,7 +251,33 @@ export function applyRulePackOverride(
       override.verifiedAsOf !== undefined ? override.verifiedAsOf : base.verifiedAsOf,
     sources: override.sources ?? base.sources,
     rulePackVersion: override.rulePackVersion ?? base.rulePackVersion,
-    statutory: base.statutory.map((s) => {
+    statutory: mergeStatutory(base, override),
+  };
+}
+
+/**
+ * Baseline contributions (minus any retired, with admin rates applied), then
+ * the admin's own additions.
+ *
+ * A custom entry sharing a baseline code replaces it in place rather than
+ * appending, so renaming a contribution does not produce two rows claiming the
+ * same levy.
+ */
+function mergeStatutory(
+  base: JurisdictionProfile,
+  override: RulePackOverride,
+): StatutoryContributionDef[] {
+  const retired = new Set(override.statutoryRetired ?? []);
+  const custom = new Map((override.statutoryCustom ?? []).map((c) => [c.code, c]));
+
+  const fromBaseline = base.statutory
+    .filter((s) => !retired.has(s.code))
+    .map((s) => {
+      const replacement = custom.get(s.code);
+      if (replacement) {
+        custom.delete(s.code); // consumed in place, not appended below
+        return withAdminProvenance(replacement, override);
+      }
       const o = override.statutoryRates?.[s.code];
       if (!o) return s;
       const employeePct = o.employeePct ?? null;
@@ -231,7 +292,37 @@ export function applyRulePackOverride(
         verified: anySet ? true : s.verified,
         asOf: anySet ? (override.verifiedAsOf ?? s.asOf) : s.asOf,
       };
-    }),
+    });
+
+  // Whatever is left in `custom` is genuinely new to this jurisdiction.
+  return [...fromBaseline, ...[...custom.values()].map((c) => withAdminProvenance(c, override))];
+}
+
+/** An admin-entered contribution is vouched-for by the person who entered it,
+ * and carries the pack's verification date rather than a baseline one it was
+ * never part of. */
+function withAdminProvenance(
+  input: StatutoryContributionInput,
+  override: RulePackOverride,
+): StatutoryContributionDef {
+  const rate = override.statutoryRates?.[input.code];
+  const employeePct = rate?.employeePct ?? input.employeePct ?? null;
+  const employerPct = rate?.employerPct ?? input.employerPct ?? null;
+  return {
+    code: input.code,
+    label: input.label,
+    appliesTo: input.appliesTo,
+    // A single combined ratePct is a baseline concept; an admin-entered
+    // contribution is expressed as its employee/employer split.
+    ratePct: null,
+    employeePct,
+    employerPct,
+    // Vouched-for by whoever entered it, and dated by the pack's own
+    // verification rather than a baseline date it was never part of.
+    verified: employeePct !== null || employerPct !== null,
+    asOf: override.verifiedAsOf ?? null,
+    source: override.sources?.[0] ?? null,
+    ...(input.note !== undefined ? { note: input.note } : {}),
   };
 }
 

@@ -78,8 +78,28 @@ export class RulePackService {
       defaultTaxRatePct:
         row.defaultTaxRatePct !== null ? Number(row.defaultTaxRatePct) : undefined,
       verifiedAsOf: row.verifiedAsOf !== null ? toIsoDate(row.verifiedAsOf) : undefined,
-      sources: row.sourceUrl ? [row.sourceUrl] : undefined,
+      // The maintained list when there is one, otherwise the single primary
+      // link, otherwise nothing (and the baseline's list stands).
+      // `?? []` is not defensive padding for its own sake: a throw anywhere in
+      // this mapper is swallowed by resolveProfile's catch and silently serves
+      // the in-code baseline, so a row missing a column would drop every stored
+      // override without a visible error.
+      sources:
+        (row.sources ?? []).length > 0
+          ? row.sources
+          : row.sourceUrl
+            ? [row.sourceUrl]
+            : undefined,
       statutoryRates,
+      // Prisma types a Json column as JsonValue, which overlaps nothing, so
+      // the double cast is unavoidable. It asserts exactly what the DTO
+      // validated on the way in — the admin INPUT shape, not a full
+      // StatutoryContributionDef; the provenance fields are derived by the
+      // merge in core, never stored.
+      statutoryCustom:
+        (row.statutoryCustom as unknown as RulePackOverride["statutoryCustom"]) ?? undefined,
+      statutoryRetired:
+        (row.statutoryRetired ?? []).length > 0 ? row.statutoryRetired : undefined,
     };
   }
 
@@ -185,6 +205,16 @@ export class RulePackService {
       ...(patch.statutoryRates !== undefined
         ? { statutoryRates: mergedStatutory as Prisma.InputJsonValue }
         : {}),
+      // These three REPLACE rather than merge: each is a list the admin edits
+      // as a whole on screen, so a submitted list is the intended final state.
+      // Merging would make removing an entry impossible.
+      ...(patch.statutoryCustom !== undefined
+        ? { statutoryCustom: patch.statutoryCustom as unknown as Prisma.InputJsonValue }
+        : {}),
+      ...(patch.statutoryRetired !== undefined
+        ? { statutoryRetired: patch.statutoryRetired }
+        : {}),
+      ...(patch.sources !== undefined ? { sources: patch.sources } : {}),
       updatedByUserId: actorUserId,
     };
 
