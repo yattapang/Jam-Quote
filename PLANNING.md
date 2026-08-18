@@ -127,6 +127,21 @@ feature are the same thing to a contractor — but the fix is different.
 | Custom unit under Job came back as "day" | Open | Not yet reproduced. Rate was correct, only the unit fell back. |
 | Deposit/discount/GCT match panel vs PDF; reopen preserved every line; email + PDF good; status auto-SENT; accept offered | **Passed** | — |
 
+### Part 3 — Projects, invoices, clients
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| Quote screen shows "30 units" for a unit named M; the invoice screen shows "30 M" | **Real** | Not a data problem. `lineUnitLabel` was correct and well tested; the quote and invoice detail pages never called it, and the labour and equipment list pages each had their own copy of the cadence map. The invoice EDIT screen and both PDFs did use the helper — which is exactly why converting appeared to fix it. Fixed `437c235` |
+| Quote converted to invoice, all lines carried over, units correct on the invoice | **Passed** | — |
+| Quote generated and emailed with the logo | **Passed** | Note §5 still lists "quote email has no logo" — that row is now stale for the PDF; leave until confirmed which surface was meant |
+
+**Lesson worth keeping:** three of the audit's findings so far have been a
+correct, well-tested helper that some screen did not call. The type system
+cannot see a bypass — `RATE_UNIT_LABEL[x]` is a valid lookup on a valid map —
+and there are no DOM tests here. Where an invariant is "everyone must go
+through this one function", enforce it by scanning the source
+(`apps/web/lib/unit-label-usage.test.ts` is the pattern).
+
 ---
 
 ## 4. Phases
