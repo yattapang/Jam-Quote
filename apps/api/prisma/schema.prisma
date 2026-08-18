@@ -8,6 +8,20 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  /// Migrations ONLY, and they must not go through the pooler.
+  ///
+  /// `prisma migrate deploy` takes a SESSION-level advisory lock. Through
+  /// pgbouncer the connection is handed back to the pool and reused for
+  /// ordinary queries, so the lock is never released — a fresh stranded lock
+  /// on every boot, each blocking the next migration with P1002. That is an
+  /// outage rather than a slow deploy: the Render start command is
+  /// `migrate deploy && node main.js`, so a timed-out migration means the API
+  /// never starts, and on the free tier a cold start re-runs it.
+  ///
+  /// DIRECT_URL must point at the Neon host WITHOUT `-pooler`. It is required:
+  /// if it is unset, Prisma fails schema validation rather than silently
+  /// falling back to the pooled URL.
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------
