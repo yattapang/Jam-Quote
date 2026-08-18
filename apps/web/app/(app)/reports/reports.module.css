@@ -217,23 +217,11 @@
  * nav, and the controls that only do something when clicked.
  */
 @media print {
-  /* Controls are interactive; on paper they are just ink. */
-  [data-print-hide],
+  /* Only the LOCAL class belongs in a CSS Module. A selector with no local
+     class in it ("Selector is not pure") is a hard build error, and mixing a
+     :global() selector into a comma list makes the whole list impure — so the
+     element-level print rules live in globals.css instead. */
   .customRange {
     display: none !important;
-  }
-
-  /* Bars are drawn with backgrounds — without this most browsers strip them
-     and the chart prints as a row of empty outlines. */
-  * {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
-
-  /* Keep a card and its heading together rather than splitting one across a
-     page break mid-figure. */
-  section,
-  table {
-    break-inside: avoid;
   }
 }

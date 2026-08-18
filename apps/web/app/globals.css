@@ -85,4 +85,18 @@ textarea {
   body {
     background: #fff;
   }
+
+  /* Bars and pills are drawn with backgrounds — without this most browsers
+     strip them and a printed chart is a row of empty outlines. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Keep a card and its heading together rather than splitting one across a
+     page break mid-figure. */
+  section,
+  table {
+    break-inside: avoid;
+  }
 }
