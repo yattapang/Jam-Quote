@@ -824,6 +824,12 @@ model Invoice {
   depositCents  Int              @default(0)
   terms         String?
   dueDate       DateTime?
+  // The date the invoice bears — what the contractor is billing AS OF, and
+  // what every report buckets revenue by. Distinct from createdAt (when the
+  // row happened to be written) so June's work written up in July is still
+  // June revenue, and back-dating is possible at all. Defaults to now, and
+  // was backfilled from createdAt, so no existing figure moved.
+  issueDate     DateTime         @default(now())
   // Denormalized computed totals (source of truth = packages/core computeTotals).
   subtotalCents Int              @default(0)
   gctCents      Int              @default(0)
@@ -839,6 +845,8 @@ model Invoice {
 
   @@unique([businessId, number])
   @@index([businessId, status])
+  // Reports filter and bucket on the invoice's own date.
+  @@index([businessId, issueDate])
   @@index([clientId])
 }
 

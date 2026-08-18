@@ -34,7 +34,7 @@ function invoice(overrides: Partial<ReportInvoice> = {}): ReportInvoice {
     status: InvoiceStatus.INVOICED,
     totalCents: 0,
     paidCents: 0,
-    createdAt: "2026-08-10T12:00:00.000Z",
+    issueDate: "2026-08-10T12:00:00.000Z",
     ...overrides,
   };
 }
@@ -61,6 +61,40 @@ function must<T>(value: T | undefined, msg = "expected value"): T {
   if (value === undefined) throw new Error(`${msg}: missing`);
   return value;
 }
+
+describe("revenue follows the invoice's own date, not when the row was written", () => {
+  // Reported from the audit: an invoice dated 1 July showed as overdue AND was
+  // counted in "this month" (August), and the sales chart had an August bar
+  // only. One cause — every bucket keyed off createdAt, so a back-dated or
+  // late-written invoice was attributed to the day it was typed in.
+  const august = { fromIso: "2026-08-01T05:00:00.000Z", toIso: "2026-09-01T05:00:00.000Z" };
+  const july = { fromIso: "2026-07-01T05:00:00.000Z", toIso: "2026-08-01T05:00:00.000Z" };
+  const julyInvoice = [invoice({ totalCents: 500_000, issueDate: "2026-07-01T12:00:00.000Z" })];
+
+  it("does not count a July invoice in August, however late it was written up", () => {
+    const summary = computeReportsSummary({ quotes: [], invoices: julyInvoice, payments: [], projects: [] }, august);
+    expect(summary.revenue.invoicedCents).toBe(0);
+  });
+
+  it("counts it in July, where the contractor put it", () => {
+    const summary = computeReportsSummary({ quotes: [], invoices: julyInvoice, payments: [], projects: [] }, july);
+    expect(summary.revenue.invoicedCents).toBe(500_000);
+  });
+
+  it("puts it in July's bar, so the chart is not one lone column for today", () => {
+    const summary = computeReportsSummary(
+      { quotes: [], invoices: julyInvoice, payments: [], projects: [] },
+      { fromIso: "2026-06-01T05:00:00.000Z", toIso: "2026-09-01T05:00:00.000Z" },
+    );
+    const nonEmpty = summary.salesByMonth.filter((m) => m.invoicedCents > 0);
+    expect(nonEmpty.map((m) => m.monthIso)).toEqual(["2026-07"]);
+  });
+
+  it("still reports it as outstanding regardless of range — receivables are a position, not a flow", () => {
+    const summary = computeReportsSummary({ quotes: [], invoices: julyInvoice, payments: [], projects: [] }, august);
+    expect(summary.receivables.totalOutstandingCents).toBe(500_000);
+  });
+});
 
 describe("computeReportsSummary", () => {
   describe("empty input", () => {
@@ -196,7 +230,7 @@ describe("computeReportsSummary", () => {
               status: InvoiceStatus.PAID,
               totalCents: 400_000,
               paidCents: 400_000,
-              createdAt: "2026-03-01T12:00:00.000Z",
+              issueDate: "2026-03-01T12:00:00.000Z",
             }),
           ],
           payments: [payment({ amountCents: 400_000, paidAt: "2026-08-05T12:00:00.000Z" })],
@@ -236,7 +270,7 @@ describe("computeReportsSummary", () => {
               status: InvoiceStatus.INVOICED,
               totalCents: 500_000,
               paidCents: 0,
-              createdAt: "2025-01-01T00:00:00.000Z", // long before AUGUST
+              issueDate: "2025-01-01T00:00:00.000Z", // long before AUGUST
               clientId: "c1",
               clientName: "Acme Co",
             }),
@@ -377,7 +411,7 @@ describe("computeReportsSummary", () => {
             invoice({
               status: InvoiceStatus.INVOICED,
               totalCents: 100_000,
-              createdAt: "2026-06-15T12:00:00.000Z",
+              issueDate: "2026-06-15T12:00:00.000Z",
             }),
           ],
         },
@@ -409,7 +443,7 @@ describe("computeReportsSummary", () => {
             invoice({
               status: InvoiceStatus.INVOICED,
               totalCents: 77_000,
-              createdAt: lateAugustUtc,
+              issueDate: lateAugustUtc,
             }),
           ],
         },
@@ -429,7 +463,7 @@ describe("computeReportsSummary", () => {
             invoice({
               status: InvoiceStatus.INVOICED,
               totalCents: 100_000,
-              createdAt: "2026-08-05T12:00:00.000Z",
+              issueDate: "2026-08-05T12:00:00.000Z",
             }),
           ],
           payments: [payment({ amountCents: 60_000, paidAt: "2026-08-06T12:00:00.000Z" })],
@@ -538,12 +572,12 @@ describe("computeReportsSummary", () => {
         toIso: "2026-09-01T00:00:00.000Z",
       };
       const invoices = [
-        invoice({ totalCents: 250_000, createdAt: "2026-06-01T02:00:00.000Z" }), // 31 May 9pm JA
-        invoice({ totalCents: 400_000, createdAt: "2026-06-15T12:00:00.000Z" }),
-        invoice({ totalCents: 125_000, createdAt: "2026-07-31T23:30:00.000Z" }), // 31 Jul 6:30pm JA
-        invoice({ totalCents: 900_000, createdAt: "2026-08-31T23:00:00.000Z" }), // 31 Aug 6pm JA
+        invoice({ totalCents: 250_000, issueDate: "2026-06-01T02:00:00.000Z" }), // 31 May 9pm JA
+        invoice({ totalCents: 400_000, issueDate: "2026-06-15T12:00:00.000Z" }),
+        invoice({ totalCents: 125_000, issueDate: "2026-07-31T23:30:00.000Z" }), // 31 Jul 6:30pm JA
+        invoice({ totalCents: 900_000, issueDate: "2026-08-31T23:00:00.000Z" }), // 31 Aug 6pm JA
         // Excluded on status, so it must be absent from both views alike.
-        invoice({ status: InvoiceStatus.DRAFT, totalCents: 777_000, createdAt: "2026-07-02T12:00:00.000Z" }),
+        invoice({ status: InvoiceStatus.DRAFT, totalCents: 777_000, issueDate: "2026-07-02T12:00:00.000Z" }),
       ];
       const payments = [
         payment({ amountCents: 100_000, paidAt: "2026-06-02T12:00:00.000Z" }),

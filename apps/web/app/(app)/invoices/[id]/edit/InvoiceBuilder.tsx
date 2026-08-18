@@ -38,6 +38,7 @@ export type InitialInvoiceSection = InitialSection;
 export interface InitialInvoice extends InitialLines {
   clientId?: string;
   dueDate?: string; // yyyy-mm-dd, for the date input
+  issueDate?: string; // yyyy-mm-dd, for the date input
   terms?: string;
   gctRatePct: number;
   discountPct: number;
@@ -89,6 +90,7 @@ export default function InvoiceBuilder({
   const [clientId, setClientId] = useState(initial.clientId ?? "");
   const [clients, setClients] = useState<ClientOption[]>(initialClients);
   const [dueDate, setDueDate] = useState(initial.dueDate ?? "");
+  const [issueDate, setIssueDate] = useState(initial.issueDate ?? "");
   const [terms, setTerms] = useState(initial.terms ?? "");
   const [gctRatePct, setGctRatePct] = useState(String(initial.gctRatePct ?? DEFAULT_GCT_RATE));
   const [discountPct, setDiscountPct] = useState(String(initial.discountPct ?? 0));
@@ -150,6 +152,10 @@ export default function InvoiceBuilder({
         // clearing the field a silent no-op.
         clientId: clientId || null,
         dueDate: dueDate ? new Date(`${dueDate}T00:00:00.000Z`).toISOString() : undefined,
+        // Midday UTC, not midnight: Jamaica is UTC-5, so a midnight-UTC
+        // instant is 7pm the PREVIOUS day locally, and the reports bucket in
+        // Jamaica time — a 1 July invoice would land in June.
+        issueDate: issueDate ? new Date(`${issueDate}T12:00:00.000Z`).toISOString() : undefined,
         terms: terms.trim() || undefined,
         gctRatePct: gctRatePctNum,
         discountPct: Number(discountPct) || 0,
@@ -208,6 +214,7 @@ export default function InvoiceBuilder({
       <div className={shared.grid2}>
         <Card>
           <div style={{ display: "grid", gap: 12 }}>
+            <Input label="Invoice date" type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
             <Input label="Due date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             <Input
               label="Terms"

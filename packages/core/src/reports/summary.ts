@@ -29,7 +29,12 @@ export interface ReportInvoice {
   status: InvoiceStatus;
   totalCents: Cents;
   paidCents: Cents;
-  createdAt: string; // ISO
+  /**
+   * The date the invoice BEARS, which is what revenue is attributed to — not
+   * when the row was written. A contractor writing up June's work in July is
+   * reporting June revenue, and using createdAt made that impossible to say.
+   */
+  issueDate: string; // ISO
   dueDate?: string | null; // ISO date, no time-of-day
   clientId?: string | null;
   clientName?: string | null;
@@ -221,7 +226,7 @@ function computeRevenue(
     // A DRAFT invoice isn't a claim on anyone yet — it's not revenue until
     // it's actually issued.
     if (inv.status === InvoiceStatus.DRAFT) continue;
-    if (!inRange(inv.createdAt, range)) continue;
+    if (!inRange(inv.issueDate, range)) continue;
     invoicedCents += inv.totalCents;
   }
 
@@ -375,8 +380,8 @@ function computeSalesByMonth(
 
   for (const inv of invoices) {
     if (inv.status === InvoiceStatus.DRAFT) continue;
-    if (!inRange(inv.createdAt, range)) continue;
-    const bucket = buckets.get(jamaicaMonthKey(inv.createdAt));
+    if (!inRange(inv.issueDate, range)) continue;
+    const bucket = buckets.get(jamaicaMonthKey(inv.issueDate));
     // Every in-range timestamp maps to a key already in `buckets` by
     // construction (monthKeysInRange spans exactly the range's months);
     // the check just satisfies noUncheckedIndexedAccess defensively.

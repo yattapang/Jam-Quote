@@ -20,7 +20,7 @@ function invoice(overrides: Partial<ReportInvoice> = {}): ReportInvoice {
     status: InvoiceStatus.INVOICED,
     totalCents: 0,
     paidCents: 0,
-    createdAt: "2026-06-01T00:00:00.000Z",
+    issueDate: "2026-06-01T00:00:00.000Z",
     ...overrides,
   };
 }

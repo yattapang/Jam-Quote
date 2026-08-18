@@ -42,6 +42,7 @@ export default async function EditInvoicePage({ params }: { params: { id: string
       initial={{
         clientId: invoice.clientId,
         dueDate: invoice.dueDate ? invoice.dueDate.slice(0, 10) : undefined,
+        issueDate: invoice.issueDate.slice(0, 10),
         terms: invoice.terms,
         gctRatePct: invoice.gctRatePct,
         discountPct: invoice.discountPct,

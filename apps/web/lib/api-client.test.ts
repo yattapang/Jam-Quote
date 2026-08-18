@@ -160,6 +160,7 @@ const apiInvoice = {
   depositCents: 5_000_000,
   terms: "Due on receipt",
   dueDate: "2026-08-15T00:00:00.000Z",
+  issueDate: "2026-08-01T00:00:00.000Z",
   subtotalCents: 16_800_000,
   gctCents: 2_394_000,
   totalCents: 18_354_000,

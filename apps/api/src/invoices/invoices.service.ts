@@ -193,6 +193,8 @@ export class InvoicesService {
           depositCents: input.depositCents,
           terms: input.terms,
           dueDate: input.dueDate,
+          // Omitted means today, via the column default.
+          ...(input.issueDate ? { issueDate: input.issueDate } : {}),
           subtotalCents: totals.subtotalCents,
           gctCents: totals.gctCents,
           totalCents: totals.totalCents,
@@ -379,6 +381,7 @@ export class InvoicesService {
           // ABSENT key means "leave as is".
           clientId: input.clientId === undefined ? existing.clientId : input.clientId,
           dueDate: input.dueDate ?? existing.dueDate,
+          issueDate: input.issueDate ?? existing.issueDate,
           terms: input.terms ?? existing.terms,
           detailLevel,
           gctRate: gctRatePct,

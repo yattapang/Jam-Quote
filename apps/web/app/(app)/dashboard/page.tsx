@@ -41,7 +41,7 @@ export default async function DashboardPage() {
       status: i.status,
       totalCents: i.totalCents ?? 0,
       paidCents: i.paidCents ?? 0,
-      createdAt: i.createdAt,
+      issueDate: i.issueDate,
       dueDate: i.dueDate,
     })),
   );

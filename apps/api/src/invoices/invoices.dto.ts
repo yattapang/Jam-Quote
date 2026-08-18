@@ -59,6 +59,9 @@ export const updateInvoiceSchema = z.object({
   // picker offers a blank option, and that option has to mean something.
   clientId: z.string().min(1).nullable().optional(),
   dueDate: z.coerce.date().optional(),
+  // The date the invoice bears. Reports attribute revenue to it, so it is a
+  // financial field, not a cosmetic one — see Invoice.issueDate in schema.
+  issueDate: z.coerce.date().optional(),
   terms: z.string().optional(),
   gctRatePct: z.number().min(0).max(100).optional(),
   discountPct: z.number().min(0).max(100).optional(),
@@ -86,6 +89,9 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 export const createInvoiceSchema = z.object({
   clientId: z.string().min(1).optional(),
   dueDate: z.coerce.date().optional(),
+  // The date the invoice bears. Reports attribute revenue to it, so it is a
+  // financial field, not a cosmetic one — see Invoice.issueDate in schema.
+  issueDate: z.coerce.date().optional(),
   terms: z.string().optional(),
   // Defaults are applied from the business's own settings when omitted — see
   // InvoicesService.create, which reads defaultGctRate rather than hardcoding.

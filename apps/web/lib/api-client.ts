@@ -348,6 +348,7 @@ export interface ApiInvoice {
   depositCents: number;
   terms?: string | null;
   dueDate?: string | null;
+  issueDate: string;
   subtotalCents: number;
   gctCents: number;
   totalCents: number;
@@ -569,6 +570,8 @@ export interface Invoice {
   terms?: string;
   dueDate?: string;
   dueDateLabel: string;
+  /** The date the invoice bears — what reports attribute its revenue to. */
+  issueDate: string;
   subtotalCents: number;
   gctCents: number;
   totalCents: number;
@@ -609,6 +612,7 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     terms: i.terms ?? undefined,
     dueDate: i.dueDate ?? undefined,
     dueDateLabel: i.dueDate ? dateLabel(i.dueDate, "Due ") : "",
+    issueDate: i.issueDate,
     subtotalCents: i.subtotalCents,
     gctCents: i.gctCents,
     totalCents: i.totalCents,
@@ -622,7 +626,15 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     })),
     detailLevel: i.detailLevel ?? undefined,
     createdAt: i.createdAt,
-    createdLabel: dateLabel(i.createdAt, "Created "),
+    // An invoice is dated by the date it BEARS, not the day the row was
+    // written — those differ whenever one is back-dated, and it is the
+    // printed date a client and an auditor will go by. Carries the year:
+    // a back-dated document is exactly where "Jul 1" alone is ambiguous.
+    createdLabel: `Invoice date ${new Date(i.issueDate).toLocaleDateString("en-JM", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    })}`,
     updatedAt: i.updatedAt,
   };
 }
@@ -964,6 +976,7 @@ export interface UpdateInvoiceInput {
   /** null detaches the client; omitting the key leaves it unchanged. */
   clientId?: string | null;
   dueDate?: string;
+  issueDate?: string;
   terms?: string;
   gctRatePct?: number;
   discountPct?: number;
