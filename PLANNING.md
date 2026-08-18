@@ -1,9 +1,10 @@
 # JamQuote — Working Plan
 
 **Last updated:** 2026-08-17
-**Status:** post-audit hardening. The owner has walked the whole app (AUDIT.md,
-six parts) and every finding is triaged below. Two contractors are to be given
-access once the remaining blockers clear. Mobile deliberately not started.
+**Status:** audit closed — every finding from the six-part walkthrough is
+resolved, answered, or explicitly deferred with a reason. The production build
+now runs locally. Next action is to deploy and put it in front of two
+contractors. Mobile deliberately not started.
 
 This file is the single source of truth for what we are building, in what
 order, and why. Update it in the same commit as the work it describes — a plan
@@ -96,6 +97,8 @@ Recently landed (all pushed):
 - **The staff console tells the truth.** It had been falling back to invented
   tenants, a hardcoded MRR and a fabricated revenue chart.
 - Deposit as % or $, unit rendering unified, material unit round-trip fixed.
+
+- **Audit findings closed** — see §3b. The last three landed in `4ce1a8d`.
 
 **Not yet met by a real user:** everything above. No contractor has used any of
 it. That is the single largest risk in this plan and the reason §4b exists.
@@ -427,9 +430,16 @@ Then, in order:
 
 1. ~~Regulatory admin CRUD~~ — **done** (`847c9dc`).
 2. ~~Rule-pack verify~~ — **done** (`4f52af7`), manual by design.
-3. **The small open audit items** — a coverage hint on the quote line, the job
-   custom unit defaulting to "day", and weekly bars on the sales chart when the
-   range is short. These are the last open findings; none blocks a contractor.
+3. ~~The small open audit items~~ — **done** (`4ce1a8d`).
+
+**Every audit finding is now closed.** Twelve substantive issues across six
+parts: nine fixed, two answered as working-as-designed with the reasoning
+recorded (equipment lines not merging; hiding not cascading), and one
+deliberately not built with its reason stated (automated rule-pack checking has
+no machine-readable source to check against).
+
+So the next action is no longer a code change. It is §4b: deploy, add the two
+contractors, and use it.
 
 **Explicitly not next:** Phase 4 (Job Library depth) and Phase 5 (mobile).
 Neither is blocking a contractor from quoting, and mobile is a rebuild that
@@ -457,9 +467,9 @@ should not start until the web app has survived real use.
 | Rule-pack verify / check-for-updates | `PATCH /admin/rulepack` publishes an override, but nothing verifies or checks for updates. Needs a source of truth before "automated" means anything. |
 | Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table; nothing records one. |
 | Automated rule-pack update check | **Deliberately not built.** Needs a machine-readable feed of Jamaican tax/statutory rates; none exists (TAJ publishes prose). A scraper over a page that can be reworded would give confident wrong answers about tax rates — worse than an honest "last checked 14 months ago". Revisit only if a real feed appears. |
-| Coverage hint on the quote line | Coverage only calculates when the material has it configured, and that is discoverable only from the material. Reported as "didn't calculate". |
-| Job custom unit shows "day" | Reported in audit part 2, not yet reproduced. Rate was correct; only the unit fell back. |
-| Weekly bars on the sales chart | The chart buckets by month, so a weekly range renders one bar. |
+| ~~Coverage hint~~ | **DONE `4ce1a8d`.** A material line with no coverage configured now says where coverage comes from. |
+| ~~Job custom unit shows "day"~~ | **DONE `4ce1a8d`.** Root cause found: JobForm's equipment picker set `rateUnit.toLowerCase()`, stamping the literal "day" over a typed unit. All three component pickers now agree and none invents a unit. |
+| ~~Weekly bars on the sales chart~~ | **DONE `4ce1a8d`.** Bucket size now follows the range: daily / weekly / monthly. |
 
 ### Known, low priority
 
