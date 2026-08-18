@@ -142,6 +142,22 @@ and there are no DOM tests here. Where an invariant is "everyone must go
 through this one function", enforce it by scanning the source
 (`apps/web/lib/unit-label-usage.test.ts` is the pattern).
 
+### Part 4 — The money seam
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| Quote → invoice conversion kept every figure | **Passed** | — |
+| A 1 July invoice showed overdue yet counted in August's "total invoiced" | **Real** | There was no invoice date. Reports bucketed on `createdAt`, so revenue was attributed to the day the row was typed. The 1 July set was the DUE date — confirmed on INV-0004 (due 2026-07-01, written 2026-08-16), a different fact that cannot stand in. `Invoice.issueDate` added, backfilled from createdAt and verified against live so no existing figure moved. Fixed `936b31b` |
+| Sales-by-month chart had an August bar only | **Same cause** | The chart bucketed on `createdAt` too. Now keys off `issueDate` |
+| Reports need a custom range and a weekly period | Accepted | Both added; week runs Mon–Sun. `6e4e2a9` |
+| Reports need to print | Accepted | Prints the page itself, no separate print view, so no second copy of the figures can disagree. `6e4e2a9` |
+
+**Why one bug produced four symptoms:** `createdAt` was doing duty as the
+invoice's date everywhere, and nothing named that assumption. Removing
+`createdAt` from `ReportInvoice` outright — rather than leaving it beside the
+new field — turned every remaining use into a compile error, which is how the
+dashboard's own mapping was caught.
+
 ---
 
 ## 4. Phases
