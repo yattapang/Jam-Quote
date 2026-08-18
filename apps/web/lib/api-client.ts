@@ -1093,6 +1093,41 @@ export interface AdminReg {
   effectiveDate: string | null;
   sourceUrl: string | null;
   actionNeeded: string | null;
+  publishedAt: string;
+  /** Null means outstanding. */
+  reviewedAt: string | null;
+  reviewedByUserId: string | null;
+}
+
+export interface RegulatoryInput {
+  title: string;
+  category: string;
+  summary: string;
+  effectiveDate?: string | null;
+  actionNeeded?: string | null;
+  sourceUrl?: string | null;
+}
+
+// --- Admin regulatory feed CRUD (MANAGE_RULEPACK) --------------------------
+
+export async function createRegulatory(input: RegulatoryInput): Promise<AdminReg> {
+  return apiClient.post<AdminReg>("/admin/regulatory", input);
+}
+
+export async function updateRegulatory(
+  id: string,
+  input: Partial<RegulatoryInput>,
+): Promise<AdminReg> {
+  return apiClient.patch<AdminReg>(`/admin/regulatory/${id}`, input);
+}
+
+/** `reviewed: false` reopens one marked by mistake. */
+export async function reviewRegulatory(id: string, reviewed: boolean): Promise<AdminReg> {
+  return apiClient.patch<AdminReg>(`/admin/regulatory/${id}/review`, { reviewed });
+}
+
+export async function deleteRegulatory(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/admin/regulatory/${id}`);
 }
 /** GET /admin/financials — ADMIN only. Plan mix, MRR & renewals within the
  * next 60 days. */

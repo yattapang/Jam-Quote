@@ -19,14 +19,20 @@ import {
 } from "./admin.service.js";
 import { AuditService } from "./audit.service.js";
 import {
+  createRegulatoryUpdateSchema,
   hardDeleteTenantSchema,
   promoteAdminSchema,
+  reviewRegulatoryUpdateSchema,
   setTenantPlanSchema,
   updateAdminSchema,
+  updateRegulatoryUpdateSchema,
+  type CreateRegulatoryUpdateInput,
   type HardDeleteTenantInput,
   type PromoteAdminInput,
+  type ReviewRegulatoryUpdateInput,
   type SetTenantPlanInput,
   type UpdateAdminInput,
+  type UpdateRegulatoryUpdateInput,
 } from "./admin.dto.js";
 
 /**
@@ -107,6 +113,49 @@ export class AdminController {
   @Get("regulatory")
   regulatory(): Promise<AdminRegulatoryUpdate[]> {
     return this.admin.regulatory();
+  }
+
+  /**
+   * Regulatory feed CRUD. Gated on MANAGE_RULEPACK rather than a new
+   * capability: that permission already reads "edit jurisdiction tax/
+   * regulatory rules", this feed is the same subject matter, and inventing a
+   * capability would silently grant nothing to every existing admin until
+   * someone remembered to add it to their list.
+   */
+  @Post("regulatory")
+  @RequireCapability(AdminCapability.MANAGE_RULEPACK)
+  createRegulatory(
+    @Body(new ZodValidationPipe(createRegulatoryUpdateSchema)) body: CreateRegulatoryUpdateInput,
+    @Req() req: Request,
+  ): Promise<AdminRegulatoryUpdate> {
+    return this.admin.createRegulatory(body, req.user!.sub);
+  }
+
+  @Patch("regulatory/:id")
+  @RequireCapability(AdminCapability.MANAGE_RULEPACK)
+  updateRegulatory(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateRegulatoryUpdateSchema)) body: UpdateRegulatoryUpdateInput,
+    @Req() req: Request,
+  ): Promise<AdminRegulatoryUpdate> {
+    return this.admin.updateRegulatory(id, body, req.user!.sub);
+  }
+
+  /** Mark dealt with, or reopen one marked by mistake. */
+  @Patch("regulatory/:id/review")
+  @RequireCapability(AdminCapability.MANAGE_RULEPACK)
+  reviewRegulatory(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(reviewRegulatoryUpdateSchema)) body: ReviewRegulatoryUpdateInput,
+    @Req() req: Request,
+  ): Promise<AdminRegulatoryUpdate> {
+    return this.admin.reviewRegulatory(id, body.reviewed, req.user!.sub);
+  }
+
+  @Delete("regulatory/:id")
+  @RequireCapability(AdminCapability.MANAGE_RULEPACK)
+  deleteRegulatory(@Param("id") id: string, @Req() req: Request): Promise<void> {
+    return this.admin.deleteRegulatory(id, req.user!.sub);
   }
 
   @Get("pricing")

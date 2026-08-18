@@ -952,8 +952,14 @@ model RegulatoryUpdate {
   sourceUrl     String?
   publishedAt   DateTime  @default(now())
   createdAt     DateTime  @default(now())
+  /// When a staff admin recorded that this change has been dealt with, and who.
+  /// Null means outstanding. The console's "Applied (YTD)" count reads this —
+  /// before it existed the stat could never be anything but zero.
+  reviewedAt       DateTime?
+  reviewedByUserId String?
 
   @@index([category])
+  @@index([reviewedAt])
 }
 
 model Attachment {

@@ -4,7 +4,13 @@ import { supportedJurisdictions } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
 import type { UpdatePricingInput } from "../billing/billing.dto.js";
-import type { PromoteAdminInput, SetTenantPlanInput, UpdateAdminInput } from "./admin.dto.js";
+import type {
+  CreateRegulatoryUpdateInput,
+  PromoteAdminInput,
+  SetTenantPlanInput,
+  UpdateAdminInput,
+  UpdateRegulatoryUpdateInput,
+} from "./admin.dto.js";
 
 /** The acting admin's authorization, from AdminGuard's req.adminContext.
  * Passed into admin-management methods so they can enforce super-admin-only
@@ -54,6 +60,11 @@ export interface AdminRegulatoryUpdate {
   effectiveDate: Date | null;
   sourceUrl: string | null;
   actionNeeded: string | null;
+  publishedAt: Date;
+  /** Null means outstanding. Drives the console's "Applied (YTD)" count, which
+   * before this column existed could never be anything but zero. */
+  reviewedAt: Date | null;
+  reviewedByUserId: string | null;
 }
 
 export interface AdminUpcomingRenewal {
@@ -73,6 +84,22 @@ export interface AdminFinancials {
 }
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
+/** One select for every regulatory read and write. Separate literals drift —
+ * the material catalog lost a unit that way when its writes omitted a join its
+ * reads had. */
+const REGULATORY_SELECT = {
+  id: true,
+  title: true,
+  category: true,
+  summary: true,
+  effectiveDate: true,
+  sourceUrl: true,
+  actionNeeded: true,
+  publishedAt: true,
+  reviewedAt: true,
+  reviewedByUserId: true,
+} as const;
 
 /**
  * Platform-level admin service for the internal JamQuote staff console.
@@ -261,16 +288,128 @@ export class AdminService {
   regulatory(): Promise<AdminRegulatoryUpdate[]> {
     return this.prisma.regulatoryUpdate.findMany({
       orderBy: { publishedAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        category: true,
-        summary: true,
-        effectiveDate: true,
-        sourceUrl: true,
-        actionNeeded: true,
-      },
+      select: REGULATORY_SELECT,
     });
+  }
+
+  /**
+   * Regulatory feed CRUD. The feed was read-only: staff could see a change but
+   * not record one, correct one, or mark it dealt with — which is what "the
+   * regulatory review is static" meant when it was reported.
+   *
+   * Every mutation is audited. This feed is the platform's record of which tax
+   * and statutory changes it has responded to; a silent edit to it is exactly
+   * the thing an audit log exists for.
+   */
+  async createRegulatory(
+    input: CreateRegulatoryUpdateInput,
+    actorUserId: string,
+  ): Promise<AdminRegulatoryUpdate> {
+    const created = await this.prisma.regulatoryUpdate.create({
+      data: {
+        title: input.title,
+        category: input.category,
+        summary: input.summary,
+        effectiveDate: input.effectiveDate ?? null,
+        actionNeeded: input.actionNeeded ?? null,
+        sourceUrl: input.sourceUrl ?? null,
+        ...(input.publishedAt ? { publishedAt: input.publishedAt } : {}),
+      },
+      select: REGULATORY_SELECT,
+    });
+    await this.audit.record({
+      actorUserId,
+      action: "regulatory.create",
+      targetType: "RegulatoryUpdate",
+      targetId: created.id,
+      details: { title: created.title, category: created.category },
+    });
+    return created;
+  }
+
+  async updateRegulatory(
+    id: string,
+    input: UpdateRegulatoryUpdateInput,
+    actorUserId: string,
+  ): Promise<AdminRegulatoryUpdate> {
+    await this.findRegulatoryOrThrow(id);
+    const updated = await this.prisma.regulatoryUpdate.update({
+      where: { id },
+      // Only keys actually present are written: an omitted key leaves the
+      // stored value alone, while an explicit null clears a nullable field.
+      data: {
+        ...(input.title !== undefined ? { title: input.title } : {}),
+        ...(input.category !== undefined ? { category: input.category } : {}),
+        ...(input.summary !== undefined ? { summary: input.summary } : {}),
+        ...(input.effectiveDate !== undefined ? { effectiveDate: input.effectiveDate } : {}),
+        ...(input.actionNeeded !== undefined ? { actionNeeded: input.actionNeeded } : {}),
+        ...(input.sourceUrl !== undefined ? { sourceUrl: input.sourceUrl } : {}),
+        ...(input.publishedAt !== undefined ? { publishedAt: input.publishedAt } : {}),
+      },
+      select: REGULATORY_SELECT,
+    });
+    await this.audit.record({
+      actorUserId,
+      action: "regulatory.update",
+      targetType: "RegulatoryUpdate",
+      targetId: id,
+      details: { fields: Object.keys(input) },
+    });
+    return updated;
+  }
+
+  /** Mark dealt with, or reopen one marked by mistake — which must be possible
+   * or the only way back is editing the database by hand. */
+  async reviewRegulatory(
+    id: string,
+    reviewed: boolean,
+    actorUserId: string,
+  ): Promise<AdminRegulatoryUpdate> {
+    await this.findRegulatoryOrThrow(id);
+    const updated = await this.prisma.regulatoryUpdate.update({
+      where: { id },
+      data: {
+        reviewedAt: reviewed ? new Date() : null,
+        reviewedByUserId: reviewed ? actorUserId : null,
+      },
+      select: REGULATORY_SELECT,
+    });
+    await this.audit.record({
+      actorUserId,
+      action: reviewed ? "regulatory.review" : "regulatory.reopen",
+      targetType: "RegulatoryUpdate",
+      targetId: id,
+      details: { title: updated.title },
+    });
+    return updated;
+  }
+
+  /**
+   * Hard delete — deliberately, unlike a tenant. A regulatory entry is
+   * reference material the platform authored, not a contractor's data: nothing
+   * points at it, no document snapshots it, and an offline client has no copy
+   * to reconcile. A row created in error should leave, not linger as a
+   * tombstone in a compliance feed. The audit entry is the record it existed.
+   */
+  async deleteRegulatory(id: string, actorUserId: string): Promise<void> {
+    const existing = await this.findRegulatoryOrThrow(id);
+    await this.prisma.regulatoryUpdate.delete({ where: { id } });
+    await this.audit.record({
+      actorUserId,
+      action: "regulatory.delete",
+      targetType: "RegulatoryUpdate",
+      targetId: id,
+      details: { title: existing.title, category: existing.category },
+    });
+  }
+
+  private async findRegulatoryOrThrow(id: string): Promise<AdminRegulatoryUpdate> {
+    const found = await this.prisma.regulatoryUpdate.findUnique({
+      where: { id },
+      select: REGULATORY_SELECT,
+    });
+    if (!found) throw new NotFoundException("Regulatory update not found");
+    return found;
   }
 
   pricing(): Promise<PricingSnapshot> {

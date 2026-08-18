@@ -42,3 +42,39 @@ export const updateAdminSchema = z
     message: "At least one field must be provided",
   });
 export type UpdateAdminInput = z.infer<typeof updateAdminSchema>;
+
+/**
+ * Regulatory feed CRUD (staff console).
+ *
+ * `category` is a free string in the schema with a documented convention
+ * (GCT | NHT | TRN | MIN_WAGE | PERMIT | OTHER) rather than an enum, and that
+ * stays true here: a new levy should not need a migration to be recorded.
+ *
+ * `actionNeeded` carries the same meaning it always has — a non-empty value
+ * means this change requires work, which is what drives "Needs review" in the
+ * console. It is nullable so an entry can be downgraded to monitoring.
+ */
+export const createRegulatoryUpdateSchema = z.object({
+  title: z.string().min(1),
+  category: z.string().min(1),
+  summary: z.string().min(1),
+  effectiveDate: z.coerce.date().nullable().optional(),
+  actionNeeded: z.string().nullable().optional(),
+  sourceUrl: z.string().url().nullable().optional(),
+  publishedAt: z.coerce.date().optional(),
+});
+export type CreateRegulatoryUpdateInput = z.infer<typeof createRegulatoryUpdateSchema>;
+
+/** Every field optional — an omitted key leaves the stored value alone, while
+ * an explicit null clears a nullable one (same convention as the invoice
+ * client picker: null is a value the caller can legitimately mean). */
+export const updateRegulatoryUpdateSchema = createRegulatoryUpdateSchema.partial();
+export type UpdateRegulatoryUpdateInput = z.infer<typeof updateRegulatoryUpdateSchema>;
+
+/** Body for PATCH /admin/regulatory/:id/review — `reviewed: false` reopens an
+ * entry marked reviewed by mistake, which must be possible or the only way
+ * back is editing the database. */
+export const reviewRegulatoryUpdateSchema = z.object({
+  reviewed: z.boolean(),
+});
+export type ReviewRegulatoryUpdateInput = z.infer<typeof reviewRegulatoryUpdateSchema>;

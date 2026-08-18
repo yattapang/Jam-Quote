@@ -392,3 +392,83 @@ describe("AdminService.regulatory", () => {
     );
   });
 });
+
+describe("AdminService — regulatory feed CRUD", () => {
+  /** The feed was read-only: staff could see a change but not record one,
+   * correct one, or mark it dealt with. That is what "regulatory review is
+   * static" meant when it was reported. */
+  function withReg(regulatoryUpdate: Partial<Record<string, unknown>> = {}) {
+    const prisma = {
+      regulatoryUpdate: {
+        create: vi.fn().mockResolvedValue({ id: "r1", title: "T", category: "GCT" }),
+        update: vi.fn().mockResolvedValue({ id: "r1", title: "T" }),
+        delete: vi.fn().mockResolvedValue({}),
+        findUnique: vi.fn().mockResolvedValue({ id: "r1", title: "T", category: "GCT" }),
+        findMany: vi.fn().mockResolvedValue([]),
+        ...regulatoryUpdate,
+      },
+    };
+    const audit = { record: vi.fn() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, audit as any, {} as any);
+    return { svc, prisma, audit };
+  }
+
+  it("records who created an entry — this feed is a compliance record", () => {
+    const { svc, audit } = withReg();
+    return svc
+      .createRegulatory({ title: "GCT change", category: "GCT", summary: "s" }, "admin-1")
+      .then(() => {
+        expect(audit.record).toHaveBeenCalledWith(
+          expect.objectContaining({ actorUserId: "admin-1", action: "regulatory.create" }),
+        );
+      });
+  });
+
+  it("leaves omitted fields alone but lets an explicit null clear one", async () => {
+    // The distinction is the whole reason update takes a partial: omitting
+    // sourceUrl must not wipe it, but sending null must.
+    const { svc, prisma } = withReg();
+    await svc.updateRegulatory("r1", { sourceUrl: null }, "admin-1");
+    const data = prisma.regulatoryUpdate.update.mock.calls[0]![0].data;
+    expect(data).toEqual({ sourceUrl: null });
+    expect(data).not.toHaveProperty("title");
+  });
+
+  it("stamps reviewedAt and the reviewer when marked reviewed", async () => {
+    const { svc, prisma } = withReg();
+    await svc.reviewRegulatory("r1", true, "admin-7");
+    const data = prisma.regulatoryUpdate.update.mock.calls[0]![0].data;
+    expect(data.reviewedAt).toBeInstanceOf(Date);
+    expect(data.reviewedByUserId).toBe("admin-7");
+  });
+
+  it("clears both when reopened, so a mistake does not need a DB edit to undo", async () => {
+    const { svc, prisma } = withReg();
+    await svc.reviewRegulatory("r1", false, "admin-7");
+    expect(prisma.regulatoryUpdate.update.mock.calls[0]![0].data).toEqual({
+      reviewedAt: null,
+      reviewedByUserId: null,
+    });
+  });
+
+  it("refuses to act on an entry that does not exist", async () => {
+    const { svc, prisma } = withReg({ findUnique: vi.fn().mockResolvedValue(null) });
+    await expect(svc.reviewRegulatory("missing", true, "a")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(svc.deleteRegulatory("missing", "a")).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.regulatoryUpdate.update).not.toHaveBeenCalled();
+    expect(prisma.regulatoryUpdate.delete).not.toHaveBeenCalled();
+  });
+
+  it("hard-deletes, and the audit entry is the record it existed", async () => {
+    // Unlike a tenant: nothing references a regulatory row and no document
+    // snapshots it, so a row created in error should leave rather than linger
+    // as a tombstone in a compliance feed.
+    const { svc, prisma, audit } = withReg();
+    await svc.deleteRegulatory("r1", "admin-1");
+    expect(prisma.regulatoryUpdate.delete).toHaveBeenCalledWith({ where: { id: "r1" } });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "regulatory.delete", details: expect.objectContaining({ title: "T" }) }),
+    );
+  });
+});

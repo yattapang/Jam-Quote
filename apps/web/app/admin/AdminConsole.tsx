@@ -14,8 +14,14 @@ import {
   updateAdmin,
   revokeAdmin,
   updateAdminRulePack,
+  createRegulatory,
+  updateRegulatory,
+  reviewRegulatory,
+  deleteRegulatory,
   ApiError,
   type AdminData,
+  type AdminReg,
+  type RegulatoryInput,
   type AdminUser,
   type PricingConfig,
   type EffectiveRulePack,
@@ -272,12 +278,37 @@ export default function AdminConsole({
     }
   }
 
+  // Re-runs the server AdminPage after every mutation so props reflect the
+  // API's new state. Declared here because both the regulatory handlers below
+  // and the tenant ones further down use it.
+  const router = useRouter();
+
+  // --- Regulatory feed CRUD (MANAGE_RULEPACK) ---
+  // The feed was read-only: staff could see a change but not record one,
+  // correct one, or mark it dealt with.
+  const [regBusy, setRegBusy] = useState<Record<string, boolean>>({});
+  const [regError, setRegError] = useState<string | null>(null);
+  const [regEditing, setRegEditing] = useState<AdminReg | "new" | null>(null);
+
+  async function runReg(key: string, fn: () => Promise<unknown>) {
+    setRegBusy((b) => ({ ...b, [key]: true }));
+    setRegError(null);
+    try {
+      await fn();
+      router.refresh();
+      setRegEditing(null);
+    } catch (err) {
+      setRegError(err instanceof Error ? err.message : "That didn't work.");
+    } finally {
+      setRegBusy((b) => ({ ...b, [key]: false }));
+    }
+  }
+
   // --- Tenant lifecycle: suspend / restore / permanent delete ---
   // useRouter().refresh() re-runs the server AdminPage after every mutation
   // so the props (tenants/financials/audit) reflect the API's new state —
   // the optimistic *Override state below just avoids a flash while that
   // round-trip is in flight.
-  const router = useRouter();
   const [tenantSuspendOverride, setTenantSuspendOverride] = useState<Record<string, boolean>>({});
   const [tenantLifecycleBusy, setTenantLifecycleBusy] = useState<Record<string, boolean>>({});
   const [tenantLifecycleError, setTenantLifecycleError] = useState<Record<string, string>>({});
@@ -495,12 +526,18 @@ export default function AdminConsole({
 
 
   const regMap: Record<string, [string, string]> = { needs: ["Needs review", "warn"], monitoring: ["Monitoring", "info"], applied: ["Applied", "good"] };
+  // Status now has three states because there is finally something that can
+  // set the third: reviewedAt. Before it existed the console counted
+  // "Applied (YTD)" on a feed where nothing could ever be applied, so the
+  // number was permanently zero.
+  const regStatusOf = (r: AdminReg): "applied" | "needs" | "monitoring" =>
+    r.reviewedAt ? "applied" : r.actionNeeded ? "needs" : "monitoring";
   const regChanges: RegRow[] = data.regulatory.map((r): RegRow => [
     r.title,
     r.category,
     r.effectiveDate ? r.effectiveDate.slice(0, 10) : "—",
     r.actionNeeded ? "action needed" : "—",
-    r.actionNeeded ? "needs" : "monitoring",
+    regStatusOf(r),
   ]);
   const regStats = [
     { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
@@ -867,32 +904,97 @@ export default function AdminConsole({
           {screen === "regulatory" && (
             <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1100, margin: "0 auto" }}>
               <div className={styles.regStatRow} style={{ marginBottom: 18 }}>
-                {regStats.map((s) => (
-                  <div key={s.label} style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "15px 18px", boxShadow: "var(--shadow)", display: "flex", alignItems: "center", gap: 13 }}>
-                    <span style={{ width: 11, height: 11, borderRadius: "50%", flex: "none", background: `var(--${s.tone})` }} />
-                    <div><div style={{ ...archivo, fontWeight: 700, fontSize: 22, lineHeight: 1 }}>{s.value}</div><div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{s.label}</div></div>
+                {regStats.map((st) => (
+                  <div key={st.label} style={{ flex: 1, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "15px 18px", boxShadow: "var(--shadow)", display: "flex", alignItems: "center", gap: 13 }}>
+                    <span style={{ width: 11, height: 11, borderRadius: "50%", flex: "none", background: `var(--${st.tone})` }} />
+                    <div><div style={{ ...archivo, fontWeight: 700, fontSize: 22, lineHeight: 1 }}>{st.value}</div><div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>{st.label}</div></div>
                   </div>
                 ))}
               </div>
+
+              {regError && (
+                <div role="alert" style={{ marginBottom: 12, padding: "9px 13px", borderRadius: 9, background: "color-mix(in srgb, var(--critical) 12%, var(--surface))", border: "1px solid var(--critical)", fontSize: 13 }}>{regError}</div>
+              )}
+
+              {canManageRulepack && (
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                  <button onClick={() => setRegEditing("new")} style={{ height: 34, padding: "0 15px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff" }}>
+                    Add entry
+                  </button>
+                </div>
+              )}
+
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
-                {regChanges.map((r, i) => {
-                  const [sl, st] = regMap[r[4]]!;
-                  const isNeeds = r[4] === "needs";
+                {data.regulatory.length === 0 && (
+                  <div style={{ padding: "22px 18px", fontSize: 13, color: "var(--muted)" }}>
+                    Nothing in the regulatory feed yet.
+                  </div>
+                )}
+                {data.regulatory.map((r) => {
+                  const status = regStatusOf(r);
+                  const [sl, st] = regMap[status]!;
+                  const busy = regBusy[r.id] === true;
                   return (
-                    <div key={i} className={`${styles.rowHover} ${styles.regRow}`} style={{ padding: "15px 18px", borderBottom: "1px solid var(--border)" }}>
+                    <div key={r.id} className={`${styles.rowHover} ${styles.regRow}`} style={{ padding: "15px 18px", borderBottom: "1px solid var(--border)" }}>
                       <div style={{ width: 40, height: 40, flex: "none", borderRadius: 10, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
                         <svg width="18" height="18" viewBox="0 0 24 24" {...iconStroke}><path d="M4 4h11l5 5v11H4z" /><path d="M15 4v5h5" /></svg>
                       </div>
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{r[0]}</div>
-                        <div className={styles.regMeta} style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}><span style={{ fontWeight: 600, color: "var(--info)" }}>{r[1]}</span>·<span>Effective {r[2]}</span>·<span>Flagged {r[3]}</span></div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{r.title}</div>
+                        <div className={styles.regMeta} style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>
+                          <span style={{ fontWeight: 600, color: "var(--info)" }}>{r.category}</span>·
+                          <span>Effective {r.effectiveDate ? r.effectiveDate.slice(0, 10) : "—"}</span>
+                          {r.actionNeeded && <>·<span>{r.actionNeeded}</span></>}
+                          {r.reviewedAt && <>·<span>Reviewed {r.reviewedAt.slice(0, 10)}</span></>}
+                        </div>
                       </div>
                       <span style={pill(st)}>{sl}</span>
-                      <button onClick={() => { go("rulepack"); if (r[0].includes("GCT")) setDiffOpen(true); }} style={{ height: 32, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: isNeeds ? "none" : "1px solid var(--border)", background: isNeeds ? "var(--accent)" : "var(--surface)", color: isNeeds ? "#fff" : "var(--text)" }}>{isNeeds ? "Review diff" : "View"}</button>
+                      {r.sourceUrl && (
+                        <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className={styles.link} style={{ fontSize: 12.5, fontWeight: 600 }}>Source</a>
+                      )}
+                      {canManageRulepack && (
+                        <>
+                          <button
+                            disabled={busy}
+                            onClick={() => runReg(r.id, () => reviewRegulatory(r.id, !r.reviewedAt))}
+                            style={{ height: 32, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: r.reviewedAt ? "1px solid var(--border)" : "none", background: r.reviewedAt ? "var(--surface)" : "var(--accent)", color: r.reviewedAt ? "var(--text)" : "#fff", opacity: busy ? 0.6 : 1 }}
+                          >
+                            {/* Reopening must be possible, or a mis-click can
+                                only be undone in the database. */}
+                            {r.reviewedAt ? "Reopen" : "Mark reviewed"}
+                          </button>
+                          <button disabled={busy} onClick={() => setRegEditing(r)} style={{ height: 32, padding: "0 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>Edit</button>
+                          <button
+                            disabled={busy}
+                            onClick={() => {
+                              if (!window.confirm(`Delete "${r.title}" from the regulatory feed? This cannot be undone.`)) return;
+                              void runReg(r.id, () => deleteRegulatory(r.id));
+                            }}
+                            style={{ height: 32, padding: "0 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--critical)", background: "var(--surface)", color: "var(--critical)" }}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   );
                 })}
               </div>
+
+              {regEditing && (
+                <RegulatoryEditor
+                  entry={regEditing === "new" ? null : regEditing}
+                  busy={regBusy["form"] === true}
+                  onCancel={() => setRegEditing(null)}
+                  onSave={(values) =>
+                    runReg("form", () =>
+                      regEditing === "new"
+                        ? createRegulatory(values)
+                        : updateRegulatory(regEditing.id, values),
+                    )
+                  }
+                />
+              )}
             </div>
           )}
 
@@ -1547,5 +1649,120 @@ function TenantDrawer({
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * Create/edit form for one regulatory entry, shown as a modal over the feed.
+ *
+ * Kept in this file beside the screen that uses it, matching how the rest of
+ * the console is written. Uncontrolled-ish: local state seeded from `entry`,
+ * so editing one row cannot mutate the list until the save round-trips.
+ */
+function RegulatoryEditor({
+  entry,
+  busy,
+  onCancel,
+  onSave,
+}: {
+  entry: AdminReg | null;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (values: RegulatoryInput) => void;
+}) {
+  const [title, setTitle] = useState(entry?.title ?? "");
+  const [category, setCategory] = useState(entry?.category ?? "GCT");
+  const [summary, setSummary] = useState(entry?.summary ?? "");
+  const [effectiveDate, setEffectiveDate] = useState(entry?.effectiveDate?.slice(0, 10) ?? "");
+  const [actionNeeded, setActionNeeded] = useState(entry?.actionNeeded ?? "");
+  const [sourceUrl, setSourceUrl] = useState(entry?.sourceUrl ?? "");
+
+  const field: React.CSSProperties = {
+    width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)",
+    background: "var(--surface)", color: "var(--text)", font: "inherit", fontSize: 13.5,
+  };
+  const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginBottom: 5 };
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    onSave({
+      title: title.trim(),
+      category: category.trim(),
+      summary: summary.trim(),
+      // Empty means "no value", sent as null so an existing one is CLEARED
+      // rather than left behind — omitting the key would leave it alone, which
+      // is not what an emptied field means.
+      effectiveDate: effectiveDate ? new Date(`${effectiveDate}T12:00:00.000Z`).toISOString() : null,
+      actionNeeded: actionNeeded.trim() || null,
+      sourceUrl: sourceUrl.trim() || null,
+    });
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={entry ? "Edit regulatory entry" : "Add regulatory entry"}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+    >
+      <form
+        onSubmit={submit}
+        style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", boxShadow: "var(--shadow)", display: "grid", gap: 13 }}
+      >
+        <div style={{ ...archivo, fontWeight: 700, fontSize: 17 }}>
+          {entry ? "Edit entry" : "Add regulatory entry"}
+        </div>
+
+        <div>
+          <label style={label} htmlFor="reg-title">Title</label>
+          <input id="reg-title" style={field} value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </div>
+
+        <div>
+          <label style={label} htmlFor="reg-category">Category</label>
+          {/* Free text with a datalist, not a select: the column is a string
+              with a documented convention precisely so a new levy does not
+              need a migration to be recorded. */}
+          <input id="reg-category" style={field} value={category} onChange={(e) => setCategory(e.target.value)} list="reg-categories" required />
+          <datalist id="reg-categories">
+            {["GCT", "NHT", "TRN", "MIN_WAGE", "PERMIT", "OTHER"].map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </div>
+
+        <div>
+          <label style={label} htmlFor="reg-summary">Summary</label>
+          <textarea id="reg-summary" style={{ ...field, minHeight: 78, resize: "vertical" }} value={summary} onChange={(e) => setSummary(e.target.value)} required />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <label style={label} htmlFor="reg-effective">Effective date</label>
+            <input id="reg-effective" type="date" style={field} value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+          </div>
+          <div>
+            <label style={label} htmlFor="reg-source">Source URL</label>
+            <input id="reg-source" type="url" placeholder="https://…" style={field} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
+          </div>
+        </div>
+
+        <div>
+          <label style={label} htmlFor="reg-action">Action needed</label>
+          <input id="reg-action" style={field} value={actionNeeded} onChange={(e) => setActionNeeded(e.target.value)} placeholder="Leave empty for monitoring only" />
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>
+            Filling this in marks the entry &ldquo;Needs review&rdquo;. Empty means monitoring.
+          </div>
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 4 }}>
+          <button type="button" onClick={onCancel} disabled={busy} style={{ height: 34, padding: "0 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+            Cancel
+          </button>
+          <button type="submit" disabled={busy} style={{ height: 34, padding: "0 16px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff", opacity: busy ? 0.6 : 1 }}>
+            {busy ? "Saving…" : entry ? "Save changes" : "Add entry"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
