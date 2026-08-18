@@ -1091,6 +1091,10 @@ model SubscriptionPayment {
   /// one interval apart and reconcile with Subscription.renewsAt.
   coversFrom  DateTime
   coversUntil DateTime
+  /// "monthly" | "annual" — what kind of term this bought. Needed because
+  /// paid-through is recomputed by CHAINING terms calendar-wise; summing raw
+  /// durations drifts, since Aug->Sep is 31 days and Sep->Oct is 30.
+  interval    String   @default("monthly")
 
   recordedByUserId String
   note             String?

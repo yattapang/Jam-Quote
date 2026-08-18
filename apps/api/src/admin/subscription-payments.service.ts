@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { SubscriptionPayment } from "@prisma/client";
+import { Prisma, type SubscriptionPayment } from "@prisma/client";
 import { SubscriptionInterval, nextTermEnd } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PricingService } from "../billing/pricing.service.js";
@@ -92,10 +92,16 @@ export class SubscriptionPaymentsService {
           paidAt: input.paidAt ? new Date(input.paidAt) : now,
           coversFrom,
           coversUntil,
+          interval,
           recordedByUserId: actorUserId,
           note: input.note ?? null,
         },
       });
+
+      // Paid-through comes from the LEDGER, not from this one payment. Same
+      // call on record and on void, so the two can never disagree about how
+      // far a tenant is paid up.
+      const paidThrough = await this.paidThroughFromLedger(tx, businessId, coversUntil);
 
       // The payment IS the upgrade. A tenant who has paid is on pro, whatever
       // they were a moment ago — including one who had reverted to free.
@@ -107,9 +113,9 @@ export class SubscriptionPaymentsService {
           status: "active",
           interval,
           priceCents: existing?.priceCents ?? null,
-          renewsAt: coversUntil,
+          renewsAt: paidThrough,
         },
-        update: { plan: "pro", interval, renewsAt: coversUntil },
+        update: { plan: "pro", interval, renewsAt: paidThrough },
       });
 
       return created;
@@ -134,40 +140,38 @@ export class SubscriptionPaymentsService {
   /**
    * Void a payment — never delete one.
    *
-   * Retracting the term is conditional on purpose. If the subscription still
-   * ends exactly where this payment left it, nothing has happened since and
-   * the term is rolled back to where it started; that is what makes "void and
-   * re-record" safe for a mis-keyed amount, which would otherwise extend the
-   * term twice.
-   *
-   * If the dates have moved on — a later payment, or a staff edit — the term
-   * is left alone. Silently rewinding someone else's change would be worse
-   * than leaving a correction for a human to make deliberately.
+   * The term is then RECOMPUTED from whatever payments remain, rather than
+   * rolled back by this payment's own dates. The difference matters as soon as
+   * there is more than one payment: voiding the FIRST of two used to leave the
+   * subscription paid through the second one's end date, so a month that had
+   * been paid for twice, then un-paid once, still read as fully covered. Now
+   * the ledger is the single source of paid-through and voiding any payment —
+   * first, middle or last — reduces it by exactly that payment's term.
    */
   async void(paymentId: string, actorUserId: string): Promise<SubscriptionPayment> {
     const payment = await this.prisma.subscriptionPayment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new NotFoundException("Subscription payment not found");
     if (payment.voidedAt) throw new BadRequestException("Payment is already voided");
 
-    const subscription = await this.prisma.subscription.findUnique({
-      where: { businessId: payment.businessId },
-    });
-    const termRetractable =
-      subscription?.renewsAt != null &&
-      subscription.renewsAt.getTime() === payment.coversUntil.getTime();
-
-    const voided = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.subscriptionPayment.update({
         where: { id: paymentId },
         data: { voidedAt: new Date() },
       });
-      if (termRetractable) {
-        await tx.subscription.update({
-          where: { businessId: payment.businessId },
-          data: { renewsAt: payment.coversFrom },
-        });
-      }
-      return updated;
+
+      // Falls back to this payment's own start when nothing is left: that is
+      // where the subscription stood before any of these payments existed.
+      const paidThrough = await this.paidThroughFromLedger(
+        tx,
+        payment.businessId,
+        payment.coversFrom,
+      );
+      await tx.subscription.updateMany({
+        where: { businessId: payment.businessId },
+        data: { renewsAt: paidThrough },
+      });
+
+      return { updated, paidThrough };
     });
 
     await this.audit.record({
@@ -178,12 +182,55 @@ export class SubscriptionPaymentsService {
       details: {
         paymentId,
         amountCents: payment.amountCents,
-        // Recorded either way: "we voided but left the term" is exactly the
-        // kind of thing someone will need to explain later.
-        termRetracted: termRetractable,
+        // What the term became, not merely that it moved — someone will need
+        // to explain this against a bank statement later.
+        renewsAt: result.paidThrough.toISOString(),
       },
     });
 
-    return voided;
+    return result.updated;
+  }
+
+  /**
+   * How far a business is paid up, derived from its ledger.
+   *
+   * Two different questions, and getting them confused is what made the first
+   * attempt at this wrong:
+   *
+   * - WHERE the paid run began — the earliest `coversFrom` across ALL
+   *   payments, voided ones included. A later payment's start date was only
+   *   ever valid because an earlier one existed, so it cannot be the anchor
+   *   once that earlier one is voided.
+   * - HOW MUCH cover was bought — the summed duration of the payments that
+   *   still stand.
+   *
+   * Anchoring to the surviving payment's own start instead leaves the void
+   * with no effect: void the first of two consecutive months and the second
+   * still runs to the same end date, so a month that was paid for and then
+   * un-paid still reads as covered. That was the reported bug.
+   *
+   * `fallback` is used when there is no ledger at all.
+   */
+  private async paidThroughFromLedger(
+    tx: Prisma.TransactionClient,
+    businessId: string,
+    fallback: Date,
+  ): Promise<Date> {
+    const all = await tx.subscriptionPayment.findMany({
+      where: { businessId },
+      orderBy: { coversFrom: "asc" },
+      select: { coversFrom: true, interval: true, voidedAt: true },
+    });
+    if (all.length === 0) return fallback;
+
+    // Chained with calendar arithmetic, not summed durations: Aug->Sep is 31
+    // days and Sep->Oct is 30, so adding milliseconds drifts a day per month
+    // and lands the renewal on the wrong date.
+    let end = all[0]!.coversFrom;
+    for (const p of all) {
+      if (p.voidedAt !== null) continue;
+      end = nextTermEnd(p.interval, end.toISOString(), end);
+    }
+    return end;
   }
 }

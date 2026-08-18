@@ -13,12 +13,18 @@ function build(opts: {
   business?: unknown;
   subscription?: unknown;
   payment?: unknown;
+  /** Unvoided payments the recompute should see AFTER the operation. */
+  ledger?: { coversFrom: Date; interval: string; voidedAt: Date | null }[];
 } = {}) {
   const created: Record<string, unknown>[] = [];
   const subscriptionWrites: Record<string, unknown>[] = [];
 
   const tx = {
     subscriptionPayment: {
+      // The whole ledger the recompute reads — voided rows included, because
+      // the ANCHOR comes from all payments while the duration comes only from
+      // the ones that still stand.
+      findMany: vi.fn().mockResolvedValue(opts.ledger ?? []),
       create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
         created.push(args.data);
         return { id: "sp-1", ...args.data };
@@ -34,6 +40,10 @@ function build(opts: {
         return {};
       }),
       update: vi.fn().mockImplementation((args: Record<string, unknown>) => {
+        subscriptionWrites.push(args);
+        return {};
+      }),
+      updateMany: vi.fn().mockImplementation((args: Record<string, unknown>) => {
         subscriptionWrites.push(args);
         return {};
       }),
@@ -146,30 +156,50 @@ describe("voiding a payment", () => {
   const coversUntil = new Date("2026-09-01T00:00:00.000Z");
   const payment = { id: "sp-1", businessId: "biz-1", amountCents: 200_000, coversFrom, coversUntil, voidedAt: null };
 
-  it("retracts the term when nothing has happened since", async () => {
-    // This is what makes "void and re-record" safe for a mis-keyed amount —
-    // without it, re-recording would extend the term a second time.
-    const { svc, tx } = build({ payment, subscription: { businessId: "biz-1", renewsAt: coversUntil } });
+  const MONTH = 31 * 86_400_000;
+
+  it("returns paid-through to the start when the only payment is voided", async () => {
+    const { svc, subscriptionWrites } = build({
+      payment,
+      subscription: { businessId: "biz-1", renewsAt: coversUntil },
+      ledger: [{ coversFrom, interval: "monthly", voidedAt: new Date() }],
+    });
     await svc.void("sp-1", "admin-1");
-    expect(tx.subscription.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { renewsAt: coversFrom } }),
-    );
+    expect(JSON.stringify(subscriptionWrites)).toContain(coversFrom.toISOString());
   });
 
-  it("leaves the term alone when the dates have moved on", async () => {
-    // A later payment or a staff edit. Silently rewinding someone else's
-    // change would be worse than leaving a deliberate correction to a human.
-    const later = new Date("2026-10-01T00:00:00.000Z");
-    const { svc, tx } = build({ payment, subscription: { businessId: "biz-1", renewsAt: later } });
+  it("voiding the FIRST of two consecutive months shortens the term by one", async () => {
+    // The reported bug. Two months bought back to back: 01 Aug -> 01 Sep and
+    // 01 Sep -> 01 Oct. Voiding the first must leave ONE month of cover from
+    // where the run began — 01 Sep — not the second payment's untouched
+    // 01 Oct end date, which is what anchoring to the survivor would give.
+    const secondFrom = coversUntil;
+    const secondUntil = new Date("2026-10-01T00:00:00.000Z");
+    const { svc, subscriptionWrites } = build({
+      payment,
+      subscription: { businessId: "biz-1", renewsAt: secondUntil },
+      ledger: [
+        { coversFrom, interval: "monthly", voidedAt: new Date() },
+        { coversFrom: secondFrom, interval: "monthly", voidedAt: null },
+      ],
+    });
+
     await svc.void("sp-1", "admin-1");
-    expect(tx.subscription.update).not.toHaveBeenCalled();
+
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain(coversUntil.toISOString());
+    expect(written).not.toContain(secondUntil.toISOString());
   });
 
-  it("records whether the term was retracted — someone will need to explain it later", async () => {
-    const { svc, audit } = build({ payment, subscription: { businessId: "biz-1", renewsAt: coversUntil } });
+  it("records what the term became, not merely that it moved", async () => {
+    const { svc, audit } = build({
+      payment,
+      subscription: { businessId: "biz-1", renewsAt: coversUntil },
+      ledger: [{ coversFrom, interval: "monthly", voidedAt: new Date() }],
+    });
     await svc.void("sp-1", "admin-1");
     expect(audit.record).toHaveBeenCalledWith(
-      expect.objectContaining({ details: expect.objectContaining({ termRetracted: true }) }),
+      expect.objectContaining({ details: expect.objectContaining({ renewsAt: expect.any(String) }) }),
     );
   });
 

@@ -2246,7 +2246,12 @@ function TenantBilling({
                 <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.method.replace("_", " ").toLowerCase()}</span>
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                {r.paidAt.slice(0, 10)} · covers to {r.coversUntil.slice(0, 10)}
+                {/* The TERM first, because that is what the row is about.
+                    Showing the payment date first read as the start of the
+                    coverage period and made a correct row look wrong. */}
+                covers {r.coversFrom.slice(0, 10)} → {r.coversUntil.slice(0, 10)}
+                {" · paid "}
+                {r.paidAt.slice(0, 10)}
                 {r.reference ? ` · ${r.reference}` : ""}
               </div>
             </div>
