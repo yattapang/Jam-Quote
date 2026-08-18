@@ -14,6 +14,16 @@ export const createBusinessSchema = z.object({
   quotePrefix: z.string().min(1).optional(),
   invoicePrefix: z.string().min(1).optional(),
   jmdPerUsd: z.number().positive().optional(),
+  /**
+   * Where subscription renewal and receipt mail goes.
+   *
+   * Maintained by the SUBSCRIBER, not by JamQuote staff — whoever owns the
+   * login is often not whoever pays the bills. Empty string clears it, and the
+   * API falls back to the owner's address while unset, so a renewal reminder
+   * is never silently undeliverable.
+   */
+  billingContactName: z.string().max(120).optional(),
+  billingContactEmail: z.union([z.string().email(), z.literal("")]).optional(),
 });
 export type CreateBusinessInput = z.infer<typeof createBusinessSchema>;
 

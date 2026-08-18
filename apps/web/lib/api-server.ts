@@ -70,6 +70,8 @@ const TOKEN_COOKIE = "jamquote_token";
 const EMPTY_BUSINESS: Business = {
   id: "",
   name: "",
+  billingContactName: "",
+  billingContactEmail: "",
   trn: "",
   town: "",
   parish: "" as Business["parish"],

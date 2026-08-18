@@ -255,4 +255,8 @@ export interface Business {
   defaultGctRatePct: number;
   countryCode: string;
   currency: string;
+  /** Where subscription renewal and receipt mail goes. Empty means unset, and
+   * the API falls back to the owner's address. */
+  billingContactName: string;
+  billingContactEmail: string;
 }

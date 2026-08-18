@@ -36,6 +36,10 @@ export default function EditBusinessButton({
   const [tradeType, setTradeType] = useState(business.tradeType);
   const [addressLine, setAddressLine] = useState(business.addressLine);
   const [gctPct, setGctPct] = useState(String(business.defaultGctRatePct));
+  // Subscription mail goes here rather than to whoever owns the login — the
+  // person who runs the business is often not the one who pays its bills.
+  const [billingName, setBillingName] = useState(business.billingContactName);
+  const [billingEmail, setBillingEmail] = useState(business.billingContactEmail);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,6 +61,10 @@ export default function EditBusinessButton({
         tradeType: tradeType.trim() || undefined,
         addressLine: addressLine.trim() || undefined,
         defaultGctRatePct: gctPct.trim() === "" ? undefined : gctValue,
+        // Sent even when empty: "" is how the field is CLEARED, and the API
+        // stores NULL so the fallback to the owner's address applies again.
+        billingContactName: billingName.trim(),
+        billingContactEmail: billingEmail.trim(),
       });
       setOpen(false);
       router.refresh();
@@ -94,6 +102,21 @@ export default function EditBusinessButton({
               />
             </div>
             <Input label="Address" value={addressLine} onChange={(e) => setAddressLine(e.target.value)} />
+            <div style={{ marginTop: 4 }}>
+              <Input
+                label="Billing contact name"
+                value={billingName}
+                onChange={(e) => setBillingName(e.target.value)}
+                placeholder="Who handles the bills"
+              />
+              <Input
+                label="Billing contact email"
+                type="email"
+                value={billingEmail}
+                onChange={(e) => setBillingEmail(e.target.value)}
+                placeholder="Leave blank to use your own address"
+              />
+            </div>
             {error && <span className={modalStyles.error}>{error}</span>}
             <div className={modalStyles.actions}>
               <Button variant="ghost" onClick={() => setOpen(false)}>

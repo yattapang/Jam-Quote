@@ -24,7 +24,22 @@ export class BusinessService {
 
   async update(id: string, input: UpdateBusinessInput): Promise<Business> {
     await this.findById(id);
-    return this.prisma.business.update({ where: { id }, data: input });
+    return this.prisma.business.update({
+      where: { id },
+      data: {
+        ...input,
+        // "" means the contractor cleared the field, and that has to reach the
+        // database as NULL. An empty string is truthy enough to be picked as a
+        // recipient, so storing one would send renewal mail to nobody and look
+        // like it had been delivered.
+        ...(input.billingContactEmail !== undefined
+          ? { billingContactEmail: input.billingContactEmail.trim() || null }
+          : {}),
+        ...(input.billingContactName !== undefined
+          ? { billingContactName: input.billingContactName.trim() || null }
+          : {}),
+      },
+    });
   }
 
   /**

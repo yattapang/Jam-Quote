@@ -318,6 +318,10 @@ describe("pure mappers", () => {
       defaultGctRatePct: 15,
       countryCode: "JM",
       currency: "JMD",
+      // Unset maps to "" rather than undefined, so the Settings form is a
+      // controlled input from the first render.
+      billingContactName: "",
+      billingContactEmail: "",
     });
   });
 

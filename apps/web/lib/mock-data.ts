@@ -41,6 +41,8 @@ const businessProfile: BusinessProfile = {
 export const fixtureBusiness: Business = {
   id: "seed-business-blackwood",
   name: businessProfile.name,
+  billingContactName: "",
+  billingContactEmail: "",
   trn: businessProfile.trn,
   town: "",
   parish: businessProfile.parish,

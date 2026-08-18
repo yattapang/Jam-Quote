@@ -286,6 +286,8 @@ export interface ApiJob {
 export interface ApiBusiness {
   id: string;
   name: string;
+  billingContactName?: string | null;
+  billingContactEmail?: string | null;
   countryCode?: string;
   currency?: string;
   trn?: string | null;
@@ -655,6 +657,8 @@ export function mapBusiness(b: ApiBusiness): Business {
     defaultGctRatePct: Number(b.defaultGctRate),
     countryCode: b.countryCode ?? "JM",
     currency: b.currency ?? "JMD",
+    billingContactName: b.billingContactName ?? "",
+    billingContactEmail: b.billingContactEmail ?? "",
   };
 }
 
@@ -906,6 +910,9 @@ export async function updateJob(id: string, input: UpdateJobInput): Promise<Job>
  * `defaultGctRate` on the way out — both are the same percentage unit (see
  * mapBusiness), so no numeric conversion, just a field-name translation. */
 export interface UpdateBusinessInput {
+  /** "" clears it — the API stores NULL so the owner-address fallback applies. */
+  billingContactName?: string;
+  billingContactEmail?: string;
   name?: string;
   trn?: string;
   addressLine?: string;
@@ -1359,6 +1366,69 @@ export interface SetTenantPlanInput {
   plan: "free" | "pro";
   renewsAt?: string;
 }
+/**
+ * A tenant paying JamQuote — PLATFORM revenue.
+ *
+ * Not to be confused with `Payment`, which is a contractor's client paying the
+ * contractor. Two separate books of account; never sum them.
+ */
+export interface AdminSubscriptionPayment {
+  id: string;
+  businessId: string;
+  amountCents: number;
+  currency: string;
+  method: string;
+  reference: string | null;
+  paidAt: string;
+  /** The term this payment bought — whole terms only. */
+  coversFrom: string;
+  coversUntil: string;
+  note: string | null;
+  /** Voided rows stay in the list: a mis-keyed receipt is history, and hiding
+   * it would make the ledger impossible to reconcile against a bank statement. */
+  voidedAt: string | null;
+}
+
+export interface RecordSubscriptionPaymentInput {
+  /** Omit for the agreed price of the tenant's term — the common case. */
+  amountCents?: number;
+  method: "CARD" | "CASH" | "BANK_TRANSFER" | "MOBILE_MONEY" | "OTHER";
+  reference?: string;
+  paidAt?: string;
+  /** Switch terms with this payment, e.g. monthly to annual at renewal. */
+  interval?: "monthly" | "annual";
+  note?: string;
+}
+
+export async function getSubscriptionPayments(
+  businessId: string,
+): Promise<AdminSubscriptionPayment[]> {
+  return apiClient.get<AdminSubscriptionPayment[]>(
+    `/admin/tenants/${businessId}/subscription-payments`,
+  );
+}
+
+/** Recording a payment IS the plan change — it advances the term server-side. */
+export async function recordSubscriptionPayment(
+  businessId: string,
+  input: RecordSubscriptionPaymentInput,
+): Promise<AdminSubscriptionPayment> {
+  return apiClient.post<AdminSubscriptionPayment>(
+    `/admin/tenants/${businessId}/subscription-payments`,
+    input,
+  );
+}
+
+/** Void, never delete. */
+export async function voidSubscriptionPayment(
+  paymentId: string,
+): Promise<AdminSubscriptionPayment> {
+  return apiClient.patch<AdminSubscriptionPayment>(
+    `/admin/subscription-payments/${paymentId}/void`,
+    {},
+  );
+}
+
 /** PATCH /admin/tenants/:id/plan — ADMIN only; sets a business's subscription. */
 export async function setTenantPlan(
   businessId: string,

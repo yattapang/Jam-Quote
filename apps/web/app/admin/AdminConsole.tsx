@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   getJurisdiction,
@@ -20,6 +20,9 @@ import {
   updateAdmin,
   revokeAdmin,
   updateAdminRulePack,
+  getSubscriptionPayments,
+  recordSubscriptionPayment,
+  voidSubscriptionPayment,
   createRegulatory,
   updateRegulatory,
   reviewRegulatory,
@@ -28,6 +31,7 @@ import {
   type AdminData,
   type AdminReg,
   type AdminTenant,
+  type AdminSubscriptionPayment,
   type RegulatoryInput,
   type AdminUser,
   type PricingConfig,
@@ -1698,6 +1702,7 @@ export default function AdminConsole({
           onSetPlan={setTenantPlanChoice}
           onToggleSuspend={toggleTenantSuspend}
           onDelete={openDeleteModal}
+          onBillingChanged={() => router.refresh()}
           onClose={() => setTenantId(null)}
         />
       )}
@@ -1827,6 +1832,7 @@ function TenantDrawer({
   onSetPlan,
   onToggleSuspend,
   onDelete,
+  onBillingChanged,
   onClose,
 }: {
   raw: [string, string, string, string, string, string, number | string, number, number];
@@ -1839,6 +1845,9 @@ function TenantDrawer({
   onSetPlan: (id: string, choice: string) => void;
   onToggleSuspend: (id: string, suspended: boolean) => void;
   onDelete: (id: string, name: string) => void;
+  /** Recording or voiding a payment changes the tenant's plan and renewal, so
+   * the console behind the drawer has to re-read rather than show stale dates. */
+  onBillingChanged: () => void;
   onClose: () => void;
 }) {
   const [name, parish, plan, trn, status, , mrr, q, qm] = raw;
@@ -1963,6 +1972,8 @@ function TenantDrawer({
               </div>
             </>
           )}
+          {businessId && canManage && <TenantBilling businessId={businessId} onChanged={onBillingChanged} />}
+
           <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 11 }}>SUBSCRIPTION</div>
           <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
             {sub.map((r) => (
@@ -2087,5 +2098,176 @@ function RegulatoryEditor({
         </div>
       </form>
     </div>
+  );
+}
+
+
+/**
+ * A tenant's platform-subscription payments: what they have paid JamQuote, and
+ * the form to record the next one.
+ *
+ * Loads on mount rather than with the page: most drawer opens are not about
+ * billing, and the tenants list should not carry every tenant's ledger.
+ *
+ * Recording a payment advances the term server-side — the console never sends
+ * a renewal date. That is the whole point of the endpoint: one action, and the
+ * account state follows.
+ */
+function TenantBilling({
+  businessId,
+  onChanged,
+}: {
+  businessId: string;
+  onChanged: () => void;
+}) {
+  const [rows, setRows] = useState<AdminSubscriptionPayment[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<"CASH" | "BANK_TRANSFER" | "CARD" | "MOBILE_MONEY" | "OTHER">("BANK_TRANSFER");
+  const [reference, setReference] = useState("");
+  const [amount, setAmount] = useState("");
+  const [interval, setInterval] = useState<"" | "monthly" | "annual">("");
+
+  const load = useCallback(async () => {
+    try {
+      setRows(await getSubscriptionPayments(businessId));
+    } catch {
+      setError("Couldn't load payments.");
+    }
+  }, [businessId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function run(fn: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+      await load();
+      onChanged();
+      setOpen(false);
+      setReference("");
+      setAmount("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const field: React.CSSProperties = {
+    width: "100%", height: 32, padding: "0 9px", borderRadius: 7,
+    border: "1px solid var(--border)", background: "var(--surface)",
+    color: "var(--text)", fontSize: 13, fontFamily: "inherit",
+  };
+
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 11 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)" }}>
+          PAYMENTS RECEIVED
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff" }}
+        >
+          {open ? "Cancel" : "Record payment"}
+        </button>
+      </div>
+
+      {error && (
+        <div role="alert" style={{ marginBottom: 9, fontSize: 12.5, color: "var(--critical)" }}>{error}</div>
+      )}
+
+      {open && (
+        <div style={{ display: "grid", gap: 8, marginBottom: 14, padding: "12px 13px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--surface-alt)" }}>
+          <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
+            Method
+            <select style={field} value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
+              <option value="BANK_TRANSFER">Bank transfer</option>
+              <option value="CASH">Cash</option>
+              <option value="MOBILE_MONEY">Mobile money</option>
+              <option value="CARD">Card</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </label>
+          <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
+            Reference
+            <input style={field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Bank ref, cheque no." />
+          </label>
+          <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
+            Amount (leave blank for the agreed price)
+            <input style={field} type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Standard" />
+          </label>
+          <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
+            Term
+            <select style={field} value={interval} onChange={(e) => setInterval(e.target.value as typeof interval)}>
+              <option value="">Keep current term</option>
+              <option value="monthly">Switch to monthly</option>
+              <option value="annual">Switch to annual</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              run(() =>
+                recordSubscriptionPayment(businessId, {
+                  method,
+                  ...(reference.trim() ? { reference: reference.trim() } : {}),
+                  // Dollars in the field, cents on the wire — every money value
+                  // in this system is an integer number of cents.
+                  ...(amount.trim() ? { amountCents: Math.round(Number(amount) * 100) } : {}),
+                  ...(interval ? { interval } : {}),
+                }),
+              )
+            }
+            style={{ height: 34, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none", background: "var(--good)", color: "#fff", opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? "Recording…" : "Record & extend term"}
+          </button>
+        </div>
+      )}
+
+      <div style={{ marginBottom: 20 }}>
+        {rows === null && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Loading…</div>}
+        {rows?.length === 0 && (
+          <div style={{ fontSize: 12.5, color: "var(--muted)" }}>No payments recorded yet.</div>
+        )}
+        {rows?.map((r) => (
+          <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: r.voidedAt ? 0.5 : 1 }}>
+            <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, textDecoration: r.voidedAt ? "line-through" : "none" }}>
+                {formatJmd(r.amountCents)}
+                <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.method.replace("_", " ").toLowerCase()}</span>
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                {r.paidAt.slice(0, 10)} · covers to {r.coversUntil.slice(0, 10)}
+                {r.reference ? ` · ${r.reference}` : ""}
+              </div>
+            </div>
+            {r.voidedAt ? (
+              <span style={pill("muted")}>Voided</span>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm(`Void this ${formatJmd(r.amountCents)} payment? The term is rolled back if nothing has changed since.`)) return;
+                  void run(() => voidSubscriptionPayment(r.id));
+                }}
+                style={{ height: 26, padding: "0 9px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--critical)" }}
+              >
+                Void
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
