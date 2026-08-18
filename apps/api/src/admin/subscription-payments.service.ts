@@ -101,7 +101,7 @@ export class SubscriptionPaymentsService {
       // Paid-through comes from the LEDGER, not from this one payment. Same
       // call on record and on void, so the two can never disagree about how
       // far a tenant is paid up.
-      const paidThrough = await this.paidThroughFromLedger(tx, businessId, coversUntil);
+      const paidThrough = await this.reallocateTerms(tx, businessId, coversUntil);
 
       // The payment IS the upgrade. A tenant who has paid is on pro, whatever
       // they were a moment ago — including one who had reverted to free.
@@ -161,11 +161,7 @@ export class SubscriptionPaymentsService {
 
       // Falls back to this payment's own start when nothing is left: that is
       // where the subscription stood before any of these payments existed.
-      const paidThrough = await this.paidThroughFromLedger(
-        tx,
-        payment.businessId,
-        payment.coversFrom,
-      );
+      const paidThrough = await this.reallocateTerms(tx, payment.businessId, payment.coversFrom);
       await tx.subscription.updateMany({
         where: { businessId: payment.businessId },
         data: { renewsAt: paidThrough },
@@ -192,44 +188,62 @@ export class SubscriptionPaymentsService {
   }
 
   /**
-   * How far a business is paid up, derived from its ledger.
+   * Re-allocate every surviving payment to a contiguous run of terms, and
+   * return where that run now ends.
    *
-   * Two different questions, and getting them confused is what made the first
-   * attempt at this wrong:
+   * The amount, date, method and reference of a payment are immutable facts.
+   * The PERIOD it covers is not a fact — it is an allocation, a decision about
+   * which term the money was applied to. Voiding an earlier payment changes
+   * that decision, exactly as it would on paper: the money that is still there
+   * moves up to cover the earliest outstanding period.
    *
-   * - WHERE the paid run began — the earliest `coversFrom` across ALL
-   *   payments, voided ones included. A later payment's start date was only
-   *   ever valid because an earlier one existed, so it cannot be the anchor
-   *   once that earlier one is voided.
-   * - HOW MUCH cover was bought — the summed duration of the payments that
-   *   still stand.
+   * Without this the ledger contradicts itself. Two consecutive months are
+   * paid, the first is voided, and the subscription correctly says paid
+   * through the earlier date — while the surviving row still claims to cover
+   * the LATER month, which nothing paid for any more. The tenant has paid for
+   * one month and both facts should say the same month.
    *
-   * Anchoring to the surviving payment's own start instead leaves the void
-   * with no effect: void the first of two consecutive months and the second
-   * still runs to the same end date, so a month that was paid for and then
-   * un-paid still reads as covered. That was the reported bug.
+   * Allocation runs in the order the money arrived (`paidAt`), anchored at
+   * where the paid run began — the earliest coversFrom across ALL payments,
+   * voided ones included, since a later start date was only ever valid because
+   * an earlier payment existed.
    *
-   * `fallback` is used when there is no ledger at all.
+   * Terms are chained with calendar arithmetic rather than summed durations:
+   * Aug->Sep is 31 days and Sep->Oct is 30, so adding milliseconds drifts a
+   * day per month and lands the renewal on the wrong date. That is what
+   * `interval` on the payment is for.
    */
-  private async paidThroughFromLedger(
+  private async reallocateTerms(
     tx: Prisma.TransactionClient,
     businessId: string,
     fallback: Date,
   ): Promise<Date> {
     const all = await tx.subscriptionPayment.findMany({
       where: { businessId },
-      orderBy: { coversFrom: "asc" },
-      select: { coversFrom: true, interval: true, voidedAt: true },
+      orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
+      select: { id: true, coversFrom: true, coversUntil: true, interval: true, voidedAt: true },
     });
     if (all.length === 0) return fallback;
 
-    // Chained with calendar arithmetic, not summed durations: Aug->Sep is 31
-    // days and Sep->Oct is 30, so adding milliseconds drifts a day per month
-    // and lands the renewal on the wrong date.
-    let end = all[0]!.coversFrom;
+    const anchor = all.reduce(
+      (earliest, p) => (p.coversFrom < earliest ? p.coversFrom : earliest),
+      all[0]!.coversFrom,
+    );
+
+    let end = anchor;
     for (const p of all) {
-      if (p.voidedAt !== null) continue;
-      end = nextTermEnd(p.interval, end.toISOString(), end);
+      if (p.voidedAt !== null) continue; // voided money buys no period
+      const from = end;
+      const until = nextTermEnd(p.interval, from.toISOString(), from);
+      // Only write when the allocation actually moved, so an ordinary payment
+      // does not rewrite every earlier row it did not affect.
+      if (p.coversFrom.getTime() !== from.getTime() || p.coversUntil.getTime() !== until.getTime()) {
+        await tx.subscriptionPayment.update({
+          where: { id: p.id },
+          data: { coversFrom: from, coversUntil: until },
+        });
+      }
+      end = until;
     }
     return end;
   }

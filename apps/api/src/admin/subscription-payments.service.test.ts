@@ -14,7 +14,7 @@ function build(opts: {
   subscription?: unknown;
   payment?: unknown;
   /** Unvoided payments the recompute should see AFTER the operation. */
-  ledger?: { coversFrom: Date; interval: string; voidedAt: Date | null }[];
+  ledger?: { id?: string; coversFrom: Date; coversUntil?: Date; interval: string; voidedAt: Date | null }[];
 } = {}) {
   const created: Record<string, unknown>[] = [];
   const subscriptionWrites: Record<string, unknown>[] = [];
@@ -162,7 +162,7 @@ describe("voiding a payment", () => {
     const { svc, subscriptionWrites } = build({
       payment,
       subscription: { businessId: "biz-1", renewsAt: coversUntil },
-      ledger: [{ coversFrom, interval: "monthly", voidedAt: new Date() }],
+      ledger: [{ id: "sp-1", coversFrom, coversUntil, interval: "monthly", voidedAt: new Date() }],
     });
     await svc.void("sp-1", "admin-1");
     expect(JSON.stringify(subscriptionWrites)).toContain(coversFrom.toISOString());
@@ -179,8 +179,8 @@ describe("voiding a payment", () => {
       payment,
       subscription: { businessId: "biz-1", renewsAt: secondUntil },
       ledger: [
-        { coversFrom, interval: "monthly", voidedAt: new Date() },
-        { coversFrom: secondFrom, interval: "monthly", voidedAt: null },
+        { id: "sp-1", coversFrom, coversUntil, interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", coversFrom: secondFrom, coversUntil: secondUntil, interval: "monthly", voidedAt: null },
       ],
     });
 
@@ -195,11 +195,38 @@ describe("voiding a payment", () => {
     const { svc, audit } = build({
       payment,
       subscription: { businessId: "biz-1", renewsAt: coversUntil },
-      ledger: [{ coversFrom, interval: "monthly", voidedAt: new Date() }],
+      ledger: [{ id: "sp-1", coversFrom, coversUntil, interval: "monthly", voidedAt: new Date() }],
     });
     await svc.void("sp-1", "admin-1");
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ details: expect.objectContaining({ renewsAt: expect.any(String) }) }),
+    );
+  });
+
+  it("moves the surviving payment onto the outstanding period", async () => {
+    // The client paid for one month. After voiding the first of two, that
+    // money should cover the EARLIEST unpaid month — otherwise the ledger row
+    // claims a period nothing paid for, while the subscription says something
+    // different.
+    const secondFrom = coversUntil;
+    const secondUntil = new Date("2026-10-01T00:00:00.000Z");
+    const { svc, tx } = build({
+      payment,
+      subscription: { businessId: "biz-1", renewsAt: secondUntil },
+      ledger: [
+        { id: "sp-1", coversFrom, coversUntil, interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", coversFrom: secondFrom, coversUntil: secondUntil, interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.void("sp-1", "admin-1");
+
+    // sp-2 is rewritten from the run's start, not left where it was.
+    expect(tx.subscriptionPayment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "sp-2" },
+        data: { coversFrom, coversUntil },
+      }),
     );
   });
 
