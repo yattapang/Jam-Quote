@@ -757,6 +757,32 @@ three years of history should not be limited by a phone's memory, and the same
 generator can later back a scheduled email to the accountant.
 
 
+## 4h. Tenants table on narrow screens — small, worth doing
+
+Confirmed working, but the ACTIONS column is the 7th of seven and needs
+horizontal scrolling to reach.
+
+**The problem is not the scroll, it is what scrolls away.** The business name
+is column one, so by the time the buttons are visible the name is not. Deciding
+to suspend or delete an account without its name on screen is the wrong thing
+to ask of anyone.
+
+Recommended fix, in order of value for effort:
+
+1. **Sticky first column** — `position: sticky; left: 0` on the name cell, with
+   a background so rows do not bleed through. The name stays put while the rest
+   scrolls. Cheap, and it fixes the actual defect rather than the symptom.
+2. **Drop ACTIONS below the tablet breakpoint.** The drawer now carries plan,
+   term, suspend and delete with room to breathe, so on a phone the row should
+   simply open it. Keeping both surfaces on a 390px screen is what forced the
+   width in the first place.
+3. **Keep the inline actions on desktop.** They are genuinely faster when
+   working through several tenants, and there is space for them there.
+
+Deliberately NOT a card layout: the table is scannable and staff compare rows
+down a column (who is past due, who is on annual). Cards lose that.
+
+
 ---
 
 ## 5. Standing outstanding items
