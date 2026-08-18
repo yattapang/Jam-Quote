@@ -160,6 +160,12 @@ model Business {
   entityType     EntityType @default(SOLE_TRADER)
   trn            String? // taxpayer id (TRN in JM), validated per jurisdiction
   logoUrl        String?
+  /// Where renewal and receipt mail goes. Maintained by the SUBSCRIBER in
+  /// their own Settings, not by staff — whoever owns the login is often not
+  /// whoever pays the bills. Falls back to the owner's address while unset,
+  /// so a reminder is never silently undeliverable.
+  billingContactName  String?
+  billingContactEmail String?
   addressLine    String?
   /// Town or city. Distinct from `parish`, which is the JURISDICTION region
   /// (14 of them in JM) wired to the rule-pack via getJurisdiction — a parish
@@ -188,6 +194,8 @@ model Business {
   equipment    EquipmentItem[]
   connections  Connection[]
   subscription Subscription?
+  subscriptionPayments SubscriptionPayment[]
+  subscriptionNotices  SubscriptionNotice[]
   trades       Trade[]
   jobs         Job[]
   catalogHidden CatalogHidden[]
@@ -1058,4 +1066,58 @@ model AuditLog {
   createdAt   DateTime @default(now())
 
   @@index([createdAt])
+}
+
+
+/// A tenant paying JamQuote for their subscription — PLATFORM revenue.
+///
+/// NOT the `Payment` model, which is a contractor's client paying the
+/// contractor's invoice. Two separate books of account; never sum them. The
+/// names are deliberately distinct so the join cannot be written by accident.
+model SubscriptionPayment {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  amountCents Int
+  currency    String        @default("JMD")
+  method      PaymentMethod
+  /// Cheque number, bank reference, wallet transaction id — whatever lets this
+  /// be matched against a bank statement later.
+  reference   String?
+  paidAt      DateTime      @default(now())
+
+  /// The term this payment bought. Whole terms only, so the two are exactly
+  /// one interval apart and reconcile with Subscription.renewsAt.
+  coversFrom  DateTime
+  coversUntil DateTime
+
+  recordedByUserId String
+  note             String?
+  /// Voided, never deleted — a mis-keyed receipt is history, not an accident
+  /// to erase. Matches how invoice payments already behave.
+  voidedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([businessId, paidAt])
+}
+
+/// One row per subscription notice actually sent.
+///
+/// The unique constraint IS the idempotency. The sweep runs on a host that
+/// sleeps, so it is expected to run from the daily cron, on boot, and from an
+/// admin button — and must never double-send. `periodEnd` scopes a notice to
+/// the term it belongs to, so the same kind can be sent again next term.
+model SubscriptionNotice {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// NoticeKind from @jamquote/core. Plain text, matching plan/status/interval
+  /// beside it, so adding a notice needs no enum migration.
+  kind      String
+  periodEnd DateTime
+  sentAt    DateTime @default(now())
+
+  @@unique([businessId, kind, periodEnd])
 }

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
-import type { AuditLog, Business, Subscription } from "@prisma/client";
+import type { AuditLog, Business, Subscription, SubscriptionPayment } from "@prisma/client";
 import { AdminCapability } from "@jamquote/core";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { RequireCapability } from "../auth/require-capability.decorator.js";
@@ -18,8 +18,11 @@ import {
   type AdminUser,
 } from "./admin.service.js";
 import { AuditService } from "./audit.service.js";
+import { SubscriptionPaymentsService } from "./subscription-payments.service.js";
 import {
   createRegulatoryUpdateSchema,
+  recordSubscriptionPaymentSchema,
+  type RecordSubscriptionPaymentInput,
   hardDeleteTenantSchema,
   promoteAdminSchema,
   reviewRegulatoryUpdateSchema,
@@ -51,6 +54,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly auditService: AuditService,
     private readonly rulePack: RulePackService,
+    private readonly subscriptionPayments: SubscriptionPaymentsService,
   ) {}
 
   @Get("overview")
@@ -206,6 +210,37 @@ export class AdminController {
   }
 
   /** Subscription & revenue overview — GET /admin/financials. */
+  // --- Subscription billing: what tenants have paid JamQuote ---------------
+  // Gated on MANAGE_TENANTS, the same capability as changing a plan: recording
+  // a payment IS a plan change, it just carries the money with it.
+
+  @Get("tenants/:id/subscription-payments")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  listSubscriptionPayments(@Param("id") id: string): Promise<SubscriptionPayment[]> {
+    return this.subscriptionPayments.findAll(id);
+  }
+
+  @Post("tenants/:id/subscription-payments")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  recordSubscriptionPayment(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(recordSubscriptionPaymentSchema))
+    body: RecordSubscriptionPaymentInput,
+    @Req() req: Request,
+  ): Promise<SubscriptionPayment> {
+    return this.subscriptionPayments.record(id, body, req.user!.sub);
+  }
+
+  /** Void, never delete — a mis-keyed receipt is history. */
+  @Patch("subscription-payments/:paymentId/void")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  voidSubscriptionPayment(
+    @Param("paymentId") paymentId: string,
+    @Req() req: Request,
+  ): Promise<SubscriptionPayment> {
+    return this.subscriptionPayments.void(paymentId, req.user!.sub);
+  }
+
   @Get("financials")
   @RequireCapability(AdminCapability.VIEW_FINANCIALS)
   financials(): Promise<AdminFinancials> {

@@ -91,3 +91,27 @@ export const reviewRegulatoryUpdateSchema = z.object({
   reviewed: z.boolean(),
 });
 export type ReviewRegulatoryUpdateInput = z.infer<typeof reviewRegulatoryUpdateSchema>;
+
+/**
+ * Body for POST /admin/tenants/:id/subscription-payments.
+ *
+ * `amountCents` is optional: omitted means the agreed price for the tenant's
+ * term, which is the common case and keeps the form a single click. It is
+ * never inferred FROM the amount — a short payment must stay visible as a
+ * short payment rather than silently redefining the agreed rate.
+ */
+export const recordSubscriptionPaymentSchema = z.object({
+  amountCents: z.number().int().positive().optional(),
+  method: z.enum(["CARD", "CASH", "BANK_TRANSFER", "MOBILE_MONEY", "OTHER"]),
+  /** Cheque number, bank reference, wallet transaction id — whatever lets this
+   * be matched against a bank statement later. */
+  reference: z.string().max(120).optional(),
+  /** When the money actually arrived, if that differs from when it was keyed
+   * in. Defaults to now. */
+  paidAt: z.string().datetime().optional(),
+  /** Switch the tenant onto a different term with this payment (e.g. monthly
+   * to annual at renewal). Defaults to the term they are already on. */
+  interval: z.enum(["monthly", "annual"]).optional(),
+  note: z.string().max(500).optional(),
+});
+export type RecordSubscriptionPaymentInput = z.infer<typeof recordSubscriptionPaymentSchema>;
