@@ -474,7 +474,7 @@ payment instead of being kept by hand.
 | `Subscription.status` is written ONCE, as the default `"active"`. Nothing ever updates it. | Every tenant reads "Active" forever. The console's Trial / Past due / Churned filters count a state nothing can set — permanently zero, the same defect as "Applied (YTD)" on the regulatory feed. |
 | `renewsAt` is written and displayed, but nothing ever READS it to decide anything. | A subscription that lapsed a year ago is indistinguishable from one paid yesterday. |
 | There is no record of platform revenue at all. | "Have they paid?" cannot be answered. MRR is contracted value — what tenants *should* pay — and was being read as income. |
-| The free cap IS enforced (`quotes.service.ts:128`). | Losing pro has real consequences, so expiry must never be silent — and auto-cutoff is dangerous. |
+| Quote creation is the ONLY thing the plan gates (`quotes.service.ts:121`). Invoicing, payments, clients, PDFs are all ungated. | Reverting to free is a reduced tier, not a lockout — a reverted tenant keeps trading and collecting. This is what makes automatic reversion at the cutoff reasonable (see 5). |
 | A daily cron already exists (`QuoteExpiryService`, `@nestjs/schedule`). | The scheduling pattern is established; no new infrastructure needed. |
 | Email is Resend, and the API already sends (password reset). | Transactional mail from the API is a known path. |
 
@@ -536,39 +536,73 @@ trusted to fire once:
 - surface "last swept at" in the console so silence is visible rather than
   assumed to mean "nothing due".
 
-**5. What expiry does — deliberately NOT an automatic cutoff.**
+**5. Non-payment reverts to FREE. It does not suspend.**
 
-A lapsed tenant is flagged, emailed, and shown as PAST_DUE to staff. Access is
-not withdrawn automatically. In a market where a bank transfer can take days,
-auto-downgrading a paying contractor mid-job — blocking quote creation via the
-free cap — turns a payment delay into a customer's outage. Downgrade stays an
-explicit admin action. Revisit only once card payment makes settlement instant.
+*Owner decision, 2026-08-18, and it changed my recommendation.*
 
-### Phases
+I had argued against any automatic cutoff. That was overweighted, because I had
+not checked what the plan actually gates: **quote creation is the only thing**
+(`quotes.service.ts:121`). Invoicing, recording payments, clients, PDFs and
+email are all ungated. So a reverted tenant keeps trading, keeps invoicing, and
+keeps collecting money — they simply drop to 3 new quotes a month until they
+pay. That is a fair, reversible consequence rather than an outage, so automatic
+reversion at the cutoff is right.
 
-- **A — the loop.** `SubscriptionPayment` model, record/void endpoints, term
-  advance on payment, derived standing in core + tests. No UI beyond a
-  "Record payment" form in the tenant drawer.
-- **B — visibility.** Financials gains *collected* (real money, from the
-  ledger) beside *MRR* (contracted). Tenant drawer gains payment history.
-  Tenants table status pill reflects derived standing.
-- **C — automation.** Notice ledger, sweep service, four email templates,
-  admin "run sweep" button and last-swept indicator.
-- **D — self-serve.** WiPay card checkout so a tenant renews themselves and
-  the ledger row is written by the webhook rather than by staff. Blocked on
-  WiPay credentials (see §5).
+The distinction to hold onto, because wiring these together would be a serious
+mistake:
 
-A is the foundation and worth doing alone: it is what makes "apply the funding
-and the account status follows" true.
+| Event | Trigger | Effect | Reversible by |
+|---|---|---|---|
+| **Revert to free** | Term ends unpaid | `plan = "free"`. All data kept. Still invoices, still collects payments. | Recording a payment |
+| **Suspend** | **Breach of terms ONLY** | Access blocked | Admin restore |
+| **Delete** | **Breach of terms ONLY** | Hard delete | Nothing |
 
-### Decisions needed before building
+Non-payment must NEVER suspend. Suspension and deletion are conduct sanctions,
+never billing ones, and the code should read that way — the reversion path must
+not touch `Business.deletedAt` at all.
 
-1. **Grace period** before a lapsed subscription reads PAST_DUE — 7 days?
-2. **Who receives the emails** — the business owner, or a billing contact?
-3. **Partial payments** — allowed (part-term credit), or must a payment cover a
-   whole term?
-4. **Trial** — is there one? "Trial" appears in the console filters today but
-   nothing implements it. Drop it, or build it?
+The cutoff is `renewsAt` itself: reminders run before it, reversion happens on
+it. No grace window, since the consequence is a reduced tier rather than a
+lockout, and a tenant who pays late is restored the moment the payment is
+recorded.
+
+**6. Billing contact belongs to the subscriber.**
+
+Renewal mail goes to a billing contact the tenant sets themselves — not to
+whichever user happens to own the login. `Business.billingContactName` +
+`billingContactEmail`, editable in the tenant's own Settings, falling back to
+the owner's address while unset so a reminder is never silently undeliverable.
+Staff can see it in the drawer but should not be the ones maintaining it.
+
+**7. Payments cover a whole term.**
+
+No partial credit. A recorded payment advances exactly one term, which keeps
+the ledger and `renewsAt` trivially reconcilable — the alternative is
+part-period arithmetic and a proration policy nobody has asked for. The form
+should say so, and default the amount to the term price so the common case is
+one click.
+
+**8. No trial.** The free tier IS the trial: 3 quotes a month, indefinitely.
+`freeQuotesPerMonth` currently defaults to 5 and must change to 3 (code default
+AND the live pricing row). The console's phantom "Trial" filter goes at the
+same time — it counts a state nothing sets.
+
+### Decisions — ANSWERED (owner, 2026-08-18)
+
+| Question | Answer |
+|---|---|
+| Grace period | None. Cutoff is `renewsAt`; reminders come before it. |
+| Who receives email | A billing contact the subscriber provides. |
+| Partial payments | Not allowed — whole terms only. |
+| Trial | None. Free tier is 3 quotes/month. |
+
+### Still open
+
+- Reminder timing: 14 / 3 / 0 days before cutoff, plus one after reverting?
+- Does reverting to free need its own email ("your account is now on Free"),
+  separate from the pre-cutoff reminders? Assumed yes.
+- Annual renewals: same reminder cadence, or earlier (30 days) given the size
+  of the payment?
 
 ---
 
