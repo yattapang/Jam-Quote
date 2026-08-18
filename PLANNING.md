@@ -461,6 +461,117 @@ Written down first so none of it is lost mid-session.
 
 ---
 
+## 4e. Subscription billing lifecycle — PROPOSED, not started
+
+The ask, restated: see money actually received from tenants, warn them before a
+subscription lapses, and have an account's standing follow from a recorded
+payment instead of being kept by hand.
+
+### What is actually there today (verified, not assumed)
+
+| Fact | Consequence |
+|---|---|
+| `Subscription.status` is written ONCE, as the default `"active"`. Nothing ever updates it. | Every tenant reads "Active" forever. The console's Trial / Past due / Churned filters count a state nothing can set — permanently zero, the same defect as "Applied (YTD)" on the regulatory feed. |
+| `renewsAt` is written and displayed, but nothing ever READS it to decide anything. | A subscription that lapsed a year ago is indistinguishable from one paid yesterday. |
+| There is no record of platform revenue at all. | "Have they paid?" cannot be answered. MRR is contracted value — what tenants *should* pay — and was being read as income. |
+| The free cap IS enforced (`quotes.service.ts:128`). | Losing pro has real consequences, so expiry must never be silent — and auto-cutoff is dangerous. |
+| A daily cron already exists (`QuoteExpiryService`, `@nestjs/schedule`). | The scheduling pattern is established; no new infrastructure needed. |
+| Email is Resend, and the API already sends (password reset). | Transactional mail from the API is a known path. |
+
+**The honest summary: there is no subscription lifecycle.** An admin sets a
+plan and it stays that way forever. Everything below builds the missing loop.
+
+### The design
+
+**1. A ledger for platform revenue — `SubscriptionPayment`.**
+
+`businessId, amountCents, currency, method, reference, paidAt, coversFrom,
+coversUntil, recordedByUserId, note, voidedAt`.
+
+This is NOT the existing `Payment` model. That one is a contractor's client
+paying the contractor's invoice — tenant revenue. This is a tenant paying
+JamQuote — platform revenue. Two different books of account that must never be
+summed together; the naming has to make that impossible to confuse.
+
+Void rather than delete, matching how invoice payments already work: a
+mis-keyed receipt is history, not an accident to erase.
+
+**2. Standing is DERIVED; only intent is stored.**
+
+The existing invariant already says never model the same fact twice — it is why
+`ProjectStage` has no `INVOICED` member. Same discipline here:
+
+- **Stored** (decisions a human made): `plan`, `interval`, `priceCents`,
+  `renewsAt`, `cancelledAt`, and suspension (already `Business.deletedAt`).
+- **Derived** (a function of `renewsAt` + now + grace): `CURRENT`,
+  `DUE_SOON`, `PAST_DUE`, `LAPSED`.
+
+Deriving it kills the phantom filters and makes it impossible for the stored
+status to drift from the dates. Pure function in `packages/core`, unit-tested
+the way `rulePackVerification` is.
+
+**3. Recording a payment IS the state change.**
+
+One admin action, everything follows: extend `renewsAt` by one term from the
+LATER of today or the current `renewsAt` (so paying early does not lose the
+tenant days), write the ledger row, email a receipt, write an audit entry. The
+admin never edits a date or a status by hand — which is the part being asked
+for, and also the part that currently cannot be done at all.
+
+**4. Reminders — and an honest problem with them.**
+
+Schedule: 14 days, 3 days, on the day, and 7 days after lapse.
+
+**The catch: a cron on a service that sleeps is not a scheduler.** Render's
+free tier spins the API down when idle, so a midnight cron may simply never
+fire. The existing quote-expiry cron has this same latent flaw and nobody has
+noticed because nothing depended on it.
+
+So the sweep must be idempotent and triggerable from several places rather than
+trusted to fire once:
+- a `SubscriptionNotice` ledger (`businessId, kind, periodEnd, sentAt`) with a
+  uniqueness constraint, so a reminder can never be sent twice however often
+  the sweep runs;
+- run it on the daily cron, on boot, AND from an admin button;
+- surface "last swept at" in the console so silence is visible rather than
+  assumed to mean "nothing due".
+
+**5. What expiry does — deliberately NOT an automatic cutoff.**
+
+A lapsed tenant is flagged, emailed, and shown as PAST_DUE to staff. Access is
+not withdrawn automatically. In a market where a bank transfer can take days,
+auto-downgrading a paying contractor mid-job — blocking quote creation via the
+free cap — turns a payment delay into a customer's outage. Downgrade stays an
+explicit admin action. Revisit only once card payment makes settlement instant.
+
+### Phases
+
+- **A — the loop.** `SubscriptionPayment` model, record/void endpoints, term
+  advance on payment, derived standing in core + tests. No UI beyond a
+  "Record payment" form in the tenant drawer.
+- **B — visibility.** Financials gains *collected* (real money, from the
+  ledger) beside *MRR* (contracted). Tenant drawer gains payment history.
+  Tenants table status pill reflects derived standing.
+- **C — automation.** Notice ledger, sweep service, four email templates,
+  admin "run sweep" button and last-swept indicator.
+- **D — self-serve.** WiPay card checkout so a tenant renews themselves and
+  the ledger row is written by the webhook rather than by staff. Blocked on
+  WiPay credentials (see §5).
+
+A is the foundation and worth doing alone: it is what makes "apply the funding
+and the account status follows" true.
+
+### Decisions needed before building
+
+1. **Grace period** before a lapsed subscription reads PAST_DUE — 7 days?
+2. **Who receives the emails** — the business owner, or a billing contact?
+3. **Partial payments** — allowed (part-term credit), or must a payment cover a
+   whole term?
+4. **Trial** — is there one? "Trial" appears in the console filters today but
+   nothing implements it. Drop it, or build it?
+
+---
+
 ---
 
 ## 5. Standing outstanding items
