@@ -627,7 +627,7 @@ fire exactly once (see 4).
 Everything here is decided; no further input needed. Written as a checklist so
 a fresh session can pick it up without re-deriving anything.
 
-**1. Schema + migration**
+**1. Schema + migration — DONE (`4be35c7`)**
 - `SubscriptionPayment`: `id, businessId, amountCents, currency, method,
   reference?, paidAt, coversFrom, coversUntil, recordedByUserId, note?,
   voidedAt?, createdAt`. Index `(businessId, paidAt)`.
@@ -648,7 +648,7 @@ most ONE notice and picks the window the tenant is actually in, so a sweep
 missed for a week does not send a burst — call it per subscription per run and
 persist whatever it returns.
 
-**3. API**
+**3. API — DONE (`4be35c7`)**
 - `POST /admin/tenants/:id/subscription-payments` — record. Advances
   `renewsAt`, sets `plan = "pro"`, writes the ledger row, audits, queues
   `RECEIPT`. Amount defaults to the term price; whole terms only.
@@ -656,14 +656,18 @@ persist whatever it returns.
 - `GET /admin/tenants/:id/subscription-payments` — history for the drawer.
 - All gated on `MANAGE_TENANTS`.
 
-**4. Free tier to 3**
+**4. Free tier to 3 — DONE (`4be35c7`)**. Live row was already 3; the code default was 5.
 - `pricing.service.ts` default 5 -> 3, AND update the live `PricingConfig` row
   (the default only applies when no row exists).
 
-**5. Tenant-facing**
+**5. Tenant-facing — REMAINING**
 - Billing contact fields in the tenant's own Settings, beside the business
   details. Falls back to the owner's email while unset, so a reminder is never
   silently undeliverable.
+
+**Remaining in Phase A:** the billing-contact fields in tenant Settings (5),
+and a "Record payment" form + payment history in the admin tenant drawer. The
+API for both is done and verified; what is left is UI.
 
 **Explicitly NOT in Phase A:** the sweep, the emails, and the revert
 transition. Those are Phase C and depend on `dueNotices` existing first. Phase
