@@ -1,7 +1,9 @@
 # JamQuote — Working Plan
 
-**Last updated:** 2026-08-15
-**Status:** web app pre-launch hardening; mobile deliberately not started.
+**Last updated:** 2026-08-17
+**Status:** post-audit hardening. The owner has walked the whole app (AUDIT.md,
+six parts) and every finding is triaged below. Two contractors are to be given
+access once the remaining blockers clear. Mobile deliberately not started.
 
 This file is the single source of truth for what we are building, in what
 order, and why. Update it in the same commit as the work it describes — a plan
@@ -68,24 +70,35 @@ Other terms already settled:
 
 ## 2. Where we are
 
-The web app is feature-complete for a first customer except for the items
-below. Payments by card are blocked on WiPay credentials. Mobile is
-intentionally untouched until the web app is solid.
+The web app has now been walked end to end by its owner rather than only
+tested. That changed the picture: the code was in better shape than the
+experience, and most findings were not broken logic.
+
+**The audit's real lesson, in one line:** of eleven substantive findings, four
+were features working exactly as designed where the design did not match what
+the word on the button means to the person clicking it, and three were a
+correct, well-tested helper that some screen simply did not call. Only two were
+ordinary bugs. Tests could not have caught most of this — which is why the
+remaining plan leans on real use, not more unit tests.
 
 Recently landed (all pushed):
 
 - **Vocabulary unified** (0a–0d): `Job` = the reusable priced template,
   `Project` = client work, in schema, wire and UI. Four steps, zero SQL.
-- **Phase 1 findability**: trade picker offers "+ Add" before you type; the
-  quote line's category dropdown always renders and can create; routes and
-  labels renamed (`/jobs` = Job Library, `/projects` = client work); Job
-  Library empty state teaches the feature.
-- **Phase 2 kind-first line editor**: every line declares what it IS
-  (Material / Labour / Equipment / Job) and the saved picker, units and price
-  follow from that. Fixed a customer-facing bug on the way — job lines printed
-  "12 unit" instead of "12 sq ft".
-- **Equipment library**: the UI for an API that already existed.
-- Reports, view-as-tenant, identity-keyed rate limiting, coverage math.
+- **Kind-first line editor** with inline creation for every kind, equipment as
+  a first-class component, and per-component units.
+- **`Invoice.issueDate`** — an invoice now carries its own date and reports
+  bucket revenue by it. Previously everything keyed off row-creation time, so
+  a back-dated invoice was counted in the month it was typed.
+- **Reports**: weekly period, custom date range, printing, and a range caption.
+- **Hiding extended to library items** — materials, labour rates and equipment,
+  not just the vocabulary behind them.
+- **The staff console tells the truth.** It had been falling back to invented
+  tenants, a hardcoded MRR and a fabricated revenue chart.
+- Deposit as % or $, unit rendering unified, material unit round-trip fixed.
+
+**Not yet met by a real user:** everything above. No contractor has used any of
+it. That is the single largest risk in this plan and the reason §4b exists.
 
 ---
 
@@ -259,7 +272,7 @@ The structural change underneath: a line's `kind` says what it IS; its
 filing a bag of cement under a custom heading recorded it as OTHER. Category
 now follows kind.
 
-### Phase 2b — Inline creation everywhere (IN PROGRESS)
+### Phase 2b — Inline creation everywhere. DONE
 
 Reported: only Material lets you create a new entry from the Saved picker.
 Labour, Equipment and Job say "none saved" with no way out except abandoning
@@ -275,18 +288,28 @@ the quote.
     OTHER component (quantityPerUnit 1, no markup), which computes to exactly
     the entered rate and opens on the Jobs page as an ordinary job to refine.
 
-### Phase 2c — Unit vocabulary for labour and equipment (API DONE: 1fb09a2)
+### Phase 2c — Unit vocabulary for labour and equipment. DONE
 
 `RateUnit` is a closed Postgres enum of cadences, so its dropdown genuinely
 cannot be extended by a tenant. But labour sold per sq ft, or scaffold per
 lift, is real. Both models gained a free-text `unitLabel`, mirroring materials.
-Migration written, NOT YET APPLIED. Pickers and quote-line plumbing still to do.
+Migration applied. Pickers, quote-line plumbing and rendering all done — the
+last piece was the screens that read `RATE_UNIT_LABEL` directly instead of
+calling `lineUnitLabel`, which is why a line sold by the metre printed
+"30 units" (`437c235`).
 
-### Phase 3 — Hide vocabulary. DONE (d1bdab4, a3a2794, 2b7989c)
+### Phase 3 — Hiding. DONE (d1bdab4, a3a2794, 2b7989c, 16f75ed)
 
-Tenants can hide material categories, material units and trades they never
-use, from Settings -> "Catalog & vocabulary". Hiding is not deleting: the row
-stays, still referenced by existing materials and by documents already sent.
+Tenants can hide material categories, material units and trades — and, since
+`16f75ed`, saved materials, labour rates and equipment themselves. Hiding is
+not deleting: the row stays, still referenced by existing materials and by
+documents already sent.
+
+**Hiding does NOT cascade** from vocabulary to items, by decision. Hiding the
+word "Tiler" shortens the trade picker; hiding the rate "Tiler — Master"
+removes it from the quote line. One click withdrawing several priced items at
+once is not something to do silently, and restoring the word would then have to
+guess which items to bring back.
 
 **The schema decision, worth not relitigating.** Catalog rows use the
 curated/tenant pattern where `businessId NULL` means a row EVERY tenant
@@ -330,65 +353,114 @@ the quote editor, add-material and invoice detail.
 
 ## 4b. Release checklist — DO THIS BEFORE MORE FEATURES
 
-A large amount of work is committed and none of it has met a real user. Two
-finished features are inert until their migrations run. Building more on top
-of an unverified stack is how a small problem becomes five interleaved ones.
+Still true, and now more so: a large amount of work is committed and none of it
+has met a real user. The audit found eleven substantive issues in a single
+pass, and the great majority were invisible to the test suite. More code is not
+what reduces that number.
 
 **1. Verify the build somewhere with clean egress.**
 `npm run build` has never succeeded on the dev machine — `next/font` cannot
-reach fonts.googleapis.com (TLS interception). Typecheck, lint and ~770 tests
-pass, but the production build is genuinely unverified. Vercel's build will be
-the first real run; expect to watch it.
+reach fonts.googleapis.com (TLS interception). Typecheck, lint and ~810 tests
+pass, but the production build is genuinely unverified. Vercel's build is the
+first real run; watch it. The print stylesheet and the admin console changes
+are also unverified in a browser for the same reason.
 
-**2. Apply the two pending migrations.**
-- `20260816090000_labour_rate_unit_label` — unitLabel on LabourRate + EquipmentItem
-- `20260816140000_catalog_hidden` — the CatalogHidden table
+**2. Migrations: nothing to remember.**
+Render runs `prisma migrate deploy` on boot, so a pushed migration applies
+itself. The earlier "apply these two by hand" step was stale advice and has
+been removed. `invoice_issue_date` was applied and verified against live —
+every existing invoice backfilled to the date reports already used, so no
+figure moved.
 
-Both additive, nullable/new-table, non-destructive. Until they run, saving a
-custom unit and hiding a catalog entry both fail against the live database.
-
-```
-npm run -w @jamquote/api exec -- prisma migrate deploy
-```
-
-**Use a DIRECT, non-pooled Neon endpoint.** Through the pooler a failed
-migration strands a session-level advisory lock and every retry then times out
-(hit once as P1002; cost a diagnosis session). This is still unfixed in
-whatever runs migrations on deploy.
+**Still true:** whatever runs migrations must use a DIRECT, non-pooled Neon
+endpoint. Through the pooler a failed migration strands a session-level
+advisory lock and every retry then times out (hit once as P1002).
 
 **3. Deploy API and web TOGETHER.**
-Non-negotiable this time. 0c/0d renamed JSON fields (`jobId` -> `projectId`,
-`assemblyId` -> `jobId`) and Phase 1 moved routes (`/jobs` is now the Job
-Library, client work is `/projects`). A new API with an old web, or the
-reverse, fails real requests rather than degrading.
+Non-negotiable. 0c/0d renamed JSON fields, Phase 1 moved routes, and
+`issueDate` is now required on the reports invoice type. A new API with an old
+web, or the reverse, fails real requests rather than degrading.
 
-**4. Then USE it, on a phone, against Blackwood.**
-Every round of the owner actually using the app has found defects the tests
-did not: the admin console cut off twice, the missing material description,
-the trade picker, the category dropdown, the cramped job builder, and the
-Saved picker gap. That is the highest-yield activity available, and it is not
-something more code substitutes for.
+**4. Then USE it, on a phone.**
+Every round of the owner actually using the app has found defects the tests did
+not. That remains the highest-yield activity available.
 
 Worth walking specifically, since these are new and unexercised:
-- A quote line of each kind — Material, Labour, Equipment, Job — including
-  creating one of each inline.
-- A job priced per sq ft: check the QUOTE prints "sq ft", not "unit".
-- Reports against Blackwood (the only tenant with data).
-- Settings -> Catalog & vocabulary: hide something, confirm it leaves the
-  quote picker.
+- The **invoice date** field: back-date one to last month, confirm it moves in
+  Reports and prints with the year on the PDF.
+- **Reports**: custom range, "This week", and Print. Check the printed sheet
+  names its period and has no sidebar.
+- **Settings → hide a saved material and a labour rate**, confirm each leaves
+  the quote-line picker and can be restored.
+- **The admin console** against real tenants: suspend, restore, change plan.
+  Confirm no figure looks invented and the plan-mix chart matches reality.
+- A quote line of each kind, including creating one of each inline.
+
+---
+
+## 4c. What to do next — recommendation
+
+**Start with §4b: deploy and use it.** Not because the backlog is empty, but
+because six audit parts produced eleven findings and only one of them was
+something a test would have caught. The cheapest defects to fix are the ones
+found before more code is layered on top of them, and there are two contractors
+waiting who will find a different set again.
+
+Adding them needs no work: signup exists at `/login` → "New to JamQuote?" →
+"Create one" (business name, email, password creates the tenant). It is simply
+not signposted as its own route.
+
+Then, in order:
+
+1. **Regulatory updates: admin CRUD.** Reported as "static" and it is — the
+   feed is real but read-only, with no way to add, edit or mark reviewed. Small,
+   self-contained, and it closes an audit finding properly rather than leaving
+   a screen that looks broken.
+2. **Rule-pack verify / check-for-updates.** The larger of the two open admin
+   items. "Automated search" needs a source of truth to check against, which
+   does not exist yet — so scope this deliberately: probably a manual
+   "reviewed on <date> by <admin>" stamp first, and automation only if a
+   machine-readable source turns up.
+3. **The small open audit items** — a coverage hint on the quote line, the job
+   custom unit defaulting to "day", and weekly bars on the sales chart when the
+   range is short.
+
+**Explicitly not next:** Phase 4 (Job Library depth) and Phase 5 (mobile).
+Neither is blocking a contractor from quoting, and mobile is a rebuild that
+should not start until the web app has survived real use.
+
+---
 
 ## 5. Standing outstanding items
 
+### Blocking or risky
+
 | Item | State |
 |---|---|
-| **`npm run build` cannot run here** | `next/font` cannot reach fonts.googleapis.com from this machine (TLS interception). Fails in `app/layout.tsx`, unrelated to any change. **Run the build somewhere with clean egress before deploying.** |
-| **Deploy API and web TOGETHER** | 0c/0d changed JSON field names and Phase 1 moved routes. A new API with an old web (or the reverse) fails those requests. |
-| Migrations | Render runs `prisma migrate deploy` on boot, so a pushed migration applies itself — there is no separate "apply" step to remember. `..._labour_rate_unit_label` and `..._catalog_hidden` confirmed applied against live. |
-| Render migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint. A session advisory lock taken through pgbouncer strands on any failed migration (hit once: P1002). |
+| **Nothing has met a real user** | Every feature listed in §2 is unexercised. The largest risk here, and the reason §4b comes before §4c. |
+| **`npm run build` cannot run here** | `next/font` cannot reach fonts.googleapis.com from this machine (TLS interception). Fails in `app/layout.tsx`, unrelated to any change. Vercel's build is the first real one. |
+| **Deploy API and web TOGETHER** | Field renames, moved routes, and `issueDate` now required on the reports invoice type. Mismatched halves fail requests rather than degrading. |
+| Migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint; through the pooler a failed migration strands a session advisory lock (hit once: P1002). |
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
-| Delete `seed-business-blackwood` | Deferred until Reports has been checked against it — the only tenant with enough data to render. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug. |
-| MaterialFavourite FK drift (#40) | Live is `RESTRICT`, schema says `SET NULL`. Safe direction, but deleting an in-use unit errors instead of nulling. Shapes the Phase 3 archive design. |
-| Quote email has no logo | Invoice email has one. |
+
+### Open audit items — not yet built
+
+| Item | State |
+|---|---|
+| Regulatory updates: admin CRUD | Feed is real and read-only. No create/edit/mark-reviewed. **Recommended next** (§4c). |
+| Rule-pack verify / check-for-updates | `PATCH /admin/rulepack` publishes an override, but nothing verifies or checks for updates. Needs a source of truth before "automated" means anything. |
+| Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table; nothing records one. |
+| Coverage hint on the quote line | Coverage only calculates when the material has it configured, and that is discoverable only from the material. Reported as "didn't calculate". |
+| Job custom unit shows "day" | Reported in audit part 2, not yet reproduced. Rate was correct; only the unit fell back. |
+| Weekly bars on the sales chart | The chart buckets by month, so a weekly range renders one bar. |
+
+### Known, low priority
+
+| Item | State |
+|---|---|
+| Delete `seed-business-blackwood` | Reports have now been checked against it. NOT purely fixtures: 4 quotes hand-made 12 Jul, material edited 9 Aug — read before deleting. |
+| MaterialFavourite FK drift (#40) | Live is `RESTRICT`, schema says `SET NULL`. Safe direction, but deleting an in-use unit errors instead of nulling. |
+| Quote email logo | Listed as missing, but the owner sent a quote WITH the logo during audit part 3. Stale row — confirm which surface was meant before acting. |
 | `Business.logoUrl` | Dead column, superseded by `BusinessLogo`. |
 | Sidebar during view-as-tenant | Shows the admin's own business name; the banner names the tenant. Cosmetic. |
 | Equipment not in mobile/sync | The equipment library is web + API only. |
