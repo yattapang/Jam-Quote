@@ -7,7 +7,7 @@ import { invoiceStatusPill } from "@/lib/status";
 import {
   getQuoteTotals,
   groupLinesByHeading,
-  RATE_UNIT_LABEL,
+  lineUnitLabel,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
 import { getInvoice, getClients } from "@/lib/api-server";
@@ -83,7 +83,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                       <div className={shared.lineRow}>
                         <span className={shared.lineDesc}>{line.description}</span>
                         <span className={shared.lineMeta}>
-                          {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]} ·{" "}
+                          {line.quantity} {lineUnitLabel(line)} ·{" "}
                           {GCT_TREATMENT_LABEL[line.gctTreatment]}
                         </span>
                         <MoneyText cents={amountByLineId.get(line.id) ?? 0} weight={700} />

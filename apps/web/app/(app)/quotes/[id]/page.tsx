@@ -7,7 +7,7 @@ import { quoteStatusPill } from "@/lib/status";
 import {
   getQuoteTotals,
   groupLinesByHeading,
-  RATE_UNIT_LABEL,
+  lineUnitLabel,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
 import { getQuote, getClients, getBusiness } from "@/lib/api-server";
@@ -87,7 +87,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
                       <div className={shared.lineRow}>
                         <span className={shared.lineDesc}>{line.description}</span>
                         <span className={shared.lineMeta}>
-                          {line.quantity} {RATE_UNIT_LABEL[line.rateUnit]} ·{" "}
+                          {line.quantity} {lineUnitLabel(line)} ·{" "}
                           {GCT_TREATMENT_LABEL[line.gctTreatment]}
                         </span>
                         <MoneyText cents={amountByLineId.get(line.id) ?? 0} weight={700} />

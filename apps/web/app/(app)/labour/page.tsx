@@ -5,17 +5,9 @@ import { getLabourRates, getTrades } from "@/lib/api-server";
 import AddLabourRateButton from "./AddLabourRateButton";
 import EditLabourRateButton from "./EditLabourRateButton";
 import shared from "../shared.module.css";
+import { lineUnitLabel } from "@/lib/quote-totals";
 
 export const metadata = { title: "Labour · JamQuote" };
-
-const RATE_UNIT_LABEL: Record<string, string> = {
-  HOUR: "hour",
-  DAY: "day",
-  WEEK: "week",
-  MONTH: "month",
-  JOB: "job",
-  UNIT: "unit",
-};
 
 export default async function LabourPage() {
   const [labourRates, trades] = await Promise.all([getLabourRates(), getTrades()]);
@@ -50,7 +42,7 @@ export default async function LabourPage() {
                 </div>
                 <div className={shared.rowRight}>
                   <span>
-                    <MoneyText cents={r.rateCents} /> / {r.unitLabel ?? RATE_UNIT_LABEL[r.rateUnit] ?? r.rateUnit.toLowerCase()}
+                    <MoneyText cents={r.rateCents} /> / {lineUnitLabel(r)}
                   </span>
                   <EditLabourRateButton rate={r} trades={trades} />
                   <DeleteRowButton

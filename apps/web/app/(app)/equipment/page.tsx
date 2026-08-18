@@ -5,17 +5,9 @@ import { getEquipment } from "@/lib/api-server";
 import AddEquipmentButton from "./AddEquipmentButton";
 import EditEquipmentButton from "./EditEquipmentButton";
 import shared from "../shared.module.css";
+import { lineUnitLabel } from "@/lib/quote-totals";
 
 export const metadata = { title: "Equipment · JamQuote" };
-
-const RATE_UNIT_LABEL: Record<string, string> = {
-  HOUR: "hour",
-  DAY: "day",
-  WEEK: "week",
-  MONTH: "month",
-  JOB: "job",
-  UNIT: "unit",
-};
 
 export default async function EquipmentPage() {
   const equipment = await getEquipment();
@@ -58,7 +50,7 @@ export default async function EquipmentPage() {
                 <div className={shared.rowRight}>
                   <span>
                     <MoneyText cents={e.rateCents} /> /{" "}
-                    {e.unitLabel ?? RATE_UNIT_LABEL[e.rateUnit] ?? e.rateUnit.toLowerCase()}
+                    {lineUnitLabel(e)}
                   </span>
                   <EditEquipmentButton item={e} />
                   <DeleteRowButton

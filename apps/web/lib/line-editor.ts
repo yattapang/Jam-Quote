@@ -13,7 +13,7 @@ import { coverageBreakdown, formatJmd, GctTreatment, JobComponentKind, LineCateg
 import type { InvoiceLineItemInput, NewJobInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
 import { materialLineDescription } from "./material-display";
-import { CATEGORY_LABEL, RATE_UNIT_LABEL } from "./quote-totals";
+import { CATEGORY_LABEL, lineUnitLabel, RATE_UNIT_LABEL } from "./quote-totals";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite, QuoteLineJobComponent } from "./types";
 
 /** Heading-dropdown sentinel meaning "let me name a new one", never a value. */
@@ -354,13 +354,13 @@ export function applyEquipmentPick(
  * can tell "add one" apart from "picked this id" with one predicate
  * (isAddNewOption) rather than a bespoke string per picker. */
 export function equipmentPickerOptions(
-  equipment: readonly Pick<EquipmentItem, "id" | "name" | "rateCents" | "rateUnit">[],
+  equipment: readonly Pick<EquipmentItem, "id" | "name" | "rateCents" | "rateUnit" | "unitLabel">[],
 ): SelectOption[] {
   return [
     { value: "", label: equipment.length > 0 ? "Select equipment…" : "No saved equipment yet" },
     ...equipment.map((e) => ({
       value: e.id,
-      label: `${e.name} — ${formatJmd(e.rateCents)}/${RATE_UNIT_LABEL[e.rateUnit]}`,
+      label: `${e.name} — ${formatJmd(e.rateCents)}/${lineUnitLabel(e)}`,
     })),
     { value: ADD_NEW_OPTION_VALUE, label: "+ Add new equipment…" },
   ];
@@ -371,13 +371,16 @@ export function equipmentPickerOptions(
  * as its own function, rather than building the list inline in the editor, so
  * it is unit-testable without a DOM like every other picker's options here. */
 export function labourRatePickerOptions(
-  labourRates: readonly Pick<LabourRate, "id" | "trade" | "skillTier" | "rateCents" | "rateUnit">[],
+  labourRates: readonly Pick<
+    LabourRate,
+    "id" | "trade" | "skillTier" | "rateCents" | "rateUnit" | "unitLabel"
+  >[],
 ): SelectOption[] {
   return [
     { value: "", label: labourRates.length > 0 ? "Select a saved rate…" : "No saved labour rates yet" },
     ...labourRates.map((r) => ({
       value: r.id,
-      label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${RATE_UNIT_LABEL[r.rateUnit]}`,
+      label: `${r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} — ${formatJmd(r.rateCents)}/${lineUnitLabel(r)}`,
     })),
     { value: ADD_NEW_OPTION_VALUE, label: "+ Add new labour rate…" },
   ];
