@@ -402,6 +402,22 @@ function LineRows({
             </button>
           </div>
 
+          {/* The coverage calculator only appears once the picked material HAS
+              coverage configured, which made it invisible: reported as both
+              "I don't know how to apply coverage" and "coverage did not
+              calculate". Neither was a bug — no material in the test data had
+              it set — but a feature you cannot find is the same as one that is
+              missing. This says where it comes from, at the one moment it is
+              relevant: a material is picked and the field is absent. */}
+          {!coverageConfig && l.kind === LineKind.MATERIAL && l.materialFavouriteId && (
+            <div className={`${styles.fieldCell} ${styles.coverageCell}`}>
+              <span className={fieldStyles.hint}>
+                Buying by area or length? Set coverage on this material (e.g. one gallon covers
+                400 sq ft) and the quantity is worked out from a measurement.
+              </span>
+            </div>
+          )}
+
           {coverageConfig && (
             <div className={`${styles.fieldCell} ${styles.coverageCell}`}>
               <span className={styles.mobileLabel}>Measured quantity</span>

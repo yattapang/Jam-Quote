@@ -83,8 +83,15 @@ export interface ReceivablesSummary {
   outstandingByClient: ClientOutstandingSummary[];
 }
 
-export interface MonthlySalesBucket {
-  monthIso: string; // "YYYY-MM", Jamaica local calendar month
+export interface SalesSeries {
+  granularity: SalesGranularity;
+  buckets: SalesBucket[];
+}
+
+export interface SalesBucket {
+  /** "YYYY-MM" for monthly buckets, "YYYY-MM-DD" for daily and for the Monday
+   * that starts a weekly one. Jamaica-local throughout. */
+  bucketIso: string;
   invoicedCents: Cents;
   collectedCents: Cents;
 }
@@ -109,7 +116,7 @@ export interface ReportsSummary {
   quotes: QuoteFunnelSummary;
   revenue: RevenueSummary;
   receivables: ReceivablesSummary;
-  salesByMonth: MonthlySalesBucket[];
+  sales: SalesSeries;
   projects: ProjectsSummary;
 }
 
@@ -151,7 +158,7 @@ export function computeReportsSummary(
     revenue: computeRevenue(input.invoices, input.payments, range),
     // Deliberately NOT range-filtered — see computeReceivables.
     receivables: computeReceivables(input.invoices, now),
-    salesByMonth: computeSalesByMonth(input.invoices, input.payments, range),
+    sales: computeSalesSeries(input.invoices, input.payments, range),
     projects: computeProjectsSummary(input.projects, range),
   };
 }
@@ -324,78 +331,145 @@ export function computeReceivables(invoices: ReportInvoice[], now: Date): Receiv
   return { totalOutstandingCents, totalOverdueCents, outstandingByClient };
 }
 
-/** Shift a UTC instant into Jamaica local time and read off its calendar
- * month as "YYYY-MM". Using UTC directly would bucket a 7pm-on-the-31st
- * invoice into the next UTC day — and sometimes the next month — which is
- * not the month the contractor experienced doing that business. */
-function jamaicaMonthKey(iso: string): string {
-  const shifted = new Date(new Date(iso).getTime() + JAMAICA_UTC_OFFSET_MS);
-  const year = shifted.getUTCFullYear();
-  const month = shifted.getUTCMonth() + 1; // 1-12
-  return `${year}-${String(month).padStart(2, "0")}`;
+/**
+ * Bucket size for the sales chart, chosen from how long the range is.
+ *
+ * A fixed monthly bucket made short ranges useless: "This month" drew exactly
+ * one bar, and the weekly range added later drew one bar covering the whole
+ * week. A single column is not a chart — it carries no shape at all, which is
+ * what "the sales chart only has August" was really describing.
+ *
+ * Thresholds are about how many columns read well, not about calendar
+ * tidiness: up to about a week, daily; up to ten weeks, weekly; beyond that,
+ * monthly. That keeps every view between roughly 4 and 15 bars.
+ */
+export type SalesGranularity = "day" | "week" | "month";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const DAILY_MAX_SPAN_DAYS = 8;
+const WEEKLY_MAX_SPAN_DAYS = 70;
+
+export function salesGranularityFor(range: ReportsRange): SalesGranularity {
+  const spanDays = (new Date(range.toIso).getTime() - new Date(range.fromIso).getTime()) / DAY_MS;
+  if (spanDays <= DAILY_MAX_SPAN_DAYS) return "day";
+  if (spanDays <= WEEKLY_MAX_SPAN_DAYS) return "week";
+  return "month";
 }
 
-function nextMonthKey(key: string): string {
-  const [yearStr, monthStr] = key.split("-");
-  const year = Number(yearStr);
-  const month = Number(monthStr);
-  return month >= 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
+/** Jamaica-local calendar fields for a UTC instant. Using UTC directly would
+ * bucket a 7pm-on-the-31st invoice into the next UTC day — and sometimes the
+ * next month — which is not the day the contractor experienced doing that
+ * business. */
+function jamaicaParts(iso: string): { year: number; month: number; day: number; weekday: number } {
+  const shifted = new Date(new Date(iso).getTime() + JAMAICA_UTC_OFFSET_MS);
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate(),
+    weekday: shifted.getUTCDay(),
+  };
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+
+function jamaicaMonthKey(iso: string): string {
+  const { year, month } = jamaicaParts(iso);
+  return `${year}-${pad(month)}`;
+}
+
+function jamaicaDayKey(iso: string): string {
+  const { year, month, day } = jamaicaParts(iso);
+  return `${year}-${pad(month)}-${pad(day)}`;
+}
+
+/** The Monday of the week an instant falls in, as YYYY-MM-DD. Monday-start
+ * matches the "This week" range preset — two different week starts in one
+ * report would put the same invoice in different weeks depending on which
+ * part of the screen you read. */
+function jamaicaWeekKey(iso: string): string {
+  const { year, month, day, weekday } = jamaicaParts(iso);
+  const daysSinceMonday = (weekday + 6) % 7;
+  const monday = new Date(Date.UTC(year, month - 1, day - daysSinceMonday));
+  return `${monday.getUTCFullYear()}-${pad(monday.getUTCMonth() + 1)}-${pad(monday.getUTCDate())}`;
+}
+
+function bucketKey(iso: string, granularity: SalesGranularity): string {
+  if (granularity === "day") return jamaicaDayKey(iso);
+  if (granularity === "week") return jamaicaWeekKey(iso);
+  return jamaicaMonthKey(iso);
+}
+
+function nextKey(key: string, granularity: SalesGranularity): string {
+  if (granularity === "month") {
+    const [yearStr, monthStr] = key.split("-");
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    return month >= 12 ? `${year + 1}-01` : `${year}-${pad(month + 1)}`;
+  }
+  const [y, m, d] = key.split("-").map(Number);
+  const step = granularity === "week" ? 7 : 1;
+  const next = new Date(Date.UTC(y ?? 1970, (m ?? 1) - 1, (d ?? 1) + step));
+  return `${next.getUTCFullYear()}-${pad(next.getUTCMonth() + 1)}-${pad(next.getUTCDate())}`;
 }
 
 /**
- * Every calendar month from the range's start to its end, inclusive,
- * Jamaica-local, in order. Charts must never have a silently-missing month —
- * that reads as "no data was collected" when really the bucket is genuinely
- * zero, and either misleads the contractor about the shape of their sales
- * trend or gets misread as a bug in the report itself.
+ * Every bucket from the range's start to its end, inclusive, Jamaica-local, in
+ * order. Charts must never have a silently-missing bucket — that reads as "no
+ * data was collected" when really the bucket is genuinely zero, and either
+ * misleads the contractor about the shape of their sales or gets misread as a
+ * bug in the report itself.
  */
-function monthKeysInRange(range: ReportsRange): string[] {
+function keysInRange(range: ReportsRange, granularity: SalesGranularity): string[] {
   const fromMs = new Date(range.fromIso).getTime();
   const toMs = new Date(range.toIso).getTime();
   if (!(toMs > fromMs)) return []; // empty or inverted range -> nothing to bucket
 
-  const firstKey = jamaicaMonthKey(range.fromIso);
+  const firstKey = bucketKey(range.fromIso, granularity);
   // range.toIso is exclusive, so the actual last in-range instant is 1ms
-  // before it — using toIso itself could pull in a whole extra empty month
-  // whenever the range ends exactly on a month boundary.
-  const lastKey = jamaicaMonthKey(new Date(toMs - 1).toISOString());
+  // before it — using toIso itself could pull in a whole extra empty bucket
+  // whenever the range ends exactly on a boundary.
+  const lastKey = bucketKey(new Date(toMs - 1).toISOString(), granularity);
 
   const keys: string[] = [firstKey];
-  while (keys[keys.length - 1] !== lastKey) {
-    keys.push(nextMonthKey(keys[keys.length - 1] ?? firstKey));
+  // Guarded rather than while(true): a key that never reaches lastKey would
+  // otherwise hang the request rather than render a short chart.
+  const MAX_BUCKETS = 400;
+  while (keys[keys.length - 1] !== lastKey && keys.length < MAX_BUCKETS) {
+    keys.push(nextKey(keys[keys.length - 1] ?? firstKey, granularity));
   }
   return keys;
 }
 
-/** Monthly invoiced-vs-collected series for the sales chart. */
-function computeSalesByMonth(
+/** Invoiced-vs-collected series for the sales chart, bucketed to suit the
+ * range's length. */
+function computeSalesSeries(
   invoices: ReportInvoice[],
   payments: ReportPayment[],
   range: ReportsRange,
-): MonthlySalesBucket[] {
-  const keys = monthKeysInRange(range);
-  const buckets = new Map<string, MonthlySalesBucket>(
-    keys.map((monthIso) => [monthIso, { monthIso, invoicedCents: 0, collectedCents: 0 }]),
+): SalesSeries {
+  const granularity = salesGranularityFor(range);
+  const keys = keysInRange(range, granularity);
+  const buckets = new Map<string, SalesBucket>(
+    keys.map((bucketIso) => [bucketIso, { bucketIso, invoicedCents: 0, collectedCents: 0 }]),
   );
 
   for (const inv of invoices) {
     if (inv.status === InvoiceStatus.DRAFT) continue;
     if (!inRange(inv.issueDate, range)) continue;
-    const bucket = buckets.get(jamaicaMonthKey(inv.issueDate));
-    // Every in-range timestamp maps to a key already in `buckets` by
-    // construction (monthKeysInRange spans exactly the range's months);
+    const bucket = buckets.get(bucketKey(inv.issueDate, granularity));
+    // Every in-range timestamp maps to a key already present by construction;
     // the check just satisfies noUncheckedIndexedAccess defensively.
     if (bucket) bucket.invoicedCents += inv.totalCents;
   }
 
   for (const p of payments) {
     if (!inRange(p.paidAt, range)) continue;
-    const bucket = buckets.get(jamaicaMonthKey(p.paidAt));
+    const bucket = buckets.get(bucketKey(p.paidAt, granularity));
     if (bucket) bucket.collectedCents += p.amountCents;
   }
 
   // Map preserves insertion order, which is chronological here.
-  return Array.from(buckets.values());
+  return { granularity, buckets: Array.from(buckets.values()) };
 }
 
 /** Projects created in range, by stage, and the busiest clients. */

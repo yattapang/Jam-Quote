@@ -86,8 +86,8 @@ describe("revenue follows the invoice's own date, not when the row was written",
       { quotes: [], invoices: julyInvoice, payments: [], projects: [] },
       { fromIso: "2026-06-01T05:00:00.000Z", toIso: "2026-09-01T05:00:00.000Z" },
     );
-    const nonEmpty = summary.salesByMonth.filter((m) => m.invoicedCents > 0);
-    expect(nonEmpty.map((m) => m.monthIso)).toEqual(["2026-07"]);
+    const nonEmpty = summary.sales.buckets.filter((m) => m.invoicedCents > 0);
+    expect(nonEmpty.map((m) => m.bucketIso)).toEqual(["2026-07"]);
   });
 
   it("still reports it as outstanding regardless of range — receivables are a position, not a flow", () => {
@@ -115,11 +115,14 @@ describe("computeReportsSummary", () => {
       expect(s.projects.topClientsByProjects).toEqual([]);
     });
 
-    it("still zero-fills every month bucket and every project stage", () => {
+    it("still zero-fills every bucket and every project stage", () => {
       const s = computeReportsSummary(EMPTY_INPUT, AUGUST, NOW);
-      expect(s.salesByMonth).toHaveLength(1);
-      expect(s.salesByMonth[0]).toEqual({
-        monthIso: "2026-08",
+      // A single month now draws WEEKLY bars — one column is not a chart.
+      expect(s.sales.granularity).toBe("week");
+      expect(s.sales.buckets.length).toBeGreaterThan(1);
+      expect(s.sales.buckets.every((b) => b.invoicedCents === 0 && b.collectedCents === 0)).toBe(true);
+      expect(s.sales.buckets[0]).toEqual({
+        bucketIso: expect.any(String),
         invoicedCents: 0,
         collectedCents: 0,
       });
@@ -242,9 +245,9 @@ describe("computeReportsSummary", () => {
       expect(s.revenue.invoicedCents).toBe(0);
       // ... but the cash lands in August because that's when it was paid.
       expect(s.revenue.collectedCents).toBe(400_000);
-      const aug = must(s.salesByMonth.find((m) => m.monthIso === "2026-08"));
-      expect(aug.collectedCents).toBe(400_000);
-      expect(aug.invoicedCents).toBe(0);
+      // Whatever the bucket size, the cash appears exactly once in the series.
+      expect(s.sales.buckets.reduce((n, b) => n + b.collectedCents, 0)).toBe(400_000);
+      expect(s.sales.buckets.reduce((n, b) => n + b.invoicedCents, 0)).toBe(0);
     });
 
     it("a payment outside the range is not collected revenue for this period", () => {
@@ -418,12 +421,12 @@ describe("computeReportsSummary", () => {
         range,
         NOW,
       );
-      expect(s.salesByMonth.map((m) => m.monthIso)).toEqual(["2026-06", "2026-07", "2026-08"]);
-      expect(must(s.salesByMonth.find((m) => m.monthIso === "2026-06")).invoicedCents).toBe(
+      expect(s.sales.buckets.map((m) => m.bucketIso)).toEqual(["2026-06", "2026-07", "2026-08"]);
+      expect(must(s.sales.buckets.find((m) => m.bucketIso === "2026-06")).invoicedCents).toBe(
         100_000,
       );
-      expect(must(s.salesByMonth.find((m) => m.monthIso === "2026-07")).invoicedCents).toBe(0);
-      expect(must(s.salesByMonth.find((m) => m.monthIso === "2026-08")).invoicedCents).toBe(0);
+      expect(must(s.sales.buckets.find((m) => m.bucketIso === "2026-07")).invoicedCents).toBe(0);
+      expect(must(s.sales.buckets.find((m) => m.bucketIso === "2026-08")).invoicedCents).toBe(0);
     });
 
     it("buckets by Jamaica local time: late on the last day of a month stays in that month", () => {
@@ -432,8 +435,11 @@ describe("computeReportsSummary", () => {
       // September, even though the UTC calendar date has already rolled
       // over to September.
       const lateAugustUtc = "2026-09-01T04:30:00.000Z";
+      // Spans three months so the series is bucketed MONTHLY — the point here
+      // is which month the instant lands in, and a one-month range now draws
+      // weekly bars.
       const range: ReportsRange = {
-        fromIso: "2026-08-01T05:00:00.000Z",
+        fromIso: "2026-06-01T05:00:00.000Z",
         toIso: "2026-09-01T05:00:00.000Z",
       };
       const s = computeReportsSummary(
@@ -450,9 +456,11 @@ describe("computeReportsSummary", () => {
         range,
         NOW,
       );
-      expect(s.salesByMonth).toHaveLength(1);
-      const aug = must(s.salesByMonth.find((m) => m.monthIso === "2026-08"));
+      expect(s.sales.granularity).toBe("month");
+      const aug = must(s.sales.buckets.find((m) => m.bucketIso === "2026-08"));
       expect(aug.invoicedCents).toBe(77_000);
+      // And nowhere else — September must stay empty.
+      expect(must(s.sales.buckets.find((m) => m.bucketIso === "2026-07")).invoicedCents).toBe(0);
     });
 
     it("collectedCents in a bucket comes from payments, invoicedCents from invoices", () => {
@@ -471,9 +479,51 @@ describe("computeReportsSummary", () => {
         AUGUST,
         NOW,
       );
-      const aug = must(s.salesByMonth.find((m) => m.monthIso === "2026-08"));
-      expect(aug.invoicedCents).toBe(100_000);
-      expect(aug.collectedCents).toBe(60_000);
+      // Invoiced on the 5th, paid on the 6th — same week, so both land in one
+      // bucket whatever the granularity. Asserting on the bucket rather than a
+      // hardcoded month key keeps this about the two SOURCES, which is the
+      // point of the test.
+      const active = must(s.sales.buckets.find((b) => b.invoicedCents > 0));
+      expect(active.invoicedCents).toBe(100_000);
+      expect(active.collectedCents).toBe(60_000);
+    });
+
+    it("picks the bucket size from the range — one bar is not a chart", () => {
+      const span = (days: number): ReportsRange => ({
+        fromIso: "2026-08-03T05:00:00.000Z",
+        toIso: new Date(Date.parse("2026-08-03T05:00:00.000Z") + days * 86_400_000).toISOString(),
+      });
+      const granularityOver = (days: number) =>
+        computeReportsSummary(EMPTY_INPUT, span(days), NOW).sales.granularity;
+
+      expect(granularityOver(7)).toBe("day"); // "This week" -> 7 daily bars
+      expect(granularityOver(31)).toBe("week"); // "This month" -> ~5 weekly bars
+      expect(granularityOver(92)).toBe("month"); // "Last 3 months"
+      expect(granularityOver(365)).toBe("month");
+    });
+
+    it("gives a week's range one bar per day, none missing", () => {
+      const s = computeReportsSummary(EMPTY_INPUT, {
+        fromIso: "2026-08-17T05:00:00.000Z",
+        toIso: "2026-08-24T05:00:00.000Z",
+      }, NOW);
+      expect(s.sales.granularity).toBe("day");
+      expect(s.sales.buckets.map((b) => b.bucketIso)).toEqual([
+        "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20",
+        "2026-08-21", "2026-08-22", "2026-08-23",
+      ]);
+    });
+
+    it("starts weekly buckets on Monday, matching the This-week range preset", () => {
+      // Two different week starts in one report would put the same invoice in
+      // different weeks depending on which part of the screen you read.
+      const s = computeReportsSummary(EMPTY_INPUT, {
+        fromIso: "2026-08-05T05:00:00.000Z", // a Wednesday
+        toIso: "2026-09-05T05:00:00.000Z",
+      }, NOW);
+      expect(s.sales.granularity).toBe("week");
+      // 3 Aug 2026 is the Monday of the week containing the 5th.
+      expect(s.sales.buckets[0]?.bucketIso).toBe("2026-08-03");
     });
   });
 
@@ -587,8 +637,8 @@ describe("computeReportsSummary", () => {
 
       const s = computeReportsSummary({ ...EMPTY_INPUT, invoices, payments }, range, NOW);
 
-      const bucketedInvoiced = s.salesByMonth.reduce((sum, m) => sum + m.invoicedCents, 0);
-      const bucketedCollected = s.salesByMonth.reduce((sum, m) => sum + m.collectedCents, 0);
+      const bucketedInvoiced = s.sales.buckets.reduce((sum, m) => sum + m.invoicedCents, 0);
+      const bucketedCollected = s.sales.buckets.reduce((sum, m) => sum + m.collectedCents, 0);
 
       expect(bucketedInvoiced).toBe(s.revenue.invoicedCents);
       expect(bucketedCollected).toBe(s.revenue.collectedCents);

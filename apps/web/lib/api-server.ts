@@ -388,7 +388,7 @@ function emptyReportsSummary(fromIso: string, toIso: string): ReportsSummary {
     quotes: { sentCount: 0, sentValueCents: 0, acceptedCount: 0, acceptedValueCents: 0, winRatePct: 0 },
     revenue: { invoicedCents: 0, collectedCents: 0 },
     receivables: { totalOutstandingCents: 0, totalOverdueCents: 0, outstandingByClient: [] },
-    salesByMonth: [],
+    sales: { granularity: "month", buckets: [] },
     projects: {
       projectsCreated: 0,
       projectsByStage: { QUOTED: 0, WON: 0, IN_PROGRESS: 0, COMPLETE: 0, CANCELLED: 0 },

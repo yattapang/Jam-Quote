@@ -197,6 +197,28 @@ function ComponentRow({
     });
   }
 
+  /**
+   * All three pickers below carry the picked item's OWN unit onto the recipe
+   * row, and none of them overwrites a unit already typed there.
+   *
+   * They used to disagree: material and labour set no unit at all, while
+   * equipment set `e.rateUnit.toLowerCase()` — inventing a word from the
+   * cadence enum. An equipment item with no unit of its own therefore stamped
+   * the literal "day" into the recipe, over whatever the contractor had
+   * written, which is the reported "I created a custom unit and it gave me
+   * day". It was also a snapshot of a FALLBACK: give that item a real unit
+   * later and the recipe still says "day" forever.
+   *
+   * Nothing is invented now. An empty unit renders as a bare quantity
+   * (componentQuantityLabel), which is the correct way to say "no unit".
+   */
+  const keepTypedUnit = (own: string | null | undefined): { unitLabel?: string } => {
+    const theirs = draft.unitLabel?.trim();
+    if (theirs) return {}; // never clobber what the contractor wrote
+    const mine = own?.trim();
+    return mine ? { unitLabel: mine } : {};
+  };
+
   function pickMaterial(id: string) {
     const m = materials.find((x) => x.id === id);
     if (!m) return onChange({ materialFavouriteId: undefined });
@@ -204,19 +226,19 @@ function ComponentRow({
       materialFavouriteId: m.id,
       description: m.name,
       unitPriceDollars: String(m.priceDollars),
+      // A material sold by the bag makes the row read "2 bag".
+      ...keepTypedUnit(m.unit),
     });
   }
 
   function pickEquipment(id: string) {
     const e = equipment.find((x) => x.id === id);
     if (!e) return onChange({ equipmentItemId: undefined });
-    // The item's own printed unit rides along, so a recipe line reads
-    // "2 day" or "3 trip" rather than a bare number.
     onChange({
       equipmentItemId: e.id,
       description: e.name,
-      unitLabel: e.unitLabel?.trim() || e.rateUnit.toLowerCase(),
       unitPriceDollars: String(e.rateDollars),
+      ...keepTypedUnit(e.unitLabel),
     });
   }
 
@@ -227,6 +249,7 @@ function ComponentRow({
       labourRateId: r.id,
       description: r.skillTier ? `${r.trade} (${r.skillTier})` : r.trade,
       unitPriceDollars: String(r.rateDollars),
+      ...keepTypedUnit(r.unitLabel),
     });
   }
 

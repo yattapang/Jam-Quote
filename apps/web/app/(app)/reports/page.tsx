@@ -6,7 +6,7 @@ import { getReports } from "@/lib/api-server";
 import { REPORT_PERIODS, customRange, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
 import PrintReportButton from "./PrintReportButton";
 import { projectStagePill } from "@/lib/status";
-import { JAMAICA_UTC_OFFSET_MS, PROJECT_STAGES } from "@jamquote/core";
+import { JAMAICA_UTC_OFFSET_MS, PROJECT_STAGES, type SalesGranularity } from "@jamquote/core";
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
 
@@ -14,16 +14,32 @@ export const metadata = { title: "Reports · JamQuote" };
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** "YYYY-MM" -> "Aug '26". Parsed directly from the string rather than
- * through `new Date` — monthIso is a Jamaica-local calendar label (see
- * MonthlySalesBucket in packages/core), and round-tripping it through a
- * UTC-based Date could shift it into the wrong month. */
-function formatMonthLabel(monthIso: string): string {
-  const [yearStr = "", monthStr = ""] = monthIso.split("-");
-  const monthIdx = Number(monthStr) - 1;
-  const label = MONTH_LABELS[monthIdx] ?? monthStr;
-  return `${label} '${yearStr.slice(2)}`;
+/**
+ * A bucket key -> the label under its bar.
+ *
+ * Parsed directly from the string rather than through `new Date`: the key is a
+ * Jamaica-local calendar label (see SalesBucket in packages/core), and
+ * round-tripping it through a UTC-based Date could shift it into the wrong day
+ * or month.
+ *
+ * "2026-08" -> "Aug '26" · "2026-08-17" -> "17 Aug" (daily) or "w/c 17 Aug"
+ * (weekly, since the key is that week's Monday and a bare date would read as a
+ * single day).
+ */
+function formatBucketLabel(bucketIso: string, granularity: SalesGranularity): string {
+  const [yearStr = "", monthStr = "", dayStr = ""] = bucketIso.split("-");
+  const month = MONTH_LABELS[Number(monthStr) - 1] ?? monthStr;
+  if (granularity === "month") return `${month} '${yearStr.slice(2)}`;
+  const day = String(Number(dayStr));
+  return granularity === "week" ? `w/c ${day} ${month}` : `${day} ${month}`;
 }
+
+/** The heading over the chart, so it never says "by month" over weekly bars. */
+const SERIES_TITLE: Record<SalesGranularity, string> = {
+  day: "Sales by day",
+  week: "Sales by week",
+  month: "Sales by month",
+};
 
 
 /**
@@ -63,7 +79,7 @@ export default async function ReportsPage({
   // zero.
   const maxMonthCents = Math.max(
     1,
-    ...reports.salesByMonth.flatMap((m) => [m.invoicedCents, m.collectedCents]),
+    ...reports.sales.buckets.flatMap((b) => [b.invoicedCents, b.collectedCents]),
   );
 
   return (
@@ -137,10 +153,10 @@ export default async function ReportsPage({
       </section>
 
       <section className={shared.section}>
-        <h2 className={shared.sectionTitle}>Sales by month</h2>
+        <h2 className={shared.sectionTitle}>{SERIES_TITLE[reports.sales.granularity]}</h2>
         <Card>
-          {reports.salesByMonth.length === 0 ? (
-            <div className={shared.empty}>No months in this period.</div>
+          {reports.sales.buckets.length === 0 ? (
+            <div className={shared.empty}>Nothing in this period.</div>
           ) : (
             <>
               <div className={styles.legend}>
@@ -153,23 +169,26 @@ export default async function ReportsPage({
               </div>
               <div className={styles.chartScroll}>
                 <div className={styles.chart}>
-                  {reports.salesByMonth.map((m) => (
-                    <div key={m.monthIso} className={styles.barGroup}>
-                      <div className={styles.bars}>
-                        <div
-                          className={`${styles.bar} ${styles.barInvoiced}`}
-                          style={{ height: `${Math.round((m.invoicedCents / maxMonthCents) * 100)}%` }}
-                          title={`Invoiced, ${formatMonthLabel(m.monthIso)}: ${(m.invoicedCents / 100).toFixed(2)}`}
-                        />
-                        <div
-                          className={`${styles.bar} ${styles.barCollected}`}
-                          style={{ height: `${Math.round((m.collectedCents / maxMonthCents) * 100)}%` }}
-                          title={`Collected, ${formatMonthLabel(m.monthIso)}: ${(m.collectedCents / 100).toFixed(2)}`}
-                        />
+                  {reports.sales.buckets.map((b) => {
+                    const label = formatBucketLabel(b.bucketIso, reports.sales.granularity);
+                    return (
+                      <div key={b.bucketIso} className={styles.barGroup}>
+                        <div className={styles.bars}>
+                          <div
+                            className={`${styles.bar} ${styles.barInvoiced}`}
+                            style={{ height: `${Math.round((b.invoicedCents / maxMonthCents) * 100)}%` }}
+                            title={`Invoiced, ${label}: ${(b.invoicedCents / 100).toFixed(2)}`}
+                          />
+                          <div
+                            className={`${styles.bar} ${styles.barCollected}`}
+                            style={{ height: `${Math.round((b.collectedCents / maxMonthCents) * 100)}%` }}
+                            title={`Collected, ${label}: ${(b.collectedCents / 100).toFixed(2)}`}
+                          />
+                        </div>
+                        <span className={styles.barLabel}>{label}</span>
                       </div>
-                      <span className={styles.barLabel}>{formatMonthLabel(m.monthIso)}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </>
