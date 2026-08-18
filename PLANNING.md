@@ -637,13 +637,16 @@ a fresh session can pick it up without re-deriving anything.
 - Both new tables need `onDelete: Cascade` on `businessId` — the #19 failure
   mode, and a tenant hard-delete must not strand billing rows.
 
-**2. Core (`packages/core`), pure + unit-tested**
-- `subscriptionStanding(renewsAt, plan, now) -> CURRENT | DUE_SOON | PAST_DUE`
-  (`DUE_SOON` inside 14 days). Mirrors `rulePackVerification` in shape.
-- `nextTermEnd(from, interval)` — advance one term from the LATER of today and
-  the current `renewsAt`, so paying early never costs days.
-- `dueNotices(sub, now, alreadySent) -> NoticeKind[]` — the whole schedule as
-  one pure function, so the cadence is testable without a clock or a mailbox.
+**2. Core — DONE (`8cd50cb`)**
+`packages/core/src/billing/subscription.ts`, 25 tests. Exports
+`subscriptionStanding`, `nextTermEnd`, `dueNotices`, `shouldRevertToFree`,
+`SubscriptionStanding`, `NoticeKind`, `DUE_SOON_DAYS`.
+
+Everything else in Phase A can be built against these without re-deriving the
+rules. One thing worth knowing when wiring the sweep: `dueNotices` returns at
+most ONE notice and picks the window the tenant is actually in, so a sweep
+missed for a week does not send a burst — call it per subscription per run and
+persist whatever it returns.
 
 **3. API**
 - `POST /admin/tenants/:id/subscription-payments` — record. Advances
