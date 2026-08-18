@@ -10,4 +10,5 @@ export * from "./quote/job-breakdown.js";
 export * from "./dashboard/stats.js";
 export * from "./reports/summary.js";
 export * from "./jurisdiction/jurisdiction.js";
+export * from "./jurisdiction/verification.js";
 export * from "./fixtures/demo.js";

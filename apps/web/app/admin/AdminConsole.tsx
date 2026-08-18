@@ -2,7 +2,13 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { getJurisdiction, formatJmd, ADMIN_CAPABILITIES, ADMIN_CAPABILITY_META } from "@jamquote/core";
+import {
+  getJurisdiction,
+  formatJmd,
+  rulePackVerification,
+  ADMIN_CAPABILITIES,
+  ADMIN_CAPABILITY_META,
+} from "@jamquote/core";
 import {
   getAdminPricing,
   updateAdminPricing,
@@ -556,6 +562,16 @@ export default function AdminConsole({
   const sourceEff = rp?.sourceUrl ?? jm.sources[0] ?? null;
   const rpOverridden = rp?.overridden ?? false;
   const taxProv = `${verifiedEff ? `Verified ${verifiedEff}` : "Unverified"} · ${rpOverridden ? "admin override" : "core baseline"}`;
+  // How overdue the pack's verification is, and what to check it against.
+  const rpVerify = rulePackVerification(verifiedEff);
+  const rpVerifyTone =
+    rpVerify.freshness === "stale" || rpVerify.freshness === "never"
+      ? "critical"
+      : rpVerify.freshness === "aging"
+        ? "warn"
+        : "good";
+  // The pack's own source first, then the jurisdiction baseline's, de-duped.
+  const rpSources = [...new Set([sourceEff, ...jm.sources].filter((u): u is string => !!u))];
   const ruleCards = [
     { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, sourceLink: sourceEff ? "Source" : "TAJ", chips: [] as string[] },
     { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", sourceLink: "TAJ", chips: [] as string[] },
@@ -1058,6 +1074,56 @@ export default function AdminConsole({
                           style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }} />
                       </label>
                     </div>
+                    {/* --- Verification ---
+                        The date field above is data entry; this is the part
+                        that makes it a task. It says how overdue the pack is,
+                        links the official sources to check against, and stamps
+                        today in one click.
+
+                        There is no automated check on purpose. A real one needs
+                        a machine-readable feed of Jamaican rates and none
+                        exists — TAJ publishes prose. A scraper over a page that
+                        can be reworded at any time would give confident wrong
+                        answers about tax rates, which is worse than an honest
+                        "last checked 14 months ago". */}
+                    <div style={{ border: `1px solid var(--${rpVerifyTone})`, background: `color-mix(in srgb, var(--${rpVerifyTone}) 8%, var(--surface))`, borderRadius: 12, padding: "13px 15px", marginBottom: 16 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", flex: "none", background: `var(--${rpVerifyTone})` }} />
+                        <span style={{ fontSize: 13.5, fontWeight: 600 }}>{rpVerify.label}</span>
+                        {rpVerify.freshness === "stale" && (
+                          <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· rates have had a budget cycle to move — worth re-checking</span>
+                        )}
+                        {rpVerify.freshness === "aging" && (
+                          <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· due for a re-check soon</span>
+                        )}
+                        {rpVerify.freshness === "never" && (
+                          <span style={{ fontSize: 12.5, color: "var(--muted)" }}>· no one has confirmed these figures against a source</span>
+                        )}
+                        {canManageRulepack && (
+                          <button
+                            type="button"
+                            onClick={() => setRpForm((f) => (f ? { ...f, verifiedAsOf: new Date().toISOString().slice(0, 10) } : f))}
+                            style={{ marginLeft: "auto", height: 31, padding: "0 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff" }}
+                          >
+                            {/* Fills the date field rather than saving on its
+                                own — it must go through the same Save as every
+                                other edit, so one review is one audited write. */}
+                            Mark verified today
+                          </button>
+                        )}
+                      </div>
+                      {rpSources.length > 0 && (
+                        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--muted)", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                          <span style={{ fontWeight: 600 }}>Check against:</span>
+                          {rpSources.map((src) => (
+                            <a key={src} href={src} target="_blank" rel="noopener noreferrer" className={styles.link} style={{ fontWeight: 600 }}>
+                              {(() => { try { return new URL(src).hostname.replace(/^www\./, ""); } catch { return src; } })()}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 8 }}>STATUTORY PAYROLL RATES (%)</div>
                     <div className={styles.statutoryGrid} style={{ marginBottom: 16 }}>
                       <div className={styles.statutorySpacer} />
