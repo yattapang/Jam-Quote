@@ -158,6 +158,24 @@ invoice's date everywhere, and nothing named that assumption. Removing
 new field — turned every remaining use into a compile error, which is how the
 dashboard's own mapping was caught.
 
+### Part 5 — Settings
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| Hid Cement (material + category) and Tiler (labour); all still in the dropdowns | **Real, but not where it looked** | The vocabulary hiding was correct — verified against live, Tiler and Cement were excluded from the trade and category lists. The saved rate "Tiler — Master" and the materials in the Cement category are DIFFERENT rows, built on that vocabulary rather than being it, and nothing could hide those. Hiding now covers the library items themselves. Fixed `16f75ed` |
+
+**Decision recorded:** hiding does **not** cascade from vocabulary to items.
+Hiding the word "Tiler" shortens the trade picker; hiding the rate
+"Tiler — Master" removes it from the quote line. One click withdrawing several
+priced items at once is not something to do silently, and restoring the word
+would then have to guess which items to bring back. The owner chose this over
+cascade and over a wording-only fix.
+
+**Pattern, third instance:** a feature working exactly as designed, where the
+design did not match what the word on the button means to the person clicking
+it. Worth checking the remaining audit areas for the same shape rather than
+only for broken code.
+
 ---
 
 ## 4. Phases
