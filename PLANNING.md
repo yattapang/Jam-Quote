@@ -176,6 +176,29 @@ design did not match what the word on the button means to the person clicking
 it. Worth checking the remaining audit areas for the same shape rather than
 only for broken code.
 
+### Part 6 — Admin console
+
+| Reported | Verdict | Resolution |
+|---|---|---|
+| No control over tenant payment status / account state / converting accounts | **Built, but unreachable** | Suspend, restore, delete and plan-change were all wired. They render only for a row with a real business id, and the mock rows carried `null` — so nothing reached them. Fixed by removing the mocks, `c57838b` |
+| "Lots of different tenant test information" | **Real** | The console fell back to 9 invented tenant rows whenever the tenant fetch came back empty |
+| Placeholder data in financials and the chart | **Real, and the worst of it** | MRR rendered a hardcoded `money(2418540)` with NO fallback guard — $24,185.40 shown as measured revenue on every load — beside a fabricated "+4.7% MoM", "+$108,420 net new" and "1.9% churn". The 12-month revenue series was typed in. Now real or "—" |
+| Regulatory review is static | **Partly real** | The feed is real data (5 rows live) but fell back to 5 mock rows, and its stats fell back to "2 / 2 / 31". Mocks gone. There is still **no admin CRUD** for regulatory updates — genuinely not built |
+| Rule-pack cannot be updated or verified | **Open** | `PATCH /admin/rulepack` exists and the console can publish an override, but there is no verify/check-for-updates flow, automated or manual. Genuinely not built |
+| Tenant isolation | **Passed** | Owner reported no issues |
+
+**The honesty problem, stated once:** in a console used to decide who to
+suspend and what to bill, invented figures are worse than an outage — they are
+actionable and they look authoritative. Every figure now comes from the API or
+renders "—", `getAdminData` records which sections failed, and the console says
+so, because with the mocks gone an empty table would otherwise read as an empty
+platform. `admin-console-honesty.test.ts` pins it.
+
+**Still to build (not defects — never started):**
+- Regulatory updates: admin create/edit/mark-reviewed
+- Rule-pack: a verify / check-for-updates flow
+- Net new + churn: needs a subscription-history table; nothing records one
+
 ---
 
 ## 4. Phases
