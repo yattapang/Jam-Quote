@@ -1082,14 +1082,6 @@ export interface AdminTenant {
   /** Set when read via GET /admin/tenants?includeSuspended=true (see getAdminData). */
   suspended: boolean;
 }
-export interface AdminSupplier {
-  id: string;
-  name: string;
-  parish: string | null;
-  isPartner: boolean;
-  skuCount: number;
-  lastFetch: string | null;
-}
 export interface AdminReg {
   id: string;
   title: string;
@@ -1214,7 +1206,6 @@ export interface EffectiveRulePack {
 export interface AdminData {
   overview: AdminOverview | null;
   tenants: AdminTenant[];
-  suppliers: AdminSupplier[];
   regulatory: AdminReg[];
   financials: AdminFinancials | null;
   audit: AdminAuditEntry[];

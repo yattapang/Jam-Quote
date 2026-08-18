@@ -30,6 +30,31 @@ describe("the staff console shows no invented data", () => {
     }
   });
 
+  it("invents nothing in the tenant drawer", () => {
+    // The drawer is where staff decide whether to suspend or bill a business,
+    // so invented figures here are the most expensive kind. It used to carry
+    // seat counts and quota caps derived from a plan-name lookup, storage
+    // usage, "invoices sent" as quotes x 0.6, a hardcoded per-plan price
+    // table, and fixed started/renews dates with a payment rail.
+    for (const fabricated of [
+      '"2.1 / 10 GB"',
+      "2024-08-19",
+      "2025-05-19",
+      '"Lynk"',
+      "q * 0.6",
+      "Starter: 4900",
+    ]) {
+      expect(CODE).not.toContain(fabricated);
+    }
+  });
+
+  it("has no platform supplier directory left", () => {
+    // Suppliers became tenant-owned in #31. What remained was a dead
+    // /admin/suppliers fetch that 404'd on every admin page load, and a
+    // "Suppliers added" tile implying the platform maintains them.
+    expect(CODE).not.toContain("Suppliers added");
+  });
+
   it("has no fictional tenant names", () => {
     for (const name of [
       "Blue Mountain Builders",

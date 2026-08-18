@@ -27,6 +27,7 @@ import {
   ApiError,
   type AdminData,
   type AdminReg,
+  type AdminTenant,
   type RegulatoryInput,
   type AdminUser,
   type PricingConfig,
@@ -557,11 +558,12 @@ export default function AdminConsole({
       label: "MRR",
       value: data.financials ? formatJmd(data.financials.mrrCents) : "—",
     },
-    // "feeds" was accurate when suppliers were a curated platform directory
-    // with price feeds. They are tenant-owned now (#31), so this counts the
-    // sum of every contractor's own merchant list — a usage metric, not a
-    // directory the platform maintains.
-    { label: "Suppliers added", value: ov ? String(ov.suppliersTracked) : "—" },
+    // NO "Suppliers added" tile. Suppliers became tenant-owned in #31 — there
+    // is no platform directory — so a platform-level supplier count on the
+    // overview reads as something JamQuote maintains and can act on. It was
+    // the last trace of the removed directory, alongside the dead
+    // /admin/suppliers fetch. The number still exists on the overview payload
+    // if a genuine usage metric is ever wanted; it just does not belong here.
     { label: "Jurisdictions live", value: ov ? String(ov.jurisdictionsLive) : "—" },
   ];
 
@@ -1690,6 +1692,12 @@ export default function AdminConsole({
           raw={selTenant}
           businessId={selBusinessId}
           suspended={selSuspended}
+          tenant={data.tenants.find((t) => t.id === selBusinessId) ?? null}
+          canManage={canManageTenants}
+          busy={selBusinessId ? !!tenantPlanBusy[selBusinessId] || !!tenantLifecycleBusy[selBusinessId] : false}
+          onSetPlan={setTenantPlanChoice}
+          onToggleSuspend={toggleTenantSuspend}
+          onDelete={openDeleteModal}
           onClose={() => setTenantId(null)}
         />
       )}
@@ -1813,11 +1821,24 @@ function TenantDrawer({
   raw,
   businessId,
   suspended,
+  tenant,
+  canManage,
+  busy,
+  onSetPlan,
+  onToggleSuspend,
+  onDelete,
   onClose,
 }: {
   raw: [string, string, string, string, string, string, number | string, number, number];
   businessId: string | null;
   suspended: boolean;
+  /** The real row, so the drawer stops inventing subscription facts. */
+  tenant: AdminTenant | null;
+  canManage: boolean;
+  busy: boolean;
+  onSetPlan: (id: string, choice: string) => void;
+  onToggleSuspend: (id: string, suspended: boolean) => void;
+  onDelete: (id: string, name: string) => void;
   onClose: () => void;
 }) {
   const [name, parish, plan, trn, status, , mrr, q, qm] = raw;
@@ -1830,22 +1851,29 @@ function TenantDrawer({
   // would send real Pro tenants down each free-tier branch: 15-quote cap,
   // one seat, and $0.00 MRR, all shown as fact to staff.
   const shown = planDisplay(plan);
-  const limit = shown === "Pro" ? 9999 : shown === "Core" ? 250 : shown === "Starter" ? 60 : 15;
-  const seats = shown === "Pro" ? 12 : shown === "Core" ? 6 : shown === "Starter" ? 3 : 1;
-  const usedSeats = Math.max(1, Math.round(seats * 0.7));
-  const mrrPlan = ({ Free: 0, Starter: 4900, Core: 12900, Pro: 34900 } as Record<string, number>)[shown] ?? 0;
+  // Only what the API actually reports.
+  //
+  // What used to be here was invented: seat counts and quota caps derived from
+  // a plan-name lookup, "Document storage 2.1 / 10 GB", "Invoices sent" as
+  // quotes x 0.6, a per-plan MRR from a hardcoded price table, and a fixed
+  // "Started 2024-08-19 / Renews 2025-05-19 / Payment rail Lynk". None of it
+  // came from anywhere. This drawer is where staff decide whether to suspend
+  // or bill a business, so invented figures here are the most expensive kind.
   const metrics = [
     { label: "Quotes created", value: String(q) },
     { label: "This month", value: String(qm) },
-    { label: "Value quoted", value: mrr === "—" ? "—" : formatJmd(Number(mrr)) },
-    { label: "Invoices sent", value: String(Math.round(q * 0.6)) },
   ];
-  const usage = [
-    { label: "Quotes", text: `${qm} / ${limit > 9000 ? "∞" : limit}`, w: Math.min(100, (qm / (limit > 9000 ? qm * 1.4 : limit)) * 100), tone: "accent" },
-    { label: "Team seats", text: `${usedSeats} / ${seats}`, w: (usedSeats / seats) * 100, tone: "info" },
-    { label: "Document storage", text: "2.1 / 10 GB", w: 21, tone: "good" },
+  const interval = tenant?.interval ?? "monthly";
+  const sub: [string, string][] = [
+    ["Plan", shown],
+    ["Term", isPro(plan) ? (interval === "annual" ? "Annual" : "Monthly") : "—"],
+    [
+      "Agreed price",
+      tenant?.priceCents != null ? `${formatJmd(tenant.priceCents)} / ${interval === "annual" ? "year" : "month"}` : "Standard",
+    ],
+    ["Renews", tenant?.renewsAt ? tenant.renewsAt.slice(0, 10) : "—"],
+    ["Created", tenant ? tenant.createdAt.slice(0, 10) : "—"],
   ];
-  const sub = [["Plan", shown], ["MRR", formatJmd(mrrPlan)], ["Started", "2024-08-19"], ["Renews", "2025-05-19"], ["Payment rail", "Lynk"]];
 
   return (
     <>
@@ -1896,15 +1924,45 @@ function TenantDrawer({
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 11 }}>USAGE THIS CYCLE</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 13, marginBottom: 20 }}>
-            {usage.map((u) => (
-              <div key={u.label}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 6 }}><span style={{ fontWeight: 500 }}>{u.label}</span><span style={{ color: "var(--muted)", ...archivo, fontVariantNumeric: "tabular-nums" }}>{u.text}</span></div>
-                <div style={{ height: 7, borderRadius: 5, background: "var(--surface-alt)", overflow: "hidden" }}><div style={{ height: "100%", width: `${u.w}%`, background: `var(--${u.tone})`, borderRadius: 5 }} /></div>
+          {/* Account management lives here as well as in the table row. The
+              row's ACTIONS column is the last of seven and scrolls off a
+              narrow screen, so the controls were reachable but easy to miss —
+              clicking the business is the natural gesture for managing it. */}
+          {businessId && canManage && (
+            <>
+              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 11 }}>MANAGE ACCOUNT</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+                  Plan &amp; term
+                  <select
+                    disabled={busy}
+                    value={!isPro(plan) ? "free" : interval === "annual" ? "pro-annual" : "pro-monthly"}
+                    onChange={(e) => onSetPlan(businessId, e.target.value)}
+                    style={{ height: 34, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }}
+                  >
+                    <option value="free">Free</option>
+                    <option value="pro-monthly">Pro · monthly</option>
+                    <option value="pro-annual">Pro · annual (discounted)</option>
+                  </select>
+                </label>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    disabled={busy}
+                    onClick={() => onToggleSuspend(businessId, suspended)}
+                    style={{ height: 34, padding: "0 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: suspended ? "var(--good)" : "var(--warn)", opacity: busy ? 0.6 : 1 }}
+                  >
+                    {suspended ? "Restore account" : "Suspend account"}
+                  </button>
+                  <button
+                    onClick={() => onDelete(businessId, name)}
+                    style={{ height: 34, padding: "0 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: "1px solid color-mix(in srgb, var(--critical) 45%, var(--border))", background: "color-mix(in srgb, var(--critical) 10%, transparent)", color: "var(--critical)" }}
+                  >
+                    Delete permanently
+                  </button>
+                </div>
               </div>
-            ))}
-          </div>
+            </>
+          )}
           <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 11 }}>SUBSCRIPTION</div>
           <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
             {sub.map((r) => (

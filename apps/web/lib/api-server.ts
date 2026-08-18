@@ -39,7 +39,6 @@ import {
   type AdminData,
   type AdminOverview,
   type AdminTenant,
-  type AdminSupplier,
   type AdminReg,
   type AdminFinancials,
   type AdminAuditEntry,
@@ -525,12 +524,17 @@ export async function getAdminData(): Promise<AdminData> {
       return empty;
     }
   };
-  const [overview, tenants, suppliers, regulatory, financials, audit, me, admins, rulepack] = await Promise.all([
+  // NO suppliers fetch. GET /admin/suppliers was removed from the API when
+  // suppliers became tenant-owned (#31) — there is no platform directory to
+  // list — but this call stayed behind and 404'd on every admin page load.
+  // Nothing consumed the result: the console's "Suppliers added" tile reads
+  // overview.suppliersTracked. It was invisible until failures started being
+  // surfaced, and then it was the one section the banner complained about.
+  const [overview, tenants, regulatory, financials, audit, me, admins, rulepack] = await Promise.all([
     safe<AdminOverview | null>("/admin/overview", null),
     // includeSuspended=true so suspended tenants still show (with their
     // `suspended` flag) rather than disappearing from the tenants table.
     safe<AdminTenant[]>("/admin/tenants?includeSuspended=true", []),
-    safe<AdminSupplier[]>("/admin/suppliers", []),
     safe<AdminReg[]>("/admin/regulatory", []),
     // Capability-gated on the API: a non-VIEW_FINANCIALS admin gets 403, which
     // safe() turns into null — the console simply hides the Financials screen.
@@ -544,7 +548,7 @@ export async function getAdminData(): Promise<AdminData> {
     safe<EffectiveRulePack | null>("/admin/rulepack", null),
   ]);
   // Cap the audit feed the console renders, even if the API ever returns more.
-  return { overview, tenants, suppliers, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack, failed };
+  return { overview, tenants, regulatory, financials, audit: audit.slice(0, 100), me, admins, rulepack, failed };
 }
 
 /**
