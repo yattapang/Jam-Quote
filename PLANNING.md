@@ -676,6 +676,87 @@ are conduct sanctions, never billing ones.
 
 ---
 
+## 4g. Tenant CSV exports for accountants — PROPOSED, later
+
+A contractor should be able to hand their accountant a file instead of a login.
+Requested 2026-08-18; not scheduled.
+
+### What is already captured — and it is the valuable half
+
+`gctTreatment` is stored **per line item** (STANDARD / ZERO_RATED / EXEMPT) on
+both quotes and invoices, not just as a document-level rate. That is exactly
+the shape a GCT return needs, and most small-business tools do not keep it.
+Payments carry method, amount and date, so cash movement is reconstructable.
+Invoice numbers are sequential, which is what makes an export auditable.
+
+So the sales side is genuinely ready to report on.
+
+### The gap that decides the scope
+
+**There is no expense or purchase record anywhere in the schema.** No Expense,
+Purchase or Bill model; materials carry a price they are SOLD at, never a cost
+they were BOUGHT at with a supplier invoice behind it.
+
+That matters more than it sounds. A GCT return nets output tax (charged on
+sales) against input tax (paid on purchases). JamQuote can produce the output
+side exactly and the input side not at all — so an export can support a return
+without being able to produce one. Saying that plainly on the export is part of
+the work; letting an accountant assume otherwise would be worse than shipping
+nothing.
+
+The real decision is therefore not "which CSVs" but **whether JamQuote starts
+capturing purchases at all.** Options, in increasing order of commitment:
+
+1. **Sales-side only.** Export what exists, labelled honestly. The accountant
+   brings purchases from elsewhere. Smallest, useful immediately.
+2. **Lightweight expense capture.** A contractor logs a supplier receipt:
+   date, supplier, amount, GCT treatment, category, optional photo. Enough for
+   input tax and a profit figure, not full bookkeeping.
+3. **Cost tracking per job.** Purchases attach to a Project, so the app can
+   answer "did this job make money?" — the question contractors actually ask.
+   The largest, and the most valuable to the user rather than their accountant.
+
+Recommend starting at 1, because it ships value without committing to a
+bookkeeping product, and 2 can follow without rework if expenses are modelled
+as their own ledger rather than bolted onto materials.
+
+### Design rules for the exports themselves
+
+**Cash basis and accrual basis are different files, never one.** Invoiced (what
+was billed) and collected (what arrived) are different numbers, and this app
+already keeps them apart in Reports. An accountant given one column labelled
+"revenue" will assume whichever basis they normally use and be wrong half the
+time. Every export names its basis in the filename AND in a header row.
+
+**A detail export must sum to its summary.** The line-level file and the
+document-level file for the same period must reconcile exactly — that is a
+testable invariant, and the money seam is where this project has already been
+bitten twice.
+
+**Excel is the target, not "CSV" in the abstract.** UTF-8 **with BOM**, or
+Excel mangles accented names and long TRNs. Money as plain decimal strings with
+a separate currency column, never cents and never pre-formatted with symbols.
+Dates ISO-8601. TRN as text, so leading zeros survive.
+
+**Exports exclude DRAFT documents** and say so. A draft is not a claim on
+anyone. And because invoices stay editable, an export is a snapshot: note the
+generation timestamp in the file so two exports of the same period that differ
+can be explained rather than argued about.
+
+### Candidate files (Phase 1, sales side)
+
+| File | Grain | For |
+|---|---|---|
+| `invoices-issued` | one row per invoice | accrual revenue, receivables |
+| `invoice-lines` | one row per line, with `gctTreatment` | GCT output tax by treatment |
+| `payments-received` | one row per payment, with method | cash basis, bank reconciliation |
+| `clients` | one row per client, with TRN | the customer listing an accountant asks for first |
+
+Generated server-side and streamed, not built in the browser: a tenant with
+three years of history should not be limited by a phone's memory, and the same
+generator can later back a scheduled email to the accountant.
+
+
 ---
 
 ## 5. Standing outstanding items
