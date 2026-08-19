@@ -687,6 +687,13 @@ past 36 hours. The revert sets `plan = "free"` and nothing else; a test asserts
 credentials** (§5). Until then renewals are staff-recorded, which the ledger
 already supports.
 
+**Operational follow-ups from the Phase C dry run are closed** (`f62d3c2`),
+except Blackwood's missing term, which is a business decision rather than a
+fix. Two of the three turned out not to be what the plan said they were:
+RESEND_API_KEY was already set, and the missing recipient was a role-filter bug
+in the sweep rather than absent data. Worth remembering — the dry run reported
+symptoms, and checking each one changed the diagnosis.
+
 ### Open after the Phase C dry run
 
 - **Jamquote (the tenant) has NO reminder recipient** — no billing contact and
@@ -855,7 +862,7 @@ down a column (who is past due, who is on annual). Cards lose that.
 | **Nothing has met a real user** | Every feature listed in §2 is unexercised. The largest risk here, and the reason §4b comes before §4c. |
 | ~~`npm run build` cannot run here~~ | **FIXED `c20c64a`.** The next/font diagnosis was wrong; the build was failing on a CSS-Module purity error in the print rules. `npm run -w @jamquote/web build` now passes locally — run it before every deploy. |
 | **Deploy API and web TOGETHER** | Field renames, moved routes, and `issueDate` now required on the reports invoice type. Mismatched halves fail requests rather than degrading. |
-| ~~Migration endpoint~~ | **FIXED `a7bb66c`, verified end-to-end.** `directUrl` + `DIRECT_URL` means migrations run unpooled and the advisory lock releases. **One action left for the owner: remove `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from Render's environment and from `render.yaml`** — it was the stopgap and is no longer needed. |
+| ~~Migration endpoint~~ | **CLOSED `a7bb66c` + `f62d3c2`.** `directUrl` + `DIRECT_URL` runs migrations unpooled; the stopgap is out of `render.yaml` and `DIRECT_URL` is now declared there (required — Prisma will NOT fall back to the pooled URL). **Last manual step: delete `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from the Render dashboard** if it was set there by hand. |
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
 
 ### Open audit items — not yet built
@@ -866,9 +873,9 @@ down a column (who is past due, who is on annual). Cards lose that.
 | ~~Rule-pack verify~~ | **DONE `4f52af7`.** Staleness, source links, "Mark verified today". Manual by design — see the automated-check row below. |
 | ~~Rule-pack maintainable without a release~~ | **DONE `9cf52c3`.** Statutory contributions can be added, renamed and retired, and the source list edited, from the console. |
 | Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table — though `SubscriptionPayment` is now most of one, so this got cheaper. |
-| **Jamquote tenant has no reminder recipient** | No billing contact and no OWNER-role user with an email. Its renewal notice falls due ~2026-09-04 and will count as a failure. Set a billing contact in that tenant's Settings. |
-| **Blackwood has no renewal date** | Skipped by the sweep entirely — correct for the manual-upgrade path (never billed, never chased), but it also means it can never revert. Record a payment to put it on a real term. |
-| **`RESEND_API_KEY` on Render** | Without it every renewal notice logs an error and counts as a failure. `/api/health` reports `email: true` when present. |
+| ~~Jamquote has no reminder recipient~~ | **FIXED `f62d3c2` — and it was a code bug, not missing data.** The fallback queried role=OWNER only, and that tenant's sole account holder is an ADMIN. Now: billing contact -> OWNER -> any addressable user. All three live tenants resolve. |
+| ~~`RESEND_API_KEY` on Render~~ | **Already set.** `/api/health` reports `email: true`. The row was wrong. |
+| **Blackwood has no renewal term** | Still open, and now VISIBLE: the tenants table shows "no term set" in warn colour (`f62d3c2`). A pro plan with no term is a silent free ride — never reminded, never reverts. Needs a decision: record a real payment, or leave it as a deliberate comp. |
 | Automated rule-pack update check | **Deliberately not built.** Needs a machine-readable feed of Jamaican tax/statutory rates; none exists (TAJ publishes prose). A scraper over a page that can be reworded would give confident wrong answers about tax rates — worse than an honest "last checked 14 months ago". Revisit only if a real feed appears. |
 | ~~Coverage hint~~ | **DONE `4ce1a8d`.** A material line with no coverage configured now says where coverage comes from. |
 | ~~Job custom unit shows "day"~~ | **DONE `4ce1a8d`.** Root cause found: JobForm's equipment picker set `rateUnit.toLowerCase()`, stamping the literal "day" over a typed unit. All three component pickers now agree and none invents a unit. |
