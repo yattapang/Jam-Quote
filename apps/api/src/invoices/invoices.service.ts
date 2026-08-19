@@ -253,6 +253,11 @@ export class InvoicesService {
         data: {
           businessId,
           clientId: quote.clientId,
+          // Carry the job across, or job costing only ever sees invoices that
+          // predate this line: the migration backfilled history from the
+          // source quote, but without this every NEW conversion would arrive
+          // unattached and quietly drop out of "did this job make money?".
+          projectId: quote.projectId,
           quoteId: quote.id,
           number,
           status: InvoiceStatus.DRAFT,
