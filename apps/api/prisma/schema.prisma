@@ -195,6 +195,7 @@ model Business {
   connections  Connection[]
   subscription Subscription?
   subscriptionPayments SubscriptionPayment[]
+  purchases            Purchase[]
   subscriptionNotices  SubscriptionNotice[]
   trades       Trade[]
   jobs         Job[]
@@ -323,6 +324,9 @@ model Project {
   @@index([clientId])
 
   @@map("Job")
+  purchases Purchase[]
+  invoices  Invoice[] @relation("InvoiceProject")
+
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +466,8 @@ model Supplier {
   lineItems    QuoteLineItem[]
 
   @@index([businessId])
+  purchases Purchase[]
+
 }
 
 /// One observed price for one item at one supplier, at one point in time.
@@ -843,6 +849,12 @@ model Invoice {
   // Point-in-time link back to the source quote (a snapshot origin, kept for
   // provenance). Invoice lines are copied at convert time and edited
   // independently while DRAFT — editing the quote never alters the invoice.
+  /// The job this invoice bills for. Backfilled from the source quote, and
+  /// defaulted from it at convert time, but settable on its own — an invoice
+  /// raised from scratch (#27) had no route to a project at all, and those
+  /// ad-hoc extras are often what decides whether a job made money.
+  projectId     String?
+  project       Project?         @relation("InvoiceProject", fields: [projectId], references: [id])
   quoteId       String?
   quote         Quote?           @relation(fields: [quoteId], references: [id])
   number        String // e.g. INV-0007
@@ -1148,4 +1160,49 @@ model SubscriptionSweepRun {
   failures    Int    @default(0)
 
   @@index([ranAt])
+}
+
+/// What a contractor SPENT — the other half of "did this job make money?".
+///
+/// Its own ledger, deliberately NOT a field on MaterialFavourite: a material
+/// is a price-list entry, a purchase is a dated event with a supplier, an
+/// amount and a tax treatment. Conflating them is how a price list starts
+/// lying about history.
+model Purchase {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// NULLABLE, and that is the design. Fuel, phone, insurance and tools are
+  /// real costs with no job behind them; a required project would make
+  /// contractors invent one and poison every job-profit figure after.
+  /// SET NULL on delete — a deleted job must not take the spend with it,
+  /// because the money still left the business.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  description String
+  /// What was actually paid, GCT included — what the receipt says.
+  amountCents Int
+  /// The GCT portion of that amount, for input tax. Zero for exempt and
+  /// zero-rated purchases, and for a supplier who is not GCT-registered.
+  gctCents    Int     @default(0)
+  /// Free text, like material categories: a contractor's own words beat a
+  /// fixed list nobody agrees on.
+  category    String?
+  purchasedAt DateTime
+  reference   String?
+  note        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Soft-delete, matching every other tenant-owned record, so an offline
+  /// client doing a delta sync can observe the tombstone.
+  deletedAt DateTime?
+
+  @@index([businessId, purchasedAt])
+  @@index([projectId])
 }

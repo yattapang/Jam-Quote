@@ -788,6 +788,33 @@ material is a price list entry; a purchase is an event with a date, a supplier,
 an amount and a tax treatment. Conflating them is how a price list starts
 lying about history.
 
+### Build progress
+
+**Step 1 — schema + costing maths. DONE (`in progress commit`).**
+
+- `Purchase`: its own ledger. `projectId` NULLABLE by design (fuel, phone,
+  insurance have no job; a required field would make contractors invent one and
+  poison every job-profit figure). `SET NULL` on project delete — a deleted job
+  must not take the spend with it, because the money still left the business.
+  Cascade on the tenant.
+- `Invoice.projectId` added and BACKFILLED from the source quote: 2 of 8 live
+  invoices linked automatically. Without it costs were attributable and revenue
+  was not, so "did this job make money?" was unanswerable for exactly the
+  ad-hoc extras that often decide it.
+- `computeJobProfit` in core, 11 tests. Drafts excluded from revenue; invoiced
+  and collected tracked separately; GCT netted off cost ONLY for a registered
+  business, since an unregistered contractor never gets it back and netting it
+  would overstate every job; margin NULL rather than 0 when nothing has been
+  invoiced.
+
+**Remaining:** purchases CRUD + a per-project profit read on the API, then the
+UI (log a purchase, see a job's profit), then the CSV exports in §4g proper.
+
+**Watch for during contractor testing:** job costing only means anything if
+contractors actually create Projects, which are optional on a quote today. If
+the testers quote without ever making one, purchases have nothing to attach to
+and this reports on an empty set.
+
 ### Design rules for the exports themselves
 
 **Cash basis and accrual basis are different files, never one.** Invoiced (what
