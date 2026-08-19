@@ -1,10 +1,12 @@
 # JamQuote — Working Plan
 
-**Last updated:** 2026-08-17
-**Status:** audit closed — every finding from the six-part walkthrough is
-resolved, answered, or explicitly deferred with a reason. The production build
-now runs locally. Next action is to deploy and put it in front of two
-contractors. Mobile deliberately not started.
+**Last updated:** 2026-08-19
+**Status:** audit closed, and the subscription billing lifecycle is built
+(§4e–4f Phases A–C: payment ledger, derived standing, collected-vs-contracted,
+renewal reminders, revert-to-free). Phase D (WiPay self-serve) is blocked on
+credentials. **Still nothing has met a real contractor** — that remains the
+largest risk and the highest-value next action. Mobile deliberately not
+started.
 
 This file is the single source of truth for what we are building, in what
 order, and why. Update it in the same commit as the work it describes — a plan
@@ -851,18 +853,22 @@ down a column (who is past due, who is on annual). Cards lose that.
 | Item | State |
 |---|---|
 | **Nothing has met a real user** | Every feature listed in §2 is unexercised. The largest risk here, and the reason §4b comes before §4c. |
-| **`npm run build` cannot run here** | `next/font` cannot reach fonts.googleapis.com from this machine (TLS interception). Fails in `app/layout.tsx`, unrelated to any change. Vercel's build is the first real one. |
+| ~~`npm run build` cannot run here~~ | **FIXED `c20c64a`.** The next/font diagnosis was wrong; the build was failing on a CSS-Module purity error in the print rules. `npm run -w @jamquote/web build` now passes locally — run it before every deploy. |
 | **Deploy API and web TOGETHER** | Field renames, moved routes, and `issueDate` now required on the reports invoice type. Mismatched halves fail requests rather than degrading. |
-| Migration endpoint | **Unfixed, will recur.** `prisma migrate deploy` must use a DIRECT, non-pooled Neon endpoint; through the pooler a failed migration strands a session advisory lock (hit once: P1002). |
+| ~~Migration endpoint~~ | **FIXED `a7bb66c`, verified end-to-end.** `directUrl` + `DIRECT_URL` means migrations run unpooled and the advisory lock releases. **One action left for the owner: remove `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from Render's environment and from `render.yaml`** — it was the stopgap and is no longer needed. |
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
 
 ### Open audit items — not yet built
 
 | Item | State |
 |---|---|
-| Regulatory updates: admin CRUD | Feed is real and read-only. No create/edit/mark-reviewed. **Recommended next** (§4c). |
-| Rule-pack verify / check-for-updates | `PATCH /admin/rulepack` publishes an override, but nothing verifies or checks for updates. Needs a source of truth before "automated" means anything. |
-| Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table; nothing records one. |
+| ~~Regulatory updates: admin CRUD~~ | **DONE `847c9dc`.** Create/edit/review/reopen/delete behind MANAGE_RULEPACK, every mutation audited. |
+| ~~Rule-pack verify~~ | **DONE `4f52af7`.** Staleness, source links, "Mark verified today". Manual by design — see the automated-check row below. |
+| ~~Rule-pack maintainable without a release~~ | **DONE `9cf52c3`.** Statutory contributions can be added, renamed and retired, and the source list edited, from the console. |
+| Net new / churn on the admin console | Removed rather than faked. Needs a subscription-history table — though `SubscriptionPayment` is now most of one, so this got cheaper. |
+| **Jamquote tenant has no reminder recipient** | No billing contact and no OWNER-role user with an email. Its renewal notice falls due ~2026-09-04 and will count as a failure. Set a billing contact in that tenant's Settings. |
+| **Blackwood has no renewal date** | Skipped by the sweep entirely — correct for the manual-upgrade path (never billed, never chased), but it also means it can never revert. Record a payment to put it on a real term. |
+| **`RESEND_API_KEY` on Render** | Without it every renewal notice logs an error and counts as a failure. `/api/health` reports `email: true` when present. |
 | Automated rule-pack update check | **Deliberately not built.** Needs a machine-readable feed of Jamaican tax/statutory rates; none exists (TAJ publishes prose). A scraper over a page that can be reworded would give confident wrong answers about tax rates — worse than an honest "last checked 14 months ago". Revisit only if a real feed appears. |
 | ~~Coverage hint~~ | **DONE `4ce1a8d`.** A material line with no coverage configured now says where coverage comes from. |
 | ~~Job custom unit shows "day"~~ | **DONE `4ce1a8d`.** Root cause found: JobForm's equipment picker set `rateUnit.toLowerCase()`, stamping the literal "day" over a typed unit. All three component pickers now agree and none invents a unit. |
