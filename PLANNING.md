@@ -916,9 +916,30 @@ consent screens, token refresh, and scope review.
 
 ### Recommendation
 
-Do **1** now: it unblocks contractor testing this week and is a day of work
-plus DNS. Treat **3** as the commercial answer once there are enough tenants to
-justify it, and **2** only if a specific tenant asks.
+Do **1** — but the domain is deferred until AFTER contractor feasibility
+testing (owner, 2026-08-19). So for the test itself, email to clients is
+unavailable and the app now says so honestly (`48ade18`).
+
+**What shipped instead of the domain:** `emailSendingStatus()` requires a key
+AND a real sender, treating any `resend.dev` address as unconfigured. Both
+email routes use it, the send button is disabled, and the reason sits beside it
+in plain text naming the way out — Download PDF, or share on WhatsApp.
+
+That mattered more than the feature: the app was reporting successful sends
+that went nowhere, because Resend's shared test sender accepts everything and
+delivers only to the account owner. A contractor would have believed a quote
+reached their customer. One silent non-delivery costs more trust than the
+missing feature does.
+
+**For the feasibility test, WhatsApp is the channel anyway** — it is how most
+Jamaican contractors already send documents, the button exists, and it needs no
+domain, no DNS and no deliverability reputation. Worth watching whether the
+testers reach for it even after email works; if they do, that changes how much
+approach 3 is worth.
+
+**When the domain lands:** verify it in Resend, publish SPF/DKIM/DMARC, set
+`QUOTE_FROM_EMAIL`. Sending switches on with no code change. Then do the
+per-tenant `Reply-To` (still a global env var today) before any real volume.
 
 ### Also required before real volume
 
