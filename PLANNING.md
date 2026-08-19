@@ -807,8 +807,14 @@ lying about history.
   would overstate every job; margin NULL rather than 0 when nothing has been
   invoiced.
 
-**Remaining:** purchases CRUD + a per-project profit read on the API, then the
-UI (log a purchase, see a job's profit), then the CSV exports in §4g proper.
+**Step 2 — purchases API + project profit. DONE (`634ea50`).** CRUD, tenant
+scoped, plus `GET /purchases/project/:id/profit`. Revenue reads INVOICES not
+quotes. GCT registration is inferred from the business holding a TRN — the only
+signal the app has, and better than silently assuming every tenant reclaims,
+which would overstate the margin for every unregistered sole trader.
+
+**Remaining:** the UI (log a purchase; see a job's profit), then the CSV
+exports in §4g proper.
 
 **Watch for during contractor testing:** job costing only means anything if
 contractors actually create Projects, which are optional on a quote today. If
