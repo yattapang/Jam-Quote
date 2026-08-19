@@ -669,10 +669,19 @@ persist whatever it returns.
 payment and the account state follows: term extended, plan set, ledger written,
 audited. Void retracts the term only when nothing has happened since.
 
-**Phase B next** (visibility): Financials gains *collected* from the ledger
-beside *MRR* (contracted), and the tenants table's status pill switches to the
-DERIVED standing from `subscriptionStanding` — which also finally kills the
-Trial/Past due/Churned filters that count states nothing sets.
+**PHASE B COMPLETE** (`50d3547`). Financials shows *Collected this month* from
+the ledger and a *Past due* count beside *MRR (contracted)*, with labels saying
+which is which. The tenants pill and filters are derived from
+`subscriptionStanding`, so Trial / Past due / Churned — which counted states
+nothing could set and were permanently zero — are gone, replaced by
+Current / Due soon / Past due / Free.
+
+**Phase C next** (automation): the notice ledger is already in the schema and
+`dueNotices` already decides the cadence. What remains is the sweep service
+that calls it, the email templates, the revert-to-free transition, and an admin
+"run sweep" button with a last-swept indicator. Remember the invariant: the
+revert sets `plan = "free"` and NOTHING else — it must never touch
+`Business.deletedAt`.
 
 **Explicitly NOT in Phase A:** the sweep, the emails, and the revert
 transition. Those are Phase C and depend on `dueNotices` existing first. Phase
