@@ -359,6 +359,15 @@
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Hidden on desktop, where the row's hover and cursor already say it is
+   clickable and the action buttons are visible anyway. */
+.mobileHint {
+  display: none;
+  padding: 0 18px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
 .dataTable {
   width: 100%;
   border-collapse: collapse;
@@ -487,7 +496,46 @@
     min-width: 620px;
   }
   .dataTableWide {
-    min-width: 880px;
+    /* Narrower than before because the ACTIONS column is dropped down here
+       (see .actionsCell) — the drawer carries those controls with room to
+       spare, and keeping both surfaces on a 390px screen is what forced the
+       width in the first place. */
+    min-width: 700px;
+  }
+
+  /* The first column stays put while the rest scrolls.
+     The defect was never the horizontal scroll itself — it was that the
+     BUSINESS NAME scrolled out of view while you reached the columns to its
+     right, so you ended up reading a row with no idea whose it was. Deciding
+     to suspend or delete an account without its name on screen is the wrong
+     thing to ask of anyone. */
+  .stickyCol {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    /* Opaque, or the scrolling columns show through as they pass underneath. */
+    background: var(--surface);
+    /* A hairline so the frozen column reads as pinned rather than as part of
+       whatever has slid up against it. */
+    box-shadow: 1px 0 0 var(--border);
+  }
+  /* Header cells sit on the alt background; matching it keeps the freeze
+     invisible until something scrolls under it. */
+  thead .stickyCol {
+    background: var(--surface-alt);
+  }
+
+  /* Only shown once the inline actions are gone, because touch has neither a
+     hover state nor a cursor to hint that a row opens anything. */
+  .mobileHint {
+    display: block;
+  }
+
+  /* Inline row actions are hidden on narrow screens, not shrunk. Every one of
+     them — plan, suspend, delete — is in the tenant drawer, which is a tap
+     away and has space to label them properly. */
+  .actionsCell {
+    display: none;
   }
 
   .formField {

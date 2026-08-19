@@ -951,10 +951,15 @@ export default function AdminConsole({
                 ))}
               </div>
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
+                <div className={styles.mobileHint}>Tap a business to manage its plan, term or status.</div>
                 <div className={styles.tableScroll}>
+                {/* A suspended row keeps its dimmed opacity through the frozen
+                    first column (opacity inherits); only the critical tint is
+                    masked by the sticky cell's opaque background, and the
+                    "Suspended" pill in the status column carries that anyway. */}
                 <table className={`${styles.dataTable} ${styles.dataTableWide}`}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }}>ACTIONS</th>
+                    <th style={th} className={styles.stickyCol}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }} className={styles.actionsCell}>ACTIONS</th>
                   </tr></thead>
                   <tbody>
                     {tenantsRaw.map((t, i) => {
@@ -987,7 +992,7 @@ export default function AdminConsole({
                             background: suspended ? "color-mix(in srgb, var(--critical) 5%, transparent)" : undefined,
                           }}
                         >
-                          <td style={td}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
+                          <td style={td} className={styles.stickyCol}><div style={{ display: "flex", alignItems: "center", gap: 11 }}><div style={{ width: 30, height: 30, flex: "none", borderRadius: 8, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 11, color: "var(--muted)" }}>{initOf(t[0])}</div><span style={{ fontWeight: 600 }}>{t[0]}</span></div></td>
                           <td style={{ ...td, color: "var(--muted)" }}>{t[1]}</td>
                           <td style={td}>
                             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -1018,7 +1023,7 @@ export default function AdminConsole({
                             </div>
                           </td>
                           <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
-                          <td style={{ ...td, textAlign: "right" }} onClick={(e) => e.stopPropagation()}>
+                          <td style={{ ...td, textAlign: "right" }} className={styles.actionsCell} onClick={(e) => e.stopPropagation()}>
                             {id && canManageTenants ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
                                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
