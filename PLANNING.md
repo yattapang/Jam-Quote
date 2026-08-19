@@ -851,6 +851,88 @@ Deliberately NOT a card layout: the table is scannable and staff compare rows
 down a column (who is past due, who is on annual). Cards lose that.
 
 
+## 4i. Sending quotes to a contractor's clients — BLOCKS TESTING
+
+Raised 2026-08-19. Today a quote email goes out as
+`QUOTE_FROM_EMAIL ?? "JamQuote <onboarding@resend.dev>"` with a single GLOBAL
+`QUOTE_REPLY_TO`. Two separate faults:
+
+1. **`onboarding@resend.dev` is Resend's shared test sender.** It delivers only
+   to the account owner's own address. A contractor emailing their client sends
+   into a void — and the UI reports success, because the send is accepted.
+2. **Reply-to is global, not per-tenant.** Even once mail flows, a client
+   pressing Reply reaches whatever that env var names, not the contractor.
+
+Fault 2 is a code bug and is cheap. Fault 1 needs a verified domain and cannot
+be coded around.
+
+### The constraint everything else follows from
+
+You cannot put an address in `From:` unless you are authorised to send for that
+domain. SPF, DKIM and DMARC exist to stop exactly that, and the penalty is not
+a rejection you can see — it is silent spam-foldering plus damage to the
+sending reputation of every other tenant sharing the platform.
+
+**This bites hardest in this market.** Most Jamaican contractors use
+`@gmail.com`. Gmail publishes a DMARC policy, so `From: someone@gmail.com` sent
+from our servers fails authentication outright. Per-tenant domain verification
+therefore does NOT help the majority of tenants — they have no domain to
+verify.
+
+### Three approaches, in order of cost
+
+**1. Send as JamQuote, reply as the contractor.** (Recommended now.)
+
+```
+From:     Blackwood Construction (via JamQuote) <quotes@jamquote.com>
+Reply-To: owen@blackwoodconstruction.jm
+```
+
+One verified domain, SPF + DKIM + DMARC set once, works for every tenant with
+no per-tenant setup — including gmail users. The contractor's name is what the
+client reads; replies go to the contractor. Stripe, Xero and QuickBooks all
+ship variants of this, so clients are used to it.
+
+Needs: a verified domain in Resend, `QUOTE_FROM_EMAIL` set, and **reply-to
+taken from the tenant record instead of the global env var** — which is worth
+doing regardless of which approach wins.
+
+**2. Per-tenant verified sending domains.** (Later, for the few who want it.)
+
+The contractor adds DKIM/SPF records to their own DNS; Resend's domain API
+verifies them; `From:` becomes genuinely theirs. Real benefit for an
+established firm with `@theirfirm.com`, and useless for the gmail majority.
+The hidden cost is support: talking a contractor through DNS records is not a
+call this business wants to take often.
+
+**3. Send from the contractor's own mailbox via OAuth.** (Best fit, biggest
+build.)
+
+Gmail/Microsoft OAuth, send through their account. The mail is genuinely from
+them, lands in their Sent folder, and inherits their existing deliverability
+with clients who already know them. Given how many contractors here are on
+Gmail, this is the approach that actually matches the market — but it is OAuth
+consent screens, token refresh, and scope review.
+
+### Recommendation
+
+Do **1** now: it unblocks contractor testing this week and is a day of work
+plus DNS. Treat **3** as the commercial answer once there are enough tenants to
+justify it, and **2** only if a specific tenant asks.
+
+### Also required before real volume
+
+- **Bounce and complaint handling.** Resend webhooks -> a suppression list. One
+  contractor repeatedly emailing a dead address degrades delivery for every
+  other tenant on the shared domain.
+- **A verified-sender check in the UI.** If sending is not configured, the
+  quote screen should say so BEFORE the contractor clicks send — today the send
+  is accepted and appears to work.
+- **PDF as attachment vs link.** Attachments raise spam scores and size limits;
+  a signed link is lighter and gives a viewed-at signal. Worth deciding
+  deliberately rather than by default.
+
+
 ---
 
 ## 5. Standing outstanding items
