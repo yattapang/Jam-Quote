@@ -851,6 +851,41 @@ Deliberately NOT a card layout: the table is scannable and staff compare rows
 down a column (who is past due, who is on annual). Cards lose that.
 
 
+## 4j. WhatsApp delivery via public share links — DONE (`27b8612`)
+
+**Free, and no service to pay for.** `wa.me` click-to-chat needs no WhatsApp
+Business API, no provider and no per-message cost. That part was already right.
+
+**But the link was broken, in the same way email was.** The button sent clients
+`/quotes/<id>`, which is in the middleware's protected list — so the client hit
+a login wall while the contractor saw the message send and assumed it arrived.
+
+Now: `Quote.shareToken` (32 random bytes, unique, revocable, minted only on
+share), a public `/q/<token>` page written for someone who will never sign in,
+and `/public/quotes/:token` as the ONE unauthenticated endpoint in the API —
+returning a hand-written allow-list rather than the row, so adding a column to
+Quote cannot silently widen what an anonymous caller sees.
+
+**It also made `QuoteStatus.VIEWED` reachable.** The enum, its transitions and
+the expiry sweep all referenced it and nothing could set it — the third
+instance of that pattern after `Subscription.status` and "Applied (YTD)".
+
+### Known trade-offs
+
+- **"Save as PDF" uses the browser print sheet**, not a server-rendered file.
+  QuotePdf needs the full view types, and widening the anonymous response to
+  feed a renderer trades a security boundary for a convenience. If contractors
+  report clients wanting a real attachment to forward, revisit — the cheapest
+  fix is a token-scoped PDF route on the API where the full row is already in
+  hand.
+- **No expiry on share tokens.** A link works until revoked. Quotes already
+  carry `validUntil`, so honouring that on the public page is the obvious next
+  step if it matters.
+- **The public endpoint is unthrottled.** Fine at three tenants; before real
+  volume it wants rate limiting, since it is the only anonymous surface.
+
+---
+
 ## 4i. Sending quotes to a contractor's clients — BLOCKS TESTING
 
 Raised 2026-08-19. Today a quote email goes out as
