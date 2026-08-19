@@ -1032,6 +1032,113 @@ per-tenant `Reply-To` (still a global env var today) before any real volume.
   deliberately rather than by default.
 
 
+## 4k. Packaging and tiering — RECOMMENDATION, owner to decide
+
+Owner's proposal (2026-08-19): quoting standard, job tracking + invoicing as an
+upgrade, tax treatment as a further upgrade.
+
+### The principle I would apply instead
+
+**Gate capacity and insight. Never gate correctness.**
+
+A tier that produces a WRONG document is not a cheaper product, it is a
+liability with your name on it. A tier that produces a correct document more
+slowly, or without telling you how the business is doing, is a genuinely
+smaller product someone can outgrow.
+
+### Where the proposal works, and where I think it costs you
+
+**Invoicing as an upgrade — I would not.** Quoting is where a contractor
+spends effort; invoicing is where they get PAID. Splitting those means the free
+tier ends exactly where the value lands, so they will quote here and invoice on
+WhatsApp or paper — and the moment they do, you lose the payment data, which is
+the most valuable thing this system holds and the foundation of job costing,
+reports and receivables. A broken loop also makes the product easy to abandon:
+nothing depends on coming back.
+
+**Tax treatment as an upgrade — I would not, and more strongly.** GCT is not a
+premium capability in Jamaica; it is a legal requirement for a registered
+business. A quote with the wrong GCT is not a simplified quote, it is an
+incorrect one, and the contractor carries that to their client and to TAJ. It
+also cannot be cleanly stripped: `gctTreatment` is per LINE ITEM and
+`defaultGctRate` is per business, so the tax model is woven through the
+documents rather than sitting beside them.
+
+**Job tracking as an upgrade — yes, this one is right.** Costing, profitability
+and accountant exports are about running the business better rather than
+producing a correct document. That is exactly what an established contractor
+with an accountant will pay more for, and a one-man operation genuinely does
+not need.
+
+### Recommended shape
+
+| Tier | What it is | Contains |
+|---|---|---|
+| **Free** | A real trial that never expires | 3 quotes/month, FULL correctness — GCT, PDF, share link, convert to invoice, record payment |
+| **Pro** | Volume | Unlimited quotes and invoices, job library, clients, reports, reminders |
+| **Books** (later) | Insight | Job costing and profitability, purchases, accountant CSV exports, multi-user |
+
+Free stays a complete loop, just a small one. Pro is what you already have, and
+the gate already exists in the right shape (`quotes.service.ts:128` counts
+quotes, not features). Books is where §4g lands, and it justifies a higher
+price honestly.
+
+### One risk in the free tier as set
+
+3 quotes/month may be too tight to prove value. A contractor can use all three
+in week one and then be locked out for three weeks — long enough to forget the
+app exists. The cheap mitigations are a higher steady-state cap, or a larger
+one-off allowance for the first month so the habit forms before the limit
+bites. Worth watching during feasibility testing rather than deciding now.
+
+---
+
+## 4l. Feature recommendations from the current design
+
+Ordered by value, and each one is cheap BECAUSE something already built makes
+it so.
+
+**1. Auto-create a Project when a quote is accepted or converted.**
+Projects are optional on a quote today and nothing ever creates one
+automatically. Job costing depends entirely on them — so as it stands, §4g pays
+off only for contractors disciplined enough to create a job by hand. Creating
+one on acceptance (named from the quote, editable after) makes job tracking the
+default rather than a chore. **This is the single biggest lever on whether the
+costing work returns anything.**
+
+**2. Accept / decline on the share link.**
+`/q/<token>` already exists and already records VIEWED. An Accept button closes
+the loop: the client agrees in one tap, the quote advances, and the agreement
+is timestamped — which matters in a market where a great deal is agreed
+verbally and disputed later. Small now that the public page is built.
+
+**3. Labour cost in job costing — a real gap in what was just shipped.**
+Purchases capture bought goods. A contractor's own time and their crew's wages
+are usually the LARGEST cost on a job, and there is nowhere to record them, so
+every profit figure currently overstates. The app already holds labour rates;
+the missing piece is logging hours worked against a project. Without this,
+"did this job make money?" is optimistic rather than wrong-but-honest.
+
+**4. Invoice payment reminders — reuse the sweep.**
+Chasing money is the biggest administrative pain for a small contractor, and
+the machinery now exists: an idempotent sweep, a notice ledger keyed to prevent
+double-sending, and a mailer. Pointing the same pattern at overdue TENANT
+invoices instead of subscriptions is mostly wiring, and it is the feature most
+likely to make someone say the tool paid for itself.
+
+**5. Variations / change orders.**
+The commonest source of unpaid work in construction: the job grows, nobody
+writes it down, the contractor eats it. Quote revisions exist, but a revision
+replaces a quote — a variation ADDS to an accepted one and needs its own
+acceptance. Genuinely differentiating for construction specifically, and not
+something a generic invoicing tool does well.
+
+**6. Retention / holdback.**
+Common in Jamaican construction contracts and not modelled at all. A percentage
+withheld until completion changes what is actually owed and when, and a system
+that ignores it reports receivables that are wrong on every contract using it.
+
+
 ---
 
 ## 5. Standing outstanding items
