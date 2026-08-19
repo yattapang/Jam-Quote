@@ -14,6 +14,7 @@ import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import QuoteActions from "./QuoteActions";
 import WhatsAppButton from "./WhatsAppButton";
 import EmailQuoteButton from "./EmailQuoteButton";
+import { emailSendingStatus } from "@/lib/email-sending";
 import buttonStyles from "@/components/ui/Button.module.css";
 import shared from "../../shared.module.css";
 
@@ -24,6 +25,8 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
   const [clients, business] = await Promise.all([getClients(), getBusiness()]);
   const client = clients.find((c) => c.id === quote.clientId);
   const totals = getQuoteTotals(quote);
+  // Server-side: depends on env vars the browser cannot read.
+  const sending = emailSendingStatus();
   const pill = quoteStatusPill(quote.status);
   const groups = groupLinesByHeading(quote);
   // When the quote is set to DETAILED, job-type lines expand into their saved
@@ -67,7 +70,12 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             clientPhone={client?.phone}
             totalCents={totals.totalCents}
           />
-          <EmailQuoteButton quoteId={quote.id} clientEmail={client?.email} status={quote.status} />
+          <EmailQuoteButton
+            quoteId={quote.id}
+            clientEmail={client?.email}
+            status={quote.status}
+            unavailableReason={sending.configured ? undefined : sending.reason}
+          />
           <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>

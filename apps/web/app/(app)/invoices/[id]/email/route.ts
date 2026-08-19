@@ -2,6 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { Resend } from "resend";
 import { getInvoice, getClients, getBusiness, getLogoBytes } from "@/lib/api-server";
 import { getSession } from "@/lib/session";
+import { emailSendingStatus } from "@/lib/email-sending";
 import { getQuoteTotals, invoiceBalanceCents } from "@/lib/quote-totals";
 import { buildInvoiceEmail, LOGO_CID } from "@/lib/invoice-email";
 import InvoicePdf from "@/lib/pdf/InvoicePdf";
@@ -38,8 +39,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   // Refuse loudly rather than logging a warning and returning ok. #24 fixed
   // exactly this shape on password reset: the contractor saw "Sent", the
   // customer received nothing, and nobody found out until the money was late.
-  if (!process.env.RESEND_API_KEY) {
-    return Response.json({ error: "Email is not configured yet." }, { status: 503 });
+  // Stricter than "is there a key": Resend's shared test sender accepts mail
+  // and returns success while delivering only to the account owner, so this
+  // would otherwise report a send that never reached the client.
+  const sending = emailSendingStatus();
+  if (!sending.configured) {
+    return Response.json({ error: sending.reason }, { status: 503 });
   }
 
   // Ownership: getInvoice goes through serverRequest with the caller's JWT,

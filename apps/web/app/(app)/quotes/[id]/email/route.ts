@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { formatJmd } from "@jamquote/core";
 import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import { getSession } from "@/lib/session";
+import { emailSendingStatus } from "@/lib/email-sending";
 import { getQuoteTotals } from "@/lib/quote-totals";
 import QuotePdf from "@/lib/pdf/QuotePdf";
 import { escapeHtml } from "@/lib/escape-html";
@@ -26,8 +27,12 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     );
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    return Response.json({ error: "Email is not configured yet." }, { status: 503 });
+  // Stricter than "is there a key": Resend's shared test sender accepts mail
+  // and returns success while delivering only to the account owner, so this
+  // would otherwise report a send that never reached the client.
+  const sending = emailSendingStatus();
+  if (!sending.configured) {
+    return Response.json({ error: sending.reason }, { status: 503 });
   }
 
   const quote = await getQuote(params.id);

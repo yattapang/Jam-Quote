@@ -14,6 +14,14 @@ interface EmailQuoteButtonProps {
    * status. Any other status is left alone — re-emailing an ACCEPTED quote
    * must not drag it backwards to SENT. */
   status: QuoteStatus;
+  /**
+   * Why sending is unavailable, or undefined when it works. Passed from the
+   * server page — the reason depends on env vars the browser cannot read.
+   *
+   * Shown BEFORE the click rather than as an error after it: the alternative
+   * is a contractor believing a quote reached their customer when it did not.
+   */
+  unavailableReason?: string;
 }
 
 /**
@@ -26,7 +34,12 @@ interface EmailQuoteButtonProps {
  * in Draft, and never saw the Accept -> Convert to invoice path that only
  * appears once a quote has left Draft.
  */
-export default function EmailQuoteButton({ quoteId, clientEmail, status }: EmailQuoteButtonProps) {
+export default function EmailQuoteButton({
+  quoteId,
+  clientEmail,
+  status,
+  unavailableReason,
+}: EmailQuoteButtonProps) {
   const router = useRouter();
   const hasEmail = Boolean(clientEmail && clientEmail.trim());
   const [open, setOpen] = useState(false);
@@ -83,11 +96,23 @@ export default function EmailQuoteButton({ quoteId, clientEmail, status }: Email
         variant="secondary"
         size="sm"
         onClick={() => setOpen(true)}
-        disabled={!hasEmail}
-        title={hasEmail ? undefined : "No email address on file for this client"}
+        disabled={!hasEmail || !!unavailableReason}
+        title={
+          unavailableReason ??
+          (hasEmail ? undefined : "No email address on file for this client")
+        }
       >
         Send by email
       </Button>
+      {/* Stated in the open, not just as a tooltip: on a phone there is no
+          hover, and a disabled button with no explanation reads as a bug. */}
+      {unavailableReason && (
+        <span
+          style={{ fontSize: 11.5, color: "var(--muted)", maxWidth: 260, lineHeight: 1.35 }}
+        >
+          {unavailableReason}
+        </span>
+      )}
       {open && (
         <Modal title="Send quote by email?" onClose={close}>
           <div className={modalStyles.form}>
