@@ -11,6 +11,7 @@ export * from "./dashboard/stats.js";
 export * from "./reports/summary.js";
 export * from "./billing/subscription.js";
 export * from "./costing/job-profit.js";
+export * from "./costing/expense-categories.js";
 export * from "./jurisdiction/jurisdiction.js";
 export * from "./jurisdiction/verification.js";
 export * from "./fixtures/demo.js";

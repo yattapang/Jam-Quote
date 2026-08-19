@@ -1032,10 +1032,12 @@ per-tenant `Reply-To` (still a global env var today) before any real volume.
   deliberately rather than by default.
 
 
-## 4k. Packaging and tiering — RECOMMENDATION, owner to decide
+## 4k. Packaging and tiering — ACCEPTED (owner, 2026-08-19)
 
-Owner's proposal (2026-08-19): quoting standard, job tracking + invoicing as an
-upgrade, tax treatment as a further upgrade.
+Owner's original proposal was quoting standard, job tracking + invoicing as an
+upgrade, and tax treatment as a further upgrade. **The recommendation below was
+accepted in full**, so the settled shape is Free / Pro / Books: invoicing and
+GCT stay in the free tier, and job tracking becomes the paid upgrade.
 
 ### The principle I would apply instead
 
@@ -1093,12 +1095,40 @@ bites. Worth watching during feasibility testing rather than deciding now.
 
 ---
 
-## 4l. Feature recommendations from the current design
+### Expense categories — decided 2026-08-19
+
+Asked: how do they organise themselves? They did not — `category` was free text
+with no suggestions, so "Cement", "cement" and "Cemnt" would become three
+categories and the accountant export they exist for could group none of it.
+
+**Settled: suggested, not enforced.** `PURCHASE_CATEGORY_SUGGESTIONS` in core
+offers eight categories a Jamaican contractor actually uses, as a datalist —
+the field stays free text, because a contractor must be able to write their own
+word and the house rule is that vocabulary never needs a migration to extend.
+
+`groupByCategory` folds them case- and padding-insensitively, keeping the FIRST
+spelling as the label so the breakdown reads in the contractor's own words. The
+project page now shows spend by category, largest first — without that, the
+field is data entry with no payoff and a contractor would rightly stop filling
+it in.
+
+**Upgrade path if it proves necessary:** promote to a table beside
+MaterialCategoryDef and Trade, which already support curated rows, per-tenant
+additions and hiding. Not yet — a constant costs nothing, and a table needs an
+admin screen to be worth having.
+
+## 4l. Feature roadmap — ACCEPTED (owner, 2026-08-19)
 
 Ordered by value, and each one is cheap BECAUSE something already built makes
 it so.
 
-**1. Auto-create a Project when a quote is accepted or converted.**
+**1. Auto-create a Project when a quote is accepted. DONE (`see commit`).**
+Accepting now creates a job named from the quote, at stage WON (not QUOTED —
+the client has agreed), attached back to the quote so revenue and costs meet on
+one record. Best-effort: if it fails the acceptance still stands, because
+refusing to accept a quote over a bookkeeping convenience is the wrong trade.
+
+Original reasoning, kept because it is why this ranked first:
 Projects are optional on a quote today and nothing ever creates one
 automatically. Job costing depends entirely on them — so as it stands, §4g pays
 off only for contractors disciplined enough to create a job by hand. Creating
@@ -1112,7 +1142,7 @@ the loop: the client agrees in one tap, the quote advances, and the agreement
 is timestamped — which matters in a market where a great deal is agreed
 verbally and disputed later. Small now that the public page is built.
 
-**3. Labour cost in job costing — a real gap in what was just shipped.**
+**3. Labour cost in job costing — NEXT, and a real gap in what was shipped.**
 Purchases capture bought goods. A contractor's own time and their crew's wages
 are usually the LARGEST cost on a job, and there is nowhere to record them, so
 every profit figure currently overstates. The app already holds labour rates;

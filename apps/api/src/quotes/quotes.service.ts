@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import {
   BadRequestException,
+  Logger,
   HttpException,
   Injectable,
   NotFoundException,
@@ -8,6 +9,7 @@ import {
 import type { Prisma } from "@prisma/client";
 import {
   computeTotals,
+  ProjectStage,
   QuoteDetailLevel,
   QuoteStatus,
   type GctTreatment,
@@ -136,6 +138,8 @@ function lineItemCreateData(
 
 @Injectable()
 export class QuotesService {
+  private readonly logger = new Logger(QuotesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly businessService: BusinessService,
@@ -430,7 +434,58 @@ export class QuotesService {
       );
     }
     await this.prisma.quote.update({ where: { id }, data: { status } });
+
+    // Accepting a quote is the moment work becomes real, so it is the moment
+    // a job should exist to track it against.
+    //
+    // Projects are optional and nothing else ever creates one, which meant job
+    // costing only paid off for contractors disciplined enough to make one by
+    // hand — and a costing feature that depends on remembering a separate step
+    // reports on an empty set. Creating it here makes tracking the default.
+    if (status === QuoteStatus.ACCEPTED && !quote.projectId) {
+      await this.createProjectForAcceptedQuote(businessId, id);
+    }
+
     return this.findOne(businessId, id);
+  }
+
+  /**
+   * The job a newly-accepted quote is now tracked against.
+   *
+   * Named from the quote so the contractor recognises it, and attached back to
+   * the quote so revenue and costs meet on the same record. Best-effort by
+   * design: if this fails the acceptance still stands, because refusing to
+   * accept a quote over a bookkeeping convenience would be the wrong trade.
+   */
+  private async createProjectForAcceptedQuote(businessId: string, quoteId: string): Promise<void> {
+    try {
+      const quote = await this.prisma.quote.findFirst({
+        where: { id: quoteId, businessId },
+        select: { id: true, number: true, clientId: true },
+      });
+      if (!quote) return;
+
+      const project = await this.prisma.project.create({
+        data: {
+          businessId,
+          clientId: quote.clientId,
+          name: `Quote ${quote.number}`,
+          // WON, not QUOTED: the client has agreed. QUOTED would be the state
+          // it was in a moment ago, and the stage picker is hand-set from here
+          // on, so starting it wrong makes a contractor correct it every time.
+          stage: ProjectStage.WON,
+        },
+      });
+
+      await this.prisma.quote.update({
+        where: { id: quoteId },
+        data: { projectId: project.id },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Accepted quote ${quoteId} but could not create its project: ${String(err)}`,
+      );
+    }
   }
 
   /**

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatJmd } from "@jamquote/core";
+import { formatJmd, groupByCategory, PURCHASE_CATEGORY_SUGGESTIONS } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -76,6 +76,37 @@ export default function ProjectCosts({
         </Button>
       </div>
       <Card>
+        {/* Where the money went, largest first. This is what the category
+            field is FOR — without a breakdown it is data entry with no
+            payoff, and a contractor would rightly stop filling it in. */}
+        {purchases.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 14,
+              paddingBottom: 12,
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            {groupByCategory(purchases).map((g) => (
+              <span
+                key={g.category}
+                style={{
+                  fontSize: 12,
+                  padding: "5px 10px",
+                  borderRadius: 999,
+                  background: "var(--surface-alt)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                {g.category} <strong>{formatJmd(g.totalCents)}</strong>
+              </span>
+            ))}
+          </div>
+        )}
+
         {purchases.length === 0 ? (
           <div className={shared.empty}>
             Nothing logged against this job yet. Add what you spent — materials, hire, subcontractors
@@ -151,12 +182,22 @@ export default function ProjectCosts({
                 value={purchasedAt}
                 onChange={(e) => setPurchasedAt(e.target.value)}
               />
+              {/* Suggested, not enforced — a contractor must be able to use
+                  their own word. The list exists so the common ones are spelt
+                  the same way every time, since the accountant export groups
+                  on this and free text drifts within a week. */}
               <Input
                 label="Category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 placeholder="Materials, hire…"
+                list="purchase-categories"
               />
+              <datalist id="purchase-categories">
+                {PURCHASE_CATEGORY_SUGGESTIONS.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
             </div>
             <Input
               label="Reference"
