@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import {
   getJurisdiction,
   formatJmd,
+  subscriptionStanding,
+  type SubscriptionStanding,
   rulePackVerification,
   ADMIN_CAPABILITIES,
   ADMIN_CAPABILITY_META,
@@ -598,10 +600,36 @@ export default function AdminConsole({
   const tenantIntervals: string[] = data.tenants.map((t) => t.interval);
   const tenantRenewals: (string | null)[] = data.tenants.map((t) => t.renewsAt);
   const tenantSuspendedBase: boolean[] = data.tenants.map((t) => t.suspended);
-  const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
+  /**
+   * Standing is DERIVED from the renewal date, not read from
+   * Subscription.status — which is written once as "active" on create and
+   * never updated again. Every tenant therefore read "Active" forever, and the
+   * old Trial / Past due / Churned filters counted states nothing could set,
+   * so all three were permanently zero. Trial is gone entirely: the free tier
+   * IS the trial and never expires.
+   */
+  const standingOf = (i: number): SubscriptionStanding =>
+    subscriptionStanding({
+      plan: data.tenants[i]?.plan ?? "free",
+      interval: data.tenants[i]?.interval ?? "monthly",
+      renewsAt: data.tenants[i]?.renewsAt ?? null,
+    });
+  const STANDING_PILL: Record<SubscriptionStanding, [string, string]> = {
+    CURRENT: ["Current", "good"],
+    DUE_SOON: ["Due soon", "info"],
+    PAST_DUE: ["Past due", "warn"],
+    FREE: ["Free", "muted"],
+  };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
-  const cnt = (st: string) => tenantsRaw.filter((t) => t[4] === st).length;
-  const tenantFilters = [["All", String(tenantsRaw.length), true], ["Active", cnt("active")], ["Trial", cnt("trial")], ["Past due", cnt("past_due")], ["Churned", cnt("churned")]];
+  const cnt = (want: SubscriptionStanding) =>
+    tenantsRaw.filter((_, i) => standingOf(i) === want).length;
+  const tenantFilters = [
+    ["All", String(tenantsRaw.length), true],
+    ["Current", cnt("CURRENT")],
+    ["Due soon", cnt("DUE_SOON")],
+    ["Past due", cnt("PAST_DUE")],
+    ["Free", cnt("FREE")],
+  ];
 
 
   const regMap: Record<string, [string, string]> = { needs: ["Needs review", "warn"], monitoring: ["Monitoring", "info"], applied: ["Applied", "good"] };
@@ -927,7 +955,7 @@ export default function AdminConsole({
                   </tr></thead>
                   <tbody>
                     {tenantsRaw.map((t, i) => {
-                      const [sl, st] = statusMap[t[4]] ?? ["Active", "good"];
+                      const [sl, st] = STANDING_PILL[standingOf(i)];
                       const id = tenantIds[i];
                       // The override holds a CHOICE ("pro-annual"); the plan
                       // pill still wants a plan, so map it back.
@@ -1509,11 +1537,39 @@ export default function AdminConsole({
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: "var(--good)" }}>{financials ? financials.proCount.toLocaleString() : "—"}</div>
                 </div>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>MRR</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>MRR (contracted)</div>
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? formatJmd(financials.mrrCents) : "—"}</div>
                   {financials && (
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
-                      Pro @ {formatJmd(financials.proMonthlyPriceCents)}/mo · {financials.currency}
+                      What pro tenants owe per month · {financials.currency}
+                    </div>
+                  )}
+                </div>
+
+                {/* Collected sits beside MRR deliberately. With only the
+                    contracted figure on screen, recording a payment appeared to
+                    change nothing — the tenant already owed the same amount —
+                    and there was no way to see whether money had arrived. */}
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Collected this month</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: "var(--good)" }}>
+                    {financials ? formatJmd(financials.collectedThisMonthCents) : "—"}
+                  </div>
+                  {financials && (
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+                      Money actually received · excludes voided
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Past due</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: financials && financials.pastDueCount > 0 ? "var(--warn)" : undefined }}>
+                    {financials ? String(financials.pastDueCount) : "—"}
+                  </div>
+                  {financials && (
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
+                      Paid plans whose term has ended
                     </div>
                   )}
                 </div>

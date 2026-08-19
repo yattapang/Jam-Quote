@@ -1,6 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { UserRole, type Business } from "@prisma/client";
-import { supportedJurisdictions } from "@jamquote/core";
+import {
+  JAMAICA_UTC_OFFSET_MS,
+  SubscriptionStanding,
+  subscriptionStanding,
+  supportedJurisdictions,
+} from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
 import type { UpdatePricingInput } from "../billing/billing.dto.js";
@@ -86,11 +91,41 @@ export interface AdminFinancials {
   annualCount: number;
   currency: string;
   proMonthlyPriceCents: number;
+  /**
+   * CONTRACTED run-rate: what paying tenants owe per month. Not income.
+   *
+   * Shown beside `collectedThisMonthCents` on purpose. With only this figure
+   * visible, recording a payment appeared to do nothing — the tenant already
+   * owed the same amount — and there was no way to see whether the money had
+   * actually arrived.
+   */
   mrrCents: number;
+  /** Money that ACTUALLY arrived this calendar month, from the payment ledger,
+   * excluding voided rows. */
+  collectedThisMonthCents: number;
+  /** Paying tenants whose term has already ended — the ones to chase. */
+  pastDueCount: number;
   upcomingRenewals: AdminUpcomingRenewal[];
 }
 
 const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
+
+/**
+ * Start of the current calendar month in JAMAICA local time.
+ *
+ * Deliberately not `startOfCurrentMonth` from common/month.util.ts, which uses
+ * server time: that one gates the free quota, where an hour either side of a
+ * boundary is harmless. This is an accounting period, and it has to agree with
+ * the month a contractor sees in their own Reports — which bucket in Jamaica
+ * time. A figure labelled "this month" that means two different months in two
+ * places is the kind of thing nobody catches until the numbers are disputed.
+ */
+function startOfJamaicaMonth(now: Date = new Date()): Date {
+  const shifted = new Date(now.getTime() + JAMAICA_UTC_OFFSET_MS);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - JAMAICA_UTC_OFFSET_MS,
+  );
+}
 
 /** One term from today. Uses setMonth/setFullYear rather than adding a fixed
  * number of days, so a renewal lands on the same calendar date and does not
@@ -526,11 +561,17 @@ export class AdminService {
    * (suspended) businesses from every count below.
    */
   async financials(): Promise<AdminFinancials> {
-    const [pricing, businesses] = await Promise.all([
+    const monthStart = startOfJamaicaMonth();
+    const [pricing, businesses, collected] = await Promise.all([
       this.pricingService.get(),
       this.prisma.business.findMany({
         where: { deletedAt: null },
         include: { subscription: true },
+      }),
+      // Voided rows excluded: they are history for reconciliation, not income.
+      this.prisma.subscriptionPayment.aggregate({
+        where: { voidedAt: null, paidAt: { gte: monthStart } },
+        _sum: { amountCents: true },
       }),
     ]);
 
@@ -540,6 +581,7 @@ export class AdminService {
     let proCount = 0;
     let mrrCents = 0;
     let annualCount = 0;
+    let pastDueCount = 0;
     const upcomingRenewals: AdminUpcomingRenewal[] = [];
 
     for (const b of businesses) {
@@ -553,6 +595,17 @@ export class AdminService {
         // the monthly list price would ignore the annual discount the tenant
         // was actually given.
         mrrCents += monthlyValueCents(b.subscription!, pricing);
+        // Derived from the dates, never from Subscription.status — which is
+        // written once as "active" and never updated.
+        if (
+          subscriptionStanding({
+            plan: b.subscription!.plan,
+            interval: b.subscription!.interval,
+            renewsAt: b.subscription!.renewsAt ? b.subscription!.renewsAt.toISOString() : null,
+          }) === SubscriptionStanding.PAST_DUE
+        ) {
+          pastDueCount += 1;
+        }
       }
 
       if (
@@ -581,6 +634,8 @@ export class AdminService {
       // Summed per tenant rather than proCount x list price, so an annual term
       // or a negotiated rate is reported at what that tenant actually pays.
       mrrCents,
+      collectedThisMonthCents: collected._sum.amountCents ?? 0,
+      pastDueCount,
       upcomingRenewals,
     };
   }

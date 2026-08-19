@@ -339,6 +339,9 @@ describe("AdminService.financials", () => {
     const soon = new Date(now + 10 * 24 * 60 * 60 * 1000);
     const tooFar = new Date(now + 90 * 24 * 60 * 60 * 1000);
     const prisma = {
+      subscriptionPayment: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountCents: 0 } }),
+      },
       business: {
         findMany: vi.fn().mockResolvedValue([
           { id: "biz-1", name: "Pro Co", subscription: { plan: "pro", renewsAt: soon } },
@@ -484,8 +487,15 @@ describe("AdminService — regulatory feed CRUD", () => {
 describe("AdminService.financials — annual terms and negotiated prices", () => {
   const pricing = { proMonthlyPriceCents: 200_000, proAnnualPriceCents: 2_000_000, currency: "JMD", freeQuotesPerMonth: 15 };
 
-  function withSubs(subs: Array<{ plan: string; interval?: string; priceCents?: number | null; renewsAt?: Date | null }>) {
+  function withSubs(
+    subs: Array<{ plan: string; interval?: string; priceCents?: number | null; renewsAt?: Date | null }>,
+    collectedThisMonth = 0,
+  ) {
     const prisma = {
+      // The platform payment ledger behind "collected this month".
+      subscriptionPayment: {
+        aggregate: vi.fn().mockResolvedValue({ _sum: { amountCents: collectedThisMonth } }),
+      },
       business: {
         findMany: vi.fn().mockResolvedValue(
           subs.map((s, i) => ({
@@ -542,6 +552,31 @@ describe("AdminService.financials — annual terms and negotiated prices", () =>
     expect(f.mrrCents).toBe(0);
     expect(f.proCount).toBe(0);
     expect(f.freeCount).toBe(2);
+  });
+
+  it("reports money that ACTUALLY arrived, separately from MRR", async () => {
+    // With only MRR visible, recording a payment looked like it did nothing —
+    // the tenant already owed the same amount. These are different questions
+    // and the console has to ask both.
+    const { svc } = withSubs([{ plan: "pro" }], 175_000);
+    const f = await svc.financials();
+    expect(f.mrrCents).toBe(200_000);
+    expect(f.collectedThisMonthCents).toBe(175_000);
+  });
+
+  it("counts a lapsed paying tenant as past due", async () => {
+    // Derived from renewsAt, never from Subscription.status, which is written
+    // once as "active" and never updated.
+    const { svc } = withSubs([
+      { plan: "pro", renewsAt: new Date(Date.now() - 5 * 86_400_000) },
+      { plan: "pro", renewsAt: new Date(Date.now() + 5 * 86_400_000) },
+    ]);
+    expect((await svc.financials()).pastDueCount).toBe(1);
+  });
+
+  it("does not count a free tenant as past due whatever its dates say", async () => {
+    const { svc } = withSubs([{ plan: "free", renewsAt: new Date(Date.now() - 99 * 86_400_000) }]);
+    expect((await svc.financials()).pastDueCount).toBe(0);
   });
 
   it("sums a mixed book and reports how many are annual", async () => {

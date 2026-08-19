@@ -1146,7 +1146,12 @@ export interface AdminFinancials {
   proCount: number;
   currency: string;
   proMonthlyPriceCents: number;
+  /** CONTRACTED run-rate — what pro tenants owe per month. Not income. */
   mrrCents: number;
+  /** Money that actually arrived this calendar month, voided rows excluded. */
+  collectedThisMonthCents: number;
+  /** Paying tenants whose term has already ended. */
+  pastDueCount: number;
   upcomingRenewals: AdminUpcomingRenewal[];
 }
 /** GET /admin/audit — ADMIN only. Newest first. `details` is a free-form,
