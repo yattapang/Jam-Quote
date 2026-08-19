@@ -813,8 +813,18 @@ quotes. GCT registration is inferred from the business holding a TRN — the onl
 signal the app has, and better than silently assuming every tenant reclaims,
 which would overstate the margin for every unregistered sole trader.
 
-**Remaining:** the UI (log a purchase; see a job's profit), then the CSV
-exports in §4g proper.
+**Step 3 — UI. DONE.** The project page leads with "Did this job make money?"
+— invoiced, cost after reclaimable GCT, and profit with margin — above a Costs
+section where a contractor logs what they spent. Costs live on the PROJECT
+rather than in a separate expenses screen because that is where the question
+gets asked.
+
+GCT is asked for as an amount, not derived from a rate: plenty of suppliers
+here are not registered, so assuming 15% would invent input tax that cannot be
+reclaimed.
+
+**Remaining in 4g:** the accountant CSV exports (§4g "Candidate files"). The
+data they need now exists on both sides — sales and purchases.
 
 **Watch for during contractor testing:** job costing only means anything if
 contractors actually create Projects, which are optional on a quote today. If

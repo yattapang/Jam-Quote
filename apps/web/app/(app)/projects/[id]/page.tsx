@@ -6,7 +6,9 @@ import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
-import { getProject, getClients, getQuotes } from "@/lib/api-server";
+import { getProject, getClients, getQuotes, getPurchases, getProjectProfit } from "@/lib/api-server";
+import ProjectCosts from "./ProjectCosts";
+import { formatJmd } from "@jamquote/core";
 import EditProjectButton from "./EditProjectButton";
 import shared from "../../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
@@ -17,9 +19,11 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [clients, quotes] = await Promise.all([
+  const [clients, quotes, purchases, profit] = await Promise.all([
     getClients(),
     getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
+    getPurchases({ projectId: project.id }),
+    getProjectProfit(project.id),
   ]);
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 
@@ -49,6 +53,50 @@ export default async function JobDetailPage({ params }: { params: { id: string }
       </header>
 
       <div className={shared.grid2}>
+        {/* The question a contractor actually asks about a job, answered
+            first. Revenue is INVOICED work, not quoted — a quote is what was
+            hoped for. */}
+        <section className={shared.section}>
+          <div className={shared.sectionHead}>
+            <h2 className={shared.sectionTitle}>Did this job make money?</h2>
+          </div>
+          <Card>
+            {!profit ? (
+              <div className={shared.empty}>Couldn&apos;t load the figures.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 16 }}>
+                <div>
+                  <div className={shared.statHint}>Invoiced</div>
+                  <MoneyText cents={profit.revenueCents} size={22} />
+                  <div className={shared.statHint}>{formatJmd(profit.collectedCents)} received</div>
+                </div>
+                <div>
+                  <div className={shared.statHint}>Cost</div>
+                  <MoneyText cents={profit.costExGctCents} size={22} />
+                  {profit.inputTaxCents > 0 && (
+                    <div className={shared.statHint}>
+                      after {formatJmd(profit.inputTaxCents)} reclaimable GCT
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className={shared.statHint}>Profit</div>
+                  <MoneyText
+                    cents={profit.netProfitCents}
+                    size={22}
+                    tone={profit.netProfitCents < 0 ? "critical" : "good"}
+                  />
+                  <div className={shared.statHint}>
+                    {/* Null, not 0 — a job with costs and no invoices has an
+                        undefined margin, and "0%" would read as a fact. */}
+                    {profit.marginPct === null ? "not invoiced yet" : `${profit.marginPct}% margin`}
+                  </div>
+                </div>
+              </div>
+            )}
+          </Card>
+        </section>
+
         <section className={shared.section}>
           <div className={shared.sectionHead}>
             <h2 className={shared.sectionTitle}>Quotes</h2>
@@ -78,6 +126,8 @@ export default async function JobDetailPage({ params }: { params: { id: string }
             </div>
           </Card>
         </section>
+
+        <ProjectCosts projectId={project.id} purchases={purchases} />
 
         <section className={shared.section}>
           <Card>

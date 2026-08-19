@@ -1458,6 +1458,43 @@ export async function getSweepRuns(): Promise<AdminSweepRun[]> {
   return apiClient.get<AdminSweepRun[]>("/admin/subscriptions/sweeps");
 }
 
+/** A purchase as the API stores it — what was spent, and on which job. */
+export interface ApiPurchase {
+  id: string;
+  projectId: string | null;
+  supplierId: string | null;
+  description: string;
+  amountCents: number;
+  /** The GCT portion of amountCents. Zero when the supplier is not
+   * registered, or the purchase is exempt. */
+  gctCents: number;
+  category: string | null;
+  purchasedAt: string;
+  reference: string | null;
+  note: string | null;
+}
+
+export interface CreatePurchaseInput {
+  /** Omit or null for an overhead with no job behind it. */
+  projectId?: string | null;
+  supplierId?: string | null;
+  description: string;
+  amountCents: number;
+  gctCents?: number;
+  category?: string | null;
+  purchasedAt: string;
+  reference?: string | null;
+  note?: string | null;
+}
+
+export async function createPurchase(input: CreatePurchaseInput): Promise<ApiPurchase> {
+  return apiClient.post<ApiPurchase>("/purchases", input);
+}
+
+export async function deletePurchase(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/purchases/${id}`);
+}
+
 /** Mint (or reuse) the public share token for a quote. Idempotent — sharing
  * twice keeps the link already sent, so re-sending never breaks the first. */
 export async function shareQuote(quoteId: string): Promise<{ shareToken: string }> {

@@ -15,6 +15,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { JobProfit } from "@jamquote/core";
 import {
   API_BASE_URL,
   ApiError,
@@ -37,6 +38,7 @@ import {
   type ApiQuote,
   type Invoice,
   type AdminData,
+  type ApiPurchase,
   type AdminOverview,
   type AdminTenant,
   type AdminReg,
@@ -241,6 +243,42 @@ export async function getEquipment(includeHidden = false): Promise<EquipmentItem
     redirectOnAuthError(err);
     console.warn("[api-server] getEquipment: API unreachable, using empty list");
     return [];
+  }
+}
+
+/**
+ * What was spent, optionally for one job.
+ *
+ * Pass `projectId: null` for OVERHEADS — purchases belonging to no job at all.
+ * That is a meaningful filter, not an absent one, so it is sent as an empty
+ * string which the API coerces back to null.
+ */
+export async function getPurchases(params?: {
+  projectId?: string | null;
+  limit?: number;
+}): Promise<ApiPurchase[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.projectId !== undefined) qs.set("projectId", params.projectId ?? "");
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return await serverRequest<ApiPurchase[]>(`/purchases${suffix}`);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getPurchases: API unreachable, using empty list");
+    return [];
+  }
+}
+
+/** Did this job make money? Null when the API is unreachable, so the card
+ * renders "unavailable" rather than an invented zero. */
+export async function getProjectProfit(projectId: string): Promise<JobProfit | null> {
+  try {
+    return await serverRequest<JobProfit>(`/purchases/project/${projectId}/profit`);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getProjectProfit: API unreachable, returning null");
+    return null;
   }
 }
 
