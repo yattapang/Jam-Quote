@@ -13,6 +13,7 @@ import {
 import { getInvoice, getClients } from "@/lib/api-server";
 import InvoiceActions from "./InvoiceActions";
 import EmailInvoiceButton from "./EmailInvoiceButton";
+import { emailSendingStatus } from "@/lib/email-sending";
 import shared from "../../shared.module.css";
 import buttonStyles from "@/components/ui/Button.module.css";
 import PaymentsPanel from "./PaymentsPanel";
@@ -29,6 +30,8 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   // Invoice carries the same shape as Quote there, so the same math (and the
   // same single source of truth, @jamquote/core's computeTotals) applies.
   const totals = getQuoteTotals(invoice);
+  // Server-side: depends on env vars the browser cannot read.
+  const sending = emailSendingStatus();
   const pill = invoiceStatusPill(invoice.status);
   const groups = groupLinesByHeading(invoice);
   const detailed = invoice.detailLevel === QuoteDetailLevel.DETAILED;
@@ -63,7 +66,11 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
           >
             Download PDF
           </a>
-          <EmailInvoiceButton invoiceId={invoice.id} clientEmail={client?.email} />
+          <EmailInvoiceButton
+            invoiceId={invoice.id}
+            clientEmail={client?.email}
+            unavailableReason={sending.configured ? undefined : sending.reason}
+          />
           <InvoiceActions id={invoice.id} status={invoice.status} />
         </div>
       </header>

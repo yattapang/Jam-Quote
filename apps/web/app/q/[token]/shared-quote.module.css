@@ -1,0 +1,192 @@
+/*
+ * The client-facing quote page.
+ *
+ * Self-contained on purpose: this renders for someone with no account, often
+ * on a phone, arriving from a WhatsApp message. It borrows none of the app
+ * shell's chrome, so nothing here can be broken by a change to the signed-in
+ * layout — and there is nothing to click except the PDF.
+ */
+
+.page {
+  min-height: 100vh;
+  padding: 20px 14px 48px;
+  background: #f5f5f4;
+  color: #1c1917;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.card {
+  max-width: 640px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 14px;
+  padding: 24px 22px 28px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid #e7e5e4;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+}
+
+.business {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.numberBlock {
+  text-align: right;
+}
+
+.number {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  font-size: 12.5px;
+  color: #78716c;
+  line-height: 1.45;
+}
+
+.forWhom {
+  font-size: 14px;
+  margin: 0 0 18px;
+}
+
+.group {
+  margin-bottom: 18px;
+}
+
+.groupTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #78716c;
+  margin: 0 0 8px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table td {
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f5f4;
+  vertical-align: top;
+}
+
+.desc {
+  padding-right: 12px;
+}
+
+/* The quantity rides with the description rather than getting its own column:
+   at 360px a three-column table wraps into an unreadable stack. */
+.qty {
+  color: #78716c;
+  font-size: 13px;
+}
+
+.amount {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.totals {
+  margin: 20px 0 0;
+  border-top: 1px solid #e7e5e4;
+  padding-top: 14px;
+}
+
+.totals > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 14px;
+}
+
+.totals dt,
+.totals dd {
+  margin: 0;
+}
+
+.totals dd {
+  font-variant-numeric: tabular-nums;
+}
+
+.grand {
+  font-weight: 700;
+  font-size: 16px !important;
+  border-top: 1px solid #e7e5e4;
+  margin-top: 6px;
+  padding-top: 10px !important;
+}
+
+.terms {
+  margin-top: 22px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.terms p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Full width and finger-sized: on a phone this is the only thing to press. */
+.download {
+  display: block;
+  margin-top: 24px;
+  padding: 13px 16px;
+  border-radius: 10px;
+  background: #1c1917;
+  color: #fff;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14.5px;
+  text-decoration: none;
+}
+
+.title {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.footer {
+  margin: 18px 0 0;
+  font-size: 12.5px;
+  color: #78716c;
+  text-align: center;
+}
+
+/* On paper the card chrome and the button are noise — the client wants the
+   quote itself, which is what they will forward or file. */
+@media print {
+  .page {
+    padding: 0;
+    background: #fff;
+  }
+  .card {
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  .download,
+  .footer {
+    display: none;
+  }
+}

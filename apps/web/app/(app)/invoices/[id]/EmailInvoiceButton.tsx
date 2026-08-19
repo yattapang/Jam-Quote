@@ -7,11 +7,18 @@ import Modal, { modalStyles } from "@/components/ui/Modal";
 interface EmailInvoiceButtonProps {
   invoiceId: string;
   clientEmail?: string;
+  /** Why sending is unavailable, or undefined when it works. Mirrors
+   * EmailQuoteButton — the two must not disagree about whether mail can go. */
+  unavailableReason?: string;
 }
 
 /** Client island: confirms, then POSTs to the email send route. Mirrors
  * EmailQuoteButton — an outward action always confirms first. */
-export default function EmailInvoiceButton({ invoiceId, clientEmail }: EmailInvoiceButtonProps) {
+export default function EmailInvoiceButton({
+  invoiceId,
+  clientEmail,
+  unavailableReason,
+}: EmailInvoiceButtonProps) {
   const hasEmail = Boolean(clientEmail && clientEmail.trim());
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);

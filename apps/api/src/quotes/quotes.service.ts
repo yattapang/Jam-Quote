@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   BadRequestException,
   HttpException,
@@ -53,6 +54,38 @@ const QUOTE_DETAIL_INCLUDE = {
 } satisfies Prisma.QuoteInclude;
 
 type QuoteWithLines = Prisma.QuoteGetPayload<{ include: typeof QUOTE_DETAIL_INCLUDE }>;
+
+/**
+ * What an anonymous holder of a share token may read.
+ *
+ * Deliberately a hand-written allow-list rather than the Prisma row: this is
+ * the only unauthenticated response in the API, so adding a column to Quote
+ * must not silently widen it. Everything here already appears on the PDF the
+ * client is being sent.
+ */
+export interface PublicQuoteView {
+  number: string;
+  status: string;
+  validUntil: Date | null;
+  terms: string | null;
+  detailLevel: string;
+  gctRate: Prisma.Decimal;
+  discountPct: Prisma.Decimal;
+  depositCents: number;
+  subtotalCents: number;
+  gctCents: number;
+  totalCents: number;
+  lineItems: QuoteWithLines["lineItems"];
+  sections: QuoteWithLines["sections"];
+  clientName: string | null;
+  business: {
+    name: string;
+    addressLine: string | null;
+    town: string | null;
+    parish: string | null;
+    trn: string | null;
+  };
+}
 
 function collectLines(input: {
   sections: QuoteSectionInput[];
@@ -225,6 +258,105 @@ export class QuotesService {
     });
     if (!quote) throw new NotFoundException("Quote not found");
     return quote;
+  }
+
+  /**
+   * Mint (or reuse) the public share token for a quote.
+   *
+   * Reused rather than rotated on every share, so a link already sent on
+   * WhatsApp keeps working when the contractor shares again — re-sending is
+   * the most likely reason they press it a second time, and silently breaking
+   * the first link would be worse than not having one.
+   *
+   * 32 random bytes, base64url. Not derived from the quote id: ids appear in
+   * staff URLs and are guessable relative to one another, while this is handed
+   * to an outside party and must be a capability on its own.
+   */
+  async share(businessId: string, id: string): Promise<{ shareToken: string }> {
+    const quote = await this.findOne(businessId, id);
+    if (quote.shareToken) return { shareToken: quote.shareToken };
+
+    const shareToken = randomBytes(32).toString("base64url");
+    await this.prisma.quote.update({
+      where: { id },
+      data: { shareToken, sharedAt: new Date() },
+    });
+    return { shareToken };
+  }
+
+  /** Stop a shared link working. The quote is untouched; only the capability
+   * is withdrawn, so it can be re-shared later with a fresh token. */
+  async unshare(businessId: string, id: string): Promise<void> {
+    await this.findOne(businessId, id);
+    await this.prisma.quote.update({
+      where: { id },
+      data: { shareToken: null, sharedAt: null },
+    });
+  }
+
+  /**
+   * Resolve a public share token — NO businessId, because the token IS the
+   * authorisation. Deliberately the only unscoped read in this service.
+   *
+   * Also records the first view, which is what finally makes
+   * `QuoteStatus.VIEWED` reachable: the enum, its allowed transitions and the
+   * expiry sweep all referenced it, but nothing in the app could ever set it.
+   *
+   * Only DRAFT is refused. A draft has not been sent to anyone, so a link to
+   * one would expose a figure the contractor is still working on.
+   */
+  async findByShareToken(token: string): Promise<PublicQuoteView> {
+    const quote = await this.prisma.quote.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      include: {
+        ...QUOTE_DETAIL_INCLUDE,
+        client: { select: { firstName: true, lastName: true } },
+        business: {
+          select: { name: true, addressLine: true, town: true, parish: true, trn: true },
+        },
+      },
+    });
+    if (!quote || quote.status === QuoteStatus.DRAFT) {
+      // Same response either way: a wrong token and a draft must be
+      // indistinguishable, or the difference confirms which tokens are real.
+      throw new NotFoundException("Quote not found");
+    }
+
+    if (!quote.firstViewedAt) {
+      // SENT -> VIEWED only. Never drag ACCEPTED or DECLINED backwards
+      // because the client happened to reopen the link.
+      const advances = quote.status === QuoteStatus.SENT;
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: {
+          firstViewedAt: new Date(),
+          ...(advances ? { status: QuoteStatus.VIEWED } : {}),
+        },
+      });
+    }
+
+    // An explicit allow-list, not the row. This is the only response in the
+    // API an anonymous caller can read, so what it contains is a security
+    // decision rather than a serialization detail: everything here is already
+    // printed on the PDF the client is being sent, and nothing else — no ids,
+    // no timestamps, no internal status beyond what the document shows.
+    return {
+      number: quote.number,
+      status: quote.status,
+      validUntil: quote.validUntil,
+      terms: quote.terms,
+      detailLevel: quote.detailLevel,
+      gctRate: quote.gctRate,
+      discountPct: quote.discountPct,
+      depositCents: quote.depositCents,
+      subtotalCents: quote.subtotalCents,
+      gctCents: quote.gctCents,
+      totalCents: quote.totalCents,
+      lineItems: quote.lineItems,
+      sections: quote.sections,
+      clientName: quote.client ? `${quote.client.firstName} ${quote.client.lastName}`.trim() : null,
+      business: quote.business,
+    };
   }
 
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {

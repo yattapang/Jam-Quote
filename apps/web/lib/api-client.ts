@@ -1458,6 +1458,12 @@ export async function getSweepRuns(): Promise<AdminSweepRun[]> {
   return apiClient.get<AdminSweepRun[]>("/admin/subscriptions/sweeps");
 }
 
+/** Mint (or reuse) the public share token for a quote. Idempotent — sharing
+ * twice keeps the link already sent, so re-sending never breaks the first. */
+export async function shareQuote(quoteId: string): Promise<{ shareToken: string }> {
+  return apiClient.post<{ shareToken: string }>(`/quotes/${quoteId}/share`, {});
+}
+
 /** PATCH /admin/tenants/:id/plan — ADMIN only; sets a business's subscription. */
 export async function setTenantPlan(
   businessId: string,

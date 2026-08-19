@@ -354,6 +354,15 @@ model Quote {
   subtotalCents Int              @default(0)
   gctCents      Int              @default(0)
   totalCents    Int              @default(0)
+  /// Unguessable public link token. NOT the quote id: a share link goes to an
+  /// outside party and must be independently random, revocable, and useless
+  /// for guessing another quote. Null until the quote is actually shared, so
+  /// an unsent quote has no public surface at all.
+  shareToken    String?   @unique
+  sharedAt      DateTime?
+  /// First time the client opened the public link. Drives QuoteStatus.VIEWED,
+  /// which nothing in the app could set before this existed.
+  firstViewedAt DateTime?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   deletedAt     DateTime? // soft-delete for offline sync

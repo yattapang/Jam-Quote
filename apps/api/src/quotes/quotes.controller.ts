@@ -46,6 +46,19 @@ export class QuotesController {
     return this.quotes.findAll(businessId, { status, clientId, projectId });
   }
 
+  /** Mint the public link a contractor sends to their client. Idempotent —
+   * sharing twice keeps the link already sent. */
+  @Post(":id/share")
+  share(@BusinessId() businessId: string, @Param("id") id: string) {
+    return this.quotes.share(businessId, id);
+  }
+
+  /** Withdraw the link. The quote is untouched. */
+  @Delete(":id/share")
+  unshare(@BusinessId() businessId: string, @Param("id") id: string): Promise<void> {
+    return this.quotes.unshare(businessId, id);
+  }
+
   @Get(":id")
   findOne(@BusinessId() businessId: string, @Param("id") id: string) {
     return this.quotes.findOne(businessId, id);
