@@ -1434,6 +1434,30 @@ export async function voidSubscriptionPayment(
   );
 }
 
+export interface AdminSweepRun {
+  id: string;
+  ranAt: string;
+  /** "cron" | "boot" | "manual". */
+  trigger: string;
+  noticesSent: number;
+  reverted: number;
+  failures: number;
+}
+
+/** Safe to call repeatedly: notices are claimed against a unique constraint,
+ * so a second run sends nothing. */
+export async function runSubscriptionSweep(): Promise<{
+  noticesSent: number;
+  reverted: number;
+  failures: number;
+}> {
+  return apiClient.post("/admin/subscriptions/sweep", {});
+}
+
+export async function getSweepRuns(): Promise<AdminSweepRun[]> {
+  return apiClient.get<AdminSweepRun[]>("/admin/subscriptions/sweeps");
+}
+
 /** PATCH /admin/tenants/:id/plan — ADMIN only; sets a business's subscription. */
 export async function setTenantPlan(
   businessId: string,

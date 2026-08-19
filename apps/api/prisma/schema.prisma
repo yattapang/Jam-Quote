@@ -1125,3 +1125,18 @@ model SubscriptionNotice {
 
   @@unique([businessId, kind, periodEnd])
 }
+
+/// One row per subscription sweep, so "no reminders sent" can be told apart
+/// from "the sweep has not run". The API sleeps on the free tier, so the daily
+/// cron genuinely may not fire — silence must be verifiable, not assumed.
+model SubscriptionSweepRun {
+  id    String   @id @default(uuid())
+  ranAt DateTime @default(now())
+  /// "cron" | "boot" | "manual" — which trigger fired it.
+  trigger     String
+  noticesSent Int    @default(0)
+  reverted    Int    @default(0)
+  failures    Int    @default(0)
+
+  @@index([ranAt])
+}

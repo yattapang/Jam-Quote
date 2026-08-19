@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { AdminController } from "./admin.controller.js";
 import { AdminService } from "./admin.service.js";
 import { SubscriptionPaymentsService } from "./subscription-payments.service.js";
+import { SubscriptionSweepService } from "./subscription-sweep.service.js";
+import { SubscriptionMailerService } from "./subscription-mailer.service.js";
 import { AuditModule } from "./audit.module.js";
 import { AuthModule } from "../auth/auth.module.js";
 import { AdminGuard } from "../auth/admin.guard.js";
@@ -15,7 +17,7 @@ import { RulePackModule } from "../rulepack/rulepack.module.js";
   // RulePackService (GET/PATCH /admin/rulepack); AuditModule the shared trail.
   imports: [AuthModule, BillingModule, RulePackModule, AuditModule],
   controllers: [AdminController],
-  providers: [AdminService, SubscriptionPaymentsService, AdminGuard],
+  providers: [AdminService, SubscriptionPaymentsService, SubscriptionSweepService, SubscriptionMailerService, AdminGuard],
   exports: [AdminService],
 })
 export class AdminModule {}

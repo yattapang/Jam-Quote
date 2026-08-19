@@ -23,6 +23,8 @@ import {
   revokeAdmin,
   updateAdminRulePack,
   getSubscriptionPayments,
+  runSubscriptionSweep,
+  getSweepRuns,
   recordSubscriptionPayment,
   voidSubscriptionPayment,
   createRegulatory,
@@ -34,6 +36,7 @@ import {
   type AdminReg,
   type AdminTenant,
   type AdminSubscriptionPayment,
+  type AdminSweepRun,
   type RegulatoryInput,
   type AdminUser,
   type PricingConfig,
@@ -1575,6 +1578,13 @@ export default function AdminConsole({
                 </div>
               </div>
 
+              {/* The sweep's own status. It is surfaced rather than trusted
+                  because the API sleeps on the free tier, so the daily cron
+                  genuinely may not fire — without a last-run time, "no
+                  reminders sent" and "this has not run in three weeks" look
+                  exactly the same. */}
+              <SweepPanel canRun={canManageTenants} />
+
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden", boxShadow: "var(--shadow)" }}>
                 <div style={{ padding: "14px 18px 10px", ...archivo, fontWeight: 700, fontSize: 14.5 }}>Upcoming renewals (next 60 days)</div>
                 {upcomingRenewals.length === 0 ? (
@@ -2330,5 +2340,78 @@ function TenantBilling({
         ))}
       </div>
     </>
+  );
+}
+
+/**
+ * Subscription sweep status, and a button to run it now.
+ *
+ * The button exists because a cron on a host that sleeps is not a scheduler:
+ * Render spins the API down when idle, so midnight can pass unobserved. It is
+ * safe to press repeatedly — notices are claimed against a unique constraint,
+ * so a second run sends nothing.
+ */
+function SweepPanel({ canRun }: { canRun: boolean }) {
+  const [runs, setRuns] = useState<AdminSweepRun[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [justRan, setJustRan] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setRuns(await getSweepRuns());
+    } catch {
+      setError("Couldn't load sweep history.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const last = runs?.[0];
+  // Stale after ~36 hours: a daily sweep that has not run since yesterday has
+  // been missed, which on this host is expected rather than exceptional.
+  const staleHours = last ? (Date.now() - new Date(last.ranAt).getTime()) / 3_600_000 : null;
+  const stale = staleHours === null || staleHours > 36;
+
+  return (
+    <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "14px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span style={{ width: 9, height: 9, borderRadius: "50%", flex: "none", background: stale ? "var(--warn)" : "var(--good)" }} />
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ ...archivo, fontWeight: 700, fontSize: 14 }}>Renewal reminders</div>
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+            {last
+              ? `Last swept ${new Date(last.ranAt).toLocaleString("en-JM")} (${last.trigger}) · ${last.noticesSent} sent, ${last.reverted} reverted${last.failures > 0 ? `, ${last.failures} failed` : ""}`
+              : "Never run."}
+          </div>
+        </div>
+        {canRun && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError(null);
+              try {
+                const r = await runSubscriptionSweep();
+                setJustRan(`${r.noticesSent} sent, ${r.reverted} reverted${r.failures > 0 ? `, ${r.failures} failed` : ""}`);
+                await load();
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "That didn't work.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            style={{ height: 32, padding: "0 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff", opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? "Sweeping…" : "Run now"}
+          </button>
+        )}
+      </div>
+      {justRan && <div style={{ fontSize: 12, color: "var(--good)", marginTop: 8 }}>Swept: {justRan}</div>}
+      {error && <div role="alert" style={{ fontSize: 12, color: "var(--critical)", marginTop: 8 }}>{error}</div>}
+    </div>
   );
 }

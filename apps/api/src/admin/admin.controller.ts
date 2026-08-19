@@ -1,6 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import type { Request } from "express";
-import type { AuditLog, Business, Subscription, SubscriptionPayment } from "@prisma/client";
+import type {
+  AuditLog,
+  Business,
+  Subscription,
+  SubscriptionPayment,
+  SubscriptionSweepRun,
+} from "@prisma/client";
 import { AdminCapability } from "@jamquote/core";
 import { AdminGuard } from "../auth/admin.guard.js";
 import { RequireCapability } from "../auth/require-capability.decorator.js";
@@ -19,6 +25,7 @@ import {
 } from "./admin.service.js";
 import { AuditService } from "./audit.service.js";
 import { SubscriptionPaymentsService } from "./subscription-payments.service.js";
+import { SubscriptionSweepService, type SweepResult } from "./subscription-sweep.service.js";
 import {
   createRegulatoryUpdateSchema,
   recordSubscriptionPaymentSchema,
@@ -55,6 +62,7 @@ export class AdminController {
     private readonly auditService: AuditService,
     private readonly rulePack: RulePackService,
     private readonly subscriptionPayments: SubscriptionPaymentsService,
+    private readonly sweep: SubscriptionSweepService,
   ) {}
 
   @Get("overview")
@@ -239,6 +247,26 @@ export class AdminController {
     @Req() req: Request,
   ): Promise<SubscriptionPayment> {
     return this.subscriptionPayments.void(paymentId, req.user!.sub);
+  }
+
+  /**
+   * Run the subscription sweep now.
+   *
+   * Exposed because the daily cron cannot be trusted on a host that sleeps —
+   * this is the manual trigger, and it is safe to press repeatedly: notices
+   * are claimed against a unique constraint, so a second run sends nothing.
+   */
+  @Post("subscriptions/sweep")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  runSweep(): Promise<SweepResult> {
+    return this.sweep.run("manual");
+  }
+
+  /** Recent sweeps — so "no reminders" can be told from "never ran". */
+  @Get("subscriptions/sweeps")
+  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  sweepRuns(): Promise<SubscriptionSweepRun[]> {
+    return this.sweep.recentRuns();
   }
 
   @Get("financials")
