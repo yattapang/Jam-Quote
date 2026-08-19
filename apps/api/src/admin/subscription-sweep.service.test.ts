@@ -64,7 +64,7 @@ const tenant = (renewsAt: Date, over: Record<string, unknown> = {}) => ({
   id: "biz-1",
   name: "Blackwood",
   billingContactEmail: "bills@blackwood.jm",
-  users: [{ email: "owner@blackwood.jm" }],
+  users: [{ email: "owner@blackwood.jm", role: "OWNER" }],
   subscription: { plan: "pro", interval: "monthly", priceCents: null, renewsAt },
   ...over,
 });
@@ -89,15 +89,43 @@ describe("the sweep sends reminders", () => {
     expect(mailer.send).not.toHaveBeenCalled();
   });
 
-  it("falls back to the owner when no billing contact is set", async () => {
+  it("prefers an OWNER over another user when falling back", async () => {
     // Without this a reminder goes nowhere and looks delivered.
     const { svc, mailer } = build({
-      businesses: [tenant(inDays(3), { billingContactEmail: null })],
+      businesses: [
+        tenant(inDays(3), {
+          billingContactEmail: null,
+          users: [
+            { email: "clerk@blackwood.jm", role: "ADMIN" },
+            { email: "owner@blackwood.jm", role: "OWNER" },
+          ],
+        }),
+      ],
     });
     await svc.run("manual", NOW);
     expect(mailer.send).toHaveBeenCalledWith(
       expect.objectContaining({ to: "owner@blackwood.jm" }),
     );
+  });
+
+  it("still reaches a tenant whose only user is not an OWNER", async () => {
+    // Found live: a business whose sole account holder is an ADMIN. An
+    // OWNER-only fallback returned nobody, so its renewal notice would have
+    // been recorded as a failure — a silent non-delivery caused by a role
+    // label rather than by missing data.
+    const { svc, mailer } = build({
+      businesses: [
+        tenant(inDays(3), {
+          billingContactEmail: null,
+          users: [{ email: "admin@jamquote.jm", role: "ADMIN" }],
+        }),
+      ],
+    });
+    const result = await svc.run("manual", NOW);
+    expect(mailer.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "admin@jamquote.jm" }),
+    );
+    expect(result.noticesSent).toBe(1);
   });
 
   it("counts a tenant with no reachable address as a failure, not a send", async () => {

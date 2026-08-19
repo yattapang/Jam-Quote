@@ -996,9 +996,16 @@ export default function AdminConsole({
                                   without them "Pro" says nothing about what
                                   this tenant pays or when they next will. */}
                               {isPro(currentPlan) && (
-                                <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                                <span style={{ fontSize: 11, color: renewsAt ? "var(--muted)" : "var(--warn)" }}>
                                   {tenantInterval === "annual" ? "Annual" : "Monthly"}
-                                  {renewsAt ? ` · renews ${renewsAt.slice(0, 10)}` : ""}
+                                  {/* A pro plan with no term is a silent free
+                                      ride: the sweep skips it, so it is never
+                                      reminded and can never revert. Correct
+                                      not to chase someone who was never
+                                      billed, but it should be visible rather
+                                      than indistinguishable from a paid-up
+                                      account. */}
+                                  {renewsAt ? ` · renews ${renewsAt.slice(0, 10)}` : " · no term set"}
                                 </span>
                               )}
                             </div>

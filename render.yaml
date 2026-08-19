@@ -25,6 +25,18 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
+      # REQUIRED. Migrations run over this instead of DATABASE_URL — see
+      # `directUrl` in schema.prisma. It must be the Neon host WITHOUT
+      # `-pooler`: through the pooler, Prisma's session-level advisory lock is
+      # recycled onto an application connection and never released, stranding
+      # a fresh lock every boot until `migrate deploy` times out on P1002 and
+      # the service never starts.
+      #
+      # Prisma fails schema validation when it is unset rather than falling
+      # back to the pooled URL — deliberately, since a silent fallback would
+      # reintroduce the bug invisibly. So a new deploy MUST set this.
+      - key: DIRECT_URL
+        sync: false
       - key: WEB_ORIGIN
         sync: false
       # REQUIRED: the API refuses to boot in production without this (auth.module
@@ -34,19 +46,3 @@ services:
         sync: false
       - key: NODE_ENV
         value: production
-      # Prisma takes a SESSION-level advisory lock before migrating. Through
-      # Neon's pgbouncer that connection is handed back to the pool and reused
-      # for ordinary queries, so the lock is never released — a new stranded
-      # lock per deploy, each one blocking the next.
-      #
-      # That is not a slow deploy, it is an OUTAGE: startCommand is
-      # `migrate deploy && node main.js`, so a migration that times out on
-      # P1002 means the API never starts.
-      #
-      # Disabling the lock is safe for this service specifically: it runs a
-      # single instance, so there is no concurrent migration for the lock to
-      # protect against. The real fix is a non-pooled connection for
-      # migrations (Prisma `directUrl` + a DIRECT_URL env var pointing at the
-      # Neon host WITHOUT `-pooler`); switch to that and this can be dropped.
-      - key: PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK
-        value: "1"

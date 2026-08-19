@@ -67,12 +67,17 @@ export class SubscriptionSweepService implements OnModuleInit {
           name: true,
           billingContactEmail: true,
           subscription: true,
-          // Fallback recipient: whoever owns the login, when no billing
-          // contact has been set. Without it a reminder silently goes nowhere.
+          // Fallback recipients when no billing contact is set.
+          //
+          // Deliberately NOT filtered to role OWNER. A live tenant was found
+          // whose only account holder is an ADMIN, so an OWNER-only fallback
+          // returned nobody and its renewal notice would have been counted as
+          // a failure — a silent non-delivery caused by a role label rather
+          // than by missing data. Any addressable user is better than none;
+          // `deliver` prefers an OWNER when there is one.
           users: {
-            where: { role: "OWNER" },
-            select: { email: true },
-            take: 1,
+            where: { email: { not: null } },
+            select: { email: true, role: true },
           },
         },
       }),
@@ -170,7 +175,12 @@ export class SubscriptionSweepService implements OnModuleInit {
    */
   private async deliver(params: {
     kind: NoticeKind;
-    business: { id: string; name: string; billingContactEmail: string | null; users: { email: string | null }[] };
+    business: {
+      id: string;
+      name: string;
+      billingContactEmail: string | null;
+      users: { email: string | null; role: string }[];
+    };
     renewsAt: Date;
     amountCents: number;
     currency: string;
@@ -178,7 +188,13 @@ export class SubscriptionSweepService implements OnModuleInit {
   }): Promise<"sent" | "claimed" | "failed"> {
     const { kind, business, renewsAt } = params;
 
-    const to = business.billingContactEmail?.trim() || business.users[0]?.email?.trim();
+    // The subscriber's own choice first; then an OWNER; then any user with an
+    // address, because a reminder that reaches the wrong colleague still beats
+    // one that reaches nobody.
+    const owner = business.users.find((u) => u.role === "OWNER" && u.email);
+    const anyUser = business.users.find((u) => u.email);
+    const to =
+      business.billingContactEmail?.trim() || owner?.email?.trim() || anyUser?.email?.trim();
     if (!to) {
       this.logger.warn(`No billing contact or owner email for business ${business.id} — ${kind} not sent`);
       return "failed";
