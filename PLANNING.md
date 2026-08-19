@@ -676,12 +676,26 @@ which is which. The tenants pill and filters are derived from
 nothing could set and were permanently zero — are gone, replaced by
 Current / Due soon / Past due / Free.
 
-**Phase C next** (automation): the notice ledger is already in the schema and
-`dueNotices` already decides the cadence. What remains is the sweep service
-that calls it, the email templates, the revert-to-free transition, and an admin
-"run sweep" button with a last-swept indicator. Remember the invariant: the
-revert sets `plan = "free"` and NOTHING else — it must never touch
-`Business.deletedAt`.
+**PHASE C COMPLETE** (`a7d1f27`). Sweep service (boot + daily cron + admin
+button), email templates, revert-to-free, and a last-swept indicator that warns
+past 36 hours. The revert sets `plan = "free"` and nothing else; a test asserts
+`deletedAt` is never in the write.
+
+**Phase D remains: WiPay self-serve card renewal — still blocked on
+credentials** (§5). Until then renewals are staff-recorded, which the ledger
+already supports.
+
+### Open after the Phase C dry run
+
+- **Jamquote (the tenant) has NO reminder recipient** — no billing contact and
+  no OWNER-role user with an email. Its reminder falls due around 2026-09-04
+  and will be counted as a failure. Set a billing contact in that tenant's
+  Settings.
+- **Blackwood has no renewal date**, so it is skipped entirely — correct for
+  the manual-upgrade path (never billed, so never chased), but it also means it
+  will never revert. Record a payment against it to put it on a real term.
+- **RESEND_API_KEY must be set on Render** or every notice logs an error and
+  counts as a failure. `/api/health` reports `email: true` when it is present.
 
 **Explicitly NOT in Phase A:** the sweep, the emails, and the revert
 transition. Those are Phase C and depend on `dueNotices` existing first. Phase
