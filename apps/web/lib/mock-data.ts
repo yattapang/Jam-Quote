@@ -161,6 +161,8 @@ export interface ProjectDetail {
   parish: string;
   stage: ProjectStage;
   progressPct: number;
+  /** Default retention % for invoices on this job. 0 when none is agreed. */
+  retentionPct: number;
 }
 
 /** Single-job detail fixture — same fields as `projects`, plus `clientId` for
@@ -171,6 +173,8 @@ export function findProjectDetail(id: string): ProjectDetail | undefined {
   return {
     id: j.id,
     name: j.name,
+    // Fixtures carry no retention: it is a contract term, not demo data.
+    retentionPct: 0,
     clientId: j.clientId,
     clientName: findDemoClient(j.clientId)?.name ?? "Unknown",
     addressLine: j.addressLine,

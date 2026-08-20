@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
@@ -14,6 +15,7 @@ import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import QuoteActions from "./QuoteActions";
 import WhatsAppButton from "./WhatsAppButton";
 import EmailQuoteButton from "./EmailQuoteButton";
+import CreateVariationButton from "./CreateVariationButton";
 import { emailSendingStatus } from "@/lib/email-sending";
 import buttonStyles from "@/components/ui/Button.module.css";
 import shared from "../../shared.module.css";
@@ -43,6 +45,17 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
     <div className={shared.page}>
       <header className={shared.header}>
         <div className={shared.headings}>
+          {/* A variation must announce itself, or it reads as an ordinary
+              quote and the contractor loses track of what belongs to what. */}
+          {quote.variationOfQuoteId && (
+            <Link
+              href={`/quotes/${quote.variationOfQuoteId}`}
+              className={shared.eyebrow}
+              style={{ textDecoration: "underline" }}
+            >
+              Variation — see the original quote
+            </Link>
+          )}
           <span className={shared.eyebrow}>
             <a href="/quotes" style={{ color: "inherit" }}>
               ← Quotes
@@ -70,6 +83,12 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             clientPhone={client?.phone}
             totalCents={totals.totalCents}
           />
+          {/* Only on a quote the client has actually agreed to. Varying a
+              draft or a sent quote is just editing it, and Revise already
+              does that. */}
+          {(quote.status === "ACCEPTED" || quote.status === "INVOICED") && (
+            <CreateVariationButton quoteId={quote.id} />
+          )}
           <EmailQuoteButton
             quoteId={quote.id}
             clientEmail={client?.email}

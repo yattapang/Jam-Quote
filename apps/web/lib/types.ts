@@ -38,6 +38,9 @@ export interface QuoteLine extends QuoteLineItemInput {
 export interface Quote {
   id: string;
   num: string;
+  /** Set when this quote is extra work agreed after another was accepted —
+   * a variation, not a revision. */
+  variationOfQuoteId?: string;
   clientId: string;
   projectId?: string;
   projectLabel: string;

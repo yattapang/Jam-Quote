@@ -143,6 +143,9 @@ export interface ApiProject {
   parish?: string | null;
   stage: ProjectStage;
   progressPct: number;
+  /** Default retention for invoices on this job. Each invoice then owns its
+   * own, so changing this cannot restate invoices already sent. */
+  retentionPct?: number | string | null;
 }
 export interface ApiLineJobComponent {
   kind: JobComponentKind;
@@ -302,6 +305,8 @@ export interface ApiQuote {
   id: string;
   clientId?: string | null;
   projectId?: string | null;
+  /** Set when this quote is extra work agreed after another was accepted. */
+  variationOfQuoteId?: string | null;
   number: string;
   status: QuoteStatus;
   gctRate: number | string;
@@ -351,6 +356,12 @@ export interface ApiInvoice {
   terms?: string | null;
   dueDate?: string | null;
   issueDate: string;
+  /** Withheld until sign-off. Owned by this invoice, defaulted from the job. */
+  retentionPct?: number | string | null;
+  /** Snapshot of the withheld amount, so it cannot drift from the printed
+   * document if the percentage is later edited. */
+  retentionCents?: number;
+  retentionReleasedAt?: string | null;
   subtotalCents: number;
   gctCents: number;
   totalCents: number;
@@ -518,6 +529,7 @@ export function mapQuote(q: ApiQuote, projectLabel: string): Quote {
   return {
     id: q.id,
     num: q.number,
+    variationOfQuoteId: q.variationOfQuoteId ?? undefined,
     clientId: q.clientId ?? "",
     projectId: q.projectId ?? undefined,
     projectLabel,
@@ -572,6 +584,10 @@ export interface Invoice {
   terms?: string;
   dueDate?: string;
   dueDateLabel: string;
+  /** 0 when no retention applies. */
+  retentionPct: number;
+  retentionCents: number;
+  retentionReleased: boolean;
   /** The date the invoice bears — what reports attribute its revenue to. */
   issueDate: string;
   subtotalCents: number;
@@ -615,6 +631,9 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     dueDate: i.dueDate ?? undefined,
     dueDateLabel: i.dueDate ? dateLabel(i.dueDate, "Due ") : "",
     issueDate: i.issueDate,
+    retentionPct: i.retentionPct == null ? 0 : Number(i.retentionPct),
+    retentionCents: i.retentionCents ?? 0,
+    retentionReleased: Boolean(i.retentionReleasedAt),
     subtotalCents: i.subtotalCents,
     gctCents: i.gctCents,
     totalCents: i.totalCents,
@@ -678,6 +697,8 @@ export async function createClient(input: NewClientInput): Promise<Client> {
 }
 
 export interface NewProjectInput {
+  /** Default retention % for invoices on this job. null clears it. */
+  retentionPct?: number | null;
   name: string;
   clientId?: string;
   addressLine?: string;
@@ -1527,6 +1548,31 @@ export async function createLabourEntry(input: CreateLabourEntryInput): Promise<
 
 export async function deleteLabourEntry(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/purchases/labour/${id}`);
+}
+
+/**
+ * Extra work agreed after a quote was accepted.
+ *
+ * Creates a NEW empty draft linked to the original, which is never touched —
+ * see createVariation in the API. Returns the variation so the caller can
+ * navigate straight into editing it.
+ */
+export async function createQuoteVariation(quoteId: string): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>(`/quotes/${quoteId}/variation`, {});
+}
+
+/**
+ * Sign-off on retention: the money held back becomes due.
+ *
+ * Deliberately separate from recording a payment — releasing says the client
+ * now owes it, not that it has arrived. Reversible, because sign-off gets
+ * clicked early.
+ */
+export async function setInvoiceRetentionReleased(
+  invoiceId: string,
+  released: boolean,
+): Promise<void> {
+  await apiClient.post(`/invoices/${invoiceId}/retention-release`, { released });
 }
 
 /** Mint (or reuse) the public share token for a quote. Idempotent — sharing

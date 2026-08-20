@@ -11,6 +11,14 @@ export const createProjectSchema = z.object({
   // whether the block work has started, so neither is ever derived.
   stage: z.nativeEnum(ProjectStage).optional(),
   progressPct: z.number().int().min(0).max(100).optional(),
+  /**
+   * Default retention for invoices raised on this job — a percentage the
+   * client withholds until sign-off, normal in Jamaican construction.
+   *
+   * The DEFAULT only. Each invoice keeps its own, so changing this mid-job
+   * cannot restate a document the client is already holding. Null clears it.
+   */
+  retentionPct: z.number().min(0).max(100).nullable().optional(),
 });
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 

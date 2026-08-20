@@ -103,3 +103,10 @@ export const createInvoiceSchema = z.object({
   lineItems: z.array(invoiceLineItemInputSchema).default([]),
 });
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
+
+/** Sign-off toggle. Reversible, so it carries the target state rather than
+ * being a one-way "release" verb. */
+export const releaseRetentionSchema = z.object({
+  released: z.boolean(),
+});
+export type ReleaseRetentionInput = z.infer<typeof releaseRetentionSchema>;

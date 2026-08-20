@@ -7,6 +7,8 @@ import { InvoicesService } from "./invoices.service.js";
 import {
   createInvoiceSchema,
   updateInvoiceSchema,
+  releaseRetentionSchema,
+  type ReleaseRetentionInput,
   type CreateInvoiceInput,
   type UpdateInvoiceInput,
 } from "./invoices.dto.js";
@@ -62,6 +64,16 @@ export class InvoicesController {
   @Post(":id/finalize")
   finalize(@BusinessId() businessId: string, @Param("id") id: string) {
     return this.invoices.finalize(businessId, id);
+  }
+
+  /** Sign-off: the money held back is now due. Does not record a payment. */
+  @Post(":id/retention-release")
+  releaseRetention(
+    @BusinessId() businessId: string,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(releaseRetentionSchema)) body: ReleaseRetentionInput,
+  ) {
+    return this.invoices.setRetentionReleased(businessId, id, body.released);
   }
 
   @Delete(":id")

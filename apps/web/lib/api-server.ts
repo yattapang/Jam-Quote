@@ -358,6 +358,7 @@ export async function getProject(id: string): Promise<ProjectDetail | undefined>
     return {
       id: project.id,
       name: project.name,
+      retentionPct: project.retentionPct == null ? 0 : Number(project.retentionPct),
       clientId: project.clientId ?? "",
       clientName: client ? `${client.firstName} ${client.lastName}`.trim() : "Unknown",
       town: project.town ?? "",

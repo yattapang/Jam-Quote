@@ -413,6 +413,38 @@ export class InvoicesService {
    * time, and flip the source quote (if any) to INVOICED in the same
    * transaction. This is the only place a quote moves to INVOICED.
    */
+  /**
+   * Release retention on an invoice — the work has been signed off, so the
+   * money held back is now owed.
+   *
+   * This does NOT record a payment. Releasing says "this is now due"; the cash
+   * arriving is a separate event, and conflating the two would show a
+   * contractor as paid for money still sitting in the client's account.
+   *
+   * Reversible on purpose (`released: false`), because sign-off gets clicked
+   * early and the alternative is editing a finalized invoice to undo it.
+   */
+  async setRetentionReleased(
+    businessId: string,
+    id: string,
+    released: boolean,
+  ): Promise<InvoiceWithLines> {
+    const invoice = await this.findOne(businessId, id);
+    if (invoice.retentionCents <= 0) {
+      throw new BadRequestException("There is no retention held on this invoice.");
+    }
+    if (invoice.status === InvoiceStatus.DRAFT) {
+      throw new BadRequestException(
+        "Finalize the invoice before releasing retention — a draft has not been issued yet.",
+      );
+    }
+    await this.prisma.invoice.update({
+      where: { id },
+      data: { retentionReleasedAt: released ? new Date() : null },
+    });
+    return this.findOne(businessId, id);
+  }
+
   async finalize(businessId: string, id: string): Promise<InvoiceWithLines> {
     const invoice = await this.findOne(businessId, id);
     const allowed = ALLOWED_TRANSITIONS[invoice.status as InvoiceStatus] ?? [];

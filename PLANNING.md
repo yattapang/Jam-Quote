@@ -1245,6 +1245,22 @@ the client pays the rest: that is the terms working correctly, and a system
 that reports it as a shortfall would have contractors chasing money nobody
 owes yet.
 
+### Built — full slice, API through UI
+
+| Piece | Where |
+|---|---|
+| `retentionCents` / `invoiceSettlement` | `packages/core/src/costing/retention.ts` — the settlement split (due now / held / outstanding / settledForNow) lives in core, so the invoice screen and any later report cannot disagree about it. |
+| `Project.retentionPct` | schema + `projects.dto.ts` + "Retention %" on `ProjectForm`. Blank means none; blank is not 0, because a typed 0 reads as a figure someone entered. |
+| `Invoice.retentionPct` / `retentionCents` / `retentionReleasedAt` | Defaulted from the job at conversion (`retentionForProject`), then OWNED by the invoice — editing the job's terms later cannot restate a document the client already holds. |
+| Invoice screen | Held row + "Due now" instead of "Balance due" while something is held. `RetentionPanel` shows the held amount for as long as it is held, so it cannot be quietly forgotten. |
+| Release | `POST /invoices/:id/retention-release` (`setRetentionReleased`). Refuses on a DRAFT and when nothing is held; **reversible**, because sign-off gets clicked early. |
+| Variation | `POST /quotes/:id/variation` + "Add extra work" on an ACCEPTED/INVOICED quote. New empty DRAFT, original untouched, same client and job. |
+
+**The rule the tests exist to protect:** releasing retention says the money is
+now DUE — it never writes `paidCents`. Conflating the two would report a
+contractor as settled for money still in the client's account
+(`invoice-retention.service.test.ts`).
+
 
 ---
 

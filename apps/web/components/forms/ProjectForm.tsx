@@ -26,6 +26,8 @@ export interface ProjectFormValues {
   /** Kept as the raw input string so the field can be emptied while typing;
    * `projectPayloadFromValues` is what turns it back into a number. */
   progressPct: string;
+  /** Default retention % for invoices on this job. Blank = none agreed. */
+  retentionPct: string;
 }
 
 export const emptyProjectForm: ProjectFormValues = {
@@ -36,6 +38,7 @@ export const emptyProjectForm: ProjectFormValues = {
   address: "",
   stage: ProjectStage.QUOTED,
   progressPct: "0",
+  retentionPct: "",
 };
 
 export function projectFormValuesFromProject(project: ProjectDetail): ProjectFormValues {
@@ -47,6 +50,9 @@ export function projectFormValuesFromProject(project: ProjectDetail): ProjectFor
     address: project.addressLine,
     stage: project.stage,
     progressPct: String(project.progressPct),
+    // Blank rather than "0" when none applies: an empty field reads as "no
+    // retention on this job", while a 0 reads as a figure someone entered.
+    retentionPct: project.retentionPct ? String(project.retentionPct) : "",
   };
 }
 
@@ -70,6 +76,9 @@ export function projectPayloadFromValues(values: ProjectFormValues): NewProjectI
     addressLine: values.address.trim() || undefined,
     stage: values.stage,
     progressPct: progressFromInput(values.progressPct),
+    // Explicit null when cleared, so removing retention from a job actually
+    // removes it rather than leaving the old percentage in place.
+    retentionPct: values.retentionPct.trim() === "" ? null : Number(values.retentionPct),
   };
 }
 
@@ -152,6 +161,23 @@ export default function ProjectForm({
           value={values.stage}
           onChange={(e) => set("stage", e.target.value as ProjectStage)}
         />
+        {/* Retention is a CONTRACT term, so it sits with the job rather than
+            being retyped on every invoice — but each invoice keeps its own
+            copy, so changing this later cannot restate what a client is
+            already holding. */}
+        <Input
+          label="Retention %"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+          inputMode="decimal"
+          value={values.retentionPct}
+          onChange={(e) => set("retentionPct", e.target.value)}
+          placeholder="None"
+          hint="Withheld from each invoice until the work is signed off. Leave blank if none was agreed."
+        />
+
         <Input
           label="Progress"
           type="number"

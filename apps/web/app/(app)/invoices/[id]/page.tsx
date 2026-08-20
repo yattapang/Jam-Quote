@@ -1,5 +1,11 @@
 import { notFound } from "next/navigation";
-import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
+import {
+  formatJmd,
+  QuoteDetailLevel,
+  groupJobComponents,
+  componentQuantityLabel,
+  invoiceSettlement,
+} from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
@@ -17,6 +23,7 @@ import { emailSendingStatus } from "@/lib/email-sending";
 import shared from "../../shared.module.css";
 import buttonStyles from "@/components/ui/Button.module.css";
 import PaymentsPanel from "./PaymentsPanel";
+import RetentionPanel from "./RetentionPanel";
 
 export const metadata = { title: "Invoice · JamQuote" };
 
@@ -35,7 +42,17 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
   const pill = invoiceStatusPill(invoice.status);
   const groups = groupLinesByHeading(invoice);
   const detailed = invoice.detailLevel === QuoteDetailLevel.DETAILED;
-  const balanceDueCents = totals.totalCents - invoice.paidCents;
+  // Retention is NOT a shortfall. An invoice with 10% held is settled when
+  // the other 90% arrives — the rest is being held under the contract, not
+  // owed. Showing it as a balance due has contractors chasing clients for
+  // money nobody owes yet. See invoiceSettlement in core.
+  const settlement = invoiceSettlement({
+    totalCents: totals.totalCents,
+    paidCents: invoice.paidCents,
+    retentionCents: invoice.retentionCents,
+    retentionReleased: invoice.retentionReleased,
+  });
+  const balanceDueCents = settlement.outstandingCents;
 
   const amountByLineId = new Map<string, number>();
   invoice.lines.forEach((l, i) => {
@@ -170,17 +187,44 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
                   <MoneyText cents={invoice.depositCents} tone="muted" weight={600} />
                 </div>
               )}
+              {settlement.heldCents > 0 && (
+                <div className={shared.totalRowMuted}>
+                  <span>
+                    Retention held ({invoice.retentionPct}%)
+                  </span>
+                  <MoneyText cents={settlement.heldCents} tone="muted" weight={600} />
+                </div>
+              )}
               <hr className={shared.divider} />
               <div className={shared.totalRowMuted}>
                 <span>Paid</span>
                 <MoneyText cents={invoice.paidCents} tone="good" weight={600} />
               </div>
               <div className={shared.totalRow}>
-                <span>Balance due</span>
+                {/* Named "due now" only when something IS being held, so an
+                    ordinary invoice reads exactly as it always did. */}
+                <span>{settlement.heldCents > 0 ? "Due now" : "Balance due"}</span>
                 <MoneyText cents={balanceDueCents} weight={700} />
               </div>
+              {settlement.heldCents > 0 && settlement.settledForNow && (
+                <div className={shared.statHint}>
+                  Fully paid apart from retention, which is released on sign-off.
+                </div>
+              )}
             </div>
           </Card>
+
+          {invoice.retentionCents > 0 && (
+            <Card>
+              <RetentionPanel
+                invoiceId={invoice.id}
+                retentionPct={invoice.retentionPct}
+                heldCents={invoice.retentionCents}
+                released={invoice.retentionReleased}
+                isDraft={invoice.status === "DRAFT"}
+              />
+            </Card>
+          )}
 
           <Card>
             <PaymentsPanel
