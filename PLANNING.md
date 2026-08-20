@@ -438,6 +438,22 @@ Worth walking specifically, since these are new and unexercised:
 
 ## 4c. What to do next — recommendation
 
+**State as of 2026-08-20 (handoff).** The owner's pre-testing list was #4
+invoice payment reminders, #5 variations, #6 retention. **#5 and #6 are done
+end to end** (`eb53615`, and the category dropdown in `ce4b85a`). Free quotes
+now read from the Staff Console and the live figure is **5**.
+
+**Only #4 remains before contractor testing.** It is wiring, not new
+machinery: the overdue sweep, the notice ledger and the mailer all exist — see
+`invoice-overdue.service.ts` — what is missing is the client-facing reminder
+using them. Start there.
+
+**Deploy API and web TOGETHER this time.** The project screen now calls
+`GET /purchases/categories`, which the deployed API does not have. The fallback
+means no crash, but a tenant's own past categories silently will not appear
+until the API ships.
+
+
 **Deploy and put it in front of the two contractors.** Unchanged for several
 sessions, and the case gets stronger each time: the last three defects found
 were all found by USING the thing — a WhatsApp link that led to a login wall,
