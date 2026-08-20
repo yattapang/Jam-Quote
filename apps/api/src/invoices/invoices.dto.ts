@@ -110,3 +110,10 @@ export const releaseRetentionSchema = z.object({
   released: z.boolean(),
 });
 export type ReleaseRetentionInput = z.infer<typeof releaseRetentionSchema>;
+
+/** Which channel a reminder went out on. Plain strings matching the ledger
+ * column, so adding one later needs no enum migration. */
+export const sendReminderSchema = z.object({
+  channel: z.enum(["EMAIL", "WHATSAPP"]),
+});
+export type SendReminderInput = z.infer<typeof sendReminderSchema>;

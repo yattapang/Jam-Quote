@@ -918,12 +918,45 @@ model Invoice {
   sections  InvoiceSection[]
   lineItems InvoiceLineItem[]
   payments  Payment[]
+  reminders InvoiceReminder[]
 
   @@unique([businessId, number])
   @@index([businessId, status])
   // Reports filter and bucket on the invoice's own date.
   @@index([businessId, issueDate])
   @@index([clientId])
+}
+
+/// Every payment reminder a contractor has sent a client about an invoice.
+///
+/// A LEDGER, not a `lastRemindedAt` column, because the useful question is
+/// "how many times have I chased this and when", which one column cannot
+/// answer. It is also the record that settles an argument about whether the
+/// client was ever told.
+///
+/// Written for the WhatsApp channel too, where JamQuote hands the message to
+/// WhatsApp and cannot observe delivery — so `channel` says how it was sent
+/// and the row means "the contractor sent this", never "the client read it".
+model InvoiceReminder {
+  id        String  @id @default(uuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  /// Denormalized for tenant-scoped queries without a join through Invoice.
+  businessId String
+
+  /// "EMAIL" | "WHATSAPP". Plain text, matching NoticeKind beside it, so a new
+  /// channel needs no enum migration.
+  channel String
+  /// Where it went — the address or number AS SENT, so a later edit to the
+  /// client record cannot rewrite history.
+  sentTo  String?
+  /// What was owed at the time. A reminder for $45,000 must still read as
+  /// $45,000 after a part payment, or the ledger misrepresents what was said.
+  outstandingCents Int      @default(0)
+  sentAt           DateTime @default(now())
+
+  @@index([invoiceId, sentAt])
+  @@index([businessId, sentAt])
 }
 
 model InvoiceSection {

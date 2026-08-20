@@ -5,6 +5,8 @@ import {
   InvoiceStatus,
   QuoteStatus,
   retentionCents,
+  invoiceSettlement,
+  reminderMessage,
   type GctTreatment,
   type TotalsLineInput,
 } from "@jamquote/core";
@@ -41,6 +43,10 @@ const INVOICE_DETAIL_INCLUDE = {
     where: { deletedAt: null },
     orderBy: { paidAt: "desc" as const },
   },
+  // Chase history. "Have I already reminded them?" is the question a
+  // contractor cannot answer from memory a fortnight into a job, and it is
+  // the reason invoices go quietly unchased.
+  reminders: { orderBy: { sentAt: "desc" as const }, take: 20 },
 } satisfies Prisma.InvoiceInclude;
 
 type InvoiceWithLines = Prisma.InvoiceGetPayload<{ include: typeof INVOICE_DETAIL_INCLUDE }>;
@@ -413,6 +419,127 @@ export class InvoicesService {
    * time, and flip the source quote (if any) to INVOICED in the same
    * transaction. This is the only place a quote moves to INVOICED.
    */
+  /**
+   * Record that a payment reminder was sent, and return the words to send.
+   *
+   * Composition lives in core (`reminderMessage`) so the WhatsApp text and the
+   * email body cannot drift into quoting two different figures — the
+   * duplicate-cadence-map defect, which this codebase has produced twice.
+   *
+   * The row is written for BOTH channels. On WhatsApp the message is handed to
+   * WhatsApp and delivery is unobservable, so a reminder row means "the
+   * contractor sent this", never "the client read it" — the ledger must not
+   * claim more than it knows. Recording it anyway is the point: what a
+   * contractor loses track of is whether they already chased this one.
+   *
+   * Refuses on anything already settled, because a reminder for money that has
+   * arrived is worse than no reminder at all.
+   */
+  async recordReminder(
+    businessId: string,
+    id: string,
+    channel: string,
+  ): Promise<{ subject: string; body: string; sentTo: string | null }> {
+    const invoice = await this.findOne(businessId, id);
+
+    if (invoice.status === InvoiceStatus.DRAFT) {
+      throw new BadRequestException("Send the invoice before reminding anyone about it.");
+    }
+    // Retention held back is NOT owed yet, so it must not be chased. Same rule
+    // the invoice screen applies — see invoiceSettlement.
+    const settlement = invoiceSettlement({
+      totalCents: invoice.totalCents,
+      paidCents: invoice.paidCents,
+      retentionCents: invoice.retentionCents,
+      retentionReleased: Boolean(invoice.retentionReleasedAt),
+    });
+    if (settlement.outstandingCents <= 0) {
+      throw new BadRequestException("Nothing is outstanding on this invoice.");
+    }
+
+    const business = await this.prisma.business.findUnique({
+      where: { id: businessId },
+      select: { name: true },
+    });
+    const client = invoice.clientId
+      ? await this.prisma.client.findUnique({
+          where: { id: invoice.clientId },
+          select: { firstName: true, lastName: true, email: true, phone: true },
+        })
+      : null;
+
+    const message = reminderMessage({
+      businessName: business?.name ?? "",
+      // First name only. "Hi Marcia" is how a contractor here would open the
+      // message; the full legal name reads like a collections letter.
+      clientName: client?.firstName,
+      invoiceNumber: invoice.number,
+      outstandingCents: settlement.outstandingCents,
+      dueDate: invoice.dueDate,
+    });
+
+    // Stored AS SENT, so editing the client record later cannot rewrite who
+    // was told.
+    const sentTo =
+      (channel === "EMAIL" ? client?.email?.trim() : client?.phone?.trim()) || null;
+
+    // The email actually goes out HERE, before the row is written, and a
+    // failure throws rather than recording anything. The ordering is the whole
+    // point: a ledger entry for an email that never left would be the third
+    // instance in this codebase of an action reporting success while doing
+    // nothing. WhatsApp is different — the caller opens the chat, so the row
+    // records that the contractor sent it and claims nothing about delivery.
+    if (channel === "EMAIL") {
+      if (!sentTo) {
+        throw new BadRequestException("No email address on file for this client.");
+      }
+      await this.sendReminderEmail(sentTo, message.subject, message.body);
+    }
+
+    await this.prisma.invoiceReminder.create({
+      data: {
+        invoiceId: invoice.id,
+        businessId,
+        channel,
+        sentTo,
+        outstandingCents: settlement.outstandingCents,
+      },
+    });
+
+    return { ...message, sentTo };
+  }
+
+  /**
+   * Send a reminder email, or throw.
+   *
+   * Throwing is deliberate: the caller writes the ledger row only if this
+   * returns, so a reminder is never recorded for mail that did not go. Note
+   * that a send Resend ACCEPTS from an unverified domain is not the same as a
+   * delivered one, which is why the web app keeps this path disabled until the
+   * sending domain exists (§4i).
+   */
+  private async sendReminderEmail(to: string, subject: string, body: string): Promise<void> {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      throw new BadRequestException("Email sending is not configured yet.");
+    }
+    const { Resend } = await import("resend");
+    const { error } = await new Resend(apiKey).emails.send({
+      from: process.env.EMAIL_FROM ?? "JamQuote <onboarding@resend.dev>",
+      to,
+      subject,
+      // Plain text carried into HTML: the composer writes for WhatsApp too, so
+      // it produces no markup and the line breaks have to be honoured here.
+      html: body
+        .split("\n\n")
+        .map((para) => `<p>${para.split("\n").join("<br/>")}</p>`)
+        .join(""),
+    });
+    if (error) {
+      throw new BadRequestException(`Couldn't send the reminder: ${error.message}`);
+    }
+  }
+
   /**
    * Release retention on an invoice — the work has been signed off, so the
    * money held back is now owed.

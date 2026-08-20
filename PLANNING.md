@@ -443,10 +443,24 @@ invoice payment reminders, #5 variations, #6 retention. **#5 and #6 are done
 end to end** (`eb53615`, and the category dropdown in `ce4b85a`). Free quotes
 now read from the Staff Console and the live figure is **5**.
 
-**Only #4 remains before contractor testing.** It is wiring, not new
-machinery: the overdue sweep, the notice ledger and the mailer all exist — see
-`invoice-overdue.service.ts` — what is missing is the client-facing reminder
-using them. Start there.
+**#4 is now done too (2026-08-20).** Client-facing payment reminders:
+`reminderMessage` in core composes the words ONCE so the WhatsApp text and the
+email body cannot quote two different figures; `InvoiceReminder` is a ledger,
+not a `lastRemindedAt` column, because "how many times have I chased this" is
+the real question; "Send reminder" appears on the invoice only while something
+is issued and still owed.
+
+**WhatsApp works today; client email stays gated** behind the same
+`emailSendingStatus` check as the other send buttons, until the domain lands
+(§4i). The API SENDS before it records and throws on failure — a ledger row
+for mail that never left would be the third instance here of an action
+reporting success while doing nothing.
+
+**Known gap:** the WhatsApp reminder carries no link, because invoices have no
+public share token (quotes do). Adding `Invoice.shareToken` and a `/i/[token]`
+page mirrors `/q/[token]` and is the natural follow-on.
+
+**So nothing on the owner's pre-testing list is outstanding. Deploy.**
 
 **Deploy API and web TOGETHER this time.** The project screen now calls
 `GET /purchases/categories`, which the deployed API does not have. The fallback

@@ -19,6 +19,7 @@ import {
 import { getInvoice, getClients } from "@/lib/api-server";
 import InvoiceActions from "./InvoiceActions";
 import EmailInvoiceButton from "./EmailInvoiceButton";
+import RemindButton from "./RemindButton";
 import { emailSendingStatus } from "@/lib/email-sending";
 import shared from "../../shared.module.css";
 import buttonStyles from "@/components/ui/Button.module.css";
@@ -88,6 +89,16 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
             clientEmail={client?.email}
             unavailableReason={sending.configured ? undefined : sending.reason}
           />
+          {/* Chasing only makes sense once something is issued and still
+              owed. A reminder on a settled invoice is worse than none. */}
+          {invoice.status !== "DRAFT" && balanceDueCents > 0 && (
+            <RemindButton
+              invoiceId={invoice.id}
+              clientPhone={client?.phone}
+              reminders={invoice.reminders}
+              emailUnavailableReason={sending.configured ? undefined : sending.reason}
+            />
+          )}
           <InvoiceActions id={invoice.id} status={invoice.status} />
         </div>
       </header>

@@ -8,6 +8,8 @@ import {
   createInvoiceSchema,
   updateInvoiceSchema,
   releaseRetentionSchema,
+  sendReminderSchema,
+  type SendReminderInput,
   type ReleaseRetentionInput,
   type CreateInvoiceInput,
   type UpdateInvoiceInput,
@@ -74,6 +76,17 @@ export class InvoicesController {
     @Body(new ZodValidationPipe(releaseRetentionSchema)) body: ReleaseRetentionInput,
   ) {
     return this.invoices.setRetentionReleased(businessId, id, body.released);
+  }
+
+  /** Record a payment reminder and return the words to send. Composing here
+   * keeps the WhatsApp text and the email body identical. */
+  @Post(":id/reminders")
+  sendReminder(
+    @BusinessId() businessId: string,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(sendReminderSchema)) body: SendReminderInput,
+  ) {
+    return this.invoices.recordReminder(businessId, id, body.channel);
   }
 
   @Delete(":id")

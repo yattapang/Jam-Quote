@@ -362,6 +362,7 @@ export interface ApiInvoice {
    * document if the percentage is later edited. */
   retentionCents?: number;
   retentionReleasedAt?: string | null;
+  reminders?: ApiInvoiceReminder[];
   subtotalCents: number;
   gctCents: number;
   totalCents: number;
@@ -588,6 +589,8 @@ export interface Invoice {
   retentionPct: number;
   retentionCents: number;
   retentionReleased: boolean;
+  /** Chase history, newest first. */
+  reminders: InvoiceReminder[];
   /** The date the invoice bears — what reports attribute its revenue to. */
   issueDate: string;
   subtotalCents: number;
@@ -634,6 +637,13 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     retentionPct: i.retentionPct == null ? 0 : Number(i.retentionPct),
     retentionCents: i.retentionCents ?? 0,
     retentionReleased: Boolean(i.retentionReleasedAt),
+    reminders: (i.reminders ?? []).map((r) => ({
+      id: r.id,
+      channel: r.channel,
+      sentTo: r.sentTo ?? undefined,
+      outstandingCents: r.outstandingCents,
+      sentAt: r.sentAt,
+    })),
     subtotalCents: i.subtotalCents,
     gctCents: i.gctCents,
     totalCents: i.totalCents,
@@ -1559,6 +1569,39 @@ export async function deleteLabourEntry(id: string): Promise<void> {
  */
 export async function createQuoteVariation(quoteId: string): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>(`/quotes/${quoteId}/variation`, {});
+}
+
+export interface ApiInvoiceReminder {
+  id: string;
+  channel: string;
+  sentTo?: string | null;
+  outstandingCents: number;
+  sentAt: string;
+}
+
+/** One chase, as it happened. */
+export interface InvoiceReminder {
+  id: string;
+  /** "EMAIL" | "WHATSAPP" — how it went out, never whether it was read. */
+  channel: string;
+  sentTo?: string;
+  outstandingCents: number;
+  sentAt: string;
+}
+
+/**
+ * Record a payment reminder and get back the words to send.
+ *
+ * The API composes the message so the WhatsApp text and the email body cannot
+ * quote two different figures. The row means the contractor SENT it — on
+ * WhatsApp delivery is unobservable, and the ledger must not claim more than
+ * it knows.
+ */
+export async function sendInvoiceReminder(
+  invoiceId: string,
+  channel: "EMAIL" | "WHATSAPP",
+): Promise<{ subject: string; body: string; sentTo: string | null }> {
+  return apiClient.post(`/invoices/${invoiceId}/reminders`, { channel });
 }
 
 /**
