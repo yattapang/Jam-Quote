@@ -1495,6 +1495,40 @@ export async function deletePurchase(id: string): Promise<void> {
   await apiClient.delete<unknown>(`/purchases/${id}`);
 }
 
+/** Time worked on a job — usually its largest cost. */
+export interface ApiLabourEntry {
+  id: string;
+  projectId: string | null;
+  labourRateId: string | null;
+  description: string;
+  /** Prisma returns a Decimal as a string. */
+  quantity: string;
+  /** SNAPSHOT of the rate at the time — never re-read from the rate book. */
+  rateCents: number;
+  unitLabel: string;
+  workedOn: string;
+  note: string | null;
+}
+
+export interface CreateLabourEntryInput {
+  projectId?: string | null;
+  labourRateId?: string | null;
+  description: string;
+  quantity: number;
+  rateCents: number;
+  unitLabel?: string;
+  workedOn: string;
+  note?: string | null;
+}
+
+export async function createLabourEntry(input: CreateLabourEntryInput): Promise<ApiLabourEntry> {
+  return apiClient.post<ApiLabourEntry>("/purchases/labour", input);
+}
+
+export async function deleteLabourEntry(id: string): Promise<void> {
+  await apiClient.delete<unknown>(`/purchases/labour/${id}`);
+}
+
 /** Mint (or reuse) the public share token for a quote. Idempotent — sharing
  * twice keeps the link already sent, so re-sending never breaks the first. */
 export async function shareQuote(quoteId: string): Promise<{ shareToken: string }> {

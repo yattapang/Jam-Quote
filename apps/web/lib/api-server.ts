@@ -39,6 +39,7 @@ import {
   type Invoice,
   type AdminData,
   type ApiPurchase,
+  type ApiLabourEntry,
   type AdminOverview,
   type AdminTenant,
   type AdminReg,
@@ -270,11 +271,33 @@ export async function getPurchases(params?: {
   }
 }
 
+/** Time logged, optionally for one job. */
+export async function getLabourEntries(params?: {
+  projectId?: string | null;
+  limit?: number;
+}): Promise<ApiLabourEntry[]> {
+  try {
+    const qs = new URLSearchParams();
+    if (params?.projectId !== undefined) qs.set("projectId", params.projectId ?? "");
+    if (params?.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return await serverRequest<ApiLabourEntry[]>(`/purchases/labour${suffix}`);
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getLabourEntries: API unreachable, using empty list");
+    return [];
+  }
+}
+
 /** Did this job make money? Null when the API is unreachable, so the card
  * renders "unavailable" rather than an invented zero. */
-export async function getProjectProfit(projectId: string): Promise<JobProfit | null> {
+export async function getProjectProfit(
+  projectId: string,
+): Promise<(JobProfit & { labourCostCents: number; purchaseCostCents: number }) | null> {
   try {
-    return await serverRequest<JobProfit>(`/purchases/project/${projectId}/profit`);
+    return await serverRequest<JobProfit & { labourCostCents: number; purchaseCostCents: number }>(
+      `/purchases/project/${projectId}/profit`,
+    );
   } catch (err) {
     redirectOnAuthError(err);
     console.warn("[api-server] getProjectProfit: API unreachable, returning null");

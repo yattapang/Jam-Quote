@@ -6,6 +6,7 @@ function build(opts: {
   project?: unknown;
   invoices?: unknown[];
   purchases?: unknown[];
+  labour?: unknown[];
   trn?: string | null;
 } = {}) {
   const prisma = {
@@ -19,6 +20,13 @@ function build(opts: {
       update: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
     },
     invoice: { findMany: vi.fn().mockResolvedValue(opts.invoices ?? []) },
+    labourEntry: {
+      findMany: vi.fn().mockResolvedValue(opts.labour ?? []),
+      findFirst: vi.fn().mockResolvedValue({ id: "le-1" }),
+      create: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
+      update: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
+    },
+    labourRate: { findFirst: vi.fn().mockResolvedValue({ id: "lr-1" }) },
     business: {
       findUnique: vi.fn().mockResolvedValue({ trn: "trn" in opts ? opts.trn : "102-458-963" }),
     },
@@ -147,5 +155,91 @@ describe("did this job make money?", () => {
   it("refuses a project this business does not own", async () => {
     const { svc } = build({ project: null });
     await expect(svc.projectProfit("biz-1", "nope")).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe("labour is part of the cost, and it is the biggest part", () => {
+  const invoiced = { status: "INVOICED", totalCents: 1_000_000, paidCents: 0 };
+
+  it("counts wages against the job", async () => {
+    // Before this existed every profit figure overstated: costs counted the
+    // cement and not the men who laid it.
+    const { svc } = build({
+      invoices: [invoiced],
+      labour: [{ quantity: "5", rateCents: 400_000 }],
+    });
+    const p = await svc.projectProfit("biz-1", "proj-1");
+    expect(p.labourCostCents).toBe(2_000_000);
+    expect(p.netProfitCents).toBe(-1_000_000);
+  });
+
+  it("carries NO reclaimable GCT on wages", async () => {
+    // Wages are not a supply. A subcontractor who invoices with GCT is a
+    // Purchase, which is why the two stay separate.
+    const { svc } = build({
+      invoices: [invoiced],
+      labour: [{ quantity: "2", rateCents: 100_000 }],
+      trn: "102-458-963",
+    });
+    const p = await svc.projectProfit("biz-1", "proj-1");
+    expect(p.inputTaxCents).toBe(0);
+    expect(p.costExGctCents).toBe(200_000);
+  });
+
+  it("splits labour from materials, because 'cost' alone is not actionable", async () => {
+    const { svc } = build({
+      invoices: [invoiced],
+      purchases: [{ amountCents: 115_000, gctCents: 15_000 }],
+      labour: [{ quantity: "3", rateCents: 50_000 }],
+    });
+    const p = await svc.projectProfit("biz-1", "proj-1");
+    expect(p.labourCostCents).toBe(150_000);
+    expect(p.purchaseCostCents).toBe(115_000);
+    expect(p.costCents).toBe(265_000);
+  });
+
+  it("handles a half day", async () => {
+    const { svc } = build({ labour: [{ quantity: "2.5", rateCents: 400_000 }] });
+    expect((await svc.projectProfit("biz-1", "proj-1")).labourCostCents).toBe(1_000_000);
+  });
+
+  it("accepts an entry with NO job — admin time is a real cost", async () => {
+    const { svc, prisma } = build();
+    await svc.createLabour("biz-1", {
+      description: "Office admin",
+      quantity: 1,
+      rateCents: 300_000,
+      workedOn: new Date().toISOString(),
+    });
+    expect(prisma.labourEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ projectId: null }) }),
+    );
+  });
+
+  it("refuses a labour rate belonging to another business", async () => {
+    const { svc, prisma } = build();
+    prisma.labourRate.findFirst.mockResolvedValue(null);
+    await expect(
+      svc.createLabour("biz-1", {
+        description: "Mason",
+        quantity: 1,
+        rateCents: 400_000,
+        workedOn: new Date().toISOString(),
+        labourRateId: "someone-elses",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("defaults the unit to days — how construction labour is usually bought", async () => {
+    const { svc, prisma } = build();
+    await svc.createLabour("biz-1", {
+      description: "Devon",
+      quantity: 2,
+      rateCents: 400_000,
+      workedOn: new Date().toISOString(),
+    });
+    expect(prisma.labourEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ unitLabel: "day" }) }),
+    );
   });
 });

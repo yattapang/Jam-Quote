@@ -6,7 +6,15 @@ import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
-import { getProject, getClients, getQuotes, getPurchases, getProjectProfit } from "@/lib/api-server";
+import {
+  getProject,
+  getClients,
+  getQuotes,
+  getPurchases,
+  getLabourEntries,
+  getLabourRates,
+  getProjectProfit,
+} from "@/lib/api-server";
 import ProjectCosts from "./ProjectCosts";
 import { formatJmd } from "@jamquote/core";
 import EditProjectButton from "./EditProjectButton";
@@ -19,10 +27,12 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [clients, quotes, purchases, profit] = await Promise.all([
+  const [clients, quotes, purchases, labour, labourRates, profit] = await Promise.all([
     getClients(),
     getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
     getPurchases({ projectId: project.id }),
+    getLabourEntries({ projectId: project.id }),
+    getLabourRates(),
     getProjectProfit(project.id),
   ]);
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
@@ -73,6 +83,12 @@ export default async function JobDetailPage({ params }: { params: { id: string }
                 <div>
                   <div className={shared.statHint}>Cost</div>
                   <MoneyText cents={profit.costExGctCents} size={22} />
+                  <div className={shared.statHint}>
+                    {/* The split, because "cost" alone does not say whether a
+                        job overran on materials or on days. */}
+                    {formatJmd(profit.labourCostCents)} labour ·{" "}
+                    {formatJmd(profit.purchaseCostCents)} materials
+                  </div>
                   {profit.inputTaxCents > 0 && (
                     <div className={shared.statHint}>
                       after {formatJmd(profit.inputTaxCents)} reclaimable GCT
@@ -127,7 +143,12 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           </Card>
         </section>
 
-        <ProjectCosts projectId={project.id} purchases={purchases} />
+        <ProjectCosts
+          projectId={project.id}
+          purchases={purchases}
+          labour={labour}
+          labourRates={labourRates}
+        />
 
         <section className={shared.section}>
           <Card>

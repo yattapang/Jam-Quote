@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeJobProfit } from "./job-profit.js";
+import { computeJobProfit, labourEntryCostCents } from "./job-profit.js";
 
 const inv = (totalCents: number, paidCents = 0, status = "INVOICED") => ({
   status,
@@ -81,5 +81,34 @@ describe("computeJobProfit — margin", () => {
       netProfitCents: 0,
       marginPct: null,
     });
+  });
+});
+
+describe("labourEntryCostCents", () => {
+  it("multiplies whole days by the day rate", () => {
+    expect(labourEntryCostCents(5, 400_000)).toBe(2_000_000);
+  });
+
+  it("handles a half day", () => {
+    expect(labourEntryCostCents(2.5, 400_000)).toBe(1_000_000);
+  });
+
+  it("rounds per entry, not per sum", () => {
+    // 7.333 hours at $12.34/hr. Rounding here keeps a job total reconcilable
+    // against a wage sheet; a fraction of a cent per entry would accumulate.
+    expect(labourEntryCostCents(7.333, 1_234)).toBe(9_049);
+  });
+
+  it("accepts a decimal string, which is how Prisma returns it", () => {
+    expect(labourEntryCostCents("2.5", 400_000)).toBe(1_000_000);
+  });
+
+  it("is zero for a bad or empty quantity rather than NaN", () => {
+    // A bad keystroke should leave the figure unchanged, not poison every
+    // total that includes it.
+    expect(labourEntryCostCents("", 400_000)).toBe(0);
+    expect(labourEntryCostCents("abc", 400_000)).toBe(0);
+    expect(labourEntryCostCents(-3, 400_000)).toBe(0);
+    expect(labourEntryCostCents(0, 400_000)).toBe(0);
   });
 });

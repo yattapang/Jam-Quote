@@ -56,3 +56,35 @@ export const purchaseQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).optional(),
 });
 export type PurchaseQuery = z.infer<typeof purchaseQuerySchema>;
+
+/**
+ * Time worked on a job.
+ *
+ * `rateCents` is supplied rather than looked up from `labourRateId`, and that
+ * is deliberate: the entry SNAPSHOTS what the work cost at the time. Reading
+ * it live from the rate book would mean raising your day rate silently
+ * rewrote what last month's jobs cost.
+ */
+export const createLabourEntrySchema = z.object({
+  /** Null or omitted = admin/office time with no job behind it. */
+  projectId: z.string().min(1).nullable().optional(),
+  /** The rate book entry this came from, when it came from one. */
+  labourRateId: z.string().min(1).nullable().optional(),
+  description: z.string().min(1).max(200),
+  /** Hours or days — half-days and part-hours are normal, so not an integer. */
+  quantity: z.number().positive().max(100_000),
+  rateCents: z.number().int().nonnegative(),
+  unitLabel: z.string().min(1).max(30).optional(),
+  workedOn: z.string().datetime(),
+  note: z.string().max(500).nullable().optional(),
+});
+export type CreateLabourEntryInput = z.infer<typeof createLabourEntrySchema>;
+
+export const labourEntryQuerySchema = z.object({
+  projectId: z
+    .string()
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "" ? null : v)),
+  limit: z.coerce.number().int().positive().max(500).optional(),
+});
+export type LabourEntryQuery = z.infer<typeof labourEntryQuerySchema>;

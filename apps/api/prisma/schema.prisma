@@ -196,6 +196,7 @@ model Business {
   subscription Subscription?
   subscriptionPayments SubscriptionPayment[]
   purchases            Purchase[]
+  labourEntries        LabourEntry[]
   subscriptionNotices  SubscriptionNotice[]
   trades       Trade[]
   jobs         Job[]
@@ -325,6 +326,7 @@ model Project {
 
   @@map("Job")
   purchases Purchase[]
+  labourEntries LabourEntry[]
   invoices  Invoice[] @relation("InvoiceProject")
 
 }
@@ -537,6 +539,8 @@ model LabourRate {
   jobComponents      JobComponent[]
 
   @@index([businessId])
+  labourEntries LabourEntry[]
+
 }
 
 model MaterialFavourite {
@@ -1204,5 +1208,47 @@ model Purchase {
   deletedAt DateTime?
 
   @@index([businessId, purchasedAt])
+  @@index([projectId])
+}
+
+/// Time worked on a job — usually the LARGEST cost on it.
+///
+/// A different fact from a Purchase, not a variant of one: hours or days at a
+/// rate, often recorded before it is paid, and worth knowing in HOURS as well
+/// as dollars. Recording it as a purchase would lose the quantity, which is
+/// the part that tells a contractor whether a job overran.
+model LabourEntry {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  /// Nullable for the same reason as Purchase.projectId: office and admin time
+  /// is a real cost with no job behind it, and a required field would make
+  /// contractors attach it to whatever job happened to be open.
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  /// The rate book entry this came from, when it came from one. Nullable so a
+  /// one-off rate for a day labourer who is not in the book still records.
+  labourRateId String?
+  labourRate   LabourRate? @relation(fields: [labourRateId], references: [id], onDelete: SetNull)
+
+  /// Who did the work, in the contractor's own words ("Devon", "3 masons").
+  description String
+  /// Hours or days. Decimal because half-days and part-hours are normal.
+  quantity    Decimal @db.Decimal(12, 3)
+  /// SNAPSHOT of the rate at the time. Never re-read from LabourRate: raising
+  /// your day rate must not silently rewrite what last month's jobs cost.
+  rateCents   Int
+  /// What the quantity counts — "day", "hour", or the contractor's own word.
+  unitLabel   String  @default("day")
+  workedOn    DateTime
+  note        String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([businessId, workedOn])
   @@index([projectId])
 }

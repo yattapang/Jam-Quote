@@ -100,3 +100,23 @@ export function computeJobProfit(
       revenueCents === 0 ? null : Math.round((netProfitCents / revenueCents) * 1000) / 10,
   };
 }
+
+/**
+ * What one labour entry cost: quantity x rate, rounded to the cent.
+ *
+ * Rounded HERE rather than by summing raw products, because half-days and
+ * part-hours are normal and a fraction of a cent per entry accumulates into a
+ * job total that will not reconcile against a wage sheet. One rounding per
+ * entry, at the point the entry is priced.
+ *
+ * A non-finite or negative quantity yields 0 rather than NaN: a bad keystroke
+ * should leave the figure unchanged, not poison every total that includes it.
+ */
+export function labourEntryCostCents(
+  quantity: number | string,
+  rateCents: Cents,
+): Cents {
+  const qty = typeof quantity === "number" ? quantity : Number(quantity);
+  if (!Number.isFinite(qty) || qty <= 0) return 0;
+  return Math.round(qty * rateCents);
+}

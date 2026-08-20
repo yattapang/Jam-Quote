@@ -1142,7 +1142,22 @@ the loop: the client agrees in one tap, the quote advances, and the agreement
 is timestamped — which matters in a market where a great deal is agreed
 verbally and disputed later. Small now that the public page is built.
 
-**3. Labour cost in job costing — NEXT, and a real gap in what was shipped.**
+**3. Labour cost in job costing — DONE.** `LabourEntry`: description,
+quantity, snapshot rate, unit and date, nullable projectId (admin time is a
+real cost with no job). Folded into project profit, and the profit card now
+splits labour from materials — "cost" alone does not say whether a job overran
+on materials or on days.
+
+The rate is SNAPSHOT, never re-read from the rate book: raising your day rate
+must not silently rewrite what last month's jobs cost. Wages carry no
+reclaimable GCT, because they are not a supply — a subcontractor who invoices
+with GCT is a Purchase, which is why the two stay separate tables rather than
+one with a flag.
+
+Live check on a real job: labour $25,000 against materials $1,150. That ratio
+is the argument for the feature.
+
+Original reasoning:
 Purchases capture bought goods. A contractor's own time and their crew's wages
 are usually the LARGEST cost on a job, and there is nowhere to record them, so
 every profit figure currently overstates. The app already holds labour rates;
