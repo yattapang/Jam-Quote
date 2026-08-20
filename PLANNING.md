@@ -1,12 +1,15 @@
 # JamQuote — Working Plan
 
-**Last updated:** 2026-08-19
-**Status:** audit closed, and the subscription billing lifecycle is built
-(§4e–4f Phases A–C: payment ledger, derived standing, collected-vs-contracted,
-renewal reminders, revert-to-free). Phase D (WiPay self-serve) is blocked on
-credentials. **Still nothing has met a real contractor** — that remains the
-largest risk and the highest-value next action. Mobile deliberately not
-started.
+**Last updated:** 2026-08-19 (late)
+**Status:** feature-complete for a first commercial test. Audit closed;
+subscription billing built (§4e–4f A–C); quote delivery works end to end via
+public share links; job costing covers materials AND labour; packaging decided
+(§4k). Blocked or deferred: WiPay self-serve, and email-to-clients until a
+domain exists.
+
+**Still nothing has met a real contractor.** That has been the largest risk for
+several sessions and every round of building makes it larger, not smaller —
+each new feature is another thing nobody has tried.
 
 This file is the single source of truth for what we are building, in what
 order, and why. Update it in the same commit as the work it describes — a plan
@@ -101,9 +104,26 @@ Recently landed (all pushed):
 - Deposit as % or $, unit rendering unified, material unit round-trip fixed.
 
 - **Audit findings closed** — see §3b. The last three landed in `4ce1a8d`.
+- **Subscription billing** (§4e–4f): payment ledger, terms and negotiated
+  prices, derived standing, collected-vs-contracted, renewal reminders and
+  automatic revert to free.
+- **Quote delivery that reaches the client**: public share links (`/q/<token>`)
+  so WhatsApp works, and honest refusal on email until a sending domain exists.
+- **Job costing** (§4g): purchases, labour, and "did this job make money?" on
+  the project page, with projects auto-created on acceptance so it is not
+  optional in practice.
+- **Packaging decided** (§4k) and the feature roadmap agreed (§4l).
 
 **Not yet met by a real user:** everything above. No contractor has used any of
 it. That is the single largest risk in this plan and the reason §4b exists.
+
+**A pattern worth carrying forward.** Across the audit and everything since,
+the recurring defect was not broken logic. It was a state nothing could reach
+(`Subscription.status`, `QuoteStatus.VIEWED`, "Applied (YTD)"), a correct
+helper some screen never called (`lineUnitLabel`, `unitRef`), or an action that
+reported success while doing nothing (email to clients, the WhatsApp link, the
+first void fix). Tests caught almost none of these. Using the thing caught all
+of them.
 
 ---
 
@@ -418,34 +438,39 @@ Worth walking specifically, since these are new and unexercised:
 
 ## 4c. What to do next — recommendation
 
-**Start with §4b: deploy and use it.** Not because the backlog is empty, but
-because six audit parts produced eleven findings and only one of them was
-something a test would have caught. The cheapest defects to fix are the ones
-found before more code is layered on top of them, and there are two contractors
-waiting who will find a different set again.
+**Deploy and put it in front of the two contractors.** Unchanged for several
+sessions, and the case gets stronger each time: the last three defects found
+were all found by USING the thing — a WhatsApp link that led to a login wall,
+an email path that reported sends into a void, and an invoice conversion that
+silently dropped its job link. None had a failing test. All three would have
+been found in an hour of real use.
 
-Adding them needs no work: signup exists at `/login` → "New to JamQuote?" →
-"Create one" (business name, email, password creates the tenant). It is simply
-not signposted as its own route.
+Adding contractors needs no work: `/login` → "New to JamQuote?" → "Create one".
 
-Then, in order:
+**What is genuinely ready for them:** quoting with GCT, a job library, clients,
+PDF, WhatsApp delivery via share links, convert to invoice, record payments,
+reports, and job costing behind it.
 
-1. ~~Regulatory admin CRUD~~ — **done** (`847c9dc`).
-2. ~~Rule-pack verify~~ — **done** (`4f52af7`), manual by design.
-3. ~~The small open audit items~~ — **done** (`4ce1a8d`).
+**What they will hit, and what to say:**
 
-**Every audit finding is now closed.** Twelve substantive issues across six
-parts: nine fixed, two answered as working-as-designed with the reasoning
-recorded (equipment lines not merging; hiding not cascading), and one
-deliberately not built with its reason stated (automated rule-pack checking has
-no machine-readable source to check against).
+| They will find | Say |
+|---|---|
+| Email to clients is disabled | Deliberate — no sending domain yet. Use WhatsApp or Download PDF; both work. |
+| Free tier caps at 3 quotes/month | Watch whether this is too tight (§4k). If they stall in week one, raise it. |
+| No mobile app | Web on a phone. The rebuild has not started. |
 
-So the next action is no longer a code change. It is §4b: deploy, add the two
-contractors, and use it.
+**Then, in priority order** (§4l, all agreed):
 
-**Explicitly not next:** Phase 4 (Job Library depth) and Phase 5 (mobile).
-Neither is blocking a contractor from quoting, and mobile is a rebuild that
-should not start until the web app has survived real use.
+1. Accept / decline on the share link — closes the loop, cheap now the public
+   page exists.
+2. Invoice payment reminders — the sweep, notice ledger and mailer already
+   exist; pointing them at overdue tenant invoices is mostly wiring.
+3. Accountant CSV exports (§4g) — both sides of the ledger now exist.
+4. Variations / change orders — the commonest source of unpaid work.
+5. Retention / holdback.
+
+**Explicitly not next:** Phase 4 (Job Library depth), Phase 5 (mobile), and
+WiPay. None blocks a contractor from quoting today.
 
 ## 4d. Open work — raised 2026-08-18, recorded before starting
 
@@ -455,7 +480,7 @@ Written down first so none of it is lost mid-session.
 |---|---|---|
 | 1 | ~~MRR 100x too big on the overview~~ **DONE `2728003`** | `$400,000` on overview vs `$4,000` on Financials. MY regression: `money()` only formats, it does not convert cents, and when the hardcoded MRR was replaced with the real `mrrCents` the wrapper stayed. Financials uses `formatJmd`, which divides. **Fix: one helper for money everywhere in the console.** |
 | 2 | ~~"Couldn't load 1 section"~~ | **DONE `fcfaea0`.** It was `/admin/suppliers` — removed from the API in #31, still called by the web on every admin load, result never consumed. Dead fetch, type and the "Suppliers added" tile all removed. |
-| 3 | ~~Advisory lock / migrations~~ | **RESOLVED end-to-end `a7bb66c`.** The stranded session has gone and `prisma migrate deploy` now succeeds with the advisory lock ENABLED over the direct URL — the same command that timed out on P1002 an hour earlier. **Action for the owner: remove `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from Render's environment**, so the lock resumes protecting concurrent migrations. `render.yaml` still declares it; drop it there in the same change. |
+| 3 | ~~Advisory lock / migrations~~ | **CLOSED.** Fixed at the cause (`a7bb66c`: `directUrl` + `DIRECT_URL`, verified with the lock ENABLED), and the `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` stopgap was removed from `render.yaml` in `f62d3c2` with `DIRECT_URL` declared in its place. Only remaining manual step: delete that variable from the Render dashboard if it was ever set there by hand. |
 | 4 | **Tenant management options** | `/admin/me` was never the failing section, so capabilities were never the cause — that hypothesis is dead. The controls were present in the table but ACTIONS is the 7th column and scrolls off a narrow screen. `fcfaea0` adds plan/term, suspend/restore and delete to the tenant DRAWER, where clicking a business naturally leads. **Confirm on the deployed site.** |
 | 5 | ~~Annual subscription with a long-term discount~~ | **DONE `2728003`.** `Subscription.interval` + `priceCents`; plan control is a select (Free / Pro monthly / Pro annual); MRR now sums each tenant's own monthly value instead of proCount x list price. |
 | 6 | ~~Run the deployment~~ | **DONE.** Pushing IS deploying (both auto-deploy). Verified live: `/api/health` -> `{"status":"ok","db":true}`, `/api/admin/regulatory` -> 401 (today's code deployed), `/api/admin/suppliers` -> 404 (dead route confirmed gone). Free-tier cold start takes ~90s — a first-request timeout is not a failure. |
@@ -463,7 +488,7 @@ Written down first so none of it is lost mid-session.
 
 ---
 
-## 4e. Subscription billing lifecycle — PROPOSED, not started
+## 4e. Subscription billing lifecycle — BUILT (Phases A–C); D blocked
 
 The ask, restated: see money actually received from tenants, warn them before a
 subscription lapses, and have an account's standing follow from a recorded
@@ -624,7 +649,7 @@ fire exactly once (see 4).
 
 ---
 
-## 4f. Phase A — the build order, ready to start
+## 4f. Phase A — the build order. COMPLETE
 
 Everything here is decided; no further input needed. Written as a checklist so
 a fresh session can pick it up without re-deriving anything.
@@ -717,7 +742,7 @@ are conduct sanctions, never billing ones.
 
 ---
 
-## 4g. Tenant CSV exports for accountants — PROPOSED, later
+## 4g. Job costing and accountant exports — costing DONE, exports remaining
 
 A contractor should be able to hand their accountant a file instead of a login.
 Requested 2026-08-18; not scheduled.
@@ -868,7 +893,7 @@ three years of history should not be limited by a phone's memory, and the same
 generator can later back a scheduled email to the accountant.
 
 
-## 4h. Tenants table on narrow screens — small, worth doing
+## 4h. Tenants table on narrow screens — DONE (`aa0394b`)
 
 Confirmed working, but the ACTIONS column is the 7th of seven and needs
 horizontal scrolling to reach.
@@ -894,42 +919,7 @@ Deliberately NOT a card layout: the table is scannable and staff compare rows
 down a column (who is past due, who is on annual). Cards lose that.
 
 
-## 4j. WhatsApp delivery via public share links — DONE (`27b8612`)
-
-**Free, and no service to pay for.** `wa.me` click-to-chat needs no WhatsApp
-Business API, no provider and no per-message cost. That part was already right.
-
-**But the link was broken, in the same way email was.** The button sent clients
-`/quotes/<id>`, which is in the middleware's protected list — so the client hit
-a login wall while the contractor saw the message send and assumed it arrived.
-
-Now: `Quote.shareToken` (32 random bytes, unique, revocable, minted only on
-share), a public `/q/<token>` page written for someone who will never sign in,
-and `/public/quotes/:token` as the ONE unauthenticated endpoint in the API —
-returning a hand-written allow-list rather than the row, so adding a column to
-Quote cannot silently widen what an anonymous caller sees.
-
-**It also made `QuoteStatus.VIEWED` reachable.** The enum, its transitions and
-the expiry sweep all referenced it and nothing could set it — the third
-instance of that pattern after `Subscription.status` and "Applied (YTD)".
-
-### Known trade-offs
-
-- **"Save as PDF" uses the browser print sheet**, not a server-rendered file.
-  QuotePdf needs the full view types, and widening the anonymous response to
-  feed a renderer trades a security boundary for a convenience. If contractors
-  report clients wanting a real attachment to forward, revisit — the cheapest
-  fix is a token-scoped PDF route on the API where the full row is already in
-  hand.
-- **No expiry on share tokens.** A link works until revoked. Quotes already
-  carry `validUntil`, so honouring that on the public page is the obvious next
-  step if it matters.
-- **The public endpoint is unthrottled.** Fine at three tenants; before real
-  volume it wants rate limiting, since it is the only anonymous surface.
-
----
-
-## 4i. Sending quotes to a contractor's clients — BLOCKS TESTING
+## 4i. Sending quotes to a contractor's clients — email deferred, WhatsApp shipped
 
 Raised 2026-08-19. Today a quote email goes out as
 `QUOTE_FROM_EMAIL ?? "JamQuote <onboarding@resend.dev>"` with a single GLOBAL
@@ -1031,6 +1021,41 @@ per-tenant `Reply-To` (still a global env var today) before any real volume.
   a signed link is lighter and gives a viewed-at signal. Worth deciding
   deliberately rather than by default.
 
+
+## 4j. WhatsApp delivery via public share links — DONE (`27b8612`)
+
+**Free, and no service to pay for.** `wa.me` click-to-chat needs no WhatsApp
+Business API, no provider and no per-message cost. That part was already right.
+
+**But the link was broken, in the same way email was.** The button sent clients
+`/quotes/<id>`, which is in the middleware's protected list — so the client hit
+a login wall while the contractor saw the message send and assumed it arrived.
+
+Now: `Quote.shareToken` (32 random bytes, unique, revocable, minted only on
+share), a public `/q/<token>` page written for someone who will never sign in,
+and `/public/quotes/:token` as the ONE unauthenticated endpoint in the API —
+returning a hand-written allow-list rather than the row, so adding a column to
+Quote cannot silently widen what an anonymous caller sees.
+
+**It also made `QuoteStatus.VIEWED` reachable.** The enum, its transitions and
+the expiry sweep all referenced it and nothing could set it — the third
+instance of that pattern after `Subscription.status` and "Applied (YTD)".
+
+### Known trade-offs
+
+- **"Save as PDF" uses the browser print sheet**, not a server-rendered file.
+  QuotePdf needs the full view types, and widening the anonymous response to
+  feed a renderer trades a security boundary for a convenience. If contractors
+  report clients wanting a real attachment to forward, revisit — the cheapest
+  fix is a token-scoped PDF route on the API where the full row is already in
+  hand.
+- **No expiry on share tokens.** A link works until revoked. Quotes already
+  carry `validUntil`, so honouring that on the public page is the obvious next
+  step if it matters.
+- **The public endpoint is unthrottled.** Fine at three tenants; before real
+  volume it wants rate limiting, since it is the only anonymous surface.
+
+---
 
 ## 4k. Packaging and tiering — ACCEPTED (owner, 2026-08-19)
 
