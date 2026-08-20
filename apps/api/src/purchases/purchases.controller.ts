@@ -64,6 +64,13 @@ export class PurchasesController {
     return this.purchases.removeLabour(businessId, id);
   }
 
+  /** Categories this business has already used, for the purchase form's
+   * dropdown. MUST stay above `@Get(":id")` or "categories" is read as an id. */
+  @Get("categories")
+  categories(@BusinessId() businessId: string): Promise<string[]> {
+    return this.purchases.distinctCategories(businessId);
+  }
+
   @Get(":id")
   findOne(@BusinessId() businessId: string, @Param("id") id: string): Promise<Purchase> {
     return this.purchases.findOne(businessId, id);

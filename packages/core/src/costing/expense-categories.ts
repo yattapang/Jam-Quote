@@ -55,3 +55,41 @@ export function groupByCategory<T extends { category?: string | null; amountCent
 
   return [...buckets.values()].sort((a, b) => b.totalCents - a.totalCents);
 }
+
+/**
+ * The category options to offer on the purchase form: the suggestions above,
+ * plus every category this business has actually used.
+ *
+ * The tenant's own words are what stop drift after week one — a contractor who
+ * typed "Scaffold hire" last month should find it waiting rather than retype
+ * it slightly differently. Matching is case- and padding-insensitive for the
+ * same reason `groupByCategory` is: "cement " and "Cement" are one category,
+ * and the two must agree or the dropdown will offer a spelling the breakdown
+ * then splits.
+ *
+ * A suggestion's spelling WINS over a used one, so a tenant who once typed
+ * "materials" is offered the canonical "Materials" and drifts back toward it.
+ * Everything else keeps the contractor's own spelling.
+ */
+export function mergeCategoryOptions(used: readonly (string | null | undefined)[]): string[] {
+  const seen = new Map<string, string>();
+  for (const c of PURCHASE_CATEGORY_SUGGESTIONS) seen.set(c.toLowerCase(), c);
+
+  const extra: string[] = [];
+  for (const raw of used) {
+    const label = raw?.trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.set(key, label);
+    extra.push(label);
+  }
+
+  // Suggestions first in their curated order, then the tenant's own additions
+  // alphabetically — a stable order beats recency, which would move an option
+  // out from under someone mid-click.
+  return [
+    ...PURCHASE_CATEGORY_SUGGESTIONS,
+    ...extra.sort((a, b) => a.localeCompare(b)),
+  ];
+}

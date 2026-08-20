@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { PURCHASE_CATEGORY_SUGGESTIONS, groupByCategory } from "./expense-categories.js";
+import {
+  PURCHASE_CATEGORY_SUGGESTIONS,
+  groupByCategory,
+  mergeCategoryOptions,
+} from "./expense-categories.js";
 
 const p = (amountCents: number, category?: string | null) => ({ amountCents, category });
 
@@ -43,5 +47,29 @@ describe("groupByCategory", () => {
   it("offers categories a Jamaican contractor would actually use", () => {
     expect(PURCHASE_CATEGORY_SUGGESTIONS).toContain("Subcontractor");
     expect(PURCHASE_CATEGORY_SUGGESTIONS).toContain("Transport & fuel");
+  });
+});
+
+describe("mergeCategoryOptions", () => {
+  it("offers the suggestions even when nothing has been spent yet", () => {
+    expect(mergeCategoryOptions([])).toEqual([...PURCHASE_CATEGORY_SUGGESTIONS]);
+  });
+
+  it("adds the tenant's own words after the suggestions", () => {
+    const opts = mergeCategoryOptions(["Scaffold hire", "Skip"]);
+    expect(opts.slice(-2)).toEqual(["Scaffold hire", "Skip"]);
+  });
+
+  it("does not offer the same category twice in different case", () => {
+    // The dropdown and groupByCategory must agree on what counts as one
+    // category, or the form offers a spelling the breakdown then splits.
+    const opts = mergeCategoryOptions(["materials", "MATERIALS", " Materials "]);
+    expect(opts.filter((c) => c.toLowerCase() === "materials")).toEqual(["Materials"]);
+  });
+
+  it("ignores blank and whitespace-only categories", () => {
+    expect(mergeCategoryOptions(["", "   ", null, undefined])).toEqual([
+      ...PURCHASE_CATEGORY_SUGGESTIONS,
+    ]);
   });
 });

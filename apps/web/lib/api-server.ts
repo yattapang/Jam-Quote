@@ -271,6 +271,21 @@ export async function getPurchases(params?: {
   }
 }
 
+/**
+ * Categories this business has already spent under, for the purchase form's
+ * dropdown. Falls back to an empty list, which just means the form offers the
+ * built-in suggestions only — never a broken screen.
+ */
+export async function getPurchaseCategories(): Promise<string[]> {
+  try {
+    return await serverRequest<string[]>("/purchases/categories");
+  } catch (err) {
+    redirectOnAuthError(err);
+    console.warn("[api-server] getPurchaseCategories: API unreachable, using suggestions only");
+    return [];
+  }
+}
+
 /** Time logged, optionally for one job. */
 export async function getLabourEntries(params?: {
   projectId?: string | null;

@@ -21,6 +21,27 @@ import type {
 export class PurchasesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Every category this business has actually spent under.
+   *
+   * Feeds the purchase form's dropdown so a contractor finds their own past
+   * wording waiting instead of retyping it slightly differently — the drift
+   * that makes the accountant export ungroupable. Deliberately business-wide,
+   * not per project: drift happens ACROSS jobs.
+   *
+   * Returns raw spellings; `mergeCategoryOptions` in core does the
+   * case-insensitive dedupe, so it stays in step with `groupByCategory`.
+   */
+  async distinctCategories(businessId: string): Promise<string[]> {
+    const rows = await this.prisma.purchase.findMany({
+      where: { businessId, deletedAt: null, category: { not: null } },
+      select: { category: true },
+      distinct: ["category"],
+      orderBy: { category: "asc" },
+    });
+    return rows.map((r) => r.category).filter((c): c is string => Boolean(c?.trim()));
+  }
+
   async findAll(businessId: string, filters: PurchaseQuery = {}): Promise<Purchase[]> {
     return this.prisma.purchase.findMany({
       where: {

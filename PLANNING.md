@@ -1256,6 +1256,26 @@ owes yet.
 | Release | `POST /invoices/:id/retention-release` (`setRetentionReleased`). Refuses on a DRAFT and when nothing is held; **reversible**, because sign-off gets clicked early. |
 | Variation | `POST /quotes/:id/variation` + "Add extra work" on an ACCEPTED/INVOICED quote. New empty DRAFT, original untouched, same client and job. |
 
+### Expense categories — the dropdown (owner, 2026-08-20)
+
+**Finding from the owner:** "I was looking for drop down options. Is it done
+automatically?" It was a `datalist` — invisible until you typed, with no arrow
+to say anything was there. Same shape as the unit-label defect: correct logic,
+never seen at the point of use. Suggestions nobody can see do not prevent
+drift, which is the only reason the list exists.
+
+**Now a real `Select`**: the eight built-in suggestions, plus every category
+this business has already spent under (`GET /purchases/categories`), plus
+**"Other…"** which reveals a text box — free text stays possible because a
+contractor must be able to use their own word. `mergeCategoryOptions` in core
+dedupes case-insensitively so the dropdown can never offer a spelling
+`groupByCategory` then folds into a different line.
+
+**Still not a managed table** (owner, 2026-08-20). Promote to one alongside
+`MaterialCategoryDef` and `Trade` only when tenants need to hide or rename —
+that needs a settings screen to be worth having, and the hiding defects from
+the settings audit would apply to it too.
+
 **The rule the tests exist to protect:** releasing retention says the money is
 now DUE — it never writes `paidCents`. Conflating the two would report a
 contractor as settled for money still in the client's account

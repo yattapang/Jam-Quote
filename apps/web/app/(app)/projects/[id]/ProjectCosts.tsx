@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatJmd, groupByCategory, PURCHASE_CATEGORY_SUGGESTIONS } from "@jamquote/core";
+import { formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
 import {
   createPurchase,
@@ -25,11 +26,16 @@ import shared from "../../shared.module.css";
  * because that is where the question gets asked: a contractor looking at a job
  * wants to know whether it made money, not to reconcile a ledger.
  */
+/** Sentinel for the "Other…" choice. A value no real category can collide
+ * with, since categories are free text and "Other" itself is plausible. */
+const OTHER_CATEGORY = "__other__";
+
 export default function ProjectCosts({
   projectId,
   purchases,
   labour,
   labourRates,
+  usedCategories,
 }: {
   projectId: string;
   purchases: ApiPurchase[];
@@ -37,7 +43,16 @@ export default function ProjectCosts({
   /** The rate book, so a day rate is one pick rather than retyped — and so the
    * rate that gets SNAPSHOTTED is the one they actually charge. */
   labourRates: LabourRate[];
+  /** Categories this business has already spent under. Offered alongside the
+   * built-in suggestions so a contractor finds their own past wording rather
+   * than retyping it slightly differently. */
+  usedCategories: string[];
 }) {
+  // Built-in suggestions plus whatever this business has already used, deduped
+  // case-insensitively so the dropdown cannot offer a spelling that
+  // groupByCategory then folds into another line.
+  const categoryOptions = useMemo(() => mergeCategoryOptions(usedCategories), [usedCategories]);
+
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -47,6 +62,9 @@ export default function ProjectCosts({
   const [amount, setAmount] = useState("");
   const [gct, setGct] = useState("");
   const [category, setCategory] = useState("");
+  // "Other…" is a real choice, not an empty category — without this the box
+  // would vanish the moment a contractor cleared what they had typed.
+  const [customCategory, setCustomCategory] = useState(false);
   const [purchasedAt, setPurchasedAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [reference, setReference] = useState("");
 
@@ -123,6 +141,7 @@ export default function ProjectCosts({
       setAmount("");
       setGct("");
       setCategory("");
+      setCustomCategory(false);
       setReference("");
       router.refresh();
     } catch (err) {
@@ -373,22 +392,42 @@ export default function ProjectCosts({
                 value={purchasedAt}
                 onChange={(e) => setPurchasedAt(e.target.value)}
               />
-              {/* Suggested, not enforced — a contractor must be able to use
-                  their own word. The list exists so the common ones are spelt
-                  the same way every time, since the accountant export groups
-                  on this and free text drifts within a week. */}
-              <Input
+              {/* A real dropdown, not a datalist. The datalist this replaces
+                  was invisible until you typed, so the suggestions that exist
+                  to stop spelling drift were never seen — and drift is exactly
+                  what makes the spend breakdown and the accountant export
+                  ungroupable. "Other…" keeps free text possible, because a
+                  contractor must be able to use their own word. */}
+              <Select
                 label="Category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Materials, hire…"
-                list="purchase-categories"
+                value={customCategory ? OTHER_CATEGORY : category}
+                onChange={(e) => {
+                  const picked = e.target.value;
+                  if (picked === OTHER_CATEGORY) {
+                    setCustomCategory(true);
+                    setCategory("");
+                  } else {
+                    setCustomCategory(false);
+                    setCategory(picked);
+                  }
+                }}
+                options={[
+                  { value: "", label: "No category" },
+                  ...categoryOptions.map((c) => ({ value: c, label: c })),
+                  { value: OTHER_CATEGORY, label: "Other…" },
+                ]}
+                hint="Groups the spend breakdown and the accountant export."
               />
-              <datalist id="purchase-categories">
-                {PURCHASE_CATEGORY_SUGGESTIONS.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
+              {customCategory && (
+                <Input
+                  label="New category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="e.g. Scaffold hire"
+                  autoFocus
+                  hint="Saved with this purchase and offered next time."
+                />
+              )}
             </div>
             <Input
               label="Reference"

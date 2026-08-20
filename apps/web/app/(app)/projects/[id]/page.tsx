@@ -11,6 +11,7 @@ import {
   getClients,
   getQuotes,
   getPurchases,
+  getPurchaseCategories,
   getLabourEntries,
   getLabourRates,
   getProjectProfit,
@@ -27,14 +28,16 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [clients, quotes, purchases, labour, labourRates, profit] = await Promise.all([
-    getClients(),
-    getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
-    getPurchases({ projectId: project.id }),
-    getLabourEntries({ projectId: project.id }),
-    getLabourRates(),
-    getProjectProfit(project.id),
-  ]);
+  const [clients, quotes, purchases, labour, labourRates, profit, usedCategories] =
+    await Promise.all([
+      getClients(),
+      getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
+      getPurchases({ projectId: project.id }),
+      getLabourEntries({ projectId: project.id }),
+      getLabourRates(),
+      getProjectProfit(project.id),
+      getPurchaseCategories(),
+    ]);
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 
   return (
@@ -148,6 +151,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           purchases={purchases}
           labour={labour}
           labourRates={labourRates}
+          usedCategories={usedCategories}
         />
 
         <section className={shared.section}>
