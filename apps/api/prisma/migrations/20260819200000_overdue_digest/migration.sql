@@ -1,0 +1,11 @@
+-- When a business was last told its invoices are overdue.
+--
+-- Dedupe for the daily overdue digest. Deliberately a column rather than a row
+-- in SubscriptionNotice: that table is JamQuote telling a TENANT about their
+-- subscription, and this is JamQuote telling a tenant about THEIR CLIENTS.
+-- Reusing it would be the same conflation this codebase keeps refusing
+-- elsewhere (purchases vs labour, platform payments vs tenant payments).
+--
+-- A date, not a timestamp: the rule is "at most one digest a day", and the API
+-- sleeps on the free tier so the sweep may run several times in one morning.
+ALTER TABLE "Business" ADD COLUMN "lastOverdueDigestOn" DATE;

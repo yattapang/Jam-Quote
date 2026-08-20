@@ -166,6 +166,10 @@ model Business {
   /// so a reminder is never silently undeliverable.
   billingContactName  String?
   billingContactEmail String?
+  /// When this business was last sent the overdue-invoice digest. A DATE, not
+  /// a timestamp: the rule is at most one a day, and the API sleeps on the
+  /// free tier so the sweep may run several times in one morning.
+  lastOverdueDigestOn DateTime? @db.Date
   addressLine    String?
   /// Town or city. Distinct from `parish`, which is the JURISDICTION region
   /// (14 of them in JM) wired to the rule-pack via getJurisdiction — a parish

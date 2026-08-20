@@ -3,6 +3,7 @@ import { AuthModule } from "../auth/auth.module.js";
 import { BusinessModule } from "../business/business.module.js";
 import { InvoicesController } from "./invoices.controller.js";
 import { InvoicesService } from "./invoices.service.js";
+import { InvoiceOverdueService } from "./invoice-overdue.service.js";
 
 @Module({
   // BusinessModule exports BusinessService, used to reserve invoice numbers
@@ -10,7 +11,7 @@ import { InvoicesService } from "./invoices.service.js";
   // needed by TenantAuthGuard (applied on InvoicesController).
   imports: [AuthModule, BusinessModule],
   controllers: [InvoicesController],
-  providers: [InvoicesService],
+  providers: [InvoicesService, InvoiceOverdueService],
   exports: [InvoicesService],
 })
 export class InvoicesModule {}

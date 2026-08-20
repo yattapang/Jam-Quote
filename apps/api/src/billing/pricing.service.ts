@@ -8,11 +8,17 @@ export const PRICING_CONFIG_ID = "default";
 
 /** Phase-1 defaults — mirrors the seed row in the pricing_config migration. */
 export const DEFAULT_PRICING: PricingSnapshot = {
-  // 3, not a trial. The free tier IS the trial: it never expires, so a
-  // contractor can keep quoting small jobs indefinitely and only pays when the
-  // volume justifies it. It is also what a lapsed subscription reverts to, so
-  // it has to remain genuinely usable rather than punitive.
-  freeQuotesPerMonth: 3,
+  // The free tier IS the trial: it never expires, so a contractor keeps
+  // quoting small jobs indefinitely and only pays when volume justifies it. It
+  // is also what a lapsed subscription reverts to, so it must stay genuinely
+  // usable rather than punitive.
+  //
+  // Only a DEFAULT — it applies when no PricingConfig row exists. The live
+  // value is editable in the staff console (Pricing), and every quota check
+  // reads the row, so changing it there takes effect immediately without a
+  // deploy. Starting at 5 rather than 3 so a contractor does not exhaust the
+  // month in week one and forget the app exists.
+  freeQuotesPerMonth: 5,
   proMonthlyPriceCents: 200_000, // JMD 2,000
   proAnnualPriceCents: 2_000_000, // JMD 20,000
   currency: "JMD",
