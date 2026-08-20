@@ -471,3 +471,101 @@ describe("QuotesService.remove", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
+
+describe("variations", () => {
+  it("refuses to vary a quote the client has not agreed to", async () => {
+    // Varying a DRAFT or SENT quote is just editing it, and `revise` already
+    // does that properly. The distinction is the point: a revision REPLACES,
+    // a variation ADDS to something already agreed — and rewriting an accepted
+    // quote would destroy the record of what the client actually agreed to.
+    const prisma = {
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "q1",
+          businessId: "biz-1",
+          status: "SENT",
+          lineItems: [],
+          sections: [],
+        }),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    await expect(svc.createVariation("biz-1", "q1")).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("inherits the job from the original, so the extra work counts against it", async () => {
+    const created: Record<string, unknown>[] = [];
+    const prisma = {
+      quote: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: "q1",
+            businessId: "biz-1",
+            status: "ACCEPTED",
+            clientId: "c1",
+            projectId: "proj-1",
+            gctRate: 15,
+            detailLevel: "SUMMARY",
+            terms: null,
+            lineItems: [],
+            sections: [],
+          })
+          .mockResolvedValue({ id: "q2", lineItems: [], sections: [] }),
+        create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
+          created.push(args.data);
+          return { id: "q2" };
+        }),
+      },
+    };
+    const businessService = { reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0099") };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+
+    await svc.createVariation("biz-1", "q1");
+
+    expect(created[0]).toMatchObject({
+      variationOfQuoteId: "q1",
+      projectId: "proj-1",
+      clientId: "c1",
+      status: "DRAFT",
+    });
+  });
+
+  it("starts EMPTY — a variation is the new work, not a copy of the old", async () => {
+    const created: Record<string, unknown>[] = [];
+    const prisma = {
+      quote: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: "q1",
+            businessId: "biz-1",
+            status: "ACCEPTED",
+            clientId: "c1",
+            projectId: null,
+            gctRate: 15,
+            detailLevel: "SUMMARY",
+            terms: null,
+            lineItems: [{ id: "li1" }],
+            sections: [],
+          })
+          .mockResolvedValue({ id: "q2", lineItems: [], sections: [] }),
+        create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
+          created.push(args.data);
+          return { id: "q2" };
+        }),
+      },
+    };
+    const businessService = { reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0099") };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+
+    await svc.createVariation("biz-1", "q1");
+
+    // No lineItems key at all: copying the original's lines would double-bill
+    // work the client has already agreed and paid for.
+    expect(created[0]).not.toHaveProperty("lineItems");
+  });
+});

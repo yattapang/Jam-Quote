@@ -46,6 +46,13 @@ export class QuotesController {
     return this.quotes.findAll(businessId, { status, clientId, projectId });
   }
 
+  /** Extra work agreed after this quote was accepted. The original is never
+   * touched — see createVariation. */
+  @Post(":id/variation")
+  createVariation(@BusinessId() businessId: string, @Param("id") id: string) {
+    return this.quotes.createVariation(businessId, id);
+  }
+
   /** Mint the public link a contractor sends to their client. Idempotent —
    * sharing twice keeps the link already sent. */
   @Post(":id/share")

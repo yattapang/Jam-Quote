@@ -1209,6 +1209,43 @@ withheld until completion changes what is actually owed and when, and a system
 that ignores it reports receivables that are wrong on every contract using it.
 
 
+## 4m. Variations and retention — DECIDED (owner, 2026-08-19)
+
+### Variations (#5)
+
+**A variation is its own priced document, linked to the accepted quote.**
+
+Rejected: adding lines to the accepted quote and re-issuing. That REWRITES what
+was agreed — the original figure is gone, and in a dispute there is no record
+of what the client actually accepted. The whole point of the feature is to have
+that record.
+
+Rejected: a plain second quote on the same job. Nearly free, but nothing marks
+it as an addition rather than a replacement, and the link to the original is
+only implied.
+
+So: `Quote.variationOfQuoteId`, its own accept/decline through the share link,
+the original untouched, and revenue counting on the same job.
+
+**Not to be confused with `parentQuoteId`, which already exists for
+REVISIONS.** A revision REPLACES a quote that has not been agreed; a variation
+ADDS to one that has. Same shape, opposite meaning — the fields stay separate
+and the comments say why.
+
+### Retention (#6)
+
+**Per invoice, defaulted from the project.** A percentage on the project sets
+the default; each invoice carries its OWN withheld amount, so changing terms
+mid-job cannot silently restate invoices already sent — which is what a
+project-only field would do.
+
+Retention is excluded from what is currently due and tracked as a separate
+receivable until released. An invoice with retention is not "underpaid" when
+the client pays the rest: that is the terms working correctly, and a system
+that reports it as a shortfall would have contractors chasing money nobody
+owes yet.
+
+
 ---
 
 ## 5. Standing outstanding items

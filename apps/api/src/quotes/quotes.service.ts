@@ -489,6 +489,55 @@ export class QuotesService {
   }
 
   /**
+   * Create a VARIATION of an accepted quote — extra work agreed after the fact.
+   *
+   * The commonest source of unpaid work in construction: the job grows, nobody
+   * writes it down, the contractor eats it.
+   *
+   * Deliberately NOT a revision. `revise` replaces a quote that has not been
+   * agreed; this ADDS to one that has, and the original is never touched —
+   * rewriting it would destroy the record of what the client actually agreed
+   * to, which is the only thing that settles a dispute later.
+   *
+   * Starts empty and DRAFT: a variation is the new work, not a copy of the
+   * old. Inherits the client and the job so revenue lands on the same project
+   * as the original, which is what makes job costing add up.
+   */
+  async createVariation(businessId: string, quoteId: string): Promise<QuoteWithLines> {
+    const original = await this.findOne(businessId, quoteId);
+
+    // Only something the client has actually agreed to can be varied. Varying
+    // a DRAFT or a SENT quote is just editing it, and `revise` already does
+    // that properly.
+    const agreed =
+      original.status === QuoteStatus.ACCEPTED || original.status === QuoteStatus.INVOICED;
+    if (!agreed) {
+      throw new BadRequestException(
+        "Only an accepted quote can be varied. Revise it instead while it is still open.",
+      );
+    }
+
+    const number = await this.businessService.reserveQuoteNumber(businessId);
+    const created = await this.prisma.quote.create({
+      data: {
+        businessId,
+        number,
+        status: QuoteStatus.DRAFT,
+        clientId: original.clientId,
+        // Same job as the original, so the extra work counts against it.
+        projectId: original.projectId,
+        variationOfQuoteId: original.id,
+        gctRate: original.gctRate,
+        discountPct: 0,
+        depositCents: 0,
+        detailLevel: original.detailLevel,
+        terms: original.terms,
+      },
+    });
+    return this.findOne(businessId, created.id);
+  }
+
+  /**
    * Create a new revision of a quote, linked via parentQuoteId, starting
    * fresh as DRAFT with a copy of the line items.
    *

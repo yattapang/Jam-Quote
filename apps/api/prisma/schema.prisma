@@ -329,6 +329,11 @@ model Project {
   @@index([clientId])
 
   @@map("Job")
+  /// Default retention for invoices raised on this job. The invoice keeps its
+  /// OWN percentage, so changing this mid-job cannot restate invoices already
+  /// sent.
+  retentionPct Decimal? @db.Decimal(5, 2)
+
   purchases Purchase[]
   labourEntries LabourEntry[]
   invoices  Invoice[] @relation("InvoiceProject")
@@ -368,6 +373,17 @@ model Quote {
   /// outside party and must be independently random, revocable, and useless
   /// for guessing another quote. Null until the quote is actually shared, so
   /// an unsent quote has no public surface at all.
+  /// Extra work agreed AFTER this quote's parent was accepted.
+  ///
+  /// Deliberately not `parentQuoteId`, which is the REVISION link. A revision
+  /// replaces a quote that has not been agreed; a variation adds to one that
+  /// has. Rewriting an accepted quote would destroy the record of what the
+  /// client actually agreed to, which is the only thing that settles a
+  /// dispute.
+  variationOfQuoteId String?
+  variationOf        Quote?  @relation("QuoteVariations", fields: [variationOfQuoteId], references: [id], onDelete: SetNull)
+  variations         Quote[] @relation("QuoteVariations")
+
   shareToken    String?   @unique
   sharedAt      DateTime?
   /// First time the client opened the public link. Drives QuoteStatus.VIEWED,
@@ -875,6 +891,15 @@ model Invoice {
   depositCents  Int              @default(0)
   terms         String?
   dueDate       DateTime?
+  /// Percentage withheld until sign-off — normal in Jamaican construction.
+  /// Defaulted from the project at creation, then owned by this invoice.
+  retentionPct  Decimal?         @db.Decimal(5, 2)
+  /// Snapshot of the withheld amount, so it cannot drift from the document
+  /// the client is holding if the percentage is ever edited.
+  retentionCents Int             @default(0)
+  /// When the withheld money was released and became payable. Null while it
+  /// is still being held.
+  retentionReleasedAt DateTime?
   // The date the invoice bears — what the contractor is billing AS OF, and
   // what every report buckets revenue by. Distinct from createdAt (when the
   // row happened to be written) so June's work written up in July is still

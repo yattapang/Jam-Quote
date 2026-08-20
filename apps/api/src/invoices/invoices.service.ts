@@ -4,6 +4,7 @@ import {
   computeTotals,
   InvoiceStatus,
   QuoteStatus,
+  retentionCents,
   type GctTreatment,
   type TotalsLineInput,
 } from "@jamquote/core";
@@ -258,6 +259,10 @@ export class InvoicesService {
           // source quote, but without this every NEW conversion would arrive
           // unattached and quietly drop out of "did this job make money?".
           projectId: quote.projectId,
+          // Retention defaults FROM the job but is then owned by this invoice,
+          // so changing the job's terms later cannot restate a document the
+          // client is already holding.
+          ...(await this.retentionForProject(tx, quote.projectId, totals.totalCents)),
           quoteId: quote.id,
           number,
           status: InvoiceStatus.DRAFT,
@@ -452,5 +457,30 @@ export class InvoicesService {
       throw new BadRequestException("Only DRAFT invoices can be deleted");
     }
     await this.prisma.invoice.update({ where: { id }, data: { deletedAt: new Date() } });
+  }
+
+  /**
+   * The retention fields a new invoice inherits from its job.
+   *
+   * Returns both the percentage AND the resulting amount: the amount is a
+   * snapshot so it cannot drift from the printed document if the percentage is
+   * ever edited afterwards.
+   */
+  private async retentionForProject(
+    tx: Prisma.TransactionClient,
+    projectId: string | null,
+    totalCents: number,
+  ): Promise<{ retentionPct?: Prisma.Decimal; retentionCents?: number }> {
+    if (!projectId) return {};
+    const project = await tx.project.findUnique({
+      where: { id: projectId },
+      select: { retentionPct: true },
+    });
+    const pct = project?.retentionPct;
+    if (!pct) return {};
+    return {
+      retentionPct: pct,
+      retentionCents: retentionCents(totalCents, Number(pct)),
+    };
   }
 }
