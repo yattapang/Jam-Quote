@@ -477,6 +477,17 @@ Also fixed in the same pass: the reminder modal enabled Email with no client
 address on file, and stated both channels' blockers only as `title` tooltips —
 invisible on a phone, which is where a contractor actually chases an invoice.
 
+**Config as it now stands (owner, 2026-08-20):** `QUOTE_FROM_EMAIL` is scoped
+to **Preview only** in Vercel. Production has no sender, so the gate blocks
+client email everywhere a contractor will actually be — confirmed on the live
+site. When the jamquote domain is verified, add it back to **Production**;
+that single variable is the switch.
+
+**Caveat:** preview deployments share the same API and database, so a preview
+URL is a live app with client email ENABLED and no verified domain behind it.
+Do not hand a preview link to a contractor during testing without removing the
+variable from Preview too.
+
 **Lesson worth keeping: this build still prints unused-variable warnings for
 `dot`, `published` and `toggleTenantPlan`.** Each is the same shape — something
 wired from one side and dropped on the other. They should be read, not
