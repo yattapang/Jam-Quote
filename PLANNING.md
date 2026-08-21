@@ -462,6 +462,28 @@ page mirrors `/q/[token]` and is the natural follow-on.
 
 **So nothing on the owner's pre-testing list is outstanding. Deploy.**
 
+**Post-deploy defect, owner-found (2026-08-20):** "email is still enabled".
+`EmailInvoiceButton` ACCEPTED `unavailableReason` and never read it, so the
+invoice email button stayed live while the quote one was correctly gated —
+the whole point of §4i's gate, dropped one component short of working. ESLint
+had been printing `'unavailableReason' is defined but never used` in **every
+build** and it was never acted on.
+
+Fixed, and pinned by `send-gate-usage.test.ts` — a source guard, because an
+unused prop is legal TypeScript and a warning among warnings is not an
+invariant. Verified it fails on the exact code that shipped.
+
+Also fixed in the same pass: the reminder modal enabled Email with no client
+address on file, and stated both channels' blockers only as `title` tooltips —
+invisible on a phone, which is where a contractor actually chases an invoice.
+
+**Lesson worth keeping: this build still prints unused-variable warnings for
+`dot`, `published` and `toggleTenantPlan`.** Each is the same shape — something
+wired from one side and dropped on the other. They should be read, not
+tolerated.
+
+
+
 **Deploy API and web TOGETHER this time.** The project screen now calls
 `GET /purchases/categories`, which the deployed API does not have. The fallback
 means no crash, but a tenant's own past categories silently will not appear

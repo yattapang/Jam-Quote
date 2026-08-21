@@ -95,6 +95,7 @@ export default async function InvoiceDetailPage({ params }: { params: { id: stri
             <RemindButton
               invoiceId={invoice.id}
               clientPhone={client?.phone}
+              clientEmail={client?.email}
               reminders={invoice.reminders}
               emailUnavailableReason={sending.configured ? undefined : sending.reason}
             />

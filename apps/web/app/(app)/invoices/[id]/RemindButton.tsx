@@ -23,11 +23,13 @@ import { toIntlPhone } from "../../quotes/[id]/WhatsAppButton";
 export default function RemindButton({
   invoiceId,
   clientPhone,
+  clientEmail,
   reminders,
   emailUnavailableReason,
 }: {
   invoiceId: string;
   clientPhone?: string;
+  clientEmail?: string;
   reminders: InvoiceReminder[];
   /** Why client email cannot go out, or undefined when it can. */
   emailUnavailableReason?: string;
@@ -38,7 +40,16 @@ export default function RemindButton({
   const [error, setError] = useState("");
 
   const hasPhone = Boolean(clientPhone?.trim());
+  const hasEmail = Boolean(clientEmail?.trim());
   const last = reminders[0];
+
+  // Each channel says why it cannot be used. Previously these were `title`
+  // tooltips only — invisible on a phone, which is where a contractor
+  // actually chases an invoice from, so a greyed-out button just read as
+  // broken.
+  const whyNoWhatsApp = hasPhone ? null : "No phone number on file for this client.";
+  const whyNoEmail =
+    emailUnavailableReason ?? (hasEmail ? null : "No email address on file for this client.");
 
   async function chase(channel: "EMAIL" | "WHATSAPP") {
     setBusy(true);
@@ -82,6 +93,12 @@ export default function RemindButton({
               JamQuote writes the message — it names what is still owed, not the invoice total, and
               never accuses, since the client may have paid this morning.
             </p>
+            {(whyNoWhatsApp || whyNoEmail) && (
+              <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, opacity: 0.8 }}>
+                {whyNoWhatsApp && <li>WhatsApp: {whyNoWhatsApp}</li>}
+                {whyNoEmail && <li>Email: {whyNoEmail}</li>}
+              </ul>
+            )}
             {error && <span className={modalStyles.error}>{error}</span>}
             <div className={modalStyles.actions}>
               <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
@@ -90,8 +107,8 @@ export default function RemindButton({
               <Button
                 variant="secondary"
                 onClick={() => chase("EMAIL")}
-                disabled={busy || Boolean(emailUnavailableReason)}
-                title={emailUnavailableReason}
+                disabled={busy || Boolean(whyNoEmail)}
+                title={whyNoEmail ?? undefined}
               >
                 Email
               </Button>
@@ -99,7 +116,7 @@ export default function RemindButton({
                 variant="primary"
                 onClick={() => chase("WHATSAPP")}
                 disabled={busy || !hasPhone}
-                title={hasPhone ? undefined : "No phone number on file for this client"}
+                title={whyNoWhatsApp ?? undefined}
               >
                 {busy ? "Preparing…" : "WhatsApp"}
               </Button>
