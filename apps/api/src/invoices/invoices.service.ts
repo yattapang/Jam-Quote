@@ -5,6 +5,7 @@ import {
   InvoiceStatus,
   QuoteStatus,
   retentionCents,
+  clientMailStatus,
   invoiceSettlement,
   reminderMessage,
   type GctTreatment,
@@ -520,12 +521,24 @@ export class InvoicesService {
    */
   private async sendReminderEmail(to: string, subject: string, body: string): Promise<void> {
     const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      throw new BadRequestException("Email sending is not configured yet.");
+    const from = process.env.EMAIL_FROM;
+
+    // The SAME rule the web app applies to quote and invoice email, shared
+    // from core rather than restated here. Client mail leaves by two different
+    // paths — the web routes and this endpoint — and a gate enforced on one
+    // side only is not a gate. Previously this checked for a key alone, so it
+    // would have sent from the resend.dev test address: accepted, reported
+    // successful, delivered to nobody but the account owner.
+    const status = clientMailStatus({ apiKey, from });
+    if (!status.configured) {
+      throw new BadRequestException(status.reason);
     }
+
     const { Resend } = await import("resend");
     const { error } = await new Resend(apiKey).emails.send({
-      from: process.env.EMAIL_FROM ?? "JamQuote <onboarding@resend.dev>",
+      // Non-null by contract: clientMailStatus above refuses when it is unset,
+      // so there is no test-sender fallback to fall into.
+      from: from as string,
       to,
       subject,
       // Plain text carried into HTML: the composer writes for WhatsApp too, so

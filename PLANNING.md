@@ -483,6 +483,18 @@ client email everywhere a contractor will actually be — confirmed on the live
 site. When the jamquote domain is verified, add it back to **Production**;
 that single variable is the switch.
 
+**The client-mail rule now lives in core** (`clientMailStatus`), and both
+sides call it: the web app's `emailSendingStatus` is a thin env-reading
+wrapper, and the API's reminder endpoint refuses on its own. Client mail leaves
+by two different paths, so a gate enforced only where the UI happens to call it
+is not a gate — the API previously checked for a key alone and would have sent
+from the resend.dev test address, which Resend accepts and reports successful
+while delivering to nobody but the account owner.
+
+Note the scope: this is the CLIENT-facing rule. Platform mail to tenants
+(overdue digests, subscription notices) still uses its own sender and has not
+been put behind it — a separate decision, not an oversight.
+
 **Caveat:** preview deployments share the same API and database, so a preview
 URL is a live app with client email ENABLED and no verified domain behind it.
 Do not hand a preview link to a contractor during testing without removing the
