@@ -1,4 +1,5 @@
 import Card from "@/components/ui/Card";
+import { formatTrn } from "@jamquote/core";
 import {
   getBusiness,
   getBillingStatus,
@@ -73,7 +74,7 @@ export default async function SettingsPage() {
           </div>
           <div className={shared.totalRowMuted}>
             <span>TRN</span>
-            <span>{business.trn || "—"}</span>
+            <span>{formatTrn(business.trn) || "—"}</span>
           </div>
           <div className={shared.totalRowMuted}>
             <span>Town / parish</span>

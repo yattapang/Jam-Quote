@@ -1,4 +1,4 @@
-import { formatJmd } from "@jamquote/core";
+import { formatJmd, formatTrn } from "@jamquote/core";
 import { getSharedQuote, type PublicQuoteLine } from "@/lib/public-quote";
 import styles from "./shared-quote.module.css";
 import PrintButton from "./PrintButton";
@@ -53,7 +53,7 @@ export default async function SharedQuotePage({ params }: { params: { token: str
           <div>
             <div className={styles.business}>{business.name}</div>
             {address && <div className={styles.muted}>{address}</div>}
-            {business.trn && <div className={styles.muted}>TRN {business.trn}</div>}
+            {business.trn && <div className={styles.muted}>TRN {formatTrn(business.trn)}</div>}
           </div>
           <div className={styles.numberBlock}>
             <div className={styles.number}>{quote.number}</div>

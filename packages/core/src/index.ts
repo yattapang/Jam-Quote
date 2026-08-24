@@ -19,3 +19,4 @@ export * from "./fixtures/demo.js";
 export * from "./billing/invoice-reminder.js";
 export * from "./billing/client-mail.js";
 export * from "./exports/csv.js";
+export * from "./types/trn.js";

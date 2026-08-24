@@ -10,6 +10,7 @@ import {
   rulePackVerification,
   ADMIN_CAPABILITIES,
   ADMIN_CAPABILITY_META,
+  formatTrn,
 } from "@jamquote/core";
 import {
   getAdminPricing,
@@ -569,7 +570,7 @@ export default function AdminConsole({
     t.name,
     t.parish ?? "—",
     t.plan,
-    t.trn ?? "—",
+    formatTrn(t.trn) || "—",
     t.status,
     relativeTime(t.createdAt),
     "—",

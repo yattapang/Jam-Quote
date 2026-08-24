@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PARISHES } from "@jamquote/core";
+import { PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -41,7 +41,7 @@ export function clientFormValuesFromClient(client: Client): ClientFormValues {
     lastName: client.lastName,
     phone: client.phone,
     email: client.email ?? "",
-    trn: client.trn ?? "",
+    trn: formatTrn(client.trn),
     town: client.town,
     parish: client.parish,
     address: client.address,
@@ -129,7 +129,7 @@ export default function ClientForm({
       <Input
         label="TRN (if the client is a business)"
         value={values.trn}
-        onChange={(e) => set("trn", e.target.value)}
+        onChange={(e) => set("trn", formatTrnInput(e.target.value))}
         placeholder="123-456-789"
         inputMode="numeric"
         hint="9 digits. Appears on the client list you give your accountant."

@@ -1,4 +1,4 @@
-import { formatJmd, invoiceSettlement } from "@jamquote/core";
+import { formatJmd, invoiceSettlement, formatTrn } from "@jamquote/core";
 import { getSharedInvoice } from "@/lib/public-invoice";
 import type { PublicQuoteLine } from "@/lib/public-quote";
 import styles from "../../q/[token]/shared-quote.module.css";
@@ -60,7 +60,7 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
           <div>
             <div className={styles.business}>{business.name}</div>
             {address && <div className={styles.muted}>{address}</div>}
-            {business.trn && <div className={styles.muted}>TRN {business.trn}</div>}
+            {business.trn && <div className={styles.muted}>TRN {formatTrn(business.trn)}</div>}
           </div>
           <div className={styles.numberBlock}>
             <div className={styles.number}>{invoice.number}</div>

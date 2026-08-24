@@ -8,7 +8,7 @@ import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import TradeSelectField from "@/components/forms/TradeSelectField";
 import { updateBusiness, type Trade } from "@/lib/api-client";
-import { PARISHES } from "@jamquote/core";
+import { PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
 import type { Business } from "@/lib/types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
@@ -30,7 +30,9 @@ export default function EditBusinessButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(business.name);
-  const [trn, setTrn] = useState(business.trn);
+  // Held in the DISPLAY form. The API strips punctuation on the way in
+  // (trnSchema), so what is stored is always nine bare digits regardless.
+  const [trn, setTrn] = useState(formatTrn(business.trn));
   const [town, setTown] = useState<string>(business.town);
   const [parish, setParish] = useState<string>(business.parish);
   const [tradeType, setTradeType] = useState(business.tradeType);
@@ -85,7 +87,16 @@ export default function EditBusinessButton({
           <form className={modalStyles.form} onSubmit={submit}>
             <Input label="Business name" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
             <div className={modalStyles.row2}>
-              <Input label="TRN" value={trn} onChange={(e) => setTrn(e.target.value)} placeholder="102-458-963" />
+              {/* Grouped as it is typed. Nobody here reads a nine-digit run — a TRN is
+              quoted, printed and read aloud in threes, and checking it against a
+              paper document is much harder without the dashes. */}
+          <Input
+            label="TRN"
+            value={trn}
+            onChange={(e) => setTrn(formatTrnInput(e.target.value))}
+            placeholder="102-458-963"
+            inputMode="numeric"
+          />
               <Input label="Town / city" value={town} onChange={(e) => setTown(e.target.value)} placeholder="e.g. Ocho Rios" />
               <Select label="Parish" options={parishOptions} value={parish} onChange={(e) => setParish(e.target.value)} />
             </div>

@@ -492,6 +492,32 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-found during testing — TRN shown as nine digits, and Delete on sent quotes
+
+**TRN formatting (2026-08-21).** A TRN is STORED as nine bare digits —
+`trnSchema` strips punctuation, which is right: one canonical form means
+`102458963` and `102-458-963` are the same value. But nobody here READS it that
+way. It is quoted, printed and read aloud in threes, and checking a nine-digit
+run against a paper document is materially harder.
+
+`formatTrn` / `formatTrnInput` now live in core and are called by **all nine
+surfaces** — settings display and its input, both PDFs (header and footer),
+both public pages, the quote detail header, the admin console and the client
+form. The input groups as you type rather than waiting for the ninth digit.
+
+**Pinned by `trn-display-usage.test.ts`**, a source guard. There is no version
+of this the type system can catch — `business.trn` is a string and printing it
+raw compiles fine — and "a correct helper some screen never called" is the
+single most repeated defect in this project (`lineUnitLabel`, `unitRef`, the
+material unit, the email gate). Nine surfaces was too many to trust to care.
+
+**Delete on non-draft quotes — corrected twice (2026-08-21).** First fix showed
+the button dimmed with an explanation, on the reasoning that a dead control
+with no explanation reads as a bug. **The owner asked for it gone**, and they
+are right: the quote DETAIL page already hides it and offers Revise instead, so
+showing it on the list was the inconsistency. Now hidden, and the
+`disabledReason` machinery is deleted rather than left unused.
+
 ### Owner-found during testing — "Outstanding by client" scrolls the name away
 
 **2026-08-21.** On a phone the receivables table scrolled sideways, and sliding

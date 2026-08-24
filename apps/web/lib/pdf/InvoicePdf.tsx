@@ -12,7 +12,7 @@ import {
   type TextProps,
   type ImageProps,
 } from "@react-pdf/renderer";
-import { computeTotals, formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
+import { computeTotals, formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel, formatTrn } from "@jamquote/core";
 import type { Business, Client } from "@/lib/types";
 import type { Invoice } from "@/lib/api-client";
 import {
@@ -204,7 +204,7 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
           <View>
             {logo ? <Image style={styles.logo} src={logo.data} /> : null}
             <Text style={styles.businessName}>{business.name}</Text>
-            <Text style={styles.muted}>TRN {business.trn || "—"}</Text>
+            <Text style={styles.muted}>TRN {formatTrn(business.trn) || "—"}</Text>
             <Text style={styles.muted}>
               {formatAddress([business.addressLine, business.town, business.parish])}
             </Text>
@@ -316,7 +316,7 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
         <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
             {business.name}
-            {business.trn ? ` · TRN ${business.trn}` : ""} · Invoice {invoice.num}
+            {business.trn ? ` · TRN ${formatTrn(business.trn)}` : ""} · Invoice {invoice.num}
           </Text>
         </View>
       </Page>

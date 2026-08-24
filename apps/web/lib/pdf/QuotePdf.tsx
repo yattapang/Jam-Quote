@@ -12,7 +12,7 @@ import {
   type TextProps,
   type ImageProps,
 } from "@react-pdf/renderer";
-import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel, formatTrn } from "@jamquote/core";
 import type { Business, Client, Quote } from "@/lib/types";
 import { getQuoteTotals, groupLinesByHeading, lineUnitLabel, GCT_TREATMENT_LABEL } from "@/lib/quote-totals";
 import { formatAddress } from "@/lib/format-address";
@@ -236,7 +236,7 @@ export default function QuotePdf({ quote, client, business, logo }: QuotePdfProp
                 appears on a cheque. */}
             {logo ? <Image style={styles.logo} src={logo.data} /> : null}
             <Text style={styles.businessName}>{business.name}</Text>
-            <Text style={styles.muted}>TRN {business.trn || "—"}</Text>
+            <Text style={styles.muted}>TRN {formatTrn(business.trn) || "—"}</Text>
             <Text style={styles.muted}>
               {formatAddress([business.addressLine, business.town, business.parish])}
             </Text>
@@ -342,7 +342,7 @@ export default function QuotePdf({ quote, client, business, logo }: QuotePdfProp
         </View>
 
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>TRN {business.trn || "—"}</Text>
+          <Text style={styles.footerText}>TRN {formatTrn(business.trn) || "—"}</Text>
           {quote.validUntilLabel ? (
             // Lowercase only the leading word ("Valid" -> "valid") to read as a
             // sentence continuation — a blanket .toLowerCase() would also

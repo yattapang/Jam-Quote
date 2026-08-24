@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel } from "@jamquote/core";
+import { formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel, formatTrn } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
@@ -221,7 +221,7 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
             <div className={shared.list}>
               <div className={shared.totalRowMuted}>
                 <span>TRN</span>
-                <span>{business.trn || "—"}</span>
+                <span>{formatTrn(business.trn) || "—"}</span>
               </div>
               <div className={shared.totalRowMuted}>
                 <span>{quote.createdLabel}</span>
