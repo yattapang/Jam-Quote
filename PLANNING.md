@@ -492,6 +492,32 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-found during testing — the project picker still said "job"
+
+**2026-08-21.** Creating a project from inside the quote builder was labelled
+"Job (optional)", "+ Add new job…", "Add new job", "Add job" — while calling
+`createProject`. The §1 rename (0a–0d) reached the schema, the wire and most of
+the UI, and missed this component's copy entirely.
+
+**Not cosmetic.** The quote builder ALSO has a genuine "+ Add new job…" for the
+job LIBRARY — the reusable priced template. Two controls read identically and
+did completely different things. Renamed; `RateUnit.JOB` ("per job") is
+untouched, being a real rate unit.
+
+**Also fixed: an ignored restore banner switched autosave OFF.** The recovery
+work blocked saving until the offer was answered, so a contractor who mentally
+dismissed the banner and carried on typing was unprotected — able to lose a
+second quote to exactly the problem the banner exists to solve. Now, typing
+instead of answering IS the answer: the old draft goes and the work in front of
+them starts being protected.
+
+**Known and accepted: an abandoned quote can leave a project behind.** Creating
+a project from the picker commits it immediately (it has to exist to be
+selected), while the quote is not saved until Save. So closing an unfinished
+quote leaves a real project with no quote against it. Projects consume no
+numbering sequence, and a project a contractor deliberately created is usually
+one they want, so it stays — but it is worth knowing rather than discovering.
+
 ### Owner-found during testing — a quote lost to the back button
 
 **2026-08-21.** Building a quote, pressed back, lost everything. Nothing had

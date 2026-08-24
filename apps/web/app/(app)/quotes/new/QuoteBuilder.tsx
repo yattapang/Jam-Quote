@@ -188,8 +188,23 @@ export default function QuoteBuilder({
     else restoreSettled.current = true;
   }, [storageKey]);
 
+  // Snapshot as it stood on mount, so "has the contractor started typing?" can
+  // be answered while the restore offer is still up.
+  const mountedSnapshot = useRef(snapshot);
+
   useEffect(() => {
-    if (!restoreSettled.current) return;
+    if (!restoreSettled.current) {
+      // The offer is still on screen. If they have started typing instead of
+      // answering it, that IS the answer: the old draft goes and the work in
+      // front of them starts being protected.
+      //
+      // Without this, ignoring the banner left autosave switched off — so
+      // someone who dismissed it mentally and carried on could lose a second
+      // quote to exactly the problem the banner exists to solve.
+      if (JSON.stringify(snapshot) === JSON.stringify(mountedSnapshot.current)) return;
+      restoreSettled.current = true;
+      setRecovered(null);
+    }
     saveDraft(storageKey, snapshot);
   }, [storageKey, snapshot]);
 

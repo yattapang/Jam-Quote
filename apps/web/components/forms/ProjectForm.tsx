@@ -12,7 +12,7 @@ import type { ProjectDetail } from "@/lib/mock-data";
 import type { ClientOption } from "./types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
-// No blank option: every job is at some stage, and a new one starts at QUOTED
+// No blank option: every project is at some stage, and a new one starts at QUOTED
 // (the same default the column carries).
 const stageOptions = PROJECT_STAGES.map((s) => ({ value: s, label: PROJECT_STAGE_LABELS[s] }));
 
@@ -83,15 +83,16 @@ export function projectPayloadFromValues(values: ProjectFormValues): NewProjectI
 }
 
 /**
- * The job field set shared by AddProjectButton, EditProjectButton, and the inline
- * "+ Add new job…" modal opened from QuoteBuilder's job picker. The client
+ * The PROJECT field set shared by AddProjectButton, EditProjectButton, and the
+ * inline "+ Add new project…" modal opened from QuoteBuilder's project picker.
+ * (A "job" in this codebase is the reusable priced template — see §1.) The client
  * field is itself a ClientSelectField, so every entry point into this form
  * also gets "+ Add new client…" inline for free.
  */
 export default function ProjectForm({
   clients,
   initial = emptyProjectForm,
-  submitLabel = "Save job",
+  submitLabel = "Save project",
   onCancel,
   onSubmit,
   onBusyChange,
@@ -134,7 +135,7 @@ export default function ProjectForm({
   return (
     <form className={modalStyles.form} onSubmit={submit}>
       <Input
-        label="Job name"
+        label="Project name"
         value={values.name}
         onChange={(e) => set("name", e.target.value)}
         placeholder="e.g. Retaining wall, Spanish Town"
