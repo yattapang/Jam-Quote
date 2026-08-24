@@ -114,8 +114,30 @@ Recently landed (all pushed):
   optional in practice.
 - **Packaging decided** (§4k) and the feature roadmap agreed (§4l).
 
+**Since then, and all shipped (2026-08-19 → 21):**
+
+- **Variations** (`Quote.variationOfQuoteId`) and **retention** — the two
+  construction-specific gaps. §4m.
+- **Invoice payment reminders**: composed once in core, ledgered, WhatsApp
+  today and email when the domain lands. Now carrying a link to the invoice.
+- **Accept / decline on the share link** — the client's own answer, and the
+  contractor is emailed when it happens.
+- **Public invoice links** (`/i/<token>`) alongside the quote ones.
+- **Accountant CSV exports** — four files, cash and accrual kept apart, the
+  detail file tested to reconcile with the summary. §4g.
+- **Expense categories became a dropdown you can see**, free quotes read from
+  the Staff Console, `Client.trn` for the accountant's listing.
+- **The build is clean and stays clean**: zero lint warnings, and
+  `no-unused-vars` is now an ERROR — that warning had already marked three
+  real defects and been read past each time.
+
+**EVERY AGREED FEATURE IS NOW BUILT.** The readiness review in §4c lists what
+is genuinely outstanding; only one item of it is something a tester will feel.
+
 **Not yet met by a real user:** everything above. No contractor has used any of
-it. That is the single largest risk in this plan and the reason §4b exists.
+it. That is the single largest risk in this plan and the reason §4b exists —
+and it is now the ONLY thing between here and a commercial decision. For what
+happens after field testing, see `COMMERCIAL-LAUNCH.md`.
 
 **A pattern worth carrying forward.** Across the audit and everything since,
 the recurring defect was not broken logic. It was a state nothing could reach
@@ -457,6 +479,12 @@ serves every new route.
 | 6 | Tier enforcement beyond the quote cap. §4k accepted Free/Pro/Books, but ONLY quote creation is gated. Everything else is open to every tenant. | Decide — not a tester blocker, and arguably right for testing |
 | 7 | Purchases/expenses side of the accountant exports (§4g Phase 2). | Build — later |
 | 8 | Net new / churn on the console; WiPay card checkout (blocked on credentials). | Later |
+| 9 | Reply-to on client email, so a client replying to a quote reaches the CONTRACTOR rather than JamQuote. Lands with the domain. | With 1 |
+
+**Everything beyond field testing now lives in `COMMERCIAL-LAUNCH.md`** —
+hosting, backups, law, pricing and the launch order. Items 1, 6 and 8 above
+reappear there as launch gates; the rest of that document is deliberately not
+code.
 
 **4 and 5 are now built.** Of what remains, none of 6–8 blocks a contractor
 from quoting, invoicing, chasing payment or costing a job. **1 is the only
