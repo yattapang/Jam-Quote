@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef} from "react";
 import { useRouter } from "next/navigation";
 import { computeTotals, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
@@ -11,6 +11,15 @@ import { updateInvoice, ApiError, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import {
+  clearDraft,
+  draftAge,
+  draftIsWorthRestoring,
+  draftKey,
+  loadDraft,
+  saveDraft,
+  type StoredDraft,
+} from "@/lib/quote-draft-recovery";
 import shared from "../../../shared.module.css";
 import LineItemsEditor from "../../../LineItemsEditor";
 import {
@@ -56,6 +65,20 @@ export interface InitialInvoice extends InitialLines {
  * The lines themselves are edited by the shared LineItemsEditor, so this screen
  * has the same material/labour/job-type libraries as the quote builder.
  */
+/** The fields worth not retyping. Excludes transient state (saving, error)
+ * and the re-fetched clients list. */
+interface InvoiceDraftSnapshot {
+  clientId: string;
+  dueDate: string;
+  issueDate: string;
+  terms: string;
+  gctRatePct: string;
+  discountPct: string;
+  depositDollars: string;
+  detailLevel: QuoteDetailLevel;
+  lines: DraftLine[];
+}
+
 export default function InvoiceBuilder({
   invoiceId,
   invoiceNumber,
@@ -99,6 +122,57 @@ export default function InvoiceBuilder({
   const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
   // Only read on the line editor's first render, to seed its heading dropdown.
   const initialCustomHeadings = useMemo(() => customHeadingsFromInitial(initial), [initial]);
+  // ---- Draft recovery -----------------------------------------------------
+  // Narrower than the quote builder's, because the exposure is narrower: an
+  // invoice ROW is created the moment "New invoice" is confirmed, so the
+  // document itself can never be lost. What can be lost is every line entered
+  // between opening this editor and pressing Save — which on a fifteen-line
+  // invoice is the entire job.
+  //
+  // Keyed by invoice id, so two invoices being edited in different tabs cannot
+  // overwrite each other's recovery.
+  const storageKey = draftKey("edit", `invoice:${invoiceId}`);
+  const [recovered, setRecovered] = useState<StoredDraft<InvoiceDraftSnapshot> | null>(null);
+  const restoreSettled = useRef(false);
+
+  const snapshot = useMemo<InvoiceDraftSnapshot>(
+    () => ({ clientId, dueDate, issueDate, terms, gctRatePct, discountPct, depositDollars, detailLevel, lines }),
+    [clientId, dueDate, issueDate, terms, gctRatePct, discountPct, depositDollars, detailLevel, lines],
+  );
+
+  useEffect(() => {
+    const found = loadDraft<InvoiceDraftSnapshot>(storageKey);
+    if (found && draftIsWorthRestoring(found.values)) setRecovered(found);
+    else restoreSettled.current = true;
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!restoreSettled.current) return;
+    saveDraft(storageKey, snapshot);
+  }, [storageKey, snapshot]);
+
+  const restoreDraft = useCallback(() => {
+    if (!recovered) return;
+    const v = recovered.values;
+    setClientId(v.clientId);
+    setDueDate(v.dueDate);
+    setIssueDate(v.issueDate);
+    setTerms(v.terms);
+    setGctRatePct(v.gctRatePct);
+    setDiscountPct(v.discountPct);
+    setDepositDollars(v.depositDollars);
+    setDetailLevel(v.detailLevel);
+    setLines(v.lines);
+    setRecovered(null);
+    restoreSettled.current = true;
+  }, [recovered]);
+
+  const discardDraft = useCallback(() => {
+    clearDraft(storageKey);
+    setRecovered(null);
+    restoreSettled.current = true;
+  }, [storageKey]);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -164,6 +238,9 @@ export default function InvoiceBuilder({
         lineItems: [],
         sections,
       });
+      // Saved to the server, so the local copy would only ever offer to
+      // "restore" work that is already safely stored.
+      clearDraft(storageKey);
       router.push(`/invoices/${invoiceId}`);
     } catch (err) {
       setError(err instanceof ApiError && err.message ? err.message : "Couldn't save changes — is the API running?");
@@ -173,6 +250,20 @@ export default function InvoiceBuilder({
 
   return (
     <div className={shared.page}>
+      {/* Offered, never applied — same reasoning as the quote builder. */}
+      {recovered && (
+        <div className={shared.recoverBar}>
+          <span>You have unsaved changes to this invoice from {draftAge(recovered.savedAt)}.</span>
+          <span className={shared.recoverActions}>
+            <Button variant="primary" size="sm" onClick={restoreDraft}>
+              Restore them
+            </Button>
+            <Button variant="ghost" size="sm" onClick={discardDraft}>
+              Discard
+            </Button>
+          </span>
+        </div>
+      )}
       <header className={shared.header}>
         <div className={shared.headings}>
           <span className={shared.eyebrow}>

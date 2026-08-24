@@ -24,7 +24,6 @@ import {
   type StoredDraft,
 } from "@/lib/quote-draft-recovery";
 import shared from "../../shared.module.css";
-import styles from "./quote-builder.module.css";
 import LineItemsEditor from "../../LineItemsEditor";
 import {
   customHeadingsFromInitial,
@@ -306,11 +305,11 @@ export default function QuoteBuilder({
           would be worse than losing it: a contractor who deliberately started
           again would find last week's lines back without asking. */}
       {recovered && (
-        <div className={styles.recoverBar}>
+        <div className={shared.recoverBar}>
           <span>
             You have an unsaved quote from {draftAge(recovered.savedAt)}.
           </span>
-          <span className={styles.recoverActions}>
+          <span className={shared.recoverActions}>
             <Button variant="primary" size="sm" onClick={restoreDraft}>
               Restore it
             </Button>

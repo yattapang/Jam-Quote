@@ -525,6 +525,18 @@ survivable — losing the form being typed into is not.
 **Does not cover switching device.** That needs a server draft, and it is not
 worth a permanently gappy numbering sequence.
 
+**Invoices too, for a NARROWER reason (owner asked, 2026-08-21).** An invoice
+row is created the moment "New invoice" is confirmed — client and due date only
+— and the contractor lands in the editor. So the document itself can never be
+lost the way the quote was. What CAN be lost is every line entered between
+opening the editor and pressing Save, which on a fifteen-line invoice is the
+whole job. Same recovery, keyed by invoice id so two tabs cannot overwrite each
+other.
+
+Both builders share one `.recoverBar` in `shared.module.css`. It was briefly
+two copies of the same file — two copies of a style are two styles that will
+eventually differ, which is the drift this codebase keeps producing.
+
 ### Owner-found during testing — no way to enter m² for coverage
 
 **2026-08-21.** A contractor pricing tiling or concrete needs `m²` and `m³`.
