@@ -438,6 +438,36 @@ Worth walking specifically, since these are new and unexercised:
 
 ## 4c. What to do next — recommendation
 
+### Readiness review for contractor testing — 2026-08-21
+
+**Every agreed feature is built.** All five §4l roadmap items, both §4m
+features, §4g exports, and the owner's pre-testing list (#4, #5, #6) are done
+and deployed — the live database has today's migrations applied and the API
+serves every new route.
+
+**What is genuinely outstanding, in the order it should be dealt with.**
+
+| # | Item | Whose call |
+|---|---|---|
+| 1 | **Contractors cannot email their clients.** Gated by design until a verified domain exists (§4i). WhatsApp + PDF cover it, and both work — but a tester WILL reach for email, so tell them before they find it. | Owner — buy/verify the domain, then set `QUOTE_FROM_EMAIL` on Production |
+| 2 | **Blackwood has no renewal term.** A pro plan with no term is a silent free ride: never reminded, never reverted. Visible in the console as "no term set". | Owner — record a payment or mark it a deliberate comp |
+| 3 | **Delete `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from Render** if it was ever set by hand. The cause it worked around is fixed. | Owner |
+| 4 | **Nothing notifies the contractor when a client accepts or declines.** They see it next time they look. | Build — small |
+| 5 | **Invoices have no public share link**, so a WhatsApp reminder carries no link (quotes do). `Invoice.shareToken` + `/i/[token]` mirrors `/q/[token]`. | Build — small |
+| 6 | Tier enforcement beyond the quote cap. §4k accepted Free/Pro/Books, but ONLY quote creation is gated. Everything else is open to every tenant. | Decide — not a tester blocker, and arguably right for testing |
+| 7 | Purchases/expenses side of the accountant exports (§4g Phase 2). | Build — later |
+| 8 | Net new / churn on the console; WiPay card checkout (blocked on credentials). | Later |
+
+**None of 4–8 blocks a contractor from quoting, invoicing, chasing payment or
+costing a job.** 1 is the only one a tester will feel, and it has a workaround
+they will actually prefer.
+
+**The real outstanding item is still §4b.4: USE IT ON A PHONE.** Eleven
+substantive defects came out of the last owner audit; four more came out of
+this session, three of them found by the owner clicking rather than by any
+test. The features are not the risk any more — the unexercised paths are.
+
+
 **State as of 2026-08-20 (handoff).** The owner's pre-testing list was #4
 invoice payment reminders, #5 variations, #6 retention. **#5 and #6 are done
 end to end** (`eb53615`, and the category dropdown in `ce4b85a`). Free quotes
@@ -552,7 +582,8 @@ reports, and job costing behind it.
 | Free tier caps at 3 quotes/month | Watch whether this is too tight (§4k). If they stall in week one, raise it. |
 | No mobile app | Web on a phone. The rebuild has not started. |
 
-**Then, in priority order** (§4l, all agreed):
+**All five agreed roadmap items are now built** (2026-08-21). In the order
+they were agreed:
 
 1. ~~Accept / decline on the share link~~ **DONE 2026-08-21.** The client
    answers on `/q/[token]`; `POST /public/quotes/:token/decision` is the one
@@ -1317,7 +1348,7 @@ one on acceptance (named from the quote, editable after) makes job tracking the
 default rather than a chore. **This is the single biggest lever on whether the
 costing work returns anything.**
 
-**2. Accept / decline on the share link.**
+**2. Accept / decline on the share link — DONE 2026-08-21.** See §4c.
 `/q/<token>` already exists and already records VIEWED. An Accept button closes
 the loop: the client agrees in one tap, the quote advances, and the agreement
 is timestamped — which matters in a market where a great deal is agreed
@@ -1345,21 +1376,21 @@ every profit figure currently overstates. The app already holds labour rates;
 the missing piece is logging hours worked against a project. Without this,
 "did this job make money?" is optimistic rather than wrong-but-honest.
 
-**4. Invoice payment reminders — reuse the sweep.**
+**4. Invoice payment reminders — DONE 2026-08-20.** Built as a CONTRACTOR-DRIVEN chase ("Send reminder" on the invoice) rather than an automatic client sweep: client email is gated until the domain lands, and WhatsApp cannot be sent unattended. The overdue sweep still runs and still digests to the contractor.
 Chasing money is the biggest administrative pain for a small contractor, and
 the machinery now exists: an idempotent sweep, a notice ledger keyed to prevent
 double-sending, and a mailer. Pointing the same pattern at overdue TENANT
 invoices instead of subscriptions is mostly wiring, and it is the feature most
 likely to make someone say the tool paid for itself.
 
-**5. Variations / change orders.**
+**5. Variations / change orders — DONE 2026-08-19/20.**
 The commonest source of unpaid work in construction: the job grows, nobody
 writes it down, the contractor eats it. Quote revisions exist, but a revision
 replaces a quote — a variation ADDS to an accepted one and needs its own
 acceptance. Genuinely differentiating for construction specifically, and not
 something a generic invoicing tool does well.
 
-**6. Retention / holdback.**
+**6. Retention / holdback — DONE 2026-08-20.**
 Common in Jamaican construction contracts and not modelled at all. A percentage
 withheld until completion changes what is actually owed and when, and a system
 that ignores it reports receivables that are wrong on every contract using it.
