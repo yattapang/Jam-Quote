@@ -49,6 +49,20 @@ const SERIES_TITLE: Record<SalesGranularity, string> = {
  * back one day, so it names the last day actually included. Printing an
  * exclusive end would tell the contractor the report covers a day it does not.
  */
+/**
+ * The range's edges as the INCLUSIVE calendar dates the export API expects.
+ *
+ * `toIso` is exclusive — it is the instant the window ends. Handing it to the
+ * exports endpoint unchanged would produce a file covering one day more than
+ * the report on screen, and two documents that disagree about the same period
+ * is exactly the argument an accountant's file exists to prevent. Same
+ * one-day step back that rangeCaption makes, for the same reason.
+ */
+function exportDates(fromIso: string, toIso: string): { from: string; to: string } {
+  const lastDay = new Date(new Date(toIso).getTime() - 24 * 60 * 60 * 1000);
+  return { from: fromIso.slice(0, 10), to: lastDay.toISOString().slice(0, 10) };
+}
+
 function rangeCaption(fromIso: string, toIso: string): string {
   const fmt = (d: Date) =>
     new Date(d.getTime() + JAMAICA_UTC_OFFSET_MS).toLocaleDateString("en-JM", {
@@ -72,6 +86,7 @@ export default async function ReportsPage({
   const period: ReportPeriod = isReportPeriod(searchParams.period) ? searchParams.period : "month";
   const { from, to } = custom ?? periodRange(period);
   const reports = await getReports(from, to);
+  const exportRange = exportDates(reports.range.fromIso, reports.range.toIso);
 
   // Scales both series against one shared maximum so invoiced/collected bars
   // stay comparable month to month. Floored at 1 (not 0) so an all-zero
@@ -293,6 +308,47 @@ export default async function ReportsPage({
           </Card>
         </div>
       </section>
+
+      <section className={shared.section}>
+        <Card>
+          <div className={shared.statLabel}>Give your accountant the figures</div>
+          {/* Deliberately tied to the range already chosen above rather than
+              having its own date picker. Two pickers on one screen is two
+              periods that can disagree, and the whole value of these files is
+              that they tie back to what the contractor is looking at. */}
+          <p className={shared.statHint} style={{ marginTop: 4 }}>
+            Spreadsheet files for {rangeCaption(reports.range.fromIso, reports.range.toIso)}. Drafts
+            are left out, and each file says which basis it uses.
+          </p>
+          <div className={styles.exportLinks}>
+            {EXPORT_FILES.map((f) => (
+              <a
+                key={f.slug}
+                className={shared.chip}
+                href={`/reports/export/${f.slug}?from=${exportRange.from}&to=${exportRange.to}`}
+              >
+                {f.label}
+              </a>
+            ))}
+          </div>
+          {/* Says plainly which number is which. An accountant handed one
+              column called "revenue" will read it as whichever basis they
+              normally use, and be wrong half the time. */}
+          <p className={shared.statHint} style={{ marginTop: 10 }}>
+            <strong>Invoices issued</strong> is what you billed (accrual).{" "}
+            <strong>Payments received</strong> is what actually came in (cash). They are different
+            numbers on purpose.
+          </p>
+        </Card>
+      </section>
     </div>
   );
 }
+
+/** The files on offer, in the order an accountant tends to want them. */
+const EXPORT_FILES = [
+  { slug: "invoices-issued", label: "Invoices issued" },
+  { slug: "invoice-lines", label: "Invoice lines (GCT detail)" },
+  { slug: "payments-received", label: "Payments received" },
+  { slug: "clients", label: "Client list" },
+] as const;

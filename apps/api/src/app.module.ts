@@ -23,6 +23,7 @@ import { SyncModule } from "./sync/sync.module.js";
 import { BillingModule } from "./billing/billing.module.js";
 import { RegulatoryModule } from "./regulatory/regulatory.module.js";
 import { ReportsModule } from "./reports/reports.module.js";
+import { ExportsModule } from "./exports/exports.module.js";
 
 /**
  * Root module. Feature modules are registered here as the Sonnet builders
@@ -57,6 +58,7 @@ import { ReportsModule } from "./reports/reports.module.js";
     BillingModule,
     RegulatoryModule,
     ReportsModule,
+    ExportsModule,
   ],
   controllers: [HealthController],
   providers: [

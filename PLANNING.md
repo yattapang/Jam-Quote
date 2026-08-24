@@ -554,7 +554,9 @@ reports, and job costing behind it.
    time they look. A push/email on decision is the obvious next step.
 2. Invoice payment reminders — the sweep, notice ledger and mailer already
    exist; pointing them at overdue tenant invoices is mostly wiring.
-3. Accountant CSV exports (§4g) — both sides of the ledger now exist.
+3. ~~Accountant CSV exports (§4g)~~ **DONE 2026-08-21.** Four files on the
+   Reports page, `GET /exports/:file?from=&to=`. See §4g for what each one is
+   and the invariant that holds them together.
 4. Variations / change orders — the commonest source of unpaid work.
 5. Retention / holdback.
 
@@ -937,8 +939,40 @@ GCT is asked for as an amount, not derived from a rate: plenty of suppliers
 here are not registered, so assuming 15% would invent input tax that cannot be
 reclaimed.
 
-**Remaining in 4g:** the accountant CSV exports (§4g "Candidate files"). The
-data they need now exists on both sides — sales and purchases.
+**4g is now COMPLETE (2026-08-21).** All four files are built and wired to
+the Reports page, which is deliberate: they use the range already chosen there
+rather than carrying a second date picker, because two pickers on one screen
+are two periods that can disagree.
+
+| Built | Note |
+|---|---|
+| `invoices-issued` | Dated by `issueDate`, not `createdAt` — June's work written up in July is June revenue, which is the entire reason that field exists. |
+| `invoice-lines` | Carries `gctTreatment` per line, which is what lets output tax be split and checked. |
+| `payments-received` | Voided payments excluded: a reversed payment never was one. |
+| `clients` | NOT period-limited. A customer list covering only whoever was invoiced in March is not the list anyone asked for. |
+
+**The invariant, and it is tested:** `invoice-lines` sums exactly to the
+`Subtotal` column of `invoices-issued` for the same period. The extended amount
+is rounded exactly as `computeTotals` rounds it; any other rounding and the two
+files stop reconciling, which is the one thing they must not do.
+
+**Two traps that would have shipped silently.** The range end is INCLUSIVE — an
+export "to 31 August" that compared against midnight would drop a whole day of
+revenue with nothing on screen to show it. And the Reports page's `toIso` is
+EXCLUSIVE, so the link steps back a day; without that the file would cover one
+day more than the report beside it.
+
+**CSV injection is handled, not assumed away.** Every value here is tenant
+input landing on an accountant's machine, so a leading `=`, `+`, `-` or `@` is
+neutralised in `csvCell`. Money never goes through `cents / 100`.
+
+**Known gap:** the agreed `clients` file was to carry a TRN, and `Client` has
+no TRN field — only `Business` does. The column is omitted rather than exported
+empty. Adding `Client.trn` plus a form field is the fix, and matters for
+GCT-registered B2B customers.
+
+**Not built:** the purchases/expenses side. These four are the SALES side, as
+§4g Phase 1 scoped them.
 
 **Watch for during contractor testing:** job costing only means anything if
 contractors actually create Projects, which are optional on a quote today. If

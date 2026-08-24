@@ -225,3 +225,13 @@
     display: none !important;
   }
 }
+
+/* Wraps rather than scrolling: on a phone four chips on one line would push
+   the last one off the edge, and the client list is the one an accountant
+   asks for first. */
+.exportLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
