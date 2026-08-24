@@ -104,6 +104,47 @@ seconds will not open it again.
 **Work:** move Render to a paid instance. Budget for it in pricing (see §4).
 Then confirm from `SubscriptionSweepRun` that the daily jobs fire.
 
+### 1.2b Get the topology right BEFORE it costs something to change
+
+**Verified 2026-08-21.** Where things actually run:
+
+| Component | Region | Verdict |
+|---|---|---|
+| Neon database | `us-east-1` (Virginia) | **Correct.** Closest AWS region to Jamaica. |
+| Vercel web | `iad1` (Virginia) | **Correct**, and co-located with the database. |
+| Render API | `oregon` (us-west-2) | **Wrong.** |
+
+Every request currently travels Jamaica → Virginia (Vercel) → **Oregon** (API)
+→ **Virginia** (Neon) → back. It crosses the continent twice for no reason,
+adding roughly 60–70ms to every database round trip, and Prisma issues several
+per page.
+
+**Neither region can be changed in place.** A Neon project's region is fixed at
+creation; a Render service's is fixed at creation too — moving means a NEW
+service. The database is in the right place, so the fix is to recreate the API
+in `virginia`.
+
+**Cost of doing it now:** the API URL changes, so `NEXT_PUBLIC_API_BASE_URL` on
+Vercel and `apps/mobile/eas.json` need updating, and API and web must be
+redeployed together as always. With three test tenants that is twenty minutes.
+**The cost is identical at fifty paying tenants, except that fifty people are
+watching.** Do it as part of the move to paid hosting (1.2) — a new service is
+being created either way.
+
+**Also verify on Render, which cannot be read from the repo:** `DATABASE_URL`
+should use the **`-pooler`** host and `DIRECT_URL` should NOT. The local `.env`
+has both pointing at the same unpooled host, which is fine for development. In
+production, unpooled means connection exhaustion under concurrency — a failure
+that appears exactly when paying customers arrive.
+
+**The good news, and it is worth stating plainly: going Pro on Neon IS just a
+transaction.** Upgrading the plan does not recreate the project, move data, or
+change the connection string; it changes storage limits, compute allowance and
+the point-in-time-recovery window. Nothing in the app code depends on any
+Neon-specific feature — it is plain Postgres 18.6 behind Prisma — so the
+migration risk is genuinely low. **The things that are NOT reversible are the
+regions above, which is why they belong here rather than in a later phase.**
+
 ### 1.3 Backups, and a restore you have actually performed
 
 **Status: unknown, and unknown is not acceptable for other people's business
@@ -112,7 +153,13 @@ records.**
 The database is Neon, provisioned through Vercel. Before launch:
 
 1. Find out what point-in-time recovery the current Neon plan gives, and for
-   how long. **Verify — do not assume.**
+   how long. **Verify — do not assume.** This is one of the things a paid plan
+   buys, so check it against what the Pro plan would give before deciding the
+   upgrade is only about storage.
+
+   **Do this drill NOW, at 11 MB and 41 tables.** Not because you need the
+   backup today, but because the procedure must be known before it is needed,
+   and it will never again be this quick to rehearse.
 2. **Perform a restore.** Restore to a scratch branch, point a local API at it,
    and confirm a quote you know exists is there. A backup that has never been
    restored is a belief, not a backup.
