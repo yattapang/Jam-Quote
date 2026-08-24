@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
+import { normalizeUnitLabel } from "@jamquote/core";
 import type { MaterialAttributeKind, MaterialUnit, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
@@ -222,7 +223,15 @@ export class MaterialSchemaService {
    * createCategory — a unit is vocabulary, and duplicating it defeats the
    * point of having a controlled one. */
   async createUnit(businessId: string, input: CreateMaterialUnitInput): Promise<UnitView> {
-    const label = input.label.trim();
+    // `m2` becomes `m²` here rather than in the browser, so every caller gets
+    // it — the web line editor, the material form, and the mobile app when it
+    // catches up. A superscript is not on any keyboard a contractor owns, and
+    // tiling and concrete are priced in m² and m³.
+    //
+    // Doing it BEFORE the duplicate check matters: otherwise a business ends
+    // up with "m2" and "m²" as two units that mean one thing, which is exactly
+    // the drift the check exists to prevent.
+    const label = normalizeUnitLabel(input.label);
 
     const existing = await this.prisma.materialUnit.findFirst({
       where: {

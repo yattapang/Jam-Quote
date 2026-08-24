@@ -959,6 +959,10 @@ export default function LineItemsEditor({
             label="New unit"
             placeholder="e.g. per pallet"
             errorText="Couldn't add that unit — is the API running?"
+            // Says it out loud, because a contractor who cannot type ² assumes
+            // the unit simply is not available and writes "sqm" on the client's
+            // quote instead.
+            hint="Type m2 or m3 for m² and m³ — the superscript is added for you."
             onAdd={(label) => addUnitForLine(addingUnitKey, label)}
             onCancel={() => setAddingUnitKey(null)}
           />

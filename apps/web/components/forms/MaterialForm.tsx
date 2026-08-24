@@ -569,6 +569,7 @@ export function InlineAddRow({
   label,
   placeholder,
   errorText,
+  hint,
   onAdd,
   onCancel,
 }: {
@@ -576,6 +577,8 @@ export function InlineAddRow({
   placeholder: string;
   /** Shown when onAdd rejects; the caller words it for its own catalogue. */
   errorText: string;
+  /** Standing guidance, shown before anything goes wrong. */
+  hint?: string;
   onAdd: (label: string) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -615,6 +618,7 @@ export function InlineAddRow({
           }
         }}
         error={error || undefined}
+        hint={hint}
         autoFocus
       />
       <Button variant="secondary" size="sm" type="button" onClick={() => void add()} disabled={busy}>

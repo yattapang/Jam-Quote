@@ -492,6 +492,32 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-found during testing — no way to enter m² for coverage
+
+**2026-08-21.** A contractor pricing tiling or concrete needs `m²` and `m³`.
+Neither is on any keyboard they own, so the unit could not be entered and the
+fallback was writing "sqm" on the client's quote.
+
+Three separate problems, only one of which the owner could see:
+
+1. **No way to type it.** `normalizeUnitLabel` in core now turns `m2` into
+   `m²`, `ft3` into `ft³`, and the spelled-out `sq m` / `cu m` forms people
+   reach for *because* they cannot type the symbol. Applied in
+   `createUnit` on the API — before the duplicate check, so a business cannot
+   end up holding "m2" and "m²" as two units meaning one thing. Deliberately
+   narrow: "Type 2" and "42.5kg bag" are left alone, because a unit silently
+   changed under someone is worse than one they must type awkwardly.
+2. **`m³` did not exist.** Cubic metre was missing from the curated list
+   entirely — the unit concrete is sold in here.
+3. **`m²` existed but read wrong.** It was curated as "Square Metre", so a
+   quote line printed "30 Square Metre" instead of "30 m²". Relabelled.
+   Existing lines snapshot their own `unitLabel`, so nothing already sent to a
+   client moved.
+
+The Add-unit box now says so outright — "Type m2 or m3 for m² and m³" —
+because a contractor who cannot type the symbol assumes the unit is
+unavailable rather than guessing that the app will fix it.
+
 ### Owner-found during testing — TRN shown as nine digits, and Delete on sent quotes
 
 **TRN formatting (2026-08-21).** A TRN is STORED as nine bare digits —
