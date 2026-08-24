@@ -174,6 +174,78 @@
   }
 }
 
+/* On a phone this stops being a table at all.
+   
+   Sideways scrolling was not the real problem — what scrolled away was. The
+   client name is column one, so sliding right to read "Overdue" took the name
+   with it, and a column of figures with no names attached answers nothing.
+   The same defect the admin tenants table had (PLANNING §4h).
+   
+   A pinned first column was the other option. Stacking wins because it
+   removes the scroll rather than making it survivable, and because "who owes
+   me money" is read one client at a time, not compared across a row. */
+@media (max-width: 560px) {
+  .tableScroll {
+    overflow-x: visible;
+  }
+
+  .dataTable,
+  .dataTable tbody,
+  .dataTable tr,
+  .dataTable td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  /* The header row has nowhere to go once cells stack; each cell carries its
+     own label instead (data-label in the markup). */
+  .dataTable thead {
+    display: none;
+  }
+
+  .dataTable tr {
+    border-top: 1px solid var(--jq-border);
+    padding: 11px 0 3px;
+  }
+
+  .dataTable tr:first-child {
+    border-top: none;
+  }
+
+  .dataTable td {
+    border-top: none;
+    padding: 0 0 8px;
+    white-space: normal;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .dataTable td::before {
+    content: attr(data-label);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--jq-text-muted);
+  }
+
+  /* The client's name leads the block, as a heading rather than a labelled
+     value — it is what the rest of the figures are ABOUT. */
+  .dataTable td:first-child {
+    display: block;
+    font-weight: 600;
+    font-size: 14.5px;
+    padding-bottom: 6px;
+  }
+
+  .dataTable td:first-child::before {
+    content: none;
+  }
+}
+
 /* Custom date window, inline with the preset chips. */
 .customRange {
   display: inline-flex;

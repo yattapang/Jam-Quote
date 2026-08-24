@@ -492,6 +492,30 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-found during testing — "Outstanding by client" scrolls the name away
+
+**2026-08-21.** On a phone the receivables table scrolled sideways, and sliding
+right to read Overdue took the CLIENT NAME with it — leaving a column of
+figures attached to nobody.
+
+**The same defect as the admin tenants table (§4h), and the same lesson: the
+scroll was not the problem, what scrolled away was.** A table whose identifying
+column disappears answers nothing.
+
+**Fix: below 560px it stops being a table.** Each client becomes a block — name
+as a heading, then Outstanding / Overdue / Invoices as labelled figures. The
+header row is hidden and each cell names itself from `data-label`. No
+horizontal scrolling at all on a phone.
+
+A pinned first column was the alternative. Stacking won because it REMOVES the
+scroll rather than making it survivable, and because "who owes me money" is
+read one client at a time rather than compared across a row.
+
+**Not visually verified by me** — the page is behind auth and I could not
+screenshot it at phone width. Compiles and lints clean; confirm on a real
+phone. Any other table in the app deserves the same look: this pattern has now
+appeared twice.
+
 ### Readiness review for contractor testing — 2026-08-21
 
 **Every agreed feature is built.** All five §4l roadmap items, both §4m

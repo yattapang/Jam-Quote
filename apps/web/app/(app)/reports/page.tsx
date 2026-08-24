@@ -246,19 +246,22 @@ export default async function ReportsPage({
                 </thead>
                 <tbody>
                   {reports.receivables.outstandingByClient.map((c) => (
+                    /* data-label feeds the stacked layout on a phone, where the
+                       header row is hidden and each cell names itself — see
+                       .dataTable in reports.module.css. */
                     <tr key={c.clientId ?? "no-client"}>
                       <td>{c.clientName}</td>
-                      <td>
+                      <td data-label="Outstanding">
                         <MoneyText cents={c.outstandingCents} size={13.5} />
                       </td>
-                      <td>
+                      <td data-label="Overdue">
                         {c.overdueCents > 0 ? (
                           <MoneyText cents={c.overdueCents} size={13.5} tone="critical" />
                         ) : (
                           <span className={shared.rowSub}>&mdash;</span>
                         )}
                       </td>
-                      <td>{c.invoiceCount}</td>
+                      <td data-label="Invoices">{c.invoiceCount}</td>
                     </tr>
                   ))}
                 </tbody>
