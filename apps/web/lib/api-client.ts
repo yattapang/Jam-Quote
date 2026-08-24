@@ -133,6 +133,8 @@ export interface ApiClientRow {
   town?: string | null;
   parish?: string | null;
   addressLine?: string | null;
+  /** The CLIENT's own tax number, distinct from the business's. */
+  trn?: string | null;
 }
 export interface ApiProject {
   id: string;
@@ -411,6 +413,7 @@ export function mapClient(c: ApiClientRow): Client {
     phone: c.phone ?? "",
     address: c.addressLine ?? "",
     email: c.email ?? undefined,
+    trn: c.trn ?? undefined,
   };
 }
 
@@ -702,6 +705,9 @@ export function mapBusiness(b: ApiBusiness): Business {
 // --- Create (write path) ----------------------------------------------------
 
 export interface NewClientInput {
+  /** The client's own TRN. An empty string CLEARS it; omitting the key leaves
+   * whatever is stored alone. */
+  trn?: string;
   firstName: string;
   lastName?: string;
   phone?: string;

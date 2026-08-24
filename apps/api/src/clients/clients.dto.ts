@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PARISHES } from "@jamquote/core";
+import { PARISHES, trnSchema } from "@jamquote/core";
 
 // Shared optional fields for both create and update.
 const clientContactFields = {
@@ -9,6 +9,11 @@ const clientContactFields = {
   addressLine: z.string().optional(),
   town: z.string().max(80).optional(),
   parish: z.enum(PARISHES).optional(),
+  // Same validator as the contractor's own TRN, so the two cannot disagree
+  // about what a valid one is. Normalises to 9 bare digits, and an empty
+  // string is allowed through as null — clearing the field must be possible,
+  // and most customers are households with no TRN to give.
+  trn: z.union([trnSchema, z.literal("")]).optional(),
   notes: z.string().optional(),
 };
 

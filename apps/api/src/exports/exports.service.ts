@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { InvoiceStatus, csvDate, csvMoney, csvText, toCsv } from "@jamquote/core";
+import { InvoiceStatus, csvDate, csvMoney, csvText, toCsv, type CsvValue } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 /** A generated file, ready to stream. */
@@ -119,7 +119,7 @@ export class ExportsService {
       },
     });
 
-    const rows: (string | number)[][] = [];
+    const rows: CsvValue[][] = [];
     for (const invoice of invoices) {
       // Top-level lines first, then each section's, so the file reads in the
       // same order as the document the client received.
@@ -231,6 +231,10 @@ export class ExportsService {
 
     const rows = clients.map((c) => [
       clientName(c),
+      // The client's OWN tax number, not the contractor's. Forced to text so
+      // Excel cannot eat a leading zero or render it as 1.23457E+11 — a
+      // mangled tax number on an accountant's file is worse than an ugly one.
+      csvText(c.trn),
       csvText(c.phone),
       c.email ?? "",
       [c.addressLine, c.town, c.parish].filter(Boolean).join(", "),
@@ -240,6 +244,7 @@ export class ExportsService {
 
     return this.file("clients", "Customer listing (all, not period-limited)", range, [
       "Client",
+      "TRN",
       "Phone",
       "Email",
       "Address",
@@ -262,7 +267,7 @@ export class ExportsService {
     basis: string,
     range: ExportRange,
     headers: readonly string[],
-    rows: readonly (readonly (string | number | null | undefined)[])[],
+    rows: readonly (readonly CsvValue[])[],
   ): ExportFile {
     const meta: (readonly (string | number)[])[] = [
       ["Basis", basis],

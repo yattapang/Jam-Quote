@@ -76,12 +76,29 @@ describe("csvDate", () => {
 
 describe("csvText", () => {
   it("stops Excel eating the leading zero on a TRN", () => {
-    expect(csvText("001234567")).toBe('="001234567"');
+    expect(csvCell(csvText("001234567"))).toBe('="001234567"');
+  });
+
+  it("survives being written into a file, which is the point", () => {
+    // The bug this replaces: csvText produced ="001234567", csvCell then saw
+    // the quotes and escaped the whole thing to """=""001234567""""", so Excel
+    // showed the literal formula text and the leading zero was never
+    // protected at all. A correct helper defeated by the layer above it.
+    const file = toCsv(["TRN"], [[csvText("001234567")]]);
+    expect(file).toContain('="001234567"');
+    expect(file).not.toContain('""');
   });
 
   it("is blank for a missing value rather than an empty formula", () => {
-    expect(csvText(null)).toBe("");
-    expect(csvText("   ")).toBe("");
+    expect(csvCell(csvText(null))).toBe("");
+    expect(csvCell(csvText("   "))).toBe("");
+  });
+
+  it("cannot break the row it sits on", () => {
+    // This form only works unquoted, so there is no escaping available inside
+    // it — a comma or quote is stripped rather than carried through.
+    const file = toCsv(["Ref", "After"], [[csvText('12,34"56'), "still here"]]);
+    expect(file.trim().split("\r\n")[1]).toBe('="123456",still here');
   });
 });
 

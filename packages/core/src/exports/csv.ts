@@ -20,6 +20,19 @@
 const BOM = "﻿";
 
 /**
+ * A cell whose exact characters must reach the file — see `csvText`.
+ *
+ * A marker rather than a bare string, so the ONE value allowed to skip
+ * escaping has to be produced deliberately. A naming convention or a boolean
+ * flag would be silently bypassable; this is not.
+ */
+export interface CsvRaw {
+  readonly __csvRaw: string;
+}
+
+export type CsvValue = string | number | CsvRaw | null | undefined;
+
+/**
  * One cell, quoted only when it has to be.
  *
  * A leading `=`, `+`, `-` or `@` makes Excel treat the value as a FORMULA, so
@@ -27,8 +40,12 @@ const BOM = "﻿";
  * as it is a display bug: a crafted line description could otherwise execute
  * on the accountant's machine, and every value here comes from tenant input.
  */
-export function csvCell(value: string | number | null | undefined): string {
+export function csvCell(value: CsvValue): string {
   if (value === null || value === undefined) return "";
+  // Pre-encoded by csvText: written through untouched. Escaping it here would
+  // put the literal characters ="..." in the cell instead of the value they
+  // protect — the helper defeated by the layer above it.
+  if (typeof value === "object" && "__csvRaw" in value) return value.__csvRaw;
   let text = String(value);
   if (/^[=+\-@]/.test(text)) text = `'${text}`;
   if (/[",\r\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
@@ -38,7 +55,7 @@ export function csvCell(value: string | number | null | undefined): string {
 /** A complete file: BOM, header row, then data. */
 export function toCsv(
   headers: readonly string[],
-  rows: readonly (readonly (string | number | null | undefined)[])[],
+  rows: readonly (readonly CsvValue[])[],
 ): string {
   const lines = [headers.map(csvCell).join(",")];
   for (const row of rows) lines.push(row.map(csvCell).join(","));
@@ -75,7 +92,13 @@ export function csvDate(value: Date | string | null | undefined): string {
  * the literal text, which is ugly but never WRONG, and a mangled tax number on
  * an accountant's file is worse than an ugly one.
  */
-export function csvText(value: string | null | undefined): string {
+export function csvText(value: string | null | undefined): CsvRaw | "" {
   if (!value?.trim()) return "";
-  return `="${value.trim().replace(/"/g, '""')}"`;
+  // Commas and quotes are STRIPPED rather than escaped: this form only works
+  // unquoted, so no escaping is available inside it. Neither character belongs
+  // in a tax number, a phone number or a bank reference, and losing a stray
+  // one beats breaking the row it sits on.
+  const safe = value.trim().replace(/[",\r\n]/g, "");
+  return { __csvRaw: `="${safe}"` };
 }
+

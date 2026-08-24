@@ -168,6 +168,40 @@ describe("ExportsService — what the files promise", () => {
     expect(detail.csv).toContain('"Sand, =load"');
   });
 
+  it("carries the client's own TRN, forced to text so Excel cannot eat it", async () => {
+    // A TRN with a leading zero, or long enough to be shown as 1.23457E+11,
+    // is the reason this column is not a plain number. It is the client's own
+    // tax number, not the contractor's.
+    const { svc, prisma } = harness();
+    prisma.client.findMany.mockResolvedValueOnce([
+      {
+        firstName: "Marcia", lastName: "Brown", trn: "012345678",
+        phone: "8765550100", email: null, addressLine: null, town: null,
+        parish: null, createdAt: new Date("2026-01-05T00:00:00.000Z"),
+      },
+    ] as any);
+
+    const out = await svc.clients("b1", RANGE);
+    expect(out.csv).toContain("TRN");
+    expect(out.csv).toContain('="012345678"');
+  });
+
+  it("leaves the TRN cell blank for a client who has none", async () => {
+    // Most of a jobbing contractor's customers are households. A blank cell is
+    // the honest answer; an empty ="" formula would be noise in every row.
+    const { svc, prisma } = harness();
+    prisma.client.findMany.mockResolvedValueOnce([
+      {
+        firstName: "Kevin", lastName: "", trn: null, phone: null, email: null,
+        addressLine: null, town: null, parish: null,
+        createdAt: new Date("2026-01-05T00:00:00.000Z"),
+      },
+    ] as any);
+
+    const out = await svc.clients("b1", RANGE);
+    expect(out.csv).not.toContain('=""');
+  });
+
   it("does not period-limit the customer listing", async () => {
     // A customer list limited to whoever was invoiced in March is not the list
     // anyone asked for.

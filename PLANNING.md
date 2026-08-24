@@ -966,10 +966,25 @@ day more than the report beside it.
 input landing on an accountant's machine, so a leading `=`, `+`, `-` or `@` is
 neutralised in `csvCell`. Money never goes through `cents / 100`.
 
-**Known gap:** the agreed `clients` file was to carry a TRN, and `Client` has
-no TRN field — only `Business` does. The column is omitted rather than exported
-empty. Adding `Client.trn` plus a form field is the fix, and matters for
-GCT-registered B2B customers.
+~~**Known gap:** the `clients` file was to carry a TRN.~~ **CLOSED
+2026-08-21.** `Client.trn` added (nullable — most of a jobbing contractor's
+customers are households with none), validated by the SAME `trnSchema` as the
+contractor's own so the two cannot disagree, and on the client form.
+
+**Two defects found while doing it.**
+
+1. `Client.town` was accepted by the DTO and **never written** by create or
+   update, so anything a contractor typed was silently discarded — and the
+   export's Address column was reading a field that could only ever be empty.
+   The same accepted-and-dropped shape as the email gate. Fixed.
+2. `csvText` did not work at all. It produced `="012345678"`, then `csvCell`
+   saw the quotes and escaped the whole thing, so Excel showed the literal
+   formula text and the leading zero was never protected. **A correct helper
+   defeated by the layer above it** — the recurring shape in this codebase,
+   this time inside a single file. Fixed with an explicit `CsvRaw` marker that
+   `csvCell` passes through, so the one value allowed to skip escaping has to
+   be produced deliberately rather than by convention. Caught by a test written
+   for the TRN column, not by review.
 
 **Not built:** the purchases/expenses side. These four are the SALES side, as
 §4g Phase 1 scoped them.

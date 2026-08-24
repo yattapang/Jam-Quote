@@ -27,7 +27,12 @@ export class ClientsService {
         whatsapp: input.whatsapp,
         email: input.email,
         addressLine: input.addressLine,
+        // `town` was accepted by the DTO and never written here, so anything a
+        // contractor typed was silently discarded — the same shape as the
+        // email gate that was declared and dropped.
+        town: input.town,
         parish: input.parish,
+        trn: normalizeTrn(input.trn),
         notes: input.notes,
       },
     });
@@ -60,7 +65,11 @@ export class ClientsService {
         whatsapp: input.whatsapp,
         email: input.email,
         addressLine: input.addressLine,
+        town: input.town,
         parish: input.parish,
+        // Only when the caller mentioned it: an update that omits `trn`
+        // entirely must not wipe one that is already stored.
+        ...(input.trn !== undefined ? { trn: normalizeTrn(input.trn) } : {}),
         notes: input.notes,
       },
     });
@@ -71,4 +80,12 @@ export class ClientsService {
     await this.findOne(businessId, id);
     await this.prisma.client.delete({ where: { id } });
   }
+}
+
+/** Empty means "no TRN", stored as null rather than as an empty string — a
+ * blank cell and a stored blank are the same fact, and only one of them should
+ * exist in the column. */
+function normalizeTrn(trn: string | undefined): string | null | undefined {
+  if (trn === undefined) return undefined;
+  return trn.trim() ? trn.trim() : null;
 }

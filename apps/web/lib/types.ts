@@ -90,6 +90,9 @@ export interface Client {
   address: string;
   /** Optional — present once the client has an email on file. Powers "Send by email". */
   email?: string;
+  /** The client's OWN tax number, when the customer is itself a registered
+   * business. Most clients are households and have none. */
+  trn?: string;
 }
 
 /** A saved material a contractor reuses across quotes, with its last known

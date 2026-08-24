@@ -16,6 +16,9 @@ export interface ClientFormValues {
   lastName: string;
   phone: string;
   email: string;
+  /** The CLIENT's tax number, not the contractor's. Blank for the households
+   * that make up most of a jobbing contractor's book. */
+  trn: string;
   town: string;
   parish: string;
   address: string;
@@ -26,6 +29,7 @@ export const emptyClientForm: ClientFormValues = {
   lastName: "",
   phone: "",
   email: "",
+  trn: "",
   town: "",
   parish: "",
   address: "",
@@ -37,6 +41,7 @@ export function clientFormValuesFromClient(client: Client): ClientFormValues {
     lastName: client.lastName,
     phone: client.phone,
     email: client.email ?? "",
+    trn: client.trn ?? "",
     town: client.town,
     parish: client.parish,
     address: client.address,
@@ -49,6 +54,10 @@ export function clientPayloadFromValues(values: ClientFormValues): NewClientInpu
     lastName: values.lastName.trim() || undefined,
     phone: values.phone.trim() || undefined,
     email: values.email.trim() || undefined,
+    // Empty string rather than undefined, so CLEARING a TRN actually removes
+    // it. Undefined would mean "not mentioned", and the stored one would
+    // survive an edit that deliberately emptied the field.
+    trn: values.trn.trim(),
     town: values.town.trim() || undefined,
     parish: values.parish || undefined,
     addressLine: values.address.trim() || undefined,
@@ -113,6 +122,18 @@ export default function ClientForm({
           placeholder="client@example.com"
         />
       </div>
+      {/* Only some clients have one — a household has no TRN to give, and a
+          field that looks required would make the form feel broken for the
+          majority. It matters when the customer is itself a registered
+          business, and it is the first column an accountant asks about. */}
+      <Input
+        label="TRN (if the client is a business)"
+        value={values.trn}
+        onChange={(e) => set("trn", e.target.value)}
+        placeholder="123-456-789"
+        inputMode="numeric"
+        hint="9 digits. Appears on the client list you give your accountant."
+      />
       <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" />
       <Select label="Parish" options={parishOptions} value={values.parish} onChange={(e) => set("parish", e.target.value)} />
       <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} />

@@ -286,6 +286,11 @@ model Client {
   phone       String?
   whatsapp    String?
   email       String?
+  /// The client's OWN tax number, stored as 9 digits with no punctuation.
+  /// Distinct from Business.trn, which is the contractor's. Needed when the
+  /// customer is itself a registered business — an accountant's customer
+  /// listing is expected to carry it, and it is the first thing they ask for.
+  trn         String?
   addressLine String?
   town        String? // town/city — see Business.town
   parish      String?
