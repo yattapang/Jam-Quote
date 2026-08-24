@@ -60,8 +60,10 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       await setQuoteStatus(id, QuoteStatus.SENT);
       setSendOpen(false);
       router.refresh();
-    } catch {
-      setSendError("Couldn't send — is the API running?");
+    } catch (err) {
+      setSendError(
+        err instanceof ApiError && err.message ? err.message : "Couldn't send — is the API running?",
+      );
     } finally {
       setSending(false);
     }
@@ -74,8 +76,10 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       const { id: newId } = await reviseQuote(id);
       setReviseOpen(false);
       router.push(`/quotes/${newId}/edit`);
-    } catch {
-      setReviseError("Couldn't create a revision — is the API running?");
+    } catch (err) {
+      setReviseError(
+        err instanceof ApiError && err.message ? err.message : "Couldn't create a revision — is the API running?",
+      );
       setRevising(false);
     }
   }
@@ -134,8 +138,10 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       await setQuoteStatus(id, outcome);
       setOutcome(null);
       router.refresh();
-    } catch {
-      setOutcomeError("Couldn't record that — is the API running?");
+    } catch (err) {
+      setOutcomeError(
+        err instanceof ApiError && err.message ? err.message : "Couldn't record that — is the API running?",
+      );
     } finally {
       setRecording(false);
     }

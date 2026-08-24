@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "./Button";
 import Modal, { modalStyles } from "./Modal";
 import {
+  ApiError,
   deleteJob,
   deleteClient,
   deleteInvoice,
@@ -44,6 +45,7 @@ export default function DeleteRowButton({
   label = "Delete",
   confirmMessage,
   redirectTo,
+  disabledReason,
 }: {
   kind: DeleteKind;
   id: string;
@@ -51,6 +53,15 @@ export default function DeleteRowButton({
   confirmMessage: string;
   /** Where to go after deleting. Omit to refresh the current route in place. */
   redirectTo?: string;
+  /**
+   * Why this row cannot be deleted, when it cannot. Set it and the control
+   * explains itself instead of offering an action that can only fail.
+   *
+   * Offering Delete on a quote the API will refuse is how the owner met
+   * "Couldn't delete — is the API running?" on a rule that had nothing to do
+   * with the API.
+   */
+  disabledReason?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -65,8 +76,17 @@ export default function DeleteRowButton({
       setOpen(false);
       if (redirectTo) router.push(redirectTo);
       else router.refresh();
-    } catch {
-      setError("Couldn't delete — is the API running?");
+    } catch (err) {
+      // The API's OWN message, when it sent one. This used to be a bare catch
+      // that discarded the error and guessed at the cause, so a deliberate
+      // rule — "Only DRAFT quotes can be deleted" — reached the contractor as
+      // "is the API running?", sending them to check infrastructure over a
+      // business rule. Reporting the wrong cause is worse than reporting none.
+      setError(
+        err instanceof ApiError && err.message
+          ? err.message
+          : "Couldn't delete — is the API running?",
+      );
     } finally {
       setSaving(false);
     }
@@ -77,6 +97,12 @@ export default function DeleteRowButton({
       <button
         type="button"
         className={styles.trigger}
+        // Not `disabled`: a dead control with no explanation reads as a bug,
+        // and `title` alone is invisible on the phone this is mostly used on.
+        // It still opens the modal, which says why.
+        aria-disabled={disabledReason ? true : undefined}
+        title={disabledReason}
+        style={disabledReason ? { opacity: 0.45 } : undefined}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -89,17 +115,28 @@ export default function DeleteRowButton({
         // Some rows (e.g. quotes) are themselves click-to-navigate; stop the
         // modal's clicks (including a backdrop dismiss) from bubbling into it.
         <div onClick={(e) => e.stopPropagation()}>
-          <Modal title="Delete?" onClose={() => (saving ? null : setOpen(false))}>
+          <Modal
+            title={disabledReason ? "Can't delete this" : "Delete?"}
+            onClose={() => (saving ? null : setOpen(false))}
+          >
             <div className={modalStyles.form}>
-              <p>{confirmMessage}</p>
+              <p>{disabledReason ?? confirmMessage}</p>
               {error && <span className={modalStyles.error}>{error}</span>}
               <div className={modalStyles.actions}>
-                <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
-                  Cancel
-                </Button>
-                <Button variant="danger" onClick={confirm} disabled={saving}>
-                  {saving ? "Deleting…" : "Delete"}
-                </Button>
+                {disabledReason ? (
+                  <Button variant="primary" onClick={() => setOpen(false)}>
+                    Close
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>
+                      Cancel
+                    </Button>
+                    <Button variant="danger" onClick={confirm} disabled={saving}>
+                      {saving ? "Deleting…" : "Delete"}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </Modal>

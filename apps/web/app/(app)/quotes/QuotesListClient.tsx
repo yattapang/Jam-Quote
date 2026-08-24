@@ -80,10 +80,19 @@ export default function QuotesListClient({
                 <div className={shared.rowRight}>
                   <MoneyText cents={q.totalCents ?? 0} />
                   <span className={shared.rowSub}>{q.createdLabel}</span>
+                  {/* Only a DRAFT can be deleted — anything sent to a client
+                      is a record. The list used to offer Delete on every quote
+                      regardless, so the API refused and the contractor was
+                      told to check whether the API was running. */}
                   <DeleteRowButton
                     kind="quote"
                     id={q.id}
                     confirmMessage={`Delete quote ${q.num}? This can't be undone.`}
+                    disabledReason={
+                      q.status === "DRAFT"
+                        ? undefined
+                        : `${q.num} has already been sent to a client, so it stays on the record. Revise it instead if the price has changed.`
+                    }
                   />
                 </div>
               </div>

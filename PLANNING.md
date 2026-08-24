@@ -460,6 +460,38 @@ Worth walking specifically, since these are new and unexercised:
 
 ## 4c. What to do next — recommendation
 
+### Owner-found during testing — "couldn't delete a quote, is the API running?"
+
+**2026-08-21. Two defects, neither the one the message named.**
+
+1. **`DeleteRowButton` had a bare `catch {}` that discarded the API's error**
+   and substituted "Couldn't delete — is the API running?". The API had
+   actually said **"Only DRAFT quotes can be deleted"** — a deliberate rule.
+   Reporting the wrong cause is worse than reporting none: it sent the owner
+   to check infrastructure over a business rule. Fixed, and because eleven
+   screens share that component, all of them now tell the truth.
+
+2. **The quotes LIST offered Delete on every quote regardless of status** — an
+   action that could only fail. It now explains instead: *"QT-0139 has already
+   been sent to a client, so it stays on the record. Revise it instead."* The
+   quote DETAIL page was already gated correctly, as were invoices.
+
+**Verified against live data:** every DRAFT quote deletes cleanly (dry-run in a
+rolled-back transaction), and every foreign key pointing at `Quote` is CASCADE
+or SET NULL — so nothing at the database level blocks a delete. The rule was
+the only obstacle.
+
+**Also fixed:** the same guessed-cause pattern on the four state-change actions
+a tester is most likely to hit — mark as sent, revise, record outcome, and
+finalize an invoice. Each has a real API rule ("Cannot transition quote from X
+to Y") that was being replaced with a network guess.
+
+**Known and NOT bulk-fixed:** roughly twenty other `catch {}` blocks still
+guess at the cause. Rewriting them all by script was the wrong risk to take
+days before contractor testing. They are mostly form saves, where the failure
+is usually validation the API also reports. Worth a careful pass later; each
+one is a mystery for whoever hits it.
+
 ### Readiness review for contractor testing — 2026-08-21
 
 **Every agreed feature is built.** All five §4l roadmap items, both §4m

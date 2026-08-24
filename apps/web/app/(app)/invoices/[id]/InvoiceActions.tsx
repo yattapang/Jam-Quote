@@ -6,7 +6,7 @@ import { InvoiceStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { finalizeInvoice } from "@/lib/api-client";
+import { ApiError, finalizeInvoice } from "@/lib/api-client";
 
 /**
  * Header actions for the invoice detail page. Only a DRAFT invoice can be
@@ -29,8 +29,10 @@ export default function InvoiceActions({ id, status }: { id: string; status: Inv
       await finalizeInvoice(id);
       setFinalizeOpen(false);
       router.refresh();
-    } catch {
-      setFinalizeError("Couldn't finalize — is the API running?");
+    } catch (err) {
+      setFinalizeError(
+        err instanceof ApiError && err.message ? err.message : "Couldn't finalize — is the API running?",
+      );
       setFinalizing(false);
     }
   }
