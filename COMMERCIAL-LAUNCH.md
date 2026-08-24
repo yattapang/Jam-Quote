@@ -25,6 +25,25 @@ particularly on anything legal.
 
 ---
 
+## 0.5 While field testing runs — do these in parallel
+
+**Owner's sequence, agreed 2026-08-21: contractor testing FIRST, then this
+document.** That is the right order. But four things below are worth doing
+*during* testing rather than after, because they are free now and get more
+expensive or less useful with every week that passes.
+
+| Do it now | Why it cannot wait until after testing |
+|---|---|
+| **The backup restore drill** (1.3) | 11 MB and 41 tables today. This is the smallest and quickest this database will ever be, and the procedure has to be known before it is needed, not discovered during an incident. |
+| **Ask the testers what they would pay** (§4) | Only answerable by someone who has just used it. Ask a week in, while the experience is fresh — not in a follow-up call a month later. |
+| **Write down every question they ask** (§1) | Impossible to reconstruct afterwards. Each one is a support article or a UI fix; asked twice, it is a UI fix. |
+| **Start the domain purchase and DNS verification** (1.1) | DNS propagation and Resend verification take days, not minutes, and a warmed sending domain needs weeks of low volume before it is trusted. Beginning now costs nothing and removes the longest lead time from the critical path. |
+
+**Everything else in this document can and should wait** until testing tells
+you whether to spend the money at all.
+
+---
+
 ## 1. Exit criteria: when is field testing actually finished?
 
 Field testing is not finished when the contractors stop complaining. It is
@@ -339,6 +358,35 @@ Ordered so that each step is verifiable before the next depends on it.
 
 **Deploy discipline stays as it is in `PLANNING.md` §4b: API and web together,
 build locally first, migrations apply themselves on boot.**
+
+### 5.1 The recommendations, gathered in one place
+
+Everything above, reduced to the calls I would make. Each is argued for in its
+own section; this is the summary to read first when picking this document back
+up.
+
+1. **Bundle the region move with the move to paid hosting.** You create a new
+   Render service either way — creating it in `virginia` instead of `oregon`
+   costs nothing extra at that moment and is otherwise permanent. (1.2b)
+2. **Launch on manual payment collection; chase WiPay in parallel.** Ten
+   paying tenants collected by hand teach you more than a card integration with
+   none, and manual collection at that size is an evening a month. (1.4)
+3. **Do not launch with an introductory price you intend to raise.** Launch at
+   the price you mean and discount the annual term, which the system already
+   supports. Raising prices on the people who took a risk on you is the fastest
+   way to lose your best advocates. (§4)
+4. **Enforce the tiers LAST**, after pricing is decided and the first tenants
+   are onboarded — so they see a coherent product rather than a moving one.
+   And keep §4k's principle: gate capacity and insight, never correctness.
+   (2.1)
+5. **Get the attorney hour before taking money, not before launch day.** It has
+   a lead time you do not control, and the answer may change what the terms of
+   service have to say. (1.5)
+6. **Onboard the field testers as the first paying tenants.** They are the
+   best-qualified customers you will ever have, and they have already told you
+   whether the price is right.
+7. **Do not build anything else first.** Every agreed feature is built. The gap
+   between here and a business is not features — see §7.
 
 ---
 

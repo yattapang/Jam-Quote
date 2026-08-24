@@ -486,6 +486,19 @@ hosting, backups, law, pricing and the launch order. Items 1, 6 and 8 above
 reappear there as launch gates; the rest of that document is deliberately not
 code.
 
+**Owner's sequence (2026-08-21): contractor testing FIRST, commercial work
+after.** Correct order. Four things in that document are still worth starting
+in parallel because they have lead times or shrinking windows — the backup
+restore drill (smallest the database will ever be), asking the testers what
+they would pay (only answerable while it is fresh), writing down every question
+they ask, and beginning the domain purchase and DNS verification. See
+`COMMERCIAL-LAUNCH.md` §0.5.
+
+**Deliberately NOT changed yet:** `render.yaml` still says `region: oregon`.
+The region move is recommended and argued for, but it changes a public API URL
+and belongs with the paid-hosting switch, which is the owner's call and not
+this week's work.
+
 **4 and 5 are now built.** Of what remains, none of 6–8 blocks a contractor
 from quoting, invoicing, chasing payment or costing a job. **1 is the only
 outstanding item a tester will feel**, and it has a workaround they will
