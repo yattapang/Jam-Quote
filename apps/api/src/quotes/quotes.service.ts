@@ -7,8 +7,10 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
+import { addressableEmail } from "../common/notify-recipient.js";
 import {
   computeTotals,
+  formatJmd,
   ProjectStage,
   QuoteDetailLevel,
   QuoteStatus,
@@ -513,7 +515,83 @@ export class QuotesService {
       await this.createProjectForAcceptedQuote(quote.businessId, quote.id);
     }
 
+    // Tell the contractor. Until this, a client could accept a quote and the
+    // contractor would not know until they happened to open the app — the
+    // decision landed in the database and nowhere else.
+    //
+    // Best-effort, and deliberately AFTER the write: an unreachable mailbox
+    // must never cost the client their answer. The client is told their
+    // decision was recorded because it WAS, regardless of what happens here.
+    await this.notifyDecision(quote.businessId, quote.id, status, name.trim());
+
     return { status };
+  }
+
+  /**
+   * Email the contractor that their client has answered.
+   *
+   * Platform mail — contractor-facing, so it uses the platform sender and is
+   * NOT behind `clientMailStatus`, which governs mail to a contractor's
+   * CLIENTS. Same treatment as the overdue digest.
+   *
+   * Every failure is swallowed. This runs after the decision is already
+   * committed, and there is no version of "we could not send an email" that
+   * should propagate back to a client who has just pressed Accept.
+   */
+  private async notifyDecision(
+    businessId: string,
+    quoteId: string,
+    status: QuoteStatus,
+    decidedBy: string,
+  ): Promise<void> {
+    try {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (!apiKey) return;
+
+      const business = await this.prisma.business.findUnique({
+        where: { id: businessId },
+        select: {
+          name: true,
+          billingContactEmail: true,
+          users: { select: { email: true, role: true } },
+        },
+      });
+      if (!business) return;
+
+      const to = addressableEmail(business);
+      if (!to) return;
+
+      const quote = await this.prisma.quote.findUnique({
+        where: { id: quoteId },
+        select: { number: true, totalCents: true, declineReason: true },
+      });
+      if (!quote) return;
+
+      const accepted = status === QuoteStatus.ACCEPTED;
+      const verb = accepted ? "accepted" : "declined";
+      const { Resend } = await import("resend");
+      await new Resend(apiKey).emails.send({
+        from: process.env.EMAIL_FROM ?? "JamQuote <onboarding@resend.dev>",
+        to,
+        // The answer is in the SUBJECT. A contractor scanning a phone
+        // notification should not have to open anything to learn whether they
+        // won the job.
+        subject: `${decidedBy} ${verb} quote ${quote.number}`,
+        html: [
+          `<p><strong>${escapeHtml(decidedBy)}</strong> ${verb} quote ` +
+            `${escapeHtml(quote.number)} (${formatJmd(quote.totalCents)}) through the link you sent.</p>`,
+          !accepted && quote.declineReason
+            ? `<p>They said: &ldquo;${escapeHtml(quote.declineReason)}&rdquo;</p>`
+            : "",
+          accepted
+            ? `<p>A job has been created for it, so costs can be tracked against the work.</p>`
+            : "",
+          `<p>Open JamQuote to see it.</p>`,
+        ].join(""),
+      });
+    } catch {
+      // Swallowed on purpose — see the doc comment.
+    }
   }
 
   /**
@@ -715,4 +793,15 @@ export class QuotesService {
       this.prisma.quote.delete({ where: { id } }),
     ]);
   }
+}
+
+/** Minimal HTML escaping for values that came from an ANONYMOUS caller.
+ * `decidedByName` and `declineReason` are typed by whoever holds the share
+ * link, and they land in an email in the contractor's inbox. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

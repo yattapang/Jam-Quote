@@ -3,6 +3,7 @@ import { Cron, CronExpression } from "@nestjs/schedule";
 import { Resend } from "resend";
 import { InvoiceStatus, JAMAICA_UTC_OFFSET_MS } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { addressableEmail } from "../common/notify-recipient.js";
 
 export interface OverdueSweepResult {
   markedOverdue: number;
@@ -108,11 +109,7 @@ export class InvoiceOverdueService {
       // Same fallback chain as the subscription sweep: the subscriber's own
       // choice, then an OWNER, then any addressable user — a tenant whose only
       // account holder is an ADMIN must still be reachable.
-      const owner = business.users.find((u) => u.role === "OWNER" && u.email);
-      const to =
-        business.billingContactEmail?.trim() ||
-        owner?.email?.trim() ||
-        business.users.find((u) => u.email)?.email?.trim();
+      const to = addressableEmail(business);
       if (!to) continue;
 
       const outstandingCents = business.invoices.reduce(

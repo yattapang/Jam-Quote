@@ -91,7 +91,9 @@ export default function RemindButton({
           <div className={modalStyles.form}>
             <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>
               JamQuote writes the message — it names what is still owed, not the invoice total, and
-              never accuses, since the client may have paid this morning.
+              never accuses, since the client may have paid this morning. It includes a link to the
+              invoice, so &ldquo;send it again&rdquo; does not become the reason you wait another
+              week.
             </p>
             {(whyNoWhatsApp || whyNoEmail) && (
               <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, opacity: 0.8 }}>

@@ -28,6 +28,10 @@ export interface ReminderContext {
    * demand money a client has already partly paid. */
   outstandingCents: number;
   dueDate?: Date | null;
+  /** Public link to the invoice itself. Without it a chase names a figure the
+   * client cannot check, and "send me the invoice again" is the delay that
+   * keeps the money out. */
+  link?: string | null;
   now?: Date;
 }
 
@@ -71,6 +75,9 @@ export function reminderMessage(ctx: ReminderContext): { subject: string; body: 
   const body =
     `${greeting} a friendly reminder that invoice ${ctx.invoiceNumber} ` +
     `for ${money} ${timing}.\n\n` +
+    // The link goes BEFORE the out clause: a client who wants to check the
+    // figure should not have to read past an apology to find it.
+    (ctx.link ? `You can view it here: ${ctx.link}\n\n` : "") +
     // The out clause is not politeness for its own sake. Without it the
     // message reads as an accusation to someone who paid this morning, and
     // the contractor is the one who looks careless.

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import {
@@ -421,6 +422,99 @@ export class InvoicesService {
    * transaction. This is the only place a quote moves to INVOICED.
    */
   /**
+   * Mint (or reuse) the public link for an invoice. Idempotent — sharing twice
+   * keeps the link already sent, so a re-share cannot silently break a URL a
+   * client already has.
+   *
+   * Refuses on a DRAFT: a draft has not been issued to anyone, and a link to
+   * one would show a client a document the contractor has not committed to.
+   */
+  async share(businessId: string, id: string): Promise<{ shareToken: string }> {
+    const invoice = await this.findOne(businessId, id);
+    if (invoice.status === InvoiceStatus.DRAFT) {
+      throw new BadRequestException("Finalize the invoice before sharing it.");
+    }
+    if (invoice.shareToken) return { shareToken: invoice.shareToken };
+
+    const shareToken = randomBytes(32).toString("base64url");
+    await this.prisma.invoice.update({
+      where: { id },
+      data: { shareToken, sharedAt: new Date() },
+    });
+    return { shareToken };
+  }
+
+  /** Withdraw the capability without touching the invoice, so it can be
+   * re-shared later with a fresh token. */
+  async unshare(businessId: string, id: string): Promise<void> {
+    await this.findOne(businessId, id);
+    await this.prisma.invoice.update({
+      where: { id },
+      data: { shareToken: null, sharedAt: null },
+    });
+  }
+
+  /**
+   * Resolve a public invoice token — NO businessId, because the token IS the
+   * authorisation. Mirrors findByShareToken on quotes, including the rule that
+   * a DRAFT and an unknown token are indistinguishable.
+   *
+   * Records the first view, which is the only evidence a chase actually
+   * landed: the reminder ledger records that a reminder was SENT, never that
+   * it was read.
+   */
+  async findByShareToken(token: string): Promise<PublicInvoiceView> {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      include: {
+        ...INVOICE_DETAIL_INCLUDE,
+        client: { select: { firstName: true, lastName: true } },
+        business: {
+          select: { name: true, addressLine: true, town: true, parish: true, trn: true },
+        },
+      },
+    });
+    if (!invoice || invoice.status === InvoiceStatus.DRAFT) {
+      throw new NotFoundException("Invoice not found");
+    }
+
+    if (!invoice.firstViewedAt) {
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { firstViewedAt: new Date() },
+      });
+    }
+
+    // An explicit allow-list, not the row — the same security decision as
+    // PublicQuoteView. Everything here is already printed on the invoice the
+    // client was sent, and nothing else: no ids, no internal timestamps, and
+    // no payment history beyond the totals the document itself shows.
+    return {
+      number: invoice.number,
+      status: invoice.status,
+      issueDate: invoice.issueDate,
+      dueDate: invoice.dueDate,
+      terms: invoice.terms,
+      detailLevel: invoice.detailLevel,
+      gctRate: invoice.gctRate,
+      discountPct: invoice.discountPct,
+      depositCents: invoice.depositCents,
+      subtotalCents: invoice.subtotalCents,
+      gctCents: invoice.gctCents,
+      totalCents: invoice.totalCents,
+      paidCents: invoice.paidCents,
+      retentionCents: invoice.retentionCents,
+      retentionReleased: Boolean(invoice.retentionReleasedAt),
+      lineItems: invoice.lineItems,
+      sections: invoice.sections,
+      clientName: [invoice.client?.firstName, invoice.client?.lastName]
+        .filter((p) => p?.trim())
+        .join(" ") || null,
+      business: invoice.business,
+    };
+  }
+
+  /**
    * Record that a payment reminder was sent, and return the words to send.
    *
    * Composition lives in core (`reminderMessage`) so the WhatsApp text and the
@@ -655,4 +749,40 @@ export class InvoicesService {
       retentionCents: retentionCents(totalCents, Number(pct)),
     };
   }
+}
+
+/** What an anonymous holder of an invoice share token may read. */
+export interface PublicInvoiceView {
+  number: string;
+  status: string;
+  issueDate: Date;
+  dueDate: Date | null;
+  terms: string | null;
+  detailLevel: string;
+  gctRate: Prisma.Decimal;
+  discountPct: Prisma.Decimal;
+  depositCents: number;
+  subtotalCents: number;
+  gctCents: number;
+  totalCents: number;
+  paidCents: number;
+  retentionCents: number;
+  retentionReleased: boolean;
+  lineItems: InvoiceWithLines["lineItems"];
+  sections: InvoiceWithLines["sections"];
+  clientName: string | null;
+  business: {
+    name: string;
+    addressLine: string | null;
+    town: string | null;
+    parish: string | null;
+    trn: string | null;
+  };
+}
+
+/** The public origin links are built against. Same resolution as
+ * auth.service's reset links — one env var, first entry of the allow-list. */
+function resolveWebBase(): string {
+  const first = process.env.WEB_ORIGIN?.split(",")[0]?.trim();
+  return first || "http://localhost:3000";
 }

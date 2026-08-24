@@ -1619,6 +1619,15 @@ export async function sendInvoiceReminder(
 }
 
 /**
+ * Mint (or reuse) the public link for an invoice, so a client can see the
+ * document they are being chased about. Idempotent — the API keeps a link
+ * already sent rather than breaking a URL the client has.
+ */
+export async function shareInvoice(invoiceId: string): Promise<{ shareToken: string }> {
+  return apiClient.post(`/invoices/${invoiceId}/share`, {});
+}
+
+/**
  * Sign-off on retention: the money held back becomes due.
  *
  * Deliberately separate from recording a payment — releasing says the client

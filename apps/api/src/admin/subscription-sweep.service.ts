@@ -2,6 +2,7 @@ import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { NoticeKind, dueNotices, shouldRevertToFree } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { addressableEmail } from "../common/notify-recipient.js";
 import { PricingService } from "../billing/pricing.service.js";
 import { SubscriptionMailerService } from "./subscription-mailer.service.js";
 
@@ -194,7 +195,7 @@ export class SubscriptionSweepService implements OnModuleInit {
     const owner = business.users.find((u) => u.role === "OWNER" && u.email);
     const anyUser = business.users.find((u) => u.email);
     const to =
-      business.billingContactEmail?.trim() || owner?.email?.trim() || anyUser?.email?.trim();
+      addressableEmail(business);
     if (!to) {
       this.logger.warn(`No billing contact or owner email for business ${business.id} — ${kind} not sent`);
       return "failed";

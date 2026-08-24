@@ -452,15 +452,22 @@ serves every new route.
 | 1 | **Contractors cannot email their clients.** Gated by design until a verified domain exists (§4i). WhatsApp + PDF cover it, and both work — but a tester WILL reach for email, so tell them before they find it. | Owner — buy/verify the domain, then set `QUOTE_FROM_EMAIL` on Production |
 | 2 | **Blackwood has no renewal term.** A pro plan with no term is a silent free ride: never reminded, never reverted. Visible in the console as "no term set". | Owner — record a payment or mark it a deliberate comp |
 | 3 | **Delete `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from Render** if it was ever set by hand. The cause it worked around is fixed. | Owner |
-| 4 | **Nothing notifies the contractor when a client accepts or declines.** They see it next time they look. | Build — small |
-| 5 | **Invoices have no public share link**, so a WhatsApp reminder carries no link (quotes do). `Invoice.shareToken` + `/i/[token]` mirrors `/q/[token]`. | Build — small |
+| 4 | ~~Nothing notifies the contractor when a client accepts or declines.~~ **DONE 2026-08-21.** Best-effort email on decision, sent AFTER the write and with every failure swallowed — an unreachable mailbox must never cost a client their answer. The answer is in the SUBJECT line, so a contractor scanning a phone learns whether they won without opening anything. Decline reasons are HTML-escaped: that text comes from an anonymous caller and lands in the contractor's inbox. **Caveat: it is platform mail, so from the resend.dev test sender it reaches only the account owner** — the same limitation the overdue digest has, and it lifts with the domain. | Done |
+| 5 | ~~Invoices have no public share link.~~ **DONE 2026-08-21.** `Invoice.shareToken` + `/i/[token]`, mirroring `/q/[token]` including the rule that a DRAFT and an unknown token are indistinguishable. Reminders now mint the link and include it — best-effort, so a minting failure still sends the chase rather than refusing over a URL. `firstViewedAt` records that the chase LANDED, which the reminder ledger cannot: it only knows what was sent. | Done |
 | 6 | Tier enforcement beyond the quote cap. §4k accepted Free/Pro/Books, but ONLY quote creation is gated. Everything else is open to every tenant. | Decide — not a tester blocker, and arguably right for testing |
 | 7 | Purchases/expenses side of the accountant exports (§4g Phase 2). | Build — later |
 | 8 | Net new / churn on the console; WiPay card checkout (blocked on credentials). | Later |
 
-**None of 4–8 blocks a contractor from quoting, invoicing, chasing payment or
-costing a job.** 1 is the only one a tester will feel, and it has a workaround
-they will actually prefer.
+**4 and 5 are now built.** Of what remains, none of 6–8 blocks a contractor
+from quoting, invoicing, chasing payment or costing a job. **1 is the only
+outstanding item a tester will feel**, and it has a workaround they will
+actually prefer.
+
+**One duplication paid off while doing 4:** the "who do we email at this
+tenant" chain existed in two services and was about to become three. It is now
+`addressableEmail` in `common/notify-recipient.ts`, used by all three and
+tested — including the case that broke in production, a tenant whose only
+account holder is an ADMIN.
 
 **The real outstanding item is still §4b.4: USE IT ON A PHONE.** Eleven
 substantive defects came out of the last owner audit; four more came out of

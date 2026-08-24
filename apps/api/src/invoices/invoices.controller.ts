@@ -68,6 +68,18 @@ export class InvoicesController {
     return this.invoices.finalize(businessId, id);
   }
 
+  /** Mint the public link a contractor sends their client when chasing. */
+  @Post(":id/share")
+  share(@BusinessId() businessId: string, @Param("id") id: string) {
+    return this.invoices.share(businessId, id);
+  }
+
+  /** Withdraw the link. The invoice is untouched. */
+  @Delete(":id/share")
+  unshare(@BusinessId() businessId: string, @Param("id") id: string) {
+    return this.invoices.unshare(businessId, id);
+  }
+
   /** Sign-off: the money held back is now due. Does not record a payment. */
   @Post(":id/retention-release")
   releaseRetention(

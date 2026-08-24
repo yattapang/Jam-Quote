@@ -931,6 +931,16 @@ model Invoice {
   updatedAt     DateTime         @updatedAt
   deletedAt     DateTime? // soft-delete for offline sync
 
+  /// The public link a contractor sends their client, exactly as Quote has
+  /// one. Without it a payment reminder can name a figure but not show the
+  /// document behind it, which is what a client asks for the moment they are
+  /// chased. 32 random bytes; the token IS the authorisation.
+  shareToken    String?   @unique
+  sharedAt      DateTime?
+  /// First time the client opened the public invoice link. Evidence that the
+  /// chase landed — the reminder ledger only records that it was SENT.
+  firstViewedAt DateTime?
+
   sections  InvoiceSection[]
   lineItems InvoiceLineItem[]
   payments  Payment[]
