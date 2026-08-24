@@ -97,9 +97,6 @@ const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   color: `var(--${tone})`, background: `color-mix(in srgb, var(--${tone}) 13%, transparent)`,
   border: `1px solid color-mix(in srgb, var(--${tone}) 30%, transparent)`, ...extra,
 });
-const dot = (tone: string, extra?: CSSProperties): CSSProperties => ({
-  display: "inline-block", width: 9, height: 9, borderRadius: "50%", flex: "none", background: `var(--${tone})`, marginTop: 4, ...extra,
-});
 const th: CSSProperties = { textAlign: "left", padding: "11px 16px", fontSize: 10.5, letterSpacing: ".06em", color: "var(--muted)", fontWeight: 700, borderBottom: "1px solid var(--border)" };
 const td: CSSProperties = { padding: "12px 16px", borderBottom: "1px solid var(--border)" };
 const inputStyle: CSSProperties = { height: 36, padding: "0 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", width: "100%" };
@@ -163,9 +160,6 @@ export default function AdminConsole({
     setNavOpen(false);
   };
   const [tenantId, setTenantId] = useState<number | null>(null);
-  const [diffOpen, setDiffOpen] = useState(false);
-  const [published, setPublished] = useState(false);
-  const [toast, setToast] = useState(false);
 
   // --- Pricing editor (GET/PATCH /admin/pricing) ---
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
@@ -345,19 +339,6 @@ export default function AdminConsole({
     }
   }
 
-  async function toggleTenantPlan(id: string, currentPlan: string) {
-    const nextPlan = isPro(currentPlan) ? "free" : "pro";
-    setTenantPlanBusy((b) => ({ ...b, [id]: true }));
-    setTenantPlanError((e) => ({ ...e, [id]: false }));
-    try {
-      await setTenantPlan(id, { plan: nextPlan });
-      setTenantPlanOverride((o) => ({ ...o, [id]: nextPlan }));
-    } catch {
-      setTenantPlanError((e) => ({ ...e, [id]: true }));
-    } finally {
-      setTenantPlanBusy((b) => ({ ...b, [id]: false }));
-    }
-  }
 
   // Re-runs the server AdminPage after every mutation so props reflect the
   // API's new state. Declared here because both the regulatory handlers below
@@ -1847,55 +1828,17 @@ export default function AdminConsole({
         </div>
       )}
 
-      {/* DIFF MODAL */}
-      {diffOpen && (
-        <div onClick={() => setDiffOpen(false)} className={styles.modalOverlay} style={{ background: "rgba(15,12,8,.5)", zIndex: 50 }}>
-          <div className={styles.scr} onClick={(e) => e.stopPropagation()} style={{ width: 760, maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, boxShadow: "0 30px 80px -20px rgba(0,0,0,.55)", animation: "admin-fadein .25s ease" }}>
-            <div style={{ padding: "20px 24px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ ...archivo, fontWeight: 700, fontSize: 17 }}>Rule-pack change review</div>
-                <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>Jamaica · v2025.3 → <b style={{ color: "var(--text)" }}>v2025.4 (draft)</b> · Consumption tax</div>
-              </div>
-              <button className={styles.iconBtn} onClick={() => setDiffOpen(false)} style={{ width: 30, height: 30, border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
-            </div>
-            <div style={{ padding: "18px 24px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, color: "var(--muted)", marginBottom: 16, flexWrap: "wrap" }}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 600, color: "var(--info)" }}>Source: Tax Administration Jamaica (TAJ) ↗</span>·<span>Effective 2025-04-01</span>·<span>Flagged by rulebot · 2025-03-28</span>
-              </div>
-              <div className={styles.diffGrid}>
-                <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                  <div style={{ padding: "9px 14px", background: "var(--surface-alt)", fontSize: 11, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)" }}>CURRENT · v2025.3</div>
-                  <div style={{ padding: 14 }}><div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>GCT rate</div><div style={{ ...archivo, fontWeight: 700, fontSize: 20, marginTop: 4 }}>15%</div><div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>Single standard rate applied to all sectors. No sector-specific sub-rate.</div></div>
-                </div>
-                <div style={{ border: "1px solid color-mix(in srgb,var(--good) 45%,var(--border))", borderRadius: 12, overflow: "hidden", background: "color-mix(in srgb,var(--good) 7%,transparent)" }}>
-                  <div style={{ padding: "9px 14px", background: "color-mix(in srgb,var(--good) 15%,transparent)", fontSize: 11, fontWeight: 700, letterSpacing: ".05em", color: "var(--good)" }}>INCOMING · v2025.4</div>
-                  <div style={{ padding: 14 }}><div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>GCT rate</div><div style={{ ...archivo, fontWeight: 700, fontSize: 20, marginTop: 4 }}>15% <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>standard</span></div><div style={{ ...archivo, fontWeight: 700, fontSize: 16, marginTop: 6, color: "var(--good)" }}>+ 10% <span style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>tourism sector</span></div><div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>Adds reduced GCT sub-rate for accommodation &amp; tourism-registered vendors.</div></div>
-                </div>
-              </div>
-              <div style={{ marginTop: 16, background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 11, padding: "13px 15px", fontSize: 12.5, lineHeight: 1.5 }}>
-                <b style={{ fontWeight: 700 }}>Reviewer note.</b> Verify vendor eligibility criteria against TAJ bulletin before publishing. Sub-rate must not apply to estimates outside NAICS tourism codes. <span style={{ color: "var(--muted)" }}>Assigned to Aisha Meyers.</span>
-              </div>
-            </div>
-            <div style={{ padding: "16px 24px", borderTop: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{ fontSize: 12, color: "var(--muted)", flex: 1 }}>Publishing bumps the pack to <b style={{ color: "var(--text)" }}>v2025.4</b> and records an audit entry.</div>
-              <button onClick={() => setDiffOpen(false)} style={{ height: 38, padding: "0 16px", border: "1px solid var(--border)", borderRadius: 9, background: "var(--surface)", color: "var(--text)", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>Request changes</button>
-              <button onClick={() => { setDiffOpen(false); setPublished(true); setToast(true); setTimeout(() => setToast(false), 3200); }} style={{ height: 38, padding: "0 18px", border: "none", borderRadius: 9, background: "var(--accent)", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer", fontFamily: "inherit", display: "inline-flex", alignItems: "center", gap: 7 }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>Approve &amp; publish
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* The rule-pack "change review" modal that stood here has been REMOVED.
+          It was unreachable — nothing ever called setDiffOpen(true) — and it
+          was a design mock: a hardcoded v2025.4 tourism sub-rate, a reviewer
+          note assigned to a person who does not exist, and an "Approve &
+          publish" button that closed the dialog, set a flag nothing read, and
+          showed "published to production". It made no API call.
 
-      {/* TOAST */}
-      {toast && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 60, display: "flex", alignItems: "center", gap: 11, padding: "13px 18px", borderRadius: 11, background: "var(--text)", color: "var(--bg)", fontSize: 13, fontWeight: 600, boxShadow: "0 16px 40px -12px rgba(0,0,0,.5)", animation: "admin-fadein .3s ease" }}>
-          <span style={{ display: "flex", width: 20, height: 20, borderRadius: "50%", background: "var(--good)", alignItems: "center", justifyContent: "center" }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-          </span>
-          Rule-pack JM v2025.4 published to production
-        </div>
-      )}
+          Left in place it was one wire away from being the worst defect this
+          app could ship: staff told a tax rule change was live when nothing
+          had changed. The real editor is the rule-pack screen above
+          (GET/PATCH /admin/rulepack), which writes and reads back. */}
     </div>
   );
 }
@@ -1928,7 +1871,12 @@ function TenantDrawer({
   onBillingChanged: () => void;
   onClose: () => void;
 }) {
-  const [name, parish, plan, trn, status, , mrr, q, qm] = raw;
+  // The hole where `mrr` used to be destructured is deliberate. The drawer
+  // shows the tenant's ACTUAL agreed price from the API below; the row's MRR
+  // came from the hardcoded per-plan table that was removed for inventing
+  // figures, and reinstating it here would put two different numbers for the
+  // same tenant on one screen.
+  const [name, parish, plan, trn, status, , , q, qm] = raw;
   const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
   const [sl, st] = statusMap[status] ?? ["Active", "good"];
   const init = name.split(" ").slice(0, 2).map((w) => w[0]).join("");

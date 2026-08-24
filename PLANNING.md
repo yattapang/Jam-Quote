@@ -500,10 +500,28 @@ URL is a live app with client email ENABLED and no verified domain behind it.
 Do not hand a preview link to a contractor during testing without removing the
 variable from Preview too.
 
-**Lesson worth keeping: this build still prints unused-variable warnings for
-`dot`, `published` and `toggleTenantPlan`.** Each is the same shape — something
-wired from one side and dropped on the other. They should be read, not
-tolerated.
+**~~Lesson worth keeping: unused-variable warnings.~~ ACTED ON 2026-08-21.**
+All four were cleared and `@typescript-eslint/no-unused-vars` is now an
+**error**, not a warning. What they turned out to be:
+
+| Warning | What it actually was |
+|---|---|
+| `dot` | Dead style helper. Harmless. |
+| `toggleTenantPlan` | Superseded by `setTenantPlanChoice`, which carries plan AND interval. Dead. |
+| `mrr` | Leftover of the invented-figures cleanup. NOT restored — the drawer shows the tenant's real agreed price from the API, and reinstating the row's MRR would put two different numbers for one tenant on the same screen. |
+| `published` | **The serious one.** A "Rule-pack change review" modal with an "Approve & publish" button that closed the dialog, set a flag nothing read, and toasted "published to production" — while making **no API call**. Hardcoded v2025.4 tourism sub-rate, reviewer note assigned to a person who does not exist. |
+
+The publish modal was unreachable (nothing ever called `setDiffOpen(true)`), so
+it never lied to anyone. But it was one wire away from the worst defect this app
+could ship: staff told a tax rule change was live when nothing had changed. It
+is deleted, with a comment where it stood saying why. The real editor is the
+rule-pack screen (`GET/PATCH /admin/rulepack`), which writes and reads back.
+
+**Why the rule is now an error.** The same warning had already marked three
+real defects — `unavailableReason` leaving the invoice email button live
+against an unverified domain, `Client.town` silently discarded on every save,
+and this. Each printed in every build; each was read past, by me included. A
+warning among warnings is not an invariant.
 
 
 
