@@ -41,6 +41,12 @@ export interface Quote {
   /** Set when this quote is extra work agreed after another was accepted —
    * a variation, not a revision. */
   variationOfQuoteId?: string;
+  /** The client's own answer through the share link. Present only when THEY
+   * decided — a contractor setting the status by hand leaves it empty, and
+   * that difference is what makes it worth showing. */
+  decidedByName?: string;
+  decidedAtLabel?: string;
+  declineReason?: string;
   clientId: string;
   projectId?: string;
   projectLabel: string;

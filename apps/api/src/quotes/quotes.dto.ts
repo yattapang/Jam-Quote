@@ -82,3 +82,18 @@ export const updateQuoteStatusSchema = z.object({
   status: z.nativeEnum(QuoteStatus),
 });
 export type UpdateQuoteStatusInput = z.infer<typeof updateQuoteStatusSchema>;
+
+/**
+ * A client's accept/decline through the public link.
+ *
+ * The name is required and non-empty: an unnamed decision is worth much less
+ * as a record, and typing your own name is what makes the click deliberate
+ * rather than accidental. Capped so the field cannot be used as free storage
+ * on an unauthenticated endpoint.
+ */
+export const quoteDecisionSchema = z.object({
+  decision: z.enum(["ACCEPT", "DECLINE"]),
+  name: z.string().trim().min(1, "Please enter your name").max(120),
+  reason: z.string().trim().max(500).optional(),
+});
+export type QuoteDecisionInput = z.infer<typeof quoteDecisionSchema>;

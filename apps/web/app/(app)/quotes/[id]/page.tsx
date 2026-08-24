@@ -68,6 +68,18 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           <span className={shared.subtitle}>
             {client?.name ?? "Unknown client"} · {quote.projectLabel}
           </span>
+          {/* THE CLIENT answered, not the contractor. Worth saying explicitly:
+              a status the contractor set by hand and one the client committed
+              to through the link carry completely different weight in a
+              disagreement later, and the pill alone cannot tell them apart. */}
+          {quote.decidedByName && (
+            <span className={shared.subtitle}>
+              {quote.status === "DECLINED" ? "Declined" : "Accepted"} by{" "}
+              <strong>{quote.decidedByName}</strong>
+              {quote.decidedAtLabel ? ` on ${quote.decidedAtLabel}` : ""} through the shared link
+              {quote.declineReason ? ` — "${quote.declineReason}"` : ""}
+            </span>
+          )}
         </div>
         <div className={shared.headerActions}>
           <a

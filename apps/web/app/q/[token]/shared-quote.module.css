@@ -173,6 +173,99 @@
 
 /* On paper the card chrome and the button are noise — the client wants the
    quote itself, which is what they will forward or file. */
+/* The client's answer. Given real weight on the page — this is the one thing
+   the client is being asked to DO, and a quote that cannot be answered where
+   it is read gets answered by phone instead, which is the loop this closes. */
+.decision {
+  margin-top: 24px;
+  padding: 18px 16px;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  background: #fafaf9;
+}
+
+.decisionActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.decisionActions button {
+  flex: 1;
+  padding: 13px 16px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 14.5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.accept {
+  background: #15803d;
+  color: #fff;
+}
+
+/* Declining is a legitimate answer, not a danger. Styled as a quiet
+   alternative rather than in alarm red, which would make an honest no feel
+   like a mistake the client was about to make. */
+.decline {
+  background: #fff;
+  border-color: #d6d3d1 !important;
+  color: #44403c;
+}
+
+.decisionCancel {
+  background: transparent;
+  border-color: #d6d3d1 !important;
+  color: #57534e;
+}
+
+.decisionForm {
+  margin-top: 12px;
+}
+
+.decisionLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #44403c;
+  margin-bottom: 12px;
+}
+
+.decisionInput {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 11px 12px;
+  border: 1px solid #d6d3d1;
+  border-radius: 8px;
+  font-size: 15px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.decisionNote {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #78716c;
+}
+
+.decisionError {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #b91c1c;
+}
+
+.decisionDone {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #15803d;
+  text-align: center;
+}
+
 @media print {
   .page {
     padding: 0;
@@ -186,6 +279,7 @@
     padding: 0;
   }
   .download,
+  .decision,
   .footer {
     display: none;
   }

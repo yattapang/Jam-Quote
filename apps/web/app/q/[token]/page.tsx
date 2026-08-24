@@ -2,6 +2,7 @@ import { formatJmd } from "@jamquote/core";
 import { getSharedQuote, type PublicQuoteLine } from "@/lib/public-quote";
 import styles from "./shared-quote.module.css";
 import PrintButton from "./PrintButton";
+import QuoteDecision from "./QuoteDecision";
 
 export const metadata = { title: "Your quote" };
 
@@ -117,6 +118,12 @@ export default async function SharedQuotePage({ params }: { params: { token: str
         )}
 
         <PrintButton />
+
+        <QuoteDecision
+          token={params.token}
+          status={quote.status}
+          businessName={business.name}
+        />
 
         <p className={styles.footer}>
           Questions about this quote? Reply to {business.name} directly.

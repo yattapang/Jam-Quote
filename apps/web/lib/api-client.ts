@@ -307,6 +307,11 @@ export interface ApiQuote {
   projectId?: string | null;
   /** Set when this quote is extra work agreed after another was accepted. */
   variationOfQuoteId?: string | null;
+  /** The client's own answer through the share link — distinct from the
+   * contractor setting the status by hand. */
+  decidedAt?: string | null;
+  decidedByName?: string | null;
+  declineReason?: string | null;
   number: string;
   status: QuoteStatus;
   gctRate: number | string;
@@ -531,6 +536,9 @@ export function mapQuote(q: ApiQuote, projectLabel: string): Quote {
     id: q.id,
     num: q.number,
     variationOfQuoteId: q.variationOfQuoteId ?? undefined,
+    decidedByName: q.decidedByName ?? undefined,
+    decidedAtLabel: q.decidedAt ? new Date(q.decidedAt).toLocaleDateString() : undefined,
+    declineReason: q.declineReason ?? undefined,
     clientId: q.clientId ?? "",
     projectId: q.projectId ?? undefined,
     projectLabel,

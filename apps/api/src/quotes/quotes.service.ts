@@ -450,6 +450,73 @@ export class QuotesService {
   }
 
   /**
+   * The CLIENT accepts or declines, through the public share link.
+   *
+   * No authentication: the token IS the credential, exactly as it is for
+   * viewing. That is a deliberate trade — a client who has to make an account
+   * to say yes will phone instead, and the loop stays open, which is the very
+   * problem this closes.
+   *
+   * What makes it safe to expose is how narrow it is. Only a quote the client
+   * has actually been sent can be decided (SENT or VIEWED), the decision can
+   * only be made once, and nothing about the quote itself can be changed
+   * through this path — no amounts, no lines, no dates.
+   *
+   * A decision is FINAL here. A client who changes their mind rings the
+   * contractor, who can move the status themselves; letting the public link
+   * flip an accepted quote back and forth would destroy the one thing this
+   * record is for.
+   */
+  async decideByShareToken(
+    token: string,
+    decision: "ACCEPT" | "DECLINE",
+    name: string,
+    reason?: string,
+  ): Promise<{ status: QuoteStatus }> {
+    const quote = await this.prisma.quote.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: { id: true, businessId: true, status: true, projectId: true },
+    });
+    // Same 404 as a bad token, and same as a DRAFT — see findByShareToken.
+    // Anything else lets the response confirm which tokens are real.
+    if (!quote || quote.status === QuoteStatus.DRAFT) {
+      throw new NotFoundException("Quote not found");
+    }
+
+    const decidable = quote.status === QuoteStatus.SENT || quote.status === QuoteStatus.VIEWED;
+    if (!decidable) {
+      // Says WHAT it is now, because the commonest cause is two people opening
+      // the same link and the second one deserves an explanation rather than a
+      // blank refusal.
+      throw new BadRequestException(
+        quote.status === QuoteStatus.ACCEPTED || quote.status === QuoteStatus.DECLINED
+          ? "This quote has already been answered. Contact the contractor to change it."
+          : `This quote is no longer open for a decision (${quote.status.toLowerCase()}).`,
+      );
+    }
+
+    const status = decision === "ACCEPT" ? QuoteStatus.ACCEPTED : QuoteStatus.DECLINED;
+    await this.prisma.quote.update({
+      where: { id: quote.id },
+      data: {
+        status,
+        decidedAt: new Date(),
+        decidedByName: name.trim(),
+        declineReason: decision === "DECLINE" ? reason?.trim() || null : null,
+      },
+    });
+
+    // Same consequence as the contractor accepting it — a job to track the
+    // work against. Without this, a quote accepted by the client would be the
+    // one acceptance route that silently skips job costing.
+    if (status === QuoteStatus.ACCEPTED && !quote.projectId) {
+      await this.createProjectForAcceptedQuote(quote.businessId, quote.id);
+    }
+
+    return { status };
+  }
+
+  /**
    * The job a newly-accepted quote is now tracked against.
    *
    * Named from the quote so the contractor recognises it, and attached back to

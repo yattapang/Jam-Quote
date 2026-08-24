@@ -64,3 +64,30 @@ export async function getSharedQuote(token: string): Promise<PublicQuote | undef
     return undefined;
   }
 }
+
+/**
+ * The client's answer, sent with the share token as the only credential.
+ *
+ * Same reasoning as the fetch above: no bearer token, because there is no
+ * account behind this. Throws with the API's own message so the page can say
+ * "this quote has already been answered" rather than a generic failure — the
+ * commonest cause is two people opening the same link.
+ */
+export async function submitQuoteDecision(
+  token: string,
+  body: { decision: "ACCEPT" | "DECLINE"; name: string; reason?: string },
+): Promise<void> {
+  const res = await fetch(`${API_BASE_URL}/public/quotes/${token}/decision`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => null);
+    const message =
+      payload && typeof payload === "object" && "message" in payload
+        ? String((payload as { message: unknown }).message)
+        : "Couldn't send your answer. Please try again.";
+    throw new Error(message);
+  }
+}

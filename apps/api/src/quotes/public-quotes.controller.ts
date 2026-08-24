@@ -1,5 +1,8 @@
-import { Controller, Get, Param } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { QuotesService } from "./quotes.service.js";
+import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
+import { quoteDecisionSchema, type QuoteDecisionInput } from "./quotes.dto.js";
 
 /**
  * The one deliberately UNAUTHENTICATED surface in the API.
@@ -26,6 +29,23 @@ export class PublicQuotesController {
 
   /** Resolving the link also records the first view, which is what makes
    * QuoteStatus.VIEWED reachable at all. */
+  /**
+   * The client's own answer. Public by design — the token is the credential,
+   * because a client made to create an account will phone instead and the
+   * loop this closes stays open.
+   */
+  // Tighter than the global 120/min. This is an unauthenticated route that
+  // WRITES, so the limit is really about how fast tokens could be guessed;
+  // a real client answers a quote once.
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  @Post(":token/decision")
+  decide(
+    @Param("token") token: string,
+    @Body(new ZodValidationPipe(quoteDecisionSchema)) body: QuoteDecisionInput,
+  ) {
+    return this.quotes.decideByShareToken(token, body.decision, body.name, body.reason);
+  }
+
   @Get(":token")
   findByToken(@Param("token") token: string) {
     return this.quotes.findByShareToken(token);

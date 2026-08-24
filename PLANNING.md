@@ -536,8 +536,22 @@ reports, and job costing behind it.
 
 **Then, in priority order** (§4l, all agreed):
 
-1. Accept / decline on the share link — closes the loop, cheap now the public
-   page exists.
+1. ~~Accept / decline on the share link~~ **DONE 2026-08-21.** The client
+   answers on `/q/[token]`; `POST /public/quotes/:token/decision` is the one
+   unauthenticated WRITE in the API. Guarantees live in the method, since the
+   token is the credential: only SENT/VIEWED can be decided, only once, and a
+   test asserts the update touches **nothing but the four decision fields** —
+   the quote's money is not reachable from an anonymous route. DRAFT and an
+   unknown token return the same 404, as with the GET. A decision is final on
+   the public path; the contractor can still change it themselves, because
+   letting the link flip an accepted quote back and forth would destroy the
+   record the feature exists to create. Accepting creates the job, exactly as
+   the contractor's own accept does — otherwise client acceptance would be the
+   one route that silently skipped job costing. The contractor's quote page
+   says who answered and when, since a status the contractor set by hand and
+   one the client committed to carry different weight.
+   **Follow-on not built:** nothing NOTIFIES the contractor — they see it next
+   time they look. A push/email on decision is the obvious next step.
 2. Invoice payment reminders — the sweep, notice ledger and mailer already
    exist; pointing them at overdue tenant invoices is mostly wiring.
 3. Accountant CSV exports (§4g) — both sides of the ledger now exist.

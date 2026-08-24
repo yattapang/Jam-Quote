@@ -389,6 +389,17 @@ model Quote {
   /// First time the client opened the public link. Drives QuoteStatus.VIEWED,
   /// which nothing in the app could set before this existed.
   firstViewedAt DateTime?
+  /// When the CLIENT accepted or declined through the public link. Distinct
+  /// from a contractor setting the status by hand: this one is the client's
+  /// own act, and that difference is the entire evidential value.
+  decidedAt     DateTime?
+  /// The name the client typed when deciding. Not authentication — the link
+  /// is the only credential — but a named decision is what a contractor can
+  /// point to later, and typing your own name makes the act deliberate.
+  decidedByName String?
+  /// Optional reason given when declining. Worth asking for: "too expensive"
+  /// and "wrong start date" lead to completely different follow-ups.
+  declineReason String?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   deletedAt     DateTime? // soft-delete for offline sync
