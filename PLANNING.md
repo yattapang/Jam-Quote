@@ -492,6 +492,39 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-found during testing — a quote lost to the back button
+
+**2026-08-21.** Building a quote, pressed back, lost everything. Nothing had
+reached the server, so there was nothing to go back to.
+
+**The owner's suggestion was to save a DRAFT on every line selection, and
+explicitly invited another way. There is a better one.** Creating a quote calls
+`reserveQuoteNumber`, which increments `Business.nextQuoteSeq` **irreversibly**.
+Server-autosaving every attempt would leave a contractor's numbering running
+QT-0141, QT-0144, QT-0149 — gaps a client or an auditor can see — and fill the
+quotes list with empty drafts they then have to tidy.
+
+**Built instead: local draft recovery** (`lib/quote-draft-recovery.ts`). The
+form autosaves to the browser on every change, and returning offers *"You have
+an unsaved quote from 2 minutes ago — Restore it / Start fresh"*.
+
+It costs no quote numbers, and covers MORE than a server autosave would: the
+back button, a refresh, a crashed browser, a phone killing the tab for memory,
+and a flat battery.
+
+**Offered, never applied automatically.** Silently repopulating would be worse
+than losing it — someone who deliberately started again would find last week's
+lines back without asking. An untouched form is not offered at all
+(`draftIsWorthRestoring`), because a "restore?" prompt on every visit trains
+people to dismiss it unread, and then they dismiss the one that mattered.
+
+Cleared on a successful save, and after seven days. Every storage call is
+wrapped: a private window or a full quota loses the safety net, which is
+survivable — losing the form being typed into is not.
+
+**Does not cover switching device.** That needs a server draft, and it is not
+worth a permanently gappy numbering sequence.
+
 ### Owner-found during testing — no way to enter m² for coverage
 
 **2026-08-21.** A contractor pricing tiling or concrete needs `m²` and `m³`.

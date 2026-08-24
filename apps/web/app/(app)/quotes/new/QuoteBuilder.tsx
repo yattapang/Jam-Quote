@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { computeTotals, depositCentsFrom, DepositMode, QuoteDetailLevel } from "@jamquote/core";
@@ -14,7 +14,17 @@ import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import {
+  clearDraft,
+  draftAge,
+  draftIsWorthRestoring,
+  draftKey,
+  loadDraft,
+  saveDraft,
+  type StoredDraft,
+} from "@/lib/quote-draft-recovery";
 import shared from "../../shared.module.css";
+import styles from "./quote-builder.module.css";
 import LineItemsEditor from "../../LineItemsEditor";
 import {
   customHeadingsFromInitial,
@@ -64,6 +74,23 @@ function initialValidDays(initial?: InitialQuote): number {
   const end = new Date(initial.validUntil);
   const days = Math.round((end.getTime() - start.getTime()) / DAY_MS);
   return days > 0 ? days : DEFAULT_VALID_DAYS;
+}
+
+/**
+ * Exactly the fields a contractor would hate to retype.
+ *
+ * Deliberately not the whole component state: `saving`, `error` and the
+ * clients/projects lists are either transient or re-fetched, and restoring
+ * them would put a stale error banner back on screen.
+ */
+interface DraftSnapshot {
+  clientId: string;
+  projectId: string;
+  discountPct: string;
+  depositInput: string;
+  validDays: string;
+  detailLevel: QuoteDetailLevel;
+  lines: DraftLine[];
 }
 
 export default function QuoteBuilder({
@@ -137,6 +164,56 @@ export default function QuoteBuilder({
   const [detailLevel, setDetailLevel] = useState<QuoteDetailLevel>(
     initial?.detailLevel ?? QuoteDetailLevel.SUMMARY,
   );
+  // ---- Draft recovery -----------------------------------------------------
+  // The owner lost a quote to the back button. Nothing had reached the server,
+  // so there was nothing to go back to.
+  //
+  // Local, NOT a server-side autosave: creating a quote reserves a number
+  // irreversibly, so saving on every line change would leave a contractor's
+  // numbering full of gaps and their list full of empty drafts. See
+  // lib/quote-draft-recovery.ts.
+  const storageKey = draftKey(isEdit ? "edit" : "new", quoteId);
+  const [recovered, setRecovered] = useState<StoredDraft<DraftSnapshot> | null>(null);
+  // Blocks the autosave until the restore offer has been answered — otherwise
+  // the empty form would overwrite the very draft being offered back.
+  const restoreSettled = useRef(false);
+
+  const snapshot = useMemo<DraftSnapshot>(
+    () => ({ clientId, projectId, discountPct, depositInput, validDays, detailLevel, lines }),
+    [clientId, projectId, discountPct, depositInput, validDays, detailLevel, lines],
+  );
+
+  useEffect(() => {
+    const found = loadDraft<DraftSnapshot>(storageKey);
+    if (found && draftIsWorthRestoring(found.values)) setRecovered(found);
+    else restoreSettled.current = true;
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!restoreSettled.current) return;
+    saveDraft(storageKey, snapshot);
+  }, [storageKey, snapshot]);
+
+  const restoreDraft = useCallback(() => {
+    if (!recovered) return;
+    const v = recovered.values;
+    setClientId(v.clientId);
+    setProjectId(v.projectId);
+    setDiscountPct(v.discountPct);
+    setDepositInput(v.depositInput);
+    setValidDays(v.validDays);
+    setDetailLevel(v.detailLevel);
+    setLines(v.lines);
+    setRecovered(null);
+    restoreSettled.current = true;
+  }, [recovered]);
+
+  const discardDraft = useCallback(() => {
+    clearDraft(storageKey);
+    setRecovered(null);
+    restoreSettled.current = true;
+  }, [storageKey]);
+
   const totals = useMemo(
     () =>
       (() => {
@@ -204,6 +281,9 @@ export default function QuoteBuilder({
     };
     try {
       const { id } = isEdit ? await updateQuote(quoteId!, payload) : await createQuote(payload);
+      // The quote exists on the server now, so the local copy is no longer a
+      // safety net — leaving it would offer to "restore" work already saved.
+      clearDraft(storageKey);
       router.push(`/quotes/${id}`);
     } catch (err) {
       // Free-plan quote limit: the API returns 402 with
@@ -222,6 +302,24 @@ export default function QuoteBuilder({
 
   return (
     <div className={shared.page}>
+      {/* Offered, never applied automatically. Silently repopulating the form
+          would be worse than losing it: a contractor who deliberately started
+          again would find last week's lines back without asking. */}
+      {recovered && (
+        <div className={styles.recoverBar}>
+          <span>
+            You have an unsaved quote from {draftAge(recovered.savedAt)}.
+          </span>
+          <span className={styles.recoverActions}>
+            <Button variant="primary" size="sm" onClick={restoreDraft}>
+              Restore it
+            </Button>
+            <Button variant="ghost" size="sm" onClick={discardDraft}>
+              Start fresh
+            </Button>
+          </span>
+        </div>
+      )}
       <header className={shared.header}>
         <div className={shared.headings}>
           <span className={shared.eyebrow}>
