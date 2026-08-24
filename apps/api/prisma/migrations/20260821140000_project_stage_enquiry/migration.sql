@@ -1,0 +1,12 @@
+-- "Enquiry" — work a contractor has been asked about but not yet priced.
+--
+-- The ladder previously started at QUOTED, which asserts a price has already
+-- gone to the client. There was nowhere to record a lead.
+--
+-- BEFORE 'QUOTED' places it first in the Postgres enum's own ordering, so any
+-- ORDER BY on the column still reads in workflow order. The type is still
+-- named "JobStage" — see the @@map in schema.prisma and PLANNING §1.
+--
+-- IF NOT EXISTS makes this safe to re-run; ADD VALUE cannot be rolled back, so
+-- a partially applied migration must not block a retry.
+ALTER TYPE "JobStage" ADD VALUE IF NOT EXISTS 'ENQUIRY' BEFORE 'QUOTED';

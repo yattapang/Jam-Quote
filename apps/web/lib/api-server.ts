@@ -57,7 +57,8 @@ import {
 } from "./api-client";
 import type { Job, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote } from "./types";
 import type { ProjectSummary, ProjectDetail } from "./mock-data";
-import type { InvoiceStatus, ReportsSummary } from "@jamquote/core";
+import type { InvoiceStatus, ProjectStage, ReportsSummary } from "@jamquote/core";
+import { PROJECT_STAGES } from "@jamquote/core";
 import { IMPERSONATION_COOKIE } from "./session";
 
 const TOKEN_COOKIE = "jamquote_token";
@@ -469,7 +470,13 @@ function emptyReportsSummary(fromIso: string, toIso: string): ReportsSummary {
     sales: { granularity: "month", buckets: [] },
     projects: {
       projectsCreated: 0,
-      projectsByStage: { QUOTED: 0, WON: 0, IN_PROGRESS: 0, COMPLETE: 0, CANCELLED: 0 },
+      // Derived from PROJECT_STAGES rather than listed by hand, so a stage
+      // added later cannot be forgotten here — the same reasoning the real
+      // tally in core already follows.
+      projectsByStage: Object.fromEntries(PROJECT_STAGES.map((st) => [st, 0])) as Record<
+        ProjectStage,
+        number
+      >,
       topClientsByProjects: [],
     },
   };

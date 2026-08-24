@@ -39,3 +39,25 @@ describe("ProjectStage", () => {
     }
   });
 });
+
+describe("ENQUIRY — the stage before a price exists", () => {
+  it("comes FIRST, so the picker reads in workflow order", () => {
+    // A contractor is asked about work, then quotes it, then wins it. The
+    // ladder previously started at QUOTED, which asserts a price has already
+    // gone to the client.
+    expect(PROJECT_STAGES[0]).toBe(ProjectStage.ENQUIRY);
+    expect(PROJECT_STAGES.indexOf(ProjectStage.ENQUIRY)).toBeLessThan(
+      PROJECT_STAGES.indexOf(ProjectStage.QUOTED),
+    );
+  });
+
+  it("reads as 'Enquiry' everywhere, from the one label map", () => {
+    expect(PROJECT_STAGE_LABELS[ProjectStage.ENQUIRY]).toBe("Enquiry");
+  });
+
+  it("does NOT track progress — nothing has been agreed, let alone started", () => {
+    // Showing a % complete against an enquiry would claim work is underway on
+    // a job the contractor has not even priced.
+    expect(projectStageTracksProgress(ProjectStage.ENQUIRY)).toBe(false);
+  });
+});

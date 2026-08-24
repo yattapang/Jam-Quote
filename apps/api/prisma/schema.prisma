@@ -135,6 +135,8 @@ enum QuoteDetailLevel {
 // laid). Deliberately no INVOICED/PAID member: that is Invoice.status, and
 // holding the same fact in two places guarantees they eventually disagree.
 enum ProjectStage {
+  /// Asked about, not yet priced. Comes before QUOTED — see @jamquote/core.
+  ENQUIRY
   QUOTED
   WON
   IN_PROGRESS

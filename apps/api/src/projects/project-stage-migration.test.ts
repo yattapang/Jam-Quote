@@ -145,8 +145,19 @@ describe("Job.stage enum migration", () => {
       ).rows[0]?.udt_name;
       expect(type).toBe("JobStage");
 
+      // Read from a FULLY migrated database, not this block's `db`, which
+      // deliberately stops at TARGET so the legacy-mapping assertions can see
+      // the moment of conversion.
+      //
+      // The comparison is against schema.prisma as it stands TODAY, so it has
+      // to include every later migration that touched the enum — ENQUIRY was
+      // added in 20260821140000 and this assertion failed until it was read
+      // from here. Point-in-time state compared against a current schema only
+      // agrees until someone changes the enum again, which is precisely what
+      // this test should be catching rather than tripping over.
+      const full = await freshDb();
       const members = (
-        await db.query<{ enumlabel: string }>(
+        await full.query<{ enumlabel: string }>(
           `SELECT e.enumlabel FROM pg_enum e
              JOIN pg_type t ON t.oid = e.enumtypid
             WHERE t.typname = 'JobStage' ORDER BY e.enumsortorder`,

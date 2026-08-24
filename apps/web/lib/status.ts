@@ -28,6 +28,9 @@ const INVOICE_STATUS_PILL: Record<InvoiceStatus, PillSpec> = {
 /** Stage colours only. The LABELS come from @jamquote/core so web and mobile
  * cannot drift into calling the same stage two different things (#36). */
 const PROJECT_STAGE_KIND: Record<ProjectStage, { kind: PillKind; variant: PillVariant }> = {
+  // Quieter than QUOTED: an enquiry is not yet a commitment either way, and a
+  // list of leads should not compete for attention with work in hand.
+  [ProjectStage.ENQUIRY]: { kind: "neutral", variant: "soft" },
   [ProjectStage.QUOTED]: { kind: "neutral", variant: "soft" },
   [ProjectStage.WON]: { kind: "info", variant: "soft" },
   [ProjectStage.IN_PROGRESS]: { kind: "info", variant: "solid" },

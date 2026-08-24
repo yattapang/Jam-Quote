@@ -112,6 +112,11 @@ export type QuoteDetailLevel = (typeof QuoteDetailLevel)[keyof typeof QuoteDetai
  * guarantees the two eventually disagree.
  */
 export const ProjectStage = {
+  /** Work a contractor knows about but has not priced yet. Sits BEFORE
+   * QUOTED, and exists because there was previously nowhere to record a job
+   * you had been asked about — the ladder started at "Quoted", which is a
+   * claim you have already sent the client a price. */
+  ENQUIRY: "ENQUIRY",
   QUOTED: "QUOTED",
   WON: "WON",
   IN_PROGRESS: "IN_PROGRESS",
@@ -126,6 +131,7 @@ export const PROJECT_STAGES: ProjectStage[] = Object.values(ProjectStage);
 /** The one label map. Web list, web detail and mobile all read it, so the
  * same stage can never read three different ways to the same contractor. */
 export const PROJECT_STAGE_LABELS: Record<ProjectStage, string> = {
+  ENQUIRY: "Enquiry",
   QUOTED: "Quoted",
   WON: "Won",
   IN_PROGRESS: "In progress",

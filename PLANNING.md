@@ -492,6 +492,37 @@ days before contractor testing. They are mostly form saves, where the failure
 is usually validation the API also reports. Worth a careful pass later; each
 one is a mystery for whoever hits it.
 
+### Owner-decided — ENQUIRY, a stage before a price exists
+
+**2026-08-21.** The ladder started at QUOTED, which asserts a price has already
+gone to the client. There was nowhere to record work a contractor had merely
+been asked about. Owner chose **"Enquiry"**.
+
+`ProjectStage.ENQUIRY` is first in the enum, so it leads the picker; the SQL
+uses `ADD VALUE ... BEFORE 'QUOTED'` so the Postgres enum's own ordering
+matches, and any `ORDER BY stage` still reads in workflow order. It does not
+track progress — a % complete against an enquiry would claim work is underway
+on a job that has not been priced.
+
+**The type system found a fifth site the greps missed.** Four exhaustive
+`Record<ProjectStage, …>` maps were known; `api-server.ts`'s reports fallback
+listed the stages by hand and failed to compile. It now derives from
+`PROJECT_STAGES`, like the real tally in core already did — that comment
+("so a stage added later can't be forgotten here") paid for itself today.
+
+**A guard test had to change, and it is worth saying why.**
+`project-stage-migration.test.ts` replays migrations in PGlite, stopping at the
+stage-conversion migration so it can watch legacy values convert. It then
+compared THAT point-in-time enum against `schema.prisma` as it stands today —
+an assumption that only held while no later migration touched the enum. The
+assertion now reads from a fully migrated database. The test was encoding a
+stale assumption, not catching a real defect; the legacy-mapping assertions it
+exists for are untouched.
+
+**Default is still QUOTED**, not ENQUIRY. A project created from the quote
+builder genuinely IS being quoted, and that is the commonest path. Enquiry is
+there to be chosen.
+
 ### Owner-found during testing — the project picker still said "job"
 
 **2026-08-21.** Creating a project from inside the quote builder was labelled

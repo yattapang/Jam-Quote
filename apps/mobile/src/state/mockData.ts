@@ -133,6 +133,7 @@ export const clientRows: ClientRow[] = demoClients.map((c) => ({
  * the enum now that Project.stage is one, which also makes a missing case a
  * type error rather than a silently grey pill. */
 export const STAGE_KIND: Record<ProjectStage, StatusKind> = {
+  ENQUIRY: "neutral",
   QUOTED: "neutral",
   WON: "info",
   IN_PROGRESS: "info",
