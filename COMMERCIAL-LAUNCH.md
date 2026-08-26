@@ -37,12 +37,44 @@ expensive or less useful with every week that passes.
 | **The backup restore drill** (1.3) | 11 MB and 41 tables today. This is the smallest and quickest this database will ever be, and the procedure has to be known before it is needed, not discovered during an incident. |
 | **Ask the testers what they would pay** (§4) | Only answerable by someone who has just used it. Ask a week in, while the experience is fresh — not in a follow-up call a month later. |
 | **Write down every question they ask** (§1) | Impossible to reconstruct afterwards. Each one is a support article or a UI fix; asked twice, it is a UI fix. |
-| **Start the domain purchase and DNS verification** (1.1) | DNS propagation and Resend verification take days, not minutes, and a warmed sending domain needs weeks of low volume before it is trusted. Beginning now costs nothing and removes the longest lead time from the critical path. |
+| **Settle the NAME, then start the domain purchase and DNS verification** (1.1) | DNS propagation and Resend verification take days, and a warmed sending domain needs weeks of low volume before mailbox providers trust it. **Blocked on the rename below** — buying and warming a domain you then abandon throws the whole warming period away. |
 
 **Everything else in this document can and should wait** until testing tells
 you whether to spend the money at all.
 
 ---
+
+### 0.6 The rename — decide it before anything is bought or printed
+
+**Raised by the owner 2026-08-21: "JamQuote" is too specific for where this is
+going.** They are right on both halves. *Jam* pins it to one island; *Quote*
+pins it to one of five things the app now does — quoting, invoicing, chasing
+payment, job costing and accountant exports.
+
+**Do it now, or accept it forever.** The cost of renaming rises sharply and
+permanently at three points, all of which are close:
+
+| Once this happens | The rename costs |
+|---|---|
+| A domain is bought and warmed as a sender | The warming period, restarted from zero |
+| Contractors are onboarded | Their bookmarks, their habits, and an explanation to every one of them |
+| A quote PDF reaches a CLIENT | Nothing — the documents are signed with the CONTRACTOR's business name, not ours. This is the one place the name does not leak. |
+
+**Today the name lives in exactly four places**, none of them public: the repo,
+the npm scope `@jamquote/*`, a handful of env var names, and platform email
+copy. That is a day's work. After launch it is a migration with an audience.
+
+**What the name has to survive:**
+
+- **Being read aloud down a phone line.** A contractor will spell it to their
+  accountant. Anything needing "no, with a K" is a tax on every conversation.
+- **Being a sending domain.** Short, unambiguous, no doubled letters people
+  drop.
+- **Growing past quoting AND past Jamaica** — the two traps being escaped.
+
+**Not a constraint, usefully:** it does not need to appeal to the contractor's
+CLIENT. Quotes and invoices carry the contractor's own business name and sign
+off as them. This is a name for tradespeople, not homeowners.
 
 ## 1. Exit criteria: when is field testing actually finished?
 
