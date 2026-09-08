@@ -131,6 +131,75 @@ must reach the contractor, not JamQuote. This is not built yet — see
 **Warming matters.** A brand-new domain sending its first hundred emails to
 strangers looks like spam infrastructure. Send the first weeks' volume slowly.
 
+### 1.1b Testing on `educatebgreat.com` — a real host without the real brand
+
+**Owner has `educatebgreat.com` on GoDaddy and will register the business domain
+after testing (2026-09-08).** That is the right sequence, and it unblocks most
+of the email gate immediately.
+
+**Use SUBDOMAINS, not the root.** Two reasons, both real:
+
+- **Sender reputation is tracked largely per subdomain.** Sending a new stream
+  from the root would put the education domain's reputation and this app's in
+  one blast radius, and a bad week for one becomes a bad week for both.
+- **The root's existing SPF/DKIM/DMARC stay untouched.** Adding a second
+  sending service to a root that already sends mail is how working mail breaks.
+
+| Purpose | Host | Points at |
+|---|---|---|
+| The app contractors log into | `app.educatebgreat.com` | Vercel |
+| Platform mail TO contractors | `mail.educatebgreat.com` | Resend |
+
+**What to enable, and what to leave off.** Platform mail — overdue digests,
+renewal reminders, quote-decision alerts — goes to the testers, who know
+exactly who you are, so switch it on. **Client-facing quote and invoice email
+stays off**: a homeowner receiving a construction quote from an education
+domain reads as phishing, and WhatsApp already works and is what contractors
+here prefer. That split turns on every notification aimed at your testers while
+putting nothing confusing in front of their clients.
+
+### The GoDaddy steps, in order
+
+1. **Vercel first.** Project → Settings → Domains → add
+   `app.educatebgreat.com`. Vercel shows the record it wants.
+2. **GoDaddy DNS.** Add a CNAME with **Name `app`** → the value Vercel gave
+   (usually `cname.vercel-dns.com`).
+
+   **The gotcha that costs an evening:** GoDaddy's *Name* field is RELATIVE to
+   the domain. It wants `app`, never `app.educatebgreat.com` — entering the full
+   name silently creates `app.educatebgreat.com.educatebgreat.com`, which
+   resolves for nobody and looks like a propagation delay.
+3. **Resend.** Add domain `mail.educatebgreat.com` (the subdomain, not the
+   root). Resend returns a DKIM record and an SPF value.
+4. **GoDaddy again**, with the same relative-name rule: a DKIM record Resend
+   calls `resend._domainkey.mail.educatebgreat.com` is entered with Name
+   `resend._domainkey.mail`.
+5. **DMARC.** Add a TXT at Name `_dmarc.mail` with `v=DMARC1; p=none;
+   rua=mailto:<your address>`. Start at `p=none` — it reports without
+   rejecting, so a misconfiguration shows up in reports instead of silently
+   binning every notification. Tighten later.
+
+   If the ROOT already has a DMARC record with `p=reject` or `p=quarantine`,
+   check whether it sets `sp=`. The subdomain policy inherits from the root
+   unless `sp=` says otherwise, so a strict root can reject subdomain mail you
+   have correctly configured.
+6. **Then the app's own settings**, or nothing works:
+   - Render `WEB_ORIGIN` **must include** `https://app.educatebgreat.com` or
+     CORS blocks every request from the new origin. This is the single most
+     likely cause of "the new domain loads but nothing works".
+   - Render `EMAIL_FROM` → `JamQuote <notifications@mail.educatebgreat.com>`
+   - Vercel `NEXT_PUBLIC_API_BASE_URL` unchanged for now — the API keeps its
+     `onrender.com` address until the region move in 1.2b.
+   - Leave `QUOTE_FROM_EMAIL` OFF on Production. That is the client-facing
+     switch, and it stays off deliberately.
+7. **Verify before believing it.** Send a real overdue digest to a Gmail
+   address and check it lands in the inbox, not spam. `/api/health` reports
+   `email: true` for a KEY being present — that is not evidence of delivery.
+
+**When the business domain is registered**, only steps 3–6 repeat. The app
+domain can move at leisure; the sending domain needs its warming period started
+early, which is why §0.5 puts it in parallel with testing.
+
 ### 1.2 Paid hosting — the free tier will break three features
 
 **Status: a real, verifiable defect at launch, not a nicety.**
