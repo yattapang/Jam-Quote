@@ -7,10 +7,11 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
-import { updateInvoice, ApiError, type Trade } from "@/lib/api-client";
+import { updateInvoice, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import {
   clearDraft,
   draftAge,
@@ -258,7 +259,7 @@ export default function InvoiceBuilder({
       clearDraft(storageKey);
       router.push(`/invoices/${invoiceId}`);
     } catch (err) {
-      setError(err instanceof ApiError && err.message ? err.message : "Couldn't save changes — is the API running?");
+      setError(errorMessage(err, "Couldn't save changes — is the API running?"));
       setSaving(false);
     }
   }

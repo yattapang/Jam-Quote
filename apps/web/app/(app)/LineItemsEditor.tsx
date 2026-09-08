@@ -73,6 +73,7 @@ import { materialLineDescription } from "@/lib/material-display";
 import { lineUnitLabel } from "@/lib/quote-totals";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema, useMaterialSchema } from "@/lib/use-material-schema";
+import { errorMessage } from "@/lib/error-message";
 import shared from "./shared.module.css";
 import styles from "./LineItemsEditor.module.css";
 
@@ -712,8 +713,8 @@ export default function LineItemsEditor({
         setFavourites((favs) => [...favs, created]);
         onLinesChange((ls) => ls.map((l) => (l.key === key ? { ...l, materialFavouriteId: created.id } : l)));
       }
-    } catch {
-      setFavError("Couldn't save the material — is the API running?");
+    } catch (err) {
+      setFavError(errorMessage(err, "Couldn't save the material — is the API running?"));
     } finally {
       setSavingFavKey(null);
     }

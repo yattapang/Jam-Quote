@@ -41,7 +41,7 @@ export default function BillingCard({
       </div>
 
       {!status ? (
-        <div className={shared.statHint}>Couldn&apos;t load billing status — is the API running?</div>
+        <div className={shared.statHint}>Couldn&apos;t load billing status. Try reloading.</div>
       ) : isPro ? (
         <div className={shared.list}>
           <div className={shared.totalRow}>

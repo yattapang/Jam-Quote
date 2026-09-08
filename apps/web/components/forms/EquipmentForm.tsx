@@ -10,6 +10,7 @@ import { modalStyles } from "@/components/ui/Modal";
 import type { NewEquipmentItemInput } from "@/lib/api-client";
 import type { EquipmentItem } from "@/lib/types";
 
+import { errorMessage } from "@/lib/error-message";
 const ownedOptions = [
   { value: "hired", label: "Hired from a vendor" },
   { value: "owned", label: "I own it" },
@@ -104,8 +105,8 @@ export default function EquipmentForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }

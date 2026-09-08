@@ -5,6 +5,7 @@ import fieldStyles from "@/components/ui/Field.module.css";
 import styles from "./TradeSelectField.module.css";
 import { createTrade, type Trade } from "@/lib/api-client";
 
+import { errorMessage } from "@/lib/error-message";
 /**
  * A reusable type-ahead trade picker: a text input that filters the trades
  * list (curated global master list + this business's own custom trades) as
@@ -89,8 +90,8 @@ export default function TradeSelectField({
       setQuery(created.name);
       onChange(created.name);
       setOpen(false);
-    } catch {
-      setError("Couldn't add that trade — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't add that trade — is the API running?"));
     } finally {
       setBusy(false);
     }

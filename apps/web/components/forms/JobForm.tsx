@@ -15,6 +15,7 @@ import { createEquipmentItem, createLabourRate, createMaterialFavourite, type Ne
 import { materialFavouriteLabel } from "@/lib/material-display";
 import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./JobForm.module.css";
 
 const kindOptions = [
@@ -466,8 +467,8 @@ export default function JobForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }

@@ -6,8 +6,9 @@ import { QuoteStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { ApiError, createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
+import { createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
 
+import { errorMessage } from "@/lib/error-message";
 /**
  * Header actions for the quote detail page. DRAFT quotes can be edited,
  * marked as sent (DRAFT -> SENT), or deleted; any other status can be revised
@@ -46,9 +47,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       // The API's own message names the reason (e.g. "quote is not
       // ACCEPTED" or "already converted to an invoice") — surface it as-is
       // rather than a generic failure text.
-      setConvertError(
-        err instanceof ApiError && err.message ? err.message : "Couldn't convert to invoice — is the API running?",
-      );
+      setConvertError(errorMessage(err, "Couldn't convert to invoice — is the API running?"));
       setConverting(false);
     }
   }
@@ -61,9 +60,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setSendOpen(false);
       router.refresh();
     } catch (err) {
-      setSendError(
-        err instanceof ApiError && err.message ? err.message : "Couldn't send — is the API running?",
-      );
+      setSendError(errorMessage(err, "Couldn't send — is the API running?"));
     } finally {
       setSending(false);
     }
@@ -77,9 +74,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setReviseOpen(false);
       router.push(`/quotes/${newId}/edit`);
     } catch (err) {
-      setReviseError(
-        err instanceof ApiError && err.message ? err.message : "Couldn't create a revision — is the API running?",
-      );
+      setReviseError(errorMessage(err, "Couldn't create a revision — is the API running?"));
       setRevising(false);
     }
   }
@@ -139,9 +134,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setOutcome(null);
       router.refresh();
     } catch (err) {
-      setOutcomeError(
-        err instanceof ApiError && err.message ? err.message : "Couldn't record that — is the API running?",
-      );
+      setOutcomeError(errorMessage(err, "Couldn't record that — is the API running?"));
     } finally {
       setRecording(false);
     }

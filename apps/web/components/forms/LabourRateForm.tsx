@@ -10,6 +10,7 @@ import TradeSelectField from "@/components/forms/TradeSelectField";
 import type { NewLabourRateInput, Trade } from "@/lib/api-client";
 import type { LabourRate } from "@/lib/types";
 
+import { errorMessage } from "@/lib/error-message";
 export interface LabourRateFormValues {
   trade: string;
   skillTier: string;
@@ -85,8 +86,8 @@ export default function LabourRateForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }

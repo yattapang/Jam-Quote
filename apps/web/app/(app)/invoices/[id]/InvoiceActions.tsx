@@ -6,8 +6,9 @@ import { InvoiceStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { ApiError, finalizeInvoice } from "@/lib/api-client";
+import { finalizeInvoice } from "@/lib/api-client";
 
+import { errorMessage } from "@/lib/error-message";
 /**
  * Header actions for the invoice detail page. Only a DRAFT invoice can be
  * edited, finalized, or deleted (see the API's InvoicesService — every write
@@ -30,9 +31,7 @@ export default function InvoiceActions({ id, status }: { id: string; status: Inv
       setFinalizeOpen(false);
       router.refresh();
     } catch (err) {
-      setFinalizeError(
-        err instanceof ApiError && err.message ? err.message : "Couldn't finalize — is the API running?",
-      );
+      setFinalizeError(errorMessage(err, "Couldn't finalize — is the API running?"));
       setFinalizing(false);
     }
   }

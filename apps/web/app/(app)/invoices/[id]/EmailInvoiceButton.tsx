@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 
+import { errorMessage } from "@/lib/error-message";
 interface EmailInvoiceButtonProps {
   invoiceId: string;
   clientEmail?: string;
@@ -36,8 +37,8 @@ export default function EmailInvoiceButton({
         return;
       }
       setSent(true);
-    } catch {
-      setError("Couldn't send — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't send — is the API running?"));
     } finally {
       setSending(false);
     }

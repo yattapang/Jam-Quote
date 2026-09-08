@@ -9,6 +9,7 @@ import { modalStyles } from "@/components/ui/Modal";
 import type { NewClientInput } from "@/lib/api-client";
 import type { Client } from "@/lib/types";
 
+import { errorMessage } from "@/lib/error-message";
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 
 export interface ClientFormValues {
@@ -99,8 +100,8 @@ export default function ClientForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }

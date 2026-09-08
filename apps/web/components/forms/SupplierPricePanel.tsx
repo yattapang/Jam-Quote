@@ -24,6 +24,7 @@ import {
 } from "@/lib/catalog-options";
 import { relativeTime } from "@/lib/relative-time";
 import { cheapestPriceCents, priceDollarsToCents } from "@/lib/supplier-prices";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./SupplierPricePanel.module.css";
 
 const parishOptions = [{ value: "", label: "Parish (optional)" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
@@ -73,10 +74,10 @@ export default function SupplierPricePanel({
     setError("");
     try {
       setPrices(await getMaterialPrices(materialFavouriteId));
-    } catch {
+    } catch (err) {
       // Inline, never thrown: this panel sits beside a working edit form, and
       // a price lookup failing must not take that form down with it.
-      setError("Couldn't load supplier prices — is the API running?");
+      setError(errorMessage(err, "Couldn't load supplier prices — is the API running?"));
     } finally {
       setLoading(false);
     }
@@ -106,8 +107,8 @@ export default function SupplierPricePanel({
     try {
       await deleteMaterialPrice(id);
       await load();
-    } catch {
-      setError("Couldn't remove that price — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't remove that price — is the API running?"));
     } finally {
       setRemovingId("");
     }
@@ -141,8 +142,8 @@ export default function SupplierPricePanel({
       // Re-read rather than trusting the splice: the row the API stored is the
       // canonical one, and another tab may have added suppliers since.
       void loadSuppliers();
-    } catch {
-      setAddError("Couldn't add that supplier — is the API running?");
+    } catch (err) {
+      setAddError(errorMessage(err, "Couldn't add that supplier — is the API running?"));
     } finally {
       setAddingBusy(false);
     }
@@ -166,8 +167,8 @@ export default function SupplierPricePanel({
       setPriceDollars("");
       setNote("");
       await load();
-    } catch {
-      setFormError("Couldn't record that price — is the API running?");
+    } catch (err) {
+      setFormError(errorMessage(err, "Couldn't record that price — is the API running?"));
     } finally {
       setSaving(false);
     }

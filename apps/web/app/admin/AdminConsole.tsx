@@ -1184,7 +1184,7 @@ export default function AdminConsole({
                   payroll rates. The tax rate seeds every newly-registered business&apos;s default {taxLabelEff}.
                 </div>
                 {!rpForm ? (
-                  <div style={{ fontSize: 13, color: "var(--critical)" }}>Couldn&apos;t load the rule-pack — is the API running?</div>
+                  <div style={{ fontSize: 13, color: "var(--critical)" }}>Couldn&apos;t load the rule-pack. Try reloading.</div>
                 ) : (
                   <>
                     <div className={styles.formGrid} style={{ marginBottom: 16 }}>
@@ -1454,7 +1454,7 @@ export default function AdminConsole({
                   business. Takes effect immediately for new limit checks.
                 </div>
                 {pricingLoadError && !pricing && (
-                  <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 14 }}>Couldn&apos;t load pricing — is the API running?</div>
+                  <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 14 }}>Couldn&apos;t load pricing. Try reloading.</div>
                 )}
                 <div className={styles.formGrid} style={{ marginBottom: 16 }}>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
@@ -1512,7 +1512,7 @@ export default function AdminConsole({
                   </button>
                   {!canManagePricing && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Read-only — needs the Manage pricing capability.</span>}
                   {pricingStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
-                  {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save — is the API running?</span>}
+                  {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save. Try again.</span>}
                 </div>
               </div>
             </div>
@@ -1522,7 +1522,7 @@ export default function AdminConsole({
           {screen === "financials" && (
             <div className={`${styles.fadein} ${styles.screen}`} style={{ maxWidth: 1000, margin: "0 auto" }}>
               {!financials && (
-                <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 16 }}>Couldn&apos;t load financials — is the API running?</div>
+                <div style={{ fontSize: 13, color: "var(--critical)", marginBottom: 16 }}>Couldn&apos;t load financials. Try reloading.</div>
               )}
               <div className={styles.financeTiles} style={{ marginBottom: 18 }}>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>

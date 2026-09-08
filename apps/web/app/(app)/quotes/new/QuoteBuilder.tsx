@@ -14,6 +14,7 @@ import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import {
   clearDraft,
   draftAge,
@@ -307,7 +308,12 @@ export default function QuoteBuilder({
         setError(err.body?.message || "You've reached your free plan limit for this month. Upgrade to Pro to keep creating quotes.");
         setLimitReached(err.body?.code === "FREE_LIMIT_REACHED");
       } else {
-        setError(isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?");
+        setError(
+          errorMessage(
+            err,
+            isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?",
+          ),
+        );
         setLimitReached(false);
       }
       setSaving(false);

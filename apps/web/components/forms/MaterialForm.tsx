@@ -23,6 +23,7 @@ import {
   type NewMaterialFavouriteInput,
 } from "@/lib/api-client";
 import type { MaterialFavourite } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./MaterialForm.module.css";
 
 export interface MaterialFormValues {
@@ -339,8 +340,8 @@ export default function MaterialForm({
         },
         category,
       );
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }
@@ -594,8 +595,12 @@ export function InlineAddRow({
     setError("");
     try {
       await onAdd(trimmed);
-    } catch {
-      setError(errorText);
+    } catch (err) {
+      // The caller's `errorText` is the FALLBACK, not the answer. When the API
+      // declined with a reason - a duplicate name, a validation rule - that
+      // reason is what the contractor needs; "is the API running?" sends them
+      // to check a server that answered them perfectly well.
+      setError(errorMessage(err, errorText));
       setBusy(false);
     }
   }

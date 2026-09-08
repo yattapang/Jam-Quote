@@ -11,6 +11,7 @@ import { updateBusiness, type Trade } from "@/lib/api-client";
 import { PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
 import type { Business } from "@/lib/types";
 
+import { errorMessage } from "@/lib/error-message";
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 
 /** Header action on the settings page — mirrors EditClientButton: pre-fills a
@@ -70,8 +71,8 @@ export default function EditBusinessButton({
       });
       setOpen(false);
       router.refresh();
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
     } finally {
       setSaving(false);
     }

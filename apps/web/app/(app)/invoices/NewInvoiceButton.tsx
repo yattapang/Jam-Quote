@@ -7,6 +7,7 @@ import Input from "@/components/ui/Input";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import { createInvoice } from "@/lib/api-client";
+import { errorMessage } from "@/lib/error-message";
 import type { ClientOption } from "@/components/forms/types";
 
 /**
@@ -44,8 +45,8 @@ export default function NewInvoiceButton({ clients }: { clients: ClientOption[] 
       // so dropping the user on the read-only detail page would just make them
       // find the Edit button themselves.
       router.push(`/invoices/${invoice.id}/edit`);
-    } catch {
-      setError("Couldn't create the invoice — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't create the invoice — is the API running?"));
       setSaving(false);
     }
   }

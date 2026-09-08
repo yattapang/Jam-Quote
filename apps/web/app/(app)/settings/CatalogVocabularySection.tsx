@@ -15,6 +15,7 @@ import {
 } from "@/lib/api-client";
 import { invalidateMaterialSchema } from "@/lib/use-material-schema";
 import { buildHiddenSet, isHidden, orderForDisplay, withHiddenToggled } from "@/lib/catalog-visibility";
+import { errorMessage } from "@/lib/error-message";
 import shared from "../shared.module.css";
 import styles from "./CatalogVocabularySection.module.css";
 
@@ -116,8 +117,8 @@ export default function CatalogVocabularySection({
       // keep omitting) this row until a full page reload, which reads
       // exactly like the hide/restore having silently failed.
       invalidateMaterialSchema();
-    } catch {
-      setError("Couldn't update that — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't update that — is the API running?"));
     } finally {
       setBusyKeys((prev) => {
         const next = new Set(prev);

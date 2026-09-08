@@ -11,6 +11,7 @@ import { getMaterialFavouritesClient } from "@/lib/api-client";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useMaterialSchema } from "@/lib/use-material-schema";
 import type { MaterialFavourite } from "@/lib/types";
+import { errorMessage } from "@/lib/error-message";
 import shared from "../shared.module.css";
 
 const UNCATEGORIZED = "Uncategorized";
@@ -127,9 +128,9 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
         setMaterials(results);
         setSearching(false);
       })
-      .catch(() => {
+      .catch((err) => {
         if (requestRef.current !== requestId) return;
-        setSearchError("Couldn't search materials — is the API running?");
+        setSearchError(errorMessage(err, "Couldn't search materials — is the API running?"));
         setSearching(false);
       });
   }, [debouncedQuery, filter, filterParams, initialMaterials]);

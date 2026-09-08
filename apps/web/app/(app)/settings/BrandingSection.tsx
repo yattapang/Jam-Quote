@@ -6,6 +6,7 @@ import Card from "@/components/ui/Card";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { deleteLogo, getLogoMeta, logoUrl, uploadLogo, type ApiLogoMeta } from "@/lib/api-client";
 import { fileToBase64, MAX_LOGO_BYTES, describeLogoRejection } from "@/lib/logo-upload";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./BrandingSection.module.css";
 
 /**
@@ -28,9 +29,9 @@ export default function BrandingSection() {
       .then((m) => {
         if (active) setMeta(m);
       })
-      .catch(() => {
+      .catch((err) => {
         // A branding panel failing must not take the settings page down.
-        if (active) setError("Couldn't check for a logo — is the API running?");
+        if (active) setError(errorMessage(err, "Couldn't check for a logo — is the API running?"));
       })
       .finally(() => {
         if (active) setLoading(false);

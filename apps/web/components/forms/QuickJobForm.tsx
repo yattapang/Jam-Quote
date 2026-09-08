@@ -6,6 +6,7 @@ import Input from "@/components/ui/Input";
 import { modalStyles } from "@/components/ui/Modal";
 import { emptyQuickJobForm, type QuickJobFormValues } from "@/lib/line-editor";
 
+import { errorMessage } from "@/lib/error-message";
 /**
  * Quick add-a-job-type form behind a quote/invoice line's "+ Add new job…"
  * row. Deliberately NOT the full JobForm (name/unit/markup/component
@@ -47,8 +48,8 @@ export default function QuickJobForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }

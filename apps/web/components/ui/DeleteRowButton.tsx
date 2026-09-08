@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Button from "./Button";
 import Modal, { modalStyles } from "./Modal";
 import {
-  ApiError,
   deleteJob,
   deleteClient,
   deleteInvoice,
@@ -17,6 +16,7 @@ import {
 } from "@/lib/api-client";
 import styles from "./DeleteRowButton.module.css";
 
+import { errorMessage } from "@/lib/error-message";
 const DELETERS: Record<DeleteKind, (id: string) => Promise<void>> = {
   client: deleteClient,
   project: deleteProject,
@@ -72,11 +72,7 @@ export default function DeleteRowButton({
       // rule — "Only DRAFT quotes can be deleted" — reached the contractor as
       // "is the API running?", sending them to check infrastructure over a
       // business rule. Reporting the wrong cause is worse than reporting none.
-      setError(
-        err instanceof ApiError && err.message
-          ? err.message
-          : "Couldn't delete — is the API running?",
-      );
+      setError(errorMessage(err, "Couldn't delete — is the API running?"));
     } finally {
       setSaving(false);
     }

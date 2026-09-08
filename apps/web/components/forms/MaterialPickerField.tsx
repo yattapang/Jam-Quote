@@ -8,6 +8,7 @@ import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { materialFavouriteLabel } from "@/lib/material-display";
 import type { MaterialFavourite } from "@/lib/types";
 
+import { errorMessage } from "@/lib/error-message";
 const SEARCH_LIMIT = 20;
 const DEBOUNCE_MS = 250;
 
@@ -69,9 +70,9 @@ export default function MaterialPickerField({
         setResults(favs);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((err) => {
         if (requestRef.current !== requestId) return;
-        setError("Couldn't search materials — is the API running?");
+        setError(errorMessage(err, "Couldn't search materials — is the API running?"));
         setLoading(false);
       });
   }, [open, debouncedQuery, category]);

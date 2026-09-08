@@ -9,6 +9,7 @@ import { modalStyles } from "@/components/ui/Modal";
 import ClientSelectField from "./ClientSelectField";
 import type { NewProjectInput } from "@/lib/api-client";
 import type { ProjectDetail } from "@/lib/mock-data";
+import { errorMessage } from "@/lib/error-message";
 import type { ClientOption } from "./types";
 
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
@@ -125,8 +126,8 @@ export default function ProjectForm({
     setError("");
     try {
       await onSubmit(values);
-    } catch {
-      setError("Couldn't save — is the API running?");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save — is the API running?"));
       setSaving(false);
       onBusyChange?.(false);
     }
