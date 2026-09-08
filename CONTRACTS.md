@@ -208,11 +208,44 @@ not finished when it passes. It is finished when you have watched it fail on the
 defect it names, and the sanity assertion that it found its subjects is what
 catches the version that silently checks nothing.
 
+## 3c. What the first two conversions found
+
+The pattern earned its keep before it was finished.
+
+**A union nobody could resolve.** `ApiBusiness.defaultGctRate` was
+`number | string`, so every reader had to handle both branches forever. A test
+now builds a real `Prisma.Decimal` and proves the wire value is always a
+**string** — the union is gone, and the claim is checked rather than assumed.
+
+**A comment that was wrong.** That same declaration said the value arrives as
+`"15.00"`. It arrives as `"15"`: `JSON.stringify` drops trailing zeros. Anything
+comparing the wire value to a formatted string, or reading its decimal places,
+was comparing against something the API does not send.
+
+**Optionals that could never be absent.** `countryCode?` and `currency?` were
+optional though both are non-nullable with database defaults and sent on every
+read. Optionality invites `?? "JM"` fallbacks that can never fire, and those
+fallbacks then hide where the real default lives. Same for the client's contact
+fields, declared `phone?: string | null` — present-and-nullable and
+possibly-absent are different facts, and collapsing them means writing both
+checks to be safe.
+
+**And it caught an invented column immediately.** The first draft of the business
+sample included `suspendedAt`, which does not exist on `Business`. TypeScript
+rejected it before any test ran — which is the point of typing the sample against
+Prisma's own generated type rather than writing a plain object.
+
+**The double coupling was verified by simulating a rename.** With the contract
+still promising `trn` and the sample renamed to `taxNumber`, TypeScript refused
+the unknown property AND the Zod parse failed. Either alone would have let it
+through: an untyped sample satisfies Zod, and an unchecked contract satisfies
+TypeScript.
+
 ## 4. Status
 
 | Seam | State |
 |---|---|
-| 1 — web ↔ API wire | **Untreated.** The plan above is agreed; migration order set. Largest remaining risk. |
+| 1 — web ↔ API wire | **Started.** `Client` and `Business` converted: the web now infers both from `packages/core/src/wire/`, and the API proves it keeps the promise. Ten-odd shapes remain — `Project`, the catalogs, then `Invoice` and `Quote`. |
 | 2 — DTO ↔ persistence | **Guarded** (`apps/api/src/common/dto-persistence.test.ts`). Verified against the historical `Client.town` bug. It took THREE attempts to stop passing vacuously — see below. |
 | 3 — schema ↔ migrations | **Guarded** by the PGlite replay. Live comparison is a manual step. |
 | 4 — core ↔ apps | **Guarded** by four source guards. Build-ordering hazard is documented, not enforced. |

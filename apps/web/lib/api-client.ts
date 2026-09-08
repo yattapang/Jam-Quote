@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -121,21 +121,21 @@ export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
 
 // --- API (persistence) shapes (exported for api-server.ts) ------------------
 
-export interface ApiClientRow {
-  id: string;
-  firstName: string;
-  lastName: string;
-  // API also echoes a computed `name` (apps/mobile still reads it); mapClient
-  // derives its own `name` from firstName/lastName rather than trusting this.
-  name?: string;
-  phone?: string | null;
-  email?: string | null;
-  town?: string | null;
-  parish?: string | null;
-  addressLine?: string | null;
-  /** The CLIENT's own tax number, distinct from the business's. */
-  trn?: string | null;
-}
+/**
+ * NOT declared here. The shape lives in `@jamquote/core`'s wire contract, and
+ * this is an alias so the call sites below read unchanged.
+ *
+ * Declaring it here WAS the drift: the API returns a Prisma row serialized to
+ * JSON, nothing connected the two, and a renamed field would still compile and
+ * render `undefined` to a contractor. See `packages/core/src/wire/README.md`.
+ *
+ * The old declaration also had every contact field as `phone?: string | null` -
+ * optional AND nullable - while the API sends every column on every read. That
+ * invited `=== undefined` checks that can never be true alongside the `=== null`
+ * checks that can, and both had to be written to be safe. The contract
+ * distinguishes them.
+ */
+export type ApiClientRow = ClientWire;
 export interface ApiProject {
   id: string;
   clientId?: string | null;
@@ -288,21 +288,21 @@ export interface ApiJob {
   unitCostCents: number;
   components: ApiJobComponent[];
 }
-export interface ApiBusiness {
-  id: string;
-  name: string;
-  billingContactName?: string | null;
-  billingContactEmail?: string | null;
-  countryCode?: string;
-  currency?: string;
-  trn?: string | null;
-  addressLine?: string | null;
-  town?: string | null;
-  parish?: string | null;
-  tradeType?: string | null;
-  // Prisma Decimal comes over JSON as a numeric string, e.g. "15.00".
-  defaultGctRate: number | string;
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * The old declaration is worth remembering for two reasons. It had
+ * `defaultGctRate: number | string`, a union nobody could ever resolve, so every
+ * reader handled both branches forever; a test now PROVES a Prisma Decimal
+ * reaches the browser as a string, and the contract says so. And its comment
+ * claimed the value arrives as "15.00" - it arrives as "15", because
+ * serialization drops trailing zeros.
+ *
+ * It also had `countryCode?` and `currency?` optional, though both are
+ * non-nullable with database defaults and always sent, which invited `?? "JM"`
+ * fallbacks that could never fire and hid where the real default lives.
+ */
+export type ApiBusiness = BusinessWire;
 export interface ApiQuote {
   id: string;
   clientId?: string | null;

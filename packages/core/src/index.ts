@@ -21,3 +21,5 @@ export * from "./billing/client-mail.js";
 export * from "./exports/csv.js";
 export * from "./types/trn.js";
 export * from "./types/unit-label.js";
+export * from "./wire/client.js";
+export * from "./wire/business.js";
