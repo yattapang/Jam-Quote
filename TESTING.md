@@ -14,8 +14,8 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 44 | 490 | Services with a fake Prisma, PGlite migration replays, wire contracts |
-| `apps/web` | 27 | 411 | Pure logic, source guards, and **3 component suites** |
+| `apps/api` | 45 | 512 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity |
+| `apps/web` | 29 | 429 | Pure logic, source guards, and **5 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
 component. Every form defect the owner found by clicking was invisible to the
@@ -40,13 +40,23 @@ never failed proves only that it runs.**
 | `EmailInvoiceButton` | The gate accepted as a prop and dropped, leaving the button live against an unverified domain |
 | `ClientForm` | The TRN that would not group; `town` reaching the payload |
 | `ProjectForm` | Blank retention vs a typed `0`; the PROJECT/JOB vocabulary on screen |
+| `RemindButton` | WhatsApp and email each disabled for their OWN reason, each stated in text rather than a tooltip; the chase count; the API's real refusal |
+| `DeleteRowButton` | Confirms first; the API's own reason on refusal; blames the network only when the fetch never completed; a failed delete does not navigate |
 
 ### Owed, highest value first
 
 | Suite | Why it matters | Defect precedent |
 |---|---|---|
-| `RemindButton` | WhatsApp enabled/disabled by phone-on-file, email by the sending gate, and the *reason* stated in the open | The owner saw "no whatsapp" and an enabled email button |
-| `DeleteRowButton` | Delete absent on non-draft rows; the API's real message surfaced instead of "is the API running?" | Both shipped |
+**Two notes from writing these**, both about the tests rather than the code:
+
+- `vi.mock` factories are HOISTED, so a class declared below them is not
+  initialised when the factory runs. It fails as "Cannot access X before
+  initialization", which reads like a broken component. `vi.hoisted` is the fix.
+- The delete trigger and its confirm button share the accessible name "Delete",
+  so a name query matches both once the modal opens. Handled in the test, but
+  noted as a real if minor accessibility smell — two controls with one name, one
+  of them destructive. Renaming the confirm is a product decision, not a test's.
+
 | `QuoteBuilder` draft recovery | The banner appears only for a draft worth restoring, never on an untouched form, and typing dismisses it | Autosave was switched off while the banner showed |
 | `LineItemsEditor` | Unit label per line via `lineUnitLabel`; the category dropdown showing its options | "30 units" for a job sold by the metre; the invisible datalist |
 | `RetentionPanel` | Held vs due-now; release disabled on a draft | Retention read as a shortfall |
