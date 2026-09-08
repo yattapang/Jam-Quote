@@ -1,20 +1,50 @@
 import { z } from "zod";
 import { PARISHES, trnSchema } from "@jamquote/core";
 
+/**
+ * What a valid value for each client field IS, with no statement about whether
+ * it has to be present.
+ *
+ * Split out because there are TWO doors into the `Client` table and they had
+ * drifted apart. `POST /clients` required `email` to be a real email and
+ * `parish` to be one of the fourteen; `POST /sync` accepted any string for both.
+ * A mobile device could therefore plant `"not-an-email"` and a parish that does
+ * not exist into the same columns the REST path guards — and then "Send by
+ * email" tries to send to it, the accountant export carries it, and a
+ * jurisdiction lookup keyed on parish finds nothing.
+ *
+ * Presence differs between the two paths for good reason: REST uses
+ * `.optional()` (absent means "leave alone"), sync uses `.nullish()` (null means
+ * "the device cleared this"). So the VALUE rules live here once and each path
+ * applies its own presence rule on top. Divergence is now structurally
+ * impossible rather than something a test has to catch.
+ */
+export const clientFieldRules = {
+  phone: z.string().max(40),
+  whatsapp: z.string().max(40),
+  email: z.string().email(),
+  addressLine: z.string().max(200),
+  town: z.string().max(80),
+  parish: z.enum(PARISHES),
+  /**
+   * Same validator as the contractor's own TRN, so the two cannot disagree
+   * about what a valid one is. Normalises to 9 bare digits, and an empty string
+   * passes through as a clear — most clients are households with no TRN.
+   */
+  trn: z.union([trnSchema, z.literal("")]),
+  notes: z.string().max(2000),
+} as const;
+
 // Shared optional fields for both create and update.
 const clientContactFields = {
-  phone: z.string().optional(),
-  whatsapp: z.string().optional(),
-  email: z.string().email().optional(),
-  addressLine: z.string().optional(),
-  town: z.string().max(80).optional(),
-  parish: z.enum(PARISHES).optional(),
-  // Same validator as the contractor's own TRN, so the two cannot disagree
-  // about what a valid one is. Normalises to 9 bare digits, and an empty
-  // string is allowed through as null — clearing the field must be possible,
-  // and most customers are households with no TRN to give.
-  trn: z.union([trnSchema, z.literal("")]).optional(),
-  notes: z.string().optional(),
+  phone: clientFieldRules.phone.optional(),
+  whatsapp: clientFieldRules.whatsapp.optional(),
+  email: clientFieldRules.email.optional(),
+  addressLine: clientFieldRules.addressLine.optional(),
+  town: clientFieldRules.town.optional(),
+  parish: clientFieldRules.parish.optional(),
+  trn: clientFieldRules.trn.optional(),
+  notes: clientFieldRules.notes.optional(),
 };
 
 export const createClientSchema = z

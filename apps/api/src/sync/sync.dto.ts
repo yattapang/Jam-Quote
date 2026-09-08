@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ProjectStage } from "@jamquote/core";
+import { clientFieldRules } from "../clients/clients.dto.js";
 
 /** Pull everything changed since this server cursor (ISO). Omit for a full sync. */
 export const pullSchema = z.object({
@@ -10,16 +11,28 @@ export type PullInput = z.infer<typeof pullSchema>;
 // A device sends changes with a client-generated UUID id, an op, and its local
 // mutation time (updatedAt) used as the last-write-wins tiebreak. `data` is
 // required for upserts, absent for deletes.
+/**
+ * The same VALUE rules as `POST /clients`, with sync's own presence rule.
+ *
+ * These were restated here as bare `z.string()`, so the sync door accepted an
+ * invalid email and a non-existent parish into the very columns the REST door
+ * guards. Reusing `clientFieldRules` makes that divergence impossible instead of
+ * something someone has to notice.
+ *
+ * `.nullish()` rather than `.optional()` is deliberate and different: on this
+ * path a null means the DEVICE CLEARED the field, which is a change to
+ * replicate, while absent means untouched.
+ */
 const clientDataSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().optional(),
-  phone: z.string().nullish(),
-  whatsapp: z.string().nullish(),
-  email: z.string().nullish(),
-  addressLine: z.string().nullish(),
-  town: z.string().nullish(),
-  parish: z.string().nullish(),
-  notes: z.string().nullish(),
+  firstName: z.string().min(1).max(80),
+  lastName: z.string().max(80).optional(),
+  phone: clientFieldRules.phone.nullish(),
+  whatsapp: clientFieldRules.whatsapp.nullish(),
+  email: clientFieldRules.email.nullish(),
+  addressLine: clientFieldRules.addressLine.nullish(),
+  town: clientFieldRules.town.nullish(),
+  parish: clientFieldRules.parish.nullish(),
+  notes: clientFieldRules.notes.nullish(),
 });
 
 const projectDataSchema = z.object({

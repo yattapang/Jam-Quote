@@ -33,6 +33,9 @@ function makeService(prisma: ReturnType<typeof makePrisma>) {
   return new SyncService(prisma as unknown as PrismaService);
 }
 
+// `as const` so `parish` keeps its literal type. Without it the object widens
+// `parish` to `string`, which no longer satisfies the schema now that the sync
+// path shares the REST path's parish enum instead of accepting any string.
 const clientData = {
   firstName: "Marcia",
   lastName: "Brown",
@@ -42,7 +45,7 @@ const clientData = {
   addressLine: "12 Hope Rd",
   parish: "Kingston",
   notes: "Prefers WhatsApp",
-};
+} as const;
 
 const jobData = {
   name: "Kitchen renovation",
