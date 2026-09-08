@@ -23,3 +23,5 @@ export * from "./types/trn.js";
 export * from "./types/unit-label.js";
 export * from "./wire/client.js";
 export * from "./wire/business.js";
+export * from "./wire/project.js";
+export * from "./wire/catalog.js";

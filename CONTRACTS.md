@@ -235,6 +235,20 @@ sample included `suspendedAt`, which does not exist on `Business`. TypeScript
 rejected it before any test ran — which is the point of typing the sample against
 Prisma's own generated type rather than writing a plain object.
 
+**Two more findings from `Project` and the rate book.**
+
+`retentionPct` was hedged THREE ways at once — `?: number | string | null` — for
+one nullable `Decimal`. Optional, two types, or null: four possibilities from a
+column that arrives as exactly `string | null`. Null and `"0"` are now pinned as
+distinct, because a contractor who typed zero and one who typed nothing are
+saying different things and the form keeps them apart.
+
+`rateCents` is asserted to arrive as an integer NUMBER, not a string. Money here
+is always integer cents, and the subtle failure this guards is someone widening
+the column to `Decimal`: `Number()` would still parse the resulting string, so
+nothing would break loudly — rounding would just start drifting. A fractional
+value is rejected too, since half a cent means a caller has divided.
+
 **The double coupling was verified by simulating a rename.** With the contract
 still promising `trn` and the sample renamed to `taxNumber`, TypeScript refused
 the unknown property AND the Zod parse failed. Either alone would have let it
@@ -245,7 +259,7 @@ TypeScript.
 
 | Seam | State |
 |---|---|
-| 1 — web ↔ API wire | **Started.** `Client` and `Business` converted: the web now infers both from `packages/core/src/wire/`, and the API proves it keeps the promise. Ten-odd shapes remain — `Project`, the catalogs, then `Invoice` and `Quote`. |
+| 1 — web ↔ API wire | **Five of the flat shapes done** — `Client`, `Business`, `Project`, `LabourRate`, `EquipmentItem`. The web infers all five; the API proves each promise. Remaining: `MaterialFavourite`, then the nested pair (`Invoice`, `Quote`) and the two public views. |
 | 2 — DTO ↔ persistence | **Guarded** (`apps/api/src/common/dto-persistence.test.ts`). Verified against the historical `Client.town` bug. It took THREE attempts to stop passing vacuously — see below. |
 | 3 — schema ↔ migrations | **Guarded** by the PGlite replay. Live comparison is a manual step. |
 | 4 — core ↔ apps | **Guarded** by four source guards. Build-ordering hazard is documented, not enforced. |

@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, ProjectWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -136,19 +136,14 @@ export async function checkApiReachable(timeoutMs = 4000): Promise<boolean> {
  * distinguishes them.
  */
 export type ApiClientRow = ClientWire;
-export interface ApiProject {
-  id: string;
-  clientId?: string | null;
-  name: string;
-  addressLine?: string | null;
-  town?: string | null;
-  parish?: string | null;
-  stage: ProjectStage;
-  progressPct: number;
-  /** Default retention for invoices on this job. Each invoice then owns its
-   * own, so changing this cannot restate invoices already sent. */
-  retentionPct?: number | string | null;
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * The old declaration hedged `retentionPct` three ways at once
+ * (`?: number | string | null`) for one nullable Decimal column, so every reader
+ * had to handle all three. What arrives is `string | null`.
+ */
+export type ApiProject = ProjectWire;
 export interface ApiLineJobComponent {
   kind: JobComponentKind;
   description: string;
@@ -246,24 +241,10 @@ export interface ApiMaterialSchema {
   categories: ApiMaterialCategory[];
   units: ApiMaterialUnit[];
 }
-export interface ApiLabourRate {
-  id: string;
-  trade: string;
-  skillTier?: string | null;
-  rateCents: number;
-  rateUnit: RateUnit;
-  unitLabel?: string | null;
-}
-export interface ApiEquipmentItem {
-  id: string;
-  name: string;
-  owned: boolean;
-  vendor?: string | null;
-  vendorPhone?: string | null;
-  rateCents: number;
-  rateUnit: RateUnit;
-  unitLabel?: string | null;
-}
+/** NOT declared here - see `packages/core/src/wire/README.md`. */
+export type ApiLabourRate = LabourRateWire;
+/** NOT declared here - see `packages/core/src/wire/README.md`. */
+export type ApiEquipmentItem = EquipmentItemWire;
 export interface ApiJobComponent {
   id: string;
   kind: JobComponentKind;
