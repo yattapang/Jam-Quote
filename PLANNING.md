@@ -412,6 +412,18 @@ the print rules: a selector containing no local class ("Selector is not pure")
 is a hard error, and `:global()` in a comma list does not help because it makes
 the whole list impure. Element-level print rules now live in globals.css.
 
+**Caveat added 2026-09-08: the build needs NETWORK.** `app/layout.tsx` uses
+`next/font`, which fetches Archivo and Public Sans from Google at build time.
+Offline, the build fails with ``next/font` error: Failed to fetch` and nothing
+else — no hint that the cause is connectivity.
+
+Verified on a clean tree with the changes stashed, and `fonts.googleapis.com`
+answering HTTP 000. **This is NOT the old misdiagnosis returning** (that one was
+a CSS-Module purity error, fixed in `c20c64a`); it is a genuinely different
+failure with a similar message, which is exactly why it is written down here.
+Vercel builds fine, having network. If a local build fails this way, check
+connectivity before changing any code.
+
 **Run it before every deploy** — it catches a class of error that typecheck and
 tests do not:
 
