@@ -131,11 +131,70 @@ must reach the contractor, not JamQuote. This is not built yet — see
 **Warming matters.** A brand-new domain sending its first hundred emails to
 strangers looks like spam infrastructure. Send the first weeks' volume slowly.
 
+### 1.1a WHO the email comes from — decided, and it changes Gate 1
+
+**Owner, 2026-09-08: `educatebgreat.com` is for testing the JamQuote STAFF
+backend. Client-facing mail will come from the contractor's own business
+email.**
+
+That is the right product instinct — a quote should arrive from the builder the
+client hired, not from their software — and it removes client email from the
+launch blockers entirely. But it cannot be built the obvious way, and the
+reason is worth understanding before any work is scheduled.
+
+#### The constraint: you cannot put someone else's address in `From`
+
+Most Jamaican contractors use `gmail.com`, `hotmail.com` or `yahoo.com`. Those
+domains publish DMARC policies of `p=reject` or `p=quarantine`, and JamQuote
+cannot produce a DKIM signature for a domain it does not control. So mail sent
+from our servers with `From: contractor@gmail.com` fails DMARC and is rejected
+or spam-foldered — **by design, not by misconfiguration**. No amount of DNS on
+our side fixes it, because the whole point of DMARC is to stop exactly this.
+
+This matters because the failure is silent in the worst way: the send reports
+success, the contractor believes the quote went, and the client never sees it.
+That is the defect class this project has already shipped twice.
+
+#### The three models that actually work
+
+| Model | What the client sees | Cost | Works for |
+|---|---|---|---|
+| **A — Via + Reply-To** | `Blackwood Construction via JamQuote <quotes@ourdomain>`, replies go to the contractor | Small. No credentials stored. | Everyone, immediately |
+| **B — Contractor's own domain** | Genuinely from `info@blackwood.com` | Per-tenant DNS verification | Only contractors who own a domain — rare in this market |
+| **C — OAuth send-as (Gmail / Microsoft)** | Genuinely from `blackwood@gmail.com`, and it appears in their own Sent folder | Real work: OAuth client, token refresh, Google scope review | The majority, who use Gmail |
+
+**Recommendation: A now, C as a Pro feature later.** A is deliverable this week,
+stores no credentials, and the "via" line is honest rather than a disguise. C is
+what actually fulfils the owner's intent, and it fits this market precisely
+because most contractors are on Gmail — it also puts the sent quote in their own
+Sent folder, which is what a contractor chasing a client actually wants. B is
+worth supporting only when a contractor asks.
+
+**What NOT to build:** storing a contractor's email password to send via their
+SMTP. It works, and it makes JamQuote the custodian of credentials that unlock
+the contractor's whole mailbox. OAuth exists to avoid precisely that.
+
+#### Consequences for this plan
+
+- **Client email is no longer a Gate 1 blocker.** Contractors keep sending by
+  WhatsApp and PDF during testing, which is what they prefer anyway, and the
+  platform never impersonates them.
+- **1.1's remaining scope is platform mail only** — digests, renewal reminders
+  and quote-decision alerts, all aimed at contractors and staff. Those can run
+  from a subdomain of the testing domain today.
+- **`QUOTE_FROM_EMAIL` stays unset on Production** — and now for a reason that
+  will not expire when the brand domain arrives. It is the wrong model, not a
+  temporary gap. Revisit it only as model A's sender.
+- **The reply-to work in `PLANNING.md` §4i is now the core of model A**, not a
+  refinement of it.
+
 ### 1.1b Testing on `educatebgreat.com` — a real host without the real brand
 
 **Owner has `educatebgreat.com` on GoDaddy and will register the business domain
-after testing (2026-09-08).** That is the right sequence, and it unblocks most
-of the email gate immediately.
+after testing (2026-09-08).** It hosts the app and the STAFF backend under
+test, and carries platform mail to contractors and staff — never mail to a
+contractor's clients. See 1.1a for why that split is permanent rather than
+temporary.
 
 **Use SUBDOMAINS, not the root.** Two reasons, both real:
 
