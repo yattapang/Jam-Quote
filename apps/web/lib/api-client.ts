@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceReminderWire, InvoiceWire, LineJobComponentWire, MaterialFavouriteWire, PaymentWire, ProjectWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceReminderWire, InvoiceWire, LabourEntryWire, LineJobComponentWire, MaterialFavouriteWire, PaymentWire, ProjectWire, PurchaseWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -1420,20 +1420,15 @@ export async function getSweepRuns(): Promise<AdminSweepRun[]> {
 }
 
 /** A purchase as the API stores it — what was spent, and on which job. */
-export interface ApiPurchase {
-  id: string;
-  projectId: string | null;
-  supplierId: string | null;
-  description: string;
-  amountCents: number;
-  /** The GCT portion of amountCents. Zero when the supplier is not
-   * registered, or the purchase is exempt. */
-  gctCents: number;
-  category: string | null;
-  purchasedAt: string;
-  reference: string | null;
-  note: string | null;
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * On the money seam: this feeds `computeJobProfit`. The contract's real job is
+ * keeping `amountCents` and `gctCents` INTEGERS - widen a cents column to
+ * Decimal and every amount arrives as a string that `Number()` still parses, so
+ * nothing fails loudly while rounding quietly drifts.
+ */
+export type ApiPurchase = PurchaseWire;
 
 export interface CreatePurchaseInput {
   /** Omit or null for an overhead with no job behind it. */
@@ -1457,19 +1452,10 @@ export async function deletePurchase(id: string): Promise<void> {
 }
 
 /** Time worked on a job — usually its largest cost. */
-export interface ApiLabourEntry {
-  id: string;
-  projectId: string | null;
-  labourRateId: string | null;
-  description: string;
-  /** Prisma returns a Decimal as a string. */
-  quantity: string;
-  /** SNAPSHOT of the rate at the time — never re-read from the rate book. */
-  rateCents: number;
-  unitLabel: string;
-  workedOn: string;
-  note: string | null;
-}
+/** NOT declared here - see `packages/core/src/wire/README.md`. `rateCents` is a
+ * SNAPSHOT taken when the entry was logged: raising your day rate must not
+ * reprice work already done. */
+export type ApiLabourEntry = LabourEntryWire;
 
 export interface CreateLabourEntryInput {
   projectId?: string | null;

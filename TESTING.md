@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 53 | 605 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 54 | 616 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -309,12 +309,18 @@ lower priority rather than forgotten:
 |---|---|---|
 | Material schema tree | `ApiMaterialSchema`, `ApiMaterialAttribute`, `ApiMaterialCategory`, `ApiMaterialUnit`, `ApiMaterialAttributeOption` | Read-mostly configuration. A drift here empties a picker, which is loud |
 | Job library | `ApiJob`, `ApiJobComponent` | Same shape family as quote lines, already contract-covered in effect |
-| Costing | `ApiPurchase`, `ApiLabourEntry`, `ApiSupplier`, `ApiSupplierPrice` | Real candidates — money fields. Next in line |
+| Costing | ~~`ApiPurchase`, `ApiLabourEntry`~~ **done**; `ApiSupplier`, `ApiSupplierPrice` remain | The two that carry cents are covered. The suppliers pair is a name and a price list |
 | Admin / misc | `ApiRegulatoryUpdate`, `ApiHiddenCatalogEntry`, `ApiLogoMeta`, `ApiErrorBody`, `ApiInvoiceSection` | Staff-facing or trivial |
 
-**The costing group is the one worth doing next**, because `ApiPurchase` and
-`ApiLabourEntry` carry cents and feed job profitability — the same money seam that
-has been bitten twice.
+~~The costing group is next.~~ **Done.** `ApiPurchase` and `ApiLabourEntry` were
+the ones that mattered: they carry cents and feed `computeJobProfit`, the money
+seam that has been bitten twice. Fourteen `Api*` interfaces remain, none of them
+on a money path.
+
+Their old declarations were already GOOD — nullable where the column is nullable,
+`quantity` correctly a string. Converted anyway, because a good hand-written
+duplicate is still a duplicate, and the next person to add a field has two places
+to remember.
 
 **The pattern that made all of this cheap** is worth restating: a contract plus a
 typed sample. TypeScript checks the sample against Prisma's generated type, so a
