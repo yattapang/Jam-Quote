@@ -15,7 +15,7 @@ conversation is a backlog that gets re-derived badly.
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
 | `apps/api` | 54 | 616 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
-| `apps/web` | 31 | 449 | Pure logic, source guards, and **7 component suites** |
+| `apps/web` | 32 | 453 | Pure logic, source guards, and **7 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
 component. Every form defect the owner found by clicking was invisible to the
@@ -313,7 +313,7 @@ disclosure boundary are two boundaries that will eventually differ.
 public views. The web declares none of them; each is `z.infer<>` of a contract in
 `packages/core/src/wire/`, and the API proves it keeps each promise.
 
-**Sixteen hand-written `Api*` interfaces remain**, and they are deliberately
+**Thirteen hand-written `Api*` interfaces remain**, and they are deliberately
 lower priority rather than forgotten:
 
 | Group | Shapes | Why it can wait |
@@ -321,12 +321,31 @@ lower priority rather than forgotten:
 | Material schema tree | `ApiMaterialSchema`, `ApiMaterialAttribute`, `ApiMaterialCategory`, `ApiMaterialUnit`, `ApiMaterialAttributeOption` | Read-mostly configuration. A drift here empties a picker, which is loud |
 | Job library | `ApiJob`, `ApiJobComponent` | Same shape family as quote lines, already contract-covered in effect |
 | Costing | ~~`ApiPurchase`, `ApiLabourEntry`~~ **done**; `ApiSupplier`, `ApiSupplierPrice` remain | The two that carry cents are covered. The suppliers pair is a name and a price list |
-| Admin / misc | `ApiRegulatoryUpdate`, `ApiHiddenCatalogEntry`, `ApiLogoMeta`, `ApiErrorBody`, `ApiInvoiceSection` | Staff-facing or trivial |
+| Admin / misc | `ApiRegulatoryUpdate`, `ApiHiddenCatalogEntry`, `ApiLogoMeta`, `ApiErrorBody` | Staff-facing or trivial |
 
 ~~The costing group is next.~~ **Done.** `ApiPurchase` and `ApiLabourEntry` were
 the ones that mattered: they carry cents and feed `computeJobProfit`, the money
-seam that has been bitten twice. Fourteen `Api*` interfaces remain, none of them
+seam that has been bitten twice. Thirteen `Api*` interfaces remain, none of them
 on a money path.
+
+**`ApiInvoiceSection` and `ApiInvoiceLineItem` were not among them — they were
+already dead.** `invoiceDetailWire` replaced both, nothing had referenced either
+since, and they sat in `api-client.ts` still reading as the truth about the
+response. That is the worse half of drift: not a declaration that disagrees with
+the API, but one nobody is checking at all, waiting for the next reader to write
+code against a shape that stopped being sent.
+
+`lib/hand-written-shapes.test.ts` now pins both properties — **the list only
+shrinks** (a new hand-written shape fails; the fix is a contract, not a name in
+the allow-list) and **none of them is dead**. Getting it right took three
+attempts, which is the honest measure of how easily a source-scanning guard
+passes on nothing:
+
+| Attempt | Why it was wrong |
+|---|---|
+| `` in a template literal | Written as a literal backspace, matched nothing, reported all thirteen dead |
+| Counting raw occurrences | A COMMENT naming the shape counted as a use, so the check passed on a shape that was genuinely dead — the same vacuity that let the DTO guard pass twice on prose |
+| Comments stripped first | Verified by reintroducing `ApiInvoiceSection` and watching it fail |
 
 Their old declarations were already GOOD — nullable where the column is nullable,
 `quantity` correctly a string. Converted anyway, because a good hand-written

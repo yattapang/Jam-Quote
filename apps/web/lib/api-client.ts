@@ -273,16 +273,13 @@ export type ApiBusiness = BusinessWire;
  */
 export type ApiQuote = QuoteWire;
 
-/** Invoice line items share the exact persistence shape as quote line items
- * (both come from the same `quoteLineItemSchema`-shaped table columns). */
-export type ApiInvoiceLineItem = ApiLineItem;
 /** NOT declared here - see `packages/core/src/wire/README.md`. */
 export type ApiPayment = PaymentWire;
 
-export interface ApiInvoiceSection {
-  title: string;
-  lineItems: ApiInvoiceLineItem[];
-}
+// `ApiInvoiceSection` and `ApiInvoiceLineItem` used to sit here. They went with
+// the invoice wire contract - `invoiceDetailWire` carries the sections and their
+// lines - and nothing had referenced either one since. A dead shape is worse
+// than no shape: the next reader takes it for the truth about the response.
 /**
  * NOT declared here - see `packages/core/src/wire/README.md`. Seam 1's last shape.
  *
