@@ -21,6 +21,10 @@ function invoice(overrides: Partial<ReportInvoice> = {}): ReportInvoice {
     totalCents: 0,
     paidCents: 0,
     issueDate: "2026-06-01T00:00:00.000Z",
+    // Explicit rather than defaulted: these were optional for one commit and
+    // the compiler could not then find the callers that had to change.
+    retentionCents: 0,
+    retentionReleasedAt: null,
     ...overrides,
   };
 }

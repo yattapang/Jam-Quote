@@ -43,6 +43,11 @@ export default async function DashboardPage() {
       paidCents: i.paidCents ?? 0,
       issueDate: i.issueDate,
       dueDate: i.dueDate,
+      // The overdue card is the reason these are here. Retention is money the
+      // client may hold, so counting it as late showed a fully-settled invoice
+      // as arrears in critical red on the first screen a contractor opens.
+      retentionCents: i.retentionCents,
+      retentionReleasedAt: i.retentionReleasedAt,
     })),
   );
 

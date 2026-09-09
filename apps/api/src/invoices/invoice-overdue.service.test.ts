@@ -3,7 +3,9 @@ import { InvoiceOverdueService } from "./invoice-overdue.service.js";
 
 const NOW = new Date("2026-08-20T09:00:00.000Z");
 
-function build(opts: { businesses?: unknown[]; marked?: number; candidates?: unknown[] } = {}) {
+function build(
+  opts: { businesses?: unknown[]; marked?: number; candidates?: unknown[]; stamped?: unknown[] } = {},
+) {
   const businessUpdates: Record<string, unknown>[] = [];
   const prisma = {
     invoice: {
@@ -11,17 +13,25 @@ function build(opts: { businesses?: unknown[]; marked?: number; candidates?: unk
       // TS which are actually late, because an invoice is late only if something
       // is unpaid of what is DUE NOW — and due-now is the total less retention
       // still held, which a single updateMany cannot express.
-      findMany: vi.fn().mockResolvedValue(
-        opts.candidates ?? [
+      // Two reads now: the past-due candidates, then the rows already stamped
+      // OVERDUE so the sweep can take settled ones back out. The second answer is
+      // empty unless a test supplies `stamped`.
+      findMany: vi.fn().mockImplementation(({ where }: { where: { status?: unknown } }) =>
+        Promise.resolve(
+          JSON.stringify(where.status) === JSON.stringify("OVERDUE")
+            ? (opts.stamped ?? [])
+            : (opts.candidates ?? [
           {
             id: "inv-late",
             totalCents: 500_000,
             paidCents: 100_000,
             retentionCents: 0,
             retentionReleasedAt: null,
-          },
-        ],
+              },
+            ]),
+        ),
       ),
+      update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: opts.marked ?? 0 }),
     },
     business: {
@@ -85,17 +95,21 @@ describe("marking invoices overdue", () => {
       ],
     });
     await svc.run(NOW);
-    expect(prisma.invoice.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ["inv-released"] } } }),
-    );
+    // The write repeats every filter clause as well as the id list — narrowing it
+    // to the ids alone let a payment landing mid-sweep be stamped back to OVERDUE.
+    expect(prisma.invoice.updateMany.mock.calls[0]?.[0].where).toMatchObject({
+      id: { in: ["inv-released"] },
+      status: { in: ["INVOICED", "PARTIAL"] },
+    });
   });
 
   it("marks a genuinely late invoice, so the guard above is not just switching it off", async () => {
     const { svc, prisma } = build();
     await svc.run(NOW);
-    expect(prisma.invoice.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ["inv-late"] } } }),
-    );
+    expect(prisma.invoice.updateMany.mock.calls[0]?.[0].where).toMatchObject({
+      id: { in: ["inv-late"] },
+      status: { in: ["INVOICED", "PARTIAL"] },
+    });
   });
 
   it("targets only INVOICED and PARTIAL past their due date", async () => {
@@ -210,5 +224,69 @@ describe("the digest goes to the contractor", () => {
     await svc.run(NOW);
     expect(businessUpdates).toHaveLength(1);
     expect(businessUpdates[0]).toMatchObject({ where: { id: "fine" } });
+  });
+});
+
+describe("taking invoices back OUT of overdue", () => {
+  it("clears OVERDUE when nothing is actually due any more", async () => {
+    // The reverse direction, which the first version did not have. The sweep only
+    // READS invoices in INVOICED and PARTIAL, so anything already stamped OVERDUE
+    // stayed there for ever — including every row marked before retention was part
+    // of the question. This doubles as the repair for them, rather than a one-off
+    // script nobody runs twice.
+    const { svc, prisma } = build({
+      candidates: [],
+      stamped: [
+        {
+          id: "inv-stuck",
+          totalCents: 10_000_000,
+          paidCents: 9_000_000,
+          retentionCents: 1_000_000,
+          retentionReleasedAt: null,
+        },
+      ],
+    });
+    await svc.run(NOW);
+    // PARTIAL, not PAID: money HAS been received, and PAID is written by the
+    // payment path from the post-increment truth. Two writers guessing at PAID
+    // would eventually disagree about the same invoice.
+    expect(prisma.invoice.update).toHaveBeenCalledWith({
+      where: { id: "inv-stuck" },
+      data: { status: "PARTIAL" },
+    });
+  });
+
+  it("leaves a genuinely overdue invoice stamped", async () => {
+    const { svc, prisma } = build({
+      candidates: [],
+      stamped: [
+        {
+          id: "inv-really-late",
+          totalCents: 10_000_000,
+          paidCents: 0,
+          retentionCents: 0,
+          retentionReleasedAt: null,
+        },
+      ],
+    });
+    await svc.run(NOW);
+    expect(prisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("returns an unpaid-from-the-start invoice to INVOICED, not PARTIAL", async () => {
+    const { svc, prisma } = build({
+      candidates: [],
+      stamped: [
+        {
+          id: "inv-nothing-paid",
+          totalCents: 1_000_000,
+          paidCents: 0,
+          retentionCents: 1_000_000,
+          retentionReleasedAt: null,
+        },
+      ],
+    });
+    await svc.run(NOW);
+    expect(prisma.invoice.update.mock.calls[0]?.[0].data.status).toBe("INVOICED");
   });
 });

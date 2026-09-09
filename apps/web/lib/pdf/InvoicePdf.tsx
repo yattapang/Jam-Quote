@@ -197,8 +197,11 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
   const settlement = settlementOf({
     totalCents: totals.totalCents,
     paidCents,
-    retentionCents: invoice.retentionReleased ? 0 : invoice.retentionCents,
-    retentionReleasedAt: null,
+    retentionCents: invoice.retentionCents,
+    // The real date. This used to zero out retentionCents and pass null here —
+    // correct, but a second way of saying "released" in the argument designed to
+    // carry it, which the next caller would have copied without the ternary.
+    retentionReleasedAt: invoice.retentionReleasedAt,
   });
   const balanceCents = settlement.outstandingCents;
   const heldCents = settlement.heldCents;

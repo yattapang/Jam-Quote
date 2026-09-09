@@ -95,10 +95,29 @@ export class InvoiceOverdueService {
     });
 
     const late = candidates.filter((i) => !settlementOf(i).settledForNow).map((i) => i.id);
+
+    // The reverse direction, which the first version of this did not have: an
+    // invoice already stamped OVERDUE stayed OVERDUE for ever, because the read
+    // above only looks at INVOICED and PARTIAL. Rows marked before retention was
+    // understood are still sitting there, and the nightly digest was emailing
+    // them as "$0.00 outstanding". Nothing else un-marks them.
+    await this.clearSettledOverdue();
+
     if (late.length === 0) return 0;
 
+    // Every original clause is repeated on the WRITE, not just the id list. The
+    // single updateMany this replaced was atomic — its own where-clause re-checked
+    // the status at write time — and narrowing it to `id: { in: [...] }` opened a
+    // window where a payment landing between the read and the write set the
+    // invoice PAID and the sweep stamped it back to OVERDUE. Repeating the clauses
+    // restores that at no cost and needs no transaction.
     const { count } = await this.prisma.invoice.updateMany({
-      where: { id: { in: late } },
+      where: {
+        id: { in: late },
+        deletedAt: null,
+        status: { in: [InvoiceStatus.INVOICED, InvoiceStatus.PARTIAL] },
+        dueDate: { lt: startOfToday, not: null },
+      },
       data: { status: InvoiceStatus.OVERDUE },
     });
     return count;
@@ -106,6 +125,43 @@ export class InvoiceOverdueService {
 
   /** One digest per business per day, at most — a Jamaica day, so "today"
    * means the same thing here as it does on every other screen. */
+  /**
+   * Takes an invoice back OUT of OVERDUE once nothing is actually due.
+   *
+   * Needed for two reasons. A payment that settles an invoice sets PAID directly,
+   * but a RELEASE reversal or a corrected retention amount can leave a row stamped
+   * OVERDUE with nothing chaseable — and rows marked before retention was part of
+   * the question are in exactly that state today, which is why this doubles as the
+   * repair for them rather than shipping a one-off script nobody runs twice.
+   *
+   * PARTIAL rather than PAID when something has been received: PAID is written by
+   * the payment path from the post-increment truth, and guessing it here would let
+   * two writers disagree about the same invoice.
+   */
+  private async clearSettledOverdue(): Promise<void> {
+    const stamped = await this.prisma.invoice.findMany({
+      where: { deletedAt: null, status: InvoiceStatus.OVERDUE },
+      select: {
+        id: true,
+        totalCents: true,
+        paidCents: true,
+        retentionCents: true,
+        retentionReleasedAt: true,
+      },
+    });
+
+    const settled = stamped.filter((i) => settlementOf(i).settledForNow);
+    for (const inv of settled) {
+      await this.prisma.invoice.update({
+        where: { id: inv.id },
+        data: { status: inv.paidCents > 0 ? InvoiceStatus.PARTIAL : InvoiceStatus.INVOICED },
+      });
+    }
+    if (settled.length > 0) {
+      this.logger.log(`Cleared OVERDUE on ${settled.length} invoice(s) with nothing due`);
+    }
+  }
+
   private async sendDigests(now: Date): Promise<number> {
     const today = jamaicaTodayAsUtcMidnight(now);
 
@@ -150,6 +206,11 @@ export class InvoiceOverdueService {
         (n, i) => n + settlementOf(i).outstandingCents,
         0,
       );
+
+      // Nothing chaseable means nothing to send. Without this, a tenant whose
+      // only OVERDUE rows were retention invoices got a nightly email listing
+      // "$0.00 outstanding" against a $0.00 total.
+      if (outstandingCents <= 0) continue;
 
       const delivered = await this.sendDigest(to, business.name, business.invoices, outstandingCents);
       // The date is stamped whether or not the send succeeded. A bounced

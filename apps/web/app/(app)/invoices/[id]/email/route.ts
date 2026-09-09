@@ -74,8 +74,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const balanceDueCents = settlementOf({
     totalCents: getQuoteTotals(invoice).totalCents,
     paidCents: invoice.paidCents,
-    retentionCents: invoice.retentionReleased ? 0 : invoice.retentionCents,
-    retentionReleasedAt: null,
+    retentionCents: invoice.retentionCents,
+    retentionReleasedAt: invoice.retentionReleasedAt,
   }).outstandingCents;
   const buffer = await renderToBuffer(
     InvoicePdf({ invoice, client, business, logo: logo ?? undefined }),

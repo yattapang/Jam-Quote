@@ -9,6 +9,7 @@
  * arithmetic and grouping.
  */
 
+import { settlementOf } from "../costing/retention.js";
 import { InvoiceStatus, ProjectStage, PROJECT_STAGES, QuoteStatus } from "../types/enums.js";
 import type { Cents } from "../tax/money.js";
 
@@ -38,6 +39,22 @@ export interface ReportInvoice {
   dueDate?: string | null; // ISO date, no time-of-day
   clientId?: string | null;
   clientName?: string | null;
+  /**
+   * Retained under the contract, and the date it was released if it has been.
+   *
+   * **Required, not optional, and that is the point.** They were optional for one
+   * commit, documented as "absent means none" — which made silent under-reporting
+   * the default and meant the compiler could not find the callers that needed
+   * updating. An independent review found both production callers taking that
+   * default, so the fix was inert on the two most-looked-at screens in the app.
+   *
+   * OVERDUE cannot be answered without them: retention is money the client is
+   * entitled to hold, so counting it as late puts a figure in critical red and
+   * sends a contractor to chase someone who owes nothing yet. A caller with no
+   * retention passes 0 and null explicitly.
+   */
+  retentionCents: Cents;
+  retentionReleasedAt: Date | string | null;
 }
 
 /** Caller pre-filters out voided/reversed payments — this module trusts
@@ -289,8 +306,26 @@ export function computeReceivables(invoices: ReportInvoice[], now: Date): Receiv
 
   for (const inv of invoices) {
     if (inv.status === InvoiceStatus.DRAFT) continue; // not a claim on anyone yet
+    // Two different questions, and they have different answers on a retention
+    // invoice.
+    //
+    // OUTSTANDING is the accrual figure: billed and not yet received, retention
+    // included, because it has been invoiced and will be collected. The
+    // accountant's `invoices-issued` export takes the same view deliberately, and
+    // the two must not disagree.
+    //
+    // OVERDUE is a claim that someone is LATE, and retention is money the client
+    // is entitled to hold — so it is measured against what is payable now. Without
+    // this split, a fully-settled retention invoice appeared in critical red on
+    // the Reports page and the dashboard's overdue card.
     const remainingCents = inv.totalCents - inv.paidCents;
     if (remainingCents <= 0) continue; // fully paid (or overpaid) -> nothing outstanding
+    const { outstandingCents: chaseableCents } = settlementOf({
+      totalCents: inv.totalCents,
+      paidCents: inv.paidCents,
+      retentionCents: inv.retentionCents,
+      retentionReleasedAt: inv.retentionReleasedAt ? new Date(inv.retentionReleasedAt) : null,
+    });
 
     const key = clientGroupKey(inv.clientId);
     const existing = byClient.get(key);
@@ -312,7 +347,7 @@ export function computeReceivables(invoices: ReportInvoice[], now: Date): Receiv
     if (inv.dueDate != null) {
       const dueMs = new Date(inv.dueDate).getTime();
       if (!Number.isNaN(dueMs) && dueMs < nowMs) {
-        entry.overdueCents += remainingCents;
+        entry.overdueCents += chaseableCents;
       }
     }
 

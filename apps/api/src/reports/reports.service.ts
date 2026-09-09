@@ -97,6 +97,14 @@ export class ReportsService {
           issueDate: true,
           dueDate: true,
           clientId: true,
+          // OVERDUE cannot be answered without these. Retention is money the
+          // client is entitled to hold, so counting it as late put a
+          // fully-settled invoice in critical red on the Reports page and sent
+          // the contractor to chase someone who owed nothing yet. Outstanding
+          // still includes it — that is the accrual figure, and the accountant's
+          // invoices-issued export takes the same view on purpose.
+          retentionCents: true,
+          retentionReleasedAt: true,
           client: { select: { firstName: true, lastName: true } },
         },
       }),
@@ -155,6 +163,11 @@ export class ReportsService {
       dueDate: inv.dueDate ? inv.dueDate.toISOString() : null,
       clientId: inv.clientId,
       clientName: inv.client ? `${inv.client.firstName} ${inv.client.lastName}`.trim() : null,
+      // Selected and PASSED. Fetching them and not mapping them is the shape of
+      // defect this repo keeps finding — a column read from the database and
+      // dropped one layer above it.
+      retentionCents: inv.retentionCents,
+      retentionReleasedAt: inv.retentionReleasedAt,
     }));
 
     const projects: ReportProject[] = projectRows.map((j) => ({

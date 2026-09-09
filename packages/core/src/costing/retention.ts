@@ -70,7 +70,17 @@ export interface RetainableInvoice {
   totalCents: Cents;
   paidCents: Cents;
   retentionCents: Cents;
-  retentionReleasedAt: Date | null;
+  /**
+   * `Date | string | null`, because JSON has no Date.
+   *
+   * The API holds a `Date`, the web receives the ISO string the wire carries, and
+   * both ask this question. Typing it `Date | null` pushed a conversion onto every
+   * web caller — and the first three all avoided it by zeroing `retentionCents`
+   * and passing `null` here instead, which is a second way of saying "released" in
+   * the argument built to carry it. Accepting the string is what makes the honest
+   * call the easy one.
+   */
+  retentionReleasedAt: Date | string | null;
 }
 
 /**

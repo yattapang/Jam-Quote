@@ -151,7 +151,7 @@ It reports and exits 1 rather than repairing: detaching a client silently rewrit
 a document the contractor may already have sent, so the list is a decision. Re-run
 it after any bulk import or restore.
 
-### F2 `[reviewed]` — a card-payment helper fabricates a WiPay checkout · **CLOSED** (`3556b25`, `HEAD`)
+### F2 `[reviewed]` — a card-payment helper fabricates a WiPay checkout · **CLOSED** (`7af2bb0`)
 
 The catch block swallows any error, sleeps 700ms to look like a network call, and
 returns a `checkout.wipayfinancial.com/mock/...` URL. Its declared shape matches
@@ -247,7 +247,7 @@ Left as-is deliberately: the check validates a serialized COPY while Nest serial
 the original separately. Deterministic today; it stops being a guarantee if anything
 gains a custom `toJSON`.
 
-### F3 — card payment charges the retained money · OPEN
+### F3 `[reviewed]` — card payment charges the retained money · **CLOSED** (`3556b25`)
 
 The balance sent to WiPay is total minus paid. On a $100,000 invoice with 10%
 held and $90,000 paid, "pay by card" opens a checkout for $10,000 the contract
@@ -257,7 +257,7 @@ not refuse DRAFT.
 
 `payments.service.ts:41`
 
-### F4 — the client-facing PDF and email demand the retained money · OPEN
+### F4 `[reviewed]` — the client-facing PDF and email demand the retained money · **CLOSED** (`7af2bb0`)
 
 Both call `invoiceBalanceCents(total, paid)`, and the string "retention" appears
 **zero times** in `InvoicePdf.tsx` — no held row, no "Due now". The app's own
@@ -370,7 +370,20 @@ Also fixed in passing: `update()` used `??` for `dueDate`, so a due date could b
 set and never cleared — two lines below the comment on `clientId` explaining
 exactly why that is wrong for a nullable field.
 
-core 269, api 669, web 461, mobile 28. Typecheck 6/6, lint 2/2.
+**The independent review found the cluster was NOT closed, and it was right.**
+Seven more things, three of them regressions I introduced:
+
+| What it found | What changed |
+|---|---|
+| **`computeReceivables` — the Reports page and the dashboard's red "Total overdue" card — was starved of the retention data it asks for by BOTH callers.** I made the fields optional and documented "absent means none", which made silent under-reporting the default and hid both callers from the compiler. The original defect was still live on the two most-looked-at screens | Fields are **required** now. The compiler immediately found `dashboard/page.tsx`, which I had missed. Outstanding stays the accrual figure (agreeing with the accountant's export, deliberately); **overdue** is measured against what is payable |
+| **The sweep could mark but never UN-mark.** Rows stamped OVERDUE before retention was understood stay stamped for ever, and the digest was emailing them as "$0.00 outstanding" | `clearSettledOverdue` takes them back out — PARTIAL if money was received, INVOICED if not. It doubles as the repair for existing rows rather than a one-off script nobody runs twice |
+| **I introduced a race.** Narrowing the sweep's write to `id: { in: [...] }` dropped the status re-check the atomic `updateMany` had, so a payment landing mid-sweep could be stamped back to OVERDUE | Every original clause repeated on the write. No transaction needed |
+| **My guard drove worse code.** It greps for `settlementOf(`, so I used an awkward form — zeroing `retentionCents` and passing `retentionReleasedAt: null` — a second way of saying "released" in the argument built to carry it. Two other screens already used the boolean overload correctly | `retentionReleasedAt` now crosses the wire boundary in `mapInvoice`, `RetainableInvoice` accepts `Date \| string \| null` because JSON has no Date, and all three call sites pass the real value |
+| **F30 survived one method over.** `finalize()` recomputes the totals and left `retentionCents` alone — the identical omission, at the moment the snapshot becomes permanent and client-facing | Paired with the recompute |
+| **A `Prisma.Decimal` is an object, so `Decimal("0.00")` is truthy.** My check claimed to tell 0 from null and only ever tested null | `hasRetention` type predicate, used in all three places |
+| **The guard was much narrower than advertised**: `apps/web` only — and four of six defects were in `apps/api`; subtractions only — and three of six were COMPARISONS; and its comment-stripper ate string literals, so a `//` in a URL could hide an offender | Moved to core, scans every workspace, covers both shapes, asserts each root contributed files, and strips comments without eating strings. Verified by reintroducing a comparison in `apps/api` |
+
+core 280, api 672, web 458, mobile 28. Typecheck 6/6, lint 2/2.
 
 ---
 
@@ -379,7 +392,7 @@ core 269, api 669, web 461, mobile 28. Typecheck 6/6, lint 2/2.
 | # | Finding | Where | Status |
 |---|---|---|---|
 | F12 | **Job profit compares GCT-inclusive revenue against GCT-exclusive cost.** Revenue sums the invoice total, including output GCT remitted to TAJ, while cost correctly nets off reclaimable input tax. It only ever flatters: 65.2% shown where the truth is 60%. Correct for unregistered contractors, which is why it survived. Both fields needed for the fix are already on `Invoice`. | `job-profit.ts:77,89` | OPEN |
-| F13 **CLOSED `3556b25`** | **A settled-for-now invoice is marked OVERDUE and chased.** `statusForPaid` compares against the total, so a retention invoice stays PARTIAL, the sweep flips it OVERDUE in critical red, and the nightly digest emails the contractor to go chase it. | `payments.service.ts:13-17`, `invoice-overdue.service.ts:73,116,150` | OPEN |
+| F13 **CLOSED `3556b25`** | **A settled-for-now invoice is marked OVERDUE and chased.** `statusForPaid` compares against the total, so a retention invoice stays PARTIAL, the sweep flips it OVERDUE in critical red, and the nightly digest emails the contractor to go chase it. | `payments.service.ts:13-17`, `invoice-overdue.service.ts:73,116,150` | **CLOSED `3556b25`** |
 | F14 | **Every reminder promises a link it does not send.** `reminderMessage` is called with no link, so the empty branch always wins, while the modal says "It includes a link to the invoice". `resolveWebBase()` is dead in that file and `shareInvoice()` has no callers — so no invoice ever gets a share token, which makes the public invoice page and `firstViewedAt` unreachable in the shipped product. All four ends built, nothing joining them. The reminder's *amount* is correct. | `invoices.service.ts:624-632,843`, `api-client.ts:1520`, `RemindButton.tsx:94` | OPEN |
 | F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | OPEN |
 | F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | OPEN |
@@ -396,7 +409,7 @@ core 269, api 669, web 461, mobile 28. Typecheck 6/6, lint 2/2.
 | F27 | **The Cost tile's two sub-figures do not add up to the Cost above them.** The purchase component is derived gross of GCT while the headline is net, so the parts exceed the whole by exactly the reclaimable GCT. | `projects/[id]/page.tsx:88-93`, `purchases.service.ts:176` | OPEN |
 | F28 | **Every validation rejection reaches the user as "Validation failed".** The pipe generates the real reason and throws it into an `issues` field that **nothing under `apps/web` reads**. Because `errorMessage()` prefers a non-empty server message, this generic string beats every "Couldn't save…" fallback. Root cause behind most of F31. | `zod-validation.pipe.ts:14-17`, `api-client.ts:83` | OPEN |
 | F29 `[reviewed]` | **The failure banner cries wolf on every load for every non-super-admin.** Any throw is pushed into the failed list, including the 403s the comments describe as expected — so a MANAGE_TENANTS-only admin sees a red alert naming two sections on every page load. Same class: `SweepPanel` renders for anyone reaching Financials but its endpoint needs MANAGE_TENANTS. | `api-server.ts:605-612`, `AdminConsole.tsx:1580` | OPEN |
-| F30 **CLOSED `3556b25`** | **The retention snapshot goes stale on a draft edit.** `update` recomputes the totals and never touches `retentionCents`, so a draft edited after conversion can hold 5% while both screens label it "Retention held (10%)" on a finalized document. Related: `dueDate` uses `??`, so it can be set but never cleared — two lines below a comment explaining why that is wrong for a nullable field. | `invoices.service.ts:435-455` | OPEN |
+| F30 **CLOSED `3556b25`** | **The retention snapshot goes stale on a draft edit.** `update` recomputes the totals and never touches `retentionCents`, so a draft edited after conversion can hold 5% while both screens label it "Retention held (10%)" on a finalized document. Related: `dueDate` uses `??`, so it can be set but never cleared — two lines below a comment explaining why that is wrong for a nullable field. | `invoices.service.ts:435-455` | **CLOSED `3556b25`** |
 
 ---
 

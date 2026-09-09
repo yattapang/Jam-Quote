@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { InvoiceStatus, PROJECT_STAGES, ProjectStage, QuoteStatus } from "../types/enums.js";
 import {
+  computeReceivables,
   computeReportsSummary,
   type ReportInvoice,
   type ReportProject,
@@ -35,6 +36,10 @@ function invoice(overrides: Partial<ReportInvoice> = {}): ReportInvoice {
     totalCents: 0,
     paidCents: 0,
     issueDate: "2026-08-10T12:00:00.000Z",
+    // Explicit rather than defaulted: these were optional for one commit and
+    // the compiler could not then find the callers that had to change.
+    retentionCents: 0,
+    retentionReleasedAt: null,
     ...overrides,
   };
 }
@@ -647,5 +652,80 @@ describe("computeReportsSummary", () => {
       expect(s.revenue.invoicedCents).toBe(1_675_000);
       expect(s.revenue.collectedCents).toBe(475_000);
     });
+  });
+});
+
+/**
+ * Outstanding and overdue are DIFFERENT questions on a retention invoice.
+ *
+ * Found while auditing drift after the retention cluster landed: six surfaces had
+ * been fixed and this one had not, because `ReportInvoice` carried no retention
+ * fields at all — so the figure the Reports page prints in critical red as "Total
+ * overdue", and the dashboard's overdue card, both counted money the client is
+ * entitled to hold.
+ *
+ * The split is deliberate rather than a blanket subtraction:
+ *
+ * - **Outstanding** is the accrual position — billed and not yet received,
+ *   retention included, because it has been invoiced and will be collected. The
+ *   accountant's `invoices-issued` export takes the same view on purpose, and the
+ *   two must not disagree.
+ * - **Overdue** is a claim that someone is LATE. Retention is not late, so it is
+ *   measured against what is payable now.
+ */
+describe("receivables and retention", () => {
+  const retentionInvoice = (over: Partial<ReportInvoice> = {}): ReportInvoice => ({
+    status: InvoiceStatus.PARTIAL,
+    totalCents: 10_000_000,
+    paidCents: 9_000_000,
+    retentionCents: 1_000_000,
+    retentionReleasedAt: null,
+    issueDate: "2026-07-01T12:00:00.000Z",
+    // Well past NOW, so it would be counted as overdue if anything is.
+    dueDate: "2026-07-15T00:00:00.000Z",
+    clientId: "cl1",
+    clientName: "Marcia Brown",
+    ...over,
+  });
+
+  it("does NOT report retention still held as overdue", () => {
+    // The defect. $100,000 invoice, 10% held, $90,000 paid, due date long past:
+    // nothing is late, because the only unpaid money is money the client may keep.
+    const r = computeReceivables([retentionInvoice()], NOW);
+    expect(r.totalOverdueCents).toBe(0);
+    expect(r.outstandingByClient[0]?.overdueCents).toBe(0);
+  });
+
+  it("still reports it as OUTSTANDING, because it has been billed", () => {
+    // Not the same question. This figure has to agree with the accountant's
+    // accrual export, which subtracts no retention and says so.
+    const r = computeReceivables([retentionInvoice()], NOW);
+    expect(r.totalOutstandingCents).toBe(1_000_000);
+  });
+
+  it("reports it as overdue once the retention has been released and still unpaid", () => {
+    // Release is the moment held money becomes payable. After that, late is late.
+    const r = computeReceivables(
+      [retentionInvoice({ retentionReleasedAt: "2026-07-20T00:00:00.000Z" })],
+      NOW,
+    );
+    expect(r.totalOverdueCents).toBe(1_000_000);
+  });
+
+  it("still reports a genuinely late invoice, so the guard is not simply switching overdue off", () => {
+    const r = computeReceivables(
+      [retentionInvoice({ retentionCents: 0, paidCents: 0 })],
+      NOW,
+    );
+    expect(r.totalOverdueCents).toBe(10_000_000);
+  });
+
+  it("treats an explicit zero as no retention", () => {
+    // Most rows have none, and they say so. The fields were optional for exactly
+    // one commit, on the reasoning that "absent means none" — which made silent
+    // under-reporting the default and hid both production callers from the
+    // compiler. A caller with no retention now has to write it down.
+    const r = computeReceivables([retentionInvoice({ retentionCents: 0, paidCents: 0 })], NOW);
+    expect(r.totalOverdueCents).toBe(10_000_000);
   });
 });

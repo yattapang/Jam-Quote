@@ -1924,10 +1924,27 @@ pins nothing: the contract is never parsed against a live response, so the
 `business`, `client` and `sections` selects can be widened silently. One line
 fixes it and makes it fail closed.
 
-**Fix order:** F1 (the only tenant-boundary crossing), then F47 (one line), then
-the retention cluster F2/F3/F4/F13/F30, then the accountant's files
-F5/F6/F15/F12, then the quote-edit cluster F8/F9/F10/F11, then F7/F16, then F28
-because it is what makes F31 unreadable to a contractor.
+**Progress (2026-09-09).** Eight closed, each independently reviewed after the
+fix, and **every review found something the fix had missed** — three times a
+regression the fix itself introduced. That is now the standing practice: no
+finding is marked closed before a reviewer that did not write it has attacked it.
+
+| Closed | What it was |
+|---|---|
+| F1 | A caller-supplied `clientId` was never checked for ownership. Production data audited clean |
+| F46 | There was **no CI at all** — 1400 tests gated nothing. `verify.yml` now gates typecheck, lint and test |
+| F47 | The public share view was pinned for line fields only; `.strict()` was never parsed against a live response |
+| F2, F3, F4, F13, F30 | The retention cluster: six surfaces asked "total minus paid" when the question was "what is payable now" |
+
+**What the reviews caught that I had reported as done:** a guard satisfied by an
+import line rather than a call; a compile-time check I deleted while adding a
+runtime one; optional fields that hid two callers from the compiler and left the
+original defect live on the dashboard; a concurrency race introduced by narrowing
+a write; and a guard whose own grep drove the worse code at the call site.
+
+**Remaining order:** the accountant's files F5/F6/F15/F12, then the quote-edit
+cluster F8/F9/F10/F11, then F7/F16, then F28 because it is what makes F31
+unreadable to a contractor.
 
 **The pattern behind five of the top findings:** a comment asserts correctness
 over the cases someone hand-listed, and the defect is in the case they did not

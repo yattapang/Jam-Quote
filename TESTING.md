@@ -13,9 +13,9 @@ conversation is a backlog that gets re-derived badly.
 
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
-| `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 54 | 616 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
-| `apps/web` | 32 | 453 | Pure logic, source guards, and **7 component suites** |
+| `packages/core` | 25 | 280 | Pure logic — totals, money, dates, settlement, vocabulary, and the cross-workspace settlement guard |
+| `apps/api` | 58 | 672 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/web` | 32 | 458 | Pure logic, source guards, and **7 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
 component. Every form defect the owner found by clicking was invisible to the

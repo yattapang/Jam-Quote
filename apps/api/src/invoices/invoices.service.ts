@@ -179,6 +179,25 @@ function asPublicInvoiceView(view: PublicInvoiceView): PublicInvoiceView {
   return assertPublicShape(publicInvoiceWire, view, "PublicInvoiceView");
 }
 
+
+/**
+ * Is a retention percentage actually agreed?
+ *
+ * `retentionPct` is a nullable `Decimal`, and a `Prisma.Decimal` is an OBJECT —
+ * so `Decimal("0.00")` is truthy and a bare `if (pct)` distinguishes null from
+ * everything else, never 0 from null. The two are different facts: null is "no
+ * retention clause in this contract", 0 is "a clause, at nothing". A review found
+ * the old check claiming to tell them apart while testing only the null case.
+ *
+ * Both answers write the same `retentionCents: 0`, so nothing was wrong on screen
+ * — but the next person to act on the distinction would have found a check that
+ * does not make it.
+ */
+// A type predicate, not a boolean: callers need the narrowing as well as the answer.
+function hasRetention(pct: Prisma.Decimal | null | undefined): pct is Prisma.Decimal {
+  return pct !== null && pct !== undefined;
+}
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -487,7 +506,7 @@ export class InvoicesService {
           // the point of the snapshot: once issued, the held amount is what the
           // client was told, and a later edit to the project's percentage must not
           // restate a document they hold.
-          ...(existing.retentionPct
+          ...(hasRetention(existing.retentionPct)
             ? { retentionCents: retentionCents(totals.totalCents, Number(existing.retentionPct)) }
             : {}),
         },
@@ -811,6 +830,15 @@ export class InvoicesService {
           subtotalCents: totals.subtotalCents,
           gctCents: totals.gctCents,
           totalCents: totals.totalCents,
+          // Paired with the recompute above, and this is the last moment it can
+          // be. F30 was fixed in `update` and survived here: recomputing the total
+          // while leaving retentionCents alone is the same omission, at the exact
+          // point the snapshot becomes permanent and client-facing. Recomputing
+          // totals at all is this method asserting the stored value can be wrong;
+          // if that is true then the retention derived from it can be too.
+          ...(hasRetention(invoice.retentionPct)
+            ? { retentionCents: retentionCents(totals.totalCents, Number(invoice.retentionPct)) }
+            : {}),
         },
       });
       if (invoice.quoteId) {
@@ -851,7 +879,9 @@ export class InvoicesService {
       select: { retentionPct: true },
     });
     const pct = project?.retentionPct;
-    if (!pct) return {};
+    // Not `if (!pct)`: a Decimal is an object, so 0.00 is truthy. Zero and null
+    // are different facts, and both mean no amount is held.
+    if (!hasRetention(pct) || Number(pct) <= 0) return {};
     return {
       retentionPct: pct,
       retentionCents: retentionCents(totalCents, Number(pct)),

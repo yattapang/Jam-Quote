@@ -513,6 +513,17 @@ export interface Invoice {
   retentionPct: number;
   retentionCents: number;
   retentionReleased: boolean;
+  /**
+   * When the held money became payable, or null while it is still held.
+   *
+   * Carried as the DATE and not only as the boolean above, because
+   * `settlementOf` in core reads this field. Collapsing it to a boolean at this
+   * boundary forced three call sites to pass `retentionReleasedAt: null` and
+   * zero out `retentionCents` instead — a second way of saying "released", in
+   * the argument designed to carry it, which a review called a trap for the next
+   * caller. The boolean stays because screens read it directly.
+   */
+  retentionReleasedAt: string | null;
   /** Chase history, newest first. */
   reminders: InvoiceReminder[];
   /** The date the invoice bears — what reports attribute its revenue to. */
@@ -561,6 +572,7 @@ export function mapInvoice(i: ApiInvoice): Invoice {
     retentionPct: i.retentionPct == null ? 0 : Number(i.retentionPct),
     retentionCents: i.retentionCents ?? 0,
     retentionReleased: Boolean(i.retentionReleasedAt),
+    retentionReleasedAt: i.retentionReleasedAt,
     reminders: (i.reminders ?? []).map((r) => ({
       id: r.id,
       channel: r.channel,
