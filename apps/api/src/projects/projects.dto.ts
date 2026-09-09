@@ -1,12 +1,34 @@
 import { z } from "zod";
 import { ProjectStage, PARISHES } from "@jamquote/core";
 
+/**
+ * What a valid value for each project field IS, with no statement about
+ * presence.
+ *
+ * Extracted for the same reason as `clientFieldRules`: there are TWO doors into
+ * this table and they had drifted. `POST /projects` required `parish` to be one
+ * of the fourteen and capped `town` at 80; `POST /sync` accepted any string for
+ * both. A parish keys the jurisdiction rule-pack, so an invented one silently
+ * matches nothing.
+ *
+ * What made it hard to spot: the sync schema carries a comment reading "Same
+ * enum the REST DTO takes" — correct, and about `stage`, sitting two lines below
+ * a `parish` that was still free text. A right idea next to the wrong field.
+ */
+export const projectFieldRules = {
+  name: z.string().min(1).max(120),
+  addressLine: z.string().max(200),
+  town: z.string().max(80),
+  parish: z.enum(PARISHES),
+} as const;
+
 export const createProjectSchema = z.object({
   clientId: z.string().min(1).optional(),
-  name: z.string().min(1),
-  addressLine: z.string().optional(),
-  town: z.string().max(80).optional(),
-  parish: z.enum(PARISHES).optional(),
+  // Required on create; updateProjectSchema derives from this via .partial().
+  name: projectFieldRules.name,
+  addressLine: projectFieldRules.addressLine.optional(),
+  town: projectFieldRules.town.optional(),
+  parish: projectFieldRules.parish.optional(),
   // Both hand-set (#36): the server knows about quotes and invoices, not about
   // whether the block work has started, so neither is ever derived.
   stage: z.nativeEnum(ProjectStage).optional(),

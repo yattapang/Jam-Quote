@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ProjectStage } from "@jamquote/core";
 import { clientFieldRules } from "../clients/clients.dto.js";
+import { projectFieldRules } from "../projects/projects.dto.js";
 
 /** Pull everything changed since this server cursor (ISO). Omit for a full sync. */
 export const pullSchema = z.object({
@@ -35,12 +36,22 @@ const clientDataSchema = z.object({
   notes: clientFieldRules.notes.nullish(),
 });
 
+/**
+ * The same VALUE rules as `POST /projects`, with sync's own presence rule -
+ * see the note on `clientDataSchema` above.
+ *
+ * `parish` and `town` were bare `z.string()` here while the REST door required a
+ * real parish and capped the town, so a device could write a parish that does
+ * not exist into a column the jurisdiction rule-pack keys on.
+ */
 const projectDataSchema = z.object({
-  name: z.string().min(1),
+  // Required, not nullish: a project name cannot be null in the database, and
+  // a device clearing it is not a change worth replicating.
+  name: projectFieldRules.name,
   clientId: z.string().uuid().nullish(),
-  addressLine: z.string().nullish(),
-  town: z.string().nullish(),
-  parish: z.string().nullish(),
+  addressLine: projectFieldRules.addressLine.nullish(),
+  town: projectFieldRules.town.nullish(),
+  parish: projectFieldRules.parish.nullish(),
   // Same enum the REST DTO takes (#36). A device that still sends the old free
   // text now gets a 400 instead of writing a value the column can no longer
   // hold — and the stage it sends survives the round-trip rather than being

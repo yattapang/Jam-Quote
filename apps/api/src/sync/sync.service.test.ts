@@ -47,6 +47,8 @@ const clientData = {
   notes: "Prefers WhatsApp",
 } as const;
 
+// `as const` for the same reason as clientData above: parish must keep its
+// literal type now that the sync path shares the REST path's parish enum.
 const jobData = {
   name: "Kitchen renovation",
   clientId: CLIENT_ID,
@@ -54,7 +56,7 @@ const jobData = {
   parish: "Kingston",
   stage: ProjectStage.QUOTED,
   progressPct: 0,
-};
+} as const;
 
 describe("SyncService.pull", () => {
   it("with no `since`, queries by businessId only and returns cursor + changes", async () => {

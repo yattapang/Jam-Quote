@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PARISHES } from "@jamquote/core";
 import { createClientSchema } from "../clients/clients.dto.js";
+import { createProjectSchema } from "../projects/projects.dto.js";
 import { pushSchema } from "./sync.dto.js";
 
 /**
@@ -113,5 +114,66 @@ describe("the presence rules differ, deliberately", () => {
   it("REST accepts the field being absent, which means leave it alone", () => {
     const { email: _omitted, ...withoutEmail } = validClient;
     expect(createClientSchema.safeParse(withoutEmail).success).toBe(true);
+  });
+});
+
+/**
+ * The PROJECT table has the same two doors, and the same divergence.
+ *
+ * `POST /projects` required a real parish and capped `town`; sync accepted any
+ * string for both. What made it easy to miss: the sync schema carries a comment
+ * reading "Same enum the REST DTO takes" — true, and about `stage`, sitting two
+ * lines below a `parish` that was still free text. A right idea next to the
+ * wrong field.
+ */
+function pushProject(data: Record<string, unknown>) {
+  return {
+    clients: [],
+    projects: [
+      {
+        id: "8a2d1f60-9c4b-4e77-8f31-1b6c9e2a0d45",
+        op: "upsert",
+        updatedAt: "2026-09-08T00:00:00.000Z",
+        data,
+      },
+    ],
+  };
+}
+
+const validProject = { name: "Retaining wall", parish: "Kingston", town: "Kingston" };
+
+describe("both doors into Project agree", () => {
+  it("accept the same valid record", () => {
+    expect(createProjectSchema.safeParse(validProject).success).toBe(true);
+    expect(pushSchema.safeParse(pushProject(validProject)).success).toBe(true);
+  });
+
+  it("both reject a parish that does not exist", () => {
+    const bad = { ...validProject, parish: "St. Nowhere" };
+    expect(createProjectSchema.safeParse(bad).success).toBe(false);
+    // Used to pass. A parish keys the jurisdiction rule-pack, so an invented
+    // one silently matches nothing.
+    expect(pushSchema.safeParse(pushProject(bad)).success).toBe(false);
+  });
+
+  it("both reject a town beyond the column's length", () => {
+    const bad = { ...validProject, town: "x".repeat(200) };
+    expect(createProjectSchema.safeParse(bad).success).toBe(false);
+    expect(pushSchema.safeParse(pushProject(bad)).success).toBe(false);
+  });
+
+  it("both require a name", () => {
+    // Not nullish on either path: a project name cannot be null in the
+    // database, and a device clearing it is not a change to replicate.
+    const bad = { ...validProject, name: "" };
+    expect(createProjectSchema.safeParse(bad).success).toBe(false);
+    expect(pushSchema.safeParse(pushProject(bad)).success).toBe(false);
+  });
+
+  it("agree on every parish that DOES exist", () => {
+    for (const parish of PARISHES) {
+      expect(createProjectSchema.safeParse({ ...validProject, parish }).success).toBe(true);
+      expect(pushSchema.safeParse(pushProject({ ...validProject, parish })).success).toBe(true);
+    }
   });
 });

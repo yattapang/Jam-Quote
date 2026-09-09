@@ -14,8 +14,8 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 45 | 512 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity |
-| `apps/web` | 29 | 429 | Pure logic, source guards, and **5 component suites** |
+| `apps/api` | 46 | 535 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds |
+| `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
 component. Every form defect the owner found by clicking was invisible to the
@@ -42,6 +42,7 @@ never failed proves only that it runs.**
 | `ProjectForm` | Blank retention vs a typed `0`; the PROJECT/JOB vocabulary on screen |
 | `RemindButton` | WhatsApp and email each disabled for their OWN reason, each stated in text rather than a tooltip; the chase count; the API's real refusal |
 | `DeleteRowButton` | Confirms first; the API's own reason on refusal; blames the network only when the fetch never completed; a failed delete does not navigate |
+| `QuoteBuilder` draft recovery | The banner appears only for a draft worth restoring, never on an untouched form; Restore repopulates; Start fresh clears; and **typing dismisses it and starts autosaving** |
 
 ### Owed, highest value first
 
@@ -57,7 +58,6 @@ never failed proves only that it runs.**
   noted as a real if minor accessibility smell — two controls with one name, one
   of them destructive. Renaming the confirm is a product decision, not a test's.
 
-| `QuoteBuilder` draft recovery | The banner appears only for a draft worth restoring, never on an untouched form, and typing dismisses it | Autosave was switched off while the banner showed |
 | `LineItemsEditor` | Unit label per line via `lineUnitLabel`; the category dropdown showing its options | "30 units" for a job sold by the metre; the invisible datalist |
 | `RetentionPanel` | Held vs due-now; release disabled on a draft | Retention read as a shortfall |
 | `MaterialForm` | Coverage hint; the unit picker; `m2` → `m²` | All three were owner findings |
@@ -95,8 +95,8 @@ robustness and cost issue rather than a security one.
 
 | Item | Notes |
 |---|---|
-| **Guard: no NEW unconstrained string field** | Pin the 29 as tracked debt and fail on the 30th. Stops the bleeding without a risky mass edit |
-| **Bound the free-text fields** | `terms`, `notes`, `description`, `addressLine`. Pick limits a real contractor cannot hit |
+| ~~Guard: no NEW unconstrained string field~~ | **DONE.** `input-bounds.test.ts`. It also refuses to let its own allow-list rot, which caught the list twice while the seam fixes below were landing |
+| **Bound the remaining 11** | Started at 29. Sharing the client and project field rules across the two doors bounded **18 of them as a side effect** — the argument for fixing a seam rather than patching each side. `terms` is the one that matters most: it prints on the document a client reads |
 | **Validation matrices for the money DTOs** | `quotes`, `invoices`, `payments`, `purchases`: empty, zero, negative, fractional cents, huge, unicode, formula-leading `=`, and cents-vs-dollars confusion |
 | **Date-string boundaries** | Every `.datetime()` field against the Jamaica UTC-5 edge cases that have produced the same bug three times |
 | **Id fields that should be `.uuid()`** | `clientId`, `projectId`, `jobId`, `supplierId` and friends are free strings. Tenant checks make this safe, not clean — a bad id 404s instead of being rejected |
@@ -119,6 +119,14 @@ leave alone), sync `.nullish()` (null means the device cleared it). Divergence i
 structurally impossible rather than something a test must notice.
 `client-validation-parity.test.ts` states the intent and was verified against the
 real divergence.
+
+**The PROJECT table had the identical divergence**, found by the input-bounds
+guard rather than by looking: `POST /projects` required a real parish and capped
+`town`; sync accepted any string for both. What made it easy to miss is worth
+recording — the sync schema carries a comment reading *"Same enum the REST DTO
+takes"*, which is true, and about `stage`, sitting two lines below a `parish`
+that was still free text. **A right idea next to the wrong field.** Fixed the
+same way, with `projectFieldRules`.
 
 **Two things that happened writing that test, both worth keeping:**
 
