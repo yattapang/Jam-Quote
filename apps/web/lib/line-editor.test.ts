@@ -5,6 +5,8 @@ import {
   LineCategory,
   RateUnit,
   computeJobUnitCostCents,
+  PriceSource,
+  lineAmountCents,
 } from "@jamquote/core";
 import {
   assemblyLine,
@@ -1107,5 +1109,70 @@ describe("the heading follows the kind, unless it was chosen", () => {
   it("puts a job line on OTHER, where job lines have always gone", () => {
     const patch = applyKindChange(LineKind.JOB, { kind: "category", category: LineCategory.MATERIAL });
     expect(patch.heading).toEqual({ kind: "category", category: LineCategory.OTHER });
+  });
+});
+
+/**
+ * Opening a saved quote and re-saving it must not change what it is worth.
+ *
+ * `markupPct` is part of the SUBTOTAL — `computeTotals` builds it from the
+ * after-markup amount — and the builder never captured it. So loading a quote and
+ * pressing Save, changing nothing, lowered its total by every line's markup. On a
+ * quote with a live share token the client was looking at a document that had
+ * silently become cheaper.
+ *
+ * The comment above `unitLabel` in `InitialLine` records this exact bug being
+ * found and fixed for that field. These four were left, and they include the one
+ * that moves money.
+ */
+describe("a line survives a load-and-save round trip", () => {
+  const saved = {
+    category: LineCategory.MATERIAL,
+    description: "Cement, 42.5kg",
+    quantity: 10,
+    rateUnit: RateUnit.UNIT,
+    unitLabel: "bag",
+    unitPriceCents: 120_000,
+    gctTreatment: GctTreatment.STANDARD,
+    markupPct: 20,
+    priceSource: PriceSource.LOOKUP,
+    supplierId: "11111111-1111-4111-8111-111111111111",
+    overrideNote: "matched the Portmore yard price",
+  };
+
+  it("carries markupPct back out again", () => {
+    // The one that changes the total. Everything else here is provenance.
+    const draft = draftLineFromInitial(saved, { kind: "category", category: LineCategory.MATERIAL });
+    expect(draft.markupPct).toBe(20);
+    expect(lineToLineInput(draft).markupPct).toBe(20);
+  });
+
+  it("carries the provenance fields too", () => {
+    const out = lineToLineInput(
+      draftLineFromInitial(saved, { kind: "category", category: LineCategory.MATERIAL }),
+    );
+    expect(out.priceSource).toBe(PriceSource.LOOKUP);
+    expect(out.supplierId).toBe(saved.supplierId);
+    expect(out.overrideNote).toBe("matched the Portmore yard price");
+  });
+
+  it("does NOT invent a markup on a hand-typed line", () => {
+    // Omitted rather than sent as 0: a line that never had a markup must not
+    // acquire one, and the DTO leaves the field optional for that reason.
+    const out = lineToLineInput(newLine());
+    expect("markupPct" in out).toBe(false);
+    expect("supplierId" in out).toBe(false);
+  });
+
+  it("keeps the total identical across the round trip", () => {
+    // The assertion that would have caught it. 10 x $1,200 = $12,000, plus 20%
+    // markup = $14,400. Dropping markupPct made the same quote worth $12,000.
+    const draft = draftLineFromInitial(saved, { kind: "category", category: LineCategory.MATERIAL });
+    const resaved = lineToLineInput(draft);
+    expect(lineAmountCents({
+      quantity: resaved.quantity,
+      unitPriceCents: resaved.unitPriceCents,
+      markupPct: resaved.markupPct,
+    })).toBe(1_440_000);
   });
 });

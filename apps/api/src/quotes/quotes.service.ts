@@ -19,6 +19,7 @@ import {
   type RateUnit,
   type TotalsLineInput,
   publicQuoteWire,
+  lineAmountCents,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
@@ -89,8 +90,49 @@ export interface PublicQuoteLine {
   quantity: Prisma.Decimal;
   rateUnit: RateUnit;
   unitLabel: string | null;
-  unitPriceCents: number;
+  /**
+   * What this line COSTS, markup included — the figure printed on the document.
+   *
+   * Replaces `unitPriceCents`, which the client's page only ever multiplied. The
+   * multiplication could not include the markup (correctly withheld), so the lines
+   * did not sum to the subtotal shown beneath them. Sending the answer instead of
+   * two of its three inputs is both correct and less disclosure.
+   */
+  amountCents: number;
   gctTreatment: GctTreatment;
+}
+
+/** A read row reduced to what a client may see, with the amount worked out. */
+function publicLine(l: {
+  id: string;
+  category: LineCategory;
+  description: string;
+  quantity: Prisma.Decimal;
+  rateUnit: RateUnit;
+  unitLabel: string | null;
+  unitPriceCents: number;
+  markupPct: Prisma.Decimal | null;
+  gctTreatment: GctTreatment;
+}): PublicQuoteLine {
+  return {
+    id: l.id,
+    category: l.category,
+    description: l.description,
+    quantity: l.quantity,
+    rateUnit: l.rateUnit,
+    unitLabel: l.unitLabel,
+    // The same helper computeTotals uses, so a line cannot disagree with the
+    // subtotal it contributes to.
+    amountCents: lineAmountCents({
+      quantity: Number(l.quantity),
+      unitPriceCents: l.unitPriceCents,
+      // `== null` catches undefined as well as null. With a strict `=== null`,
+      // an absent field became Number(undefined) = NaN, and the right answer
+      // only came out because `NaN > 0` is false. Luck is not a rounding rule.
+      markupPct: l.markupPct == null ? undefined : Number(l.markupPct),
+    }),
+    gctTreatment: l.gctTreatment,
+  };
 }
 
 export interface PublicQuoteView {
@@ -189,7 +231,24 @@ function lineItemCreateData(
  * fields and false of the nested rows, which is exactly the kind of gap a
  * spread hides.
  */
-const PUBLIC_LINE_SELECT = {
+/**
+ * What is READ to build a public line — not what is sent.
+ *
+ * `markupPct` and `unitPriceCents` are here and deliberately absent from
+ * `PublicQuoteLine`: the client's page needs the line AMOUNT, and the amount is
+ * `quantity x unitPrice x (1 + markup)`. It used to be computed on the page from
+ * the unit price alone, which could not include the markup and therefore did not
+ * add up to the subtotal printed underneath it — while the emailed PDF, which
+ * does have the markup, showed different figures for the same quote.
+ *
+ * So the amount is computed HERE, where the markup is known, and neither input
+ * leaves the service. That sends strictly LESS than before — the unit price no
+ * longer crosses the wire at all — and `publicLine` below is now the allow-list
+ * rather than this select. `assertPublicShape` enforces that at runtime against
+ * the `.strict()` contract, and `public-quote-disclosure.test.ts` reads this
+ * source to confirm the forbidden fields are not in the OUTPUT shape.
+ */
+const PUBLIC_LINE_READ = {
   id: true,
   category: true,
   description: true,
@@ -197,6 +256,7 @@ const PUBLIC_LINE_SELECT = {
   rateUnit: true,
   unitLabel: true,
   unitPriceCents: true,
+  markupPct: true,
   gctTreatment: true,
 } as const;
 
@@ -403,14 +463,14 @@ export class QuotesService {
         lineItems: {
           where: { sectionId: null },
           orderBy: { sort: "asc" as const },
-          select: PUBLIC_LINE_SELECT,
+          select: PUBLIC_LINE_READ,
         },
         sections: {
           orderBy: { sort: "asc" as const },
           select: {
             id: true,
             title: true,
-            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_SELECT },
+            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_READ },
           },
         },
         client: { select: { firstName: true, lastName: true } },
@@ -446,8 +506,12 @@ export class QuotesService {
       subtotalCents: quote.subtotalCents,
       gctCents: quote.gctCents,
       totalCents: quote.totalCents,
-      lineItems: quote.lineItems,
-      sections: quote.sections,
+      lineItems: quote.lineItems.map(publicLine),
+      sections: quote.sections.map((sec) => ({
+        id: sec.id,
+        title: sec.title,
+        lineItems: sec.lineItems.map(publicLine),
+      })),
       clientName: quote.client ? `${quote.client.firstName} ${quote.client.lastName}`.trim() : null,
       business: quote.business,
     });
@@ -471,8 +535,29 @@ export class QuotesService {
     return view;
   }
 
+  /**
+   * Edit a DRAFT.
+   *
+   * **DRAFT only, and that is the whole point of the guard.** `remove` two hundred
+   * lines below has always refused anything else; this did not, so
+   * `PATCH /quotes/<accepted-id>` rewrote the lines and totals of a quote the
+   * client had agreed to — possibly one holding a live share token they were
+   * looking at. The Edit button is hidden outside DRAFT and the "Mark as sent"
+   * modal promises the quote "can no longer be edited directly", but a hidden
+   * button is a suggestion, not a rule.
+   *
+   * The right path for a change after sending already exists: `revise` copies the
+   * quote into a new DRAFT and links it by `parentQuoteId`, so what the client
+   * agreed to survives as its own record. §4m rejected variations-by-rewrite for
+   * exactly this reason, and then left the rewrite reachable.
+   */
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {
     const existing = await this.findOne(businessId, id);
+    if (existing.status !== QuoteStatus.DRAFT) {
+      throw new BadRequestException(
+        "Only draft quotes can be edited. Use Revise to change one that has been sent.",
+      );
+    }
     await assertClientOwned(this.prisma, businessId, input.clientId);
     await assertProjectOwned(this.prisma, businessId, input.projectId);
 

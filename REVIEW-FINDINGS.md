@@ -296,7 +296,7 @@ emails them. Recovering from one lapse takes as many payments as months missed.
 
 `subscription-payments.service.ts:216-249`
 
-### F8 — an ACCEPTED quote can be rewritten · OPEN
+### F8 — an ACCEPTED quote can be rewritten · **CLOSED**
 
 `update` has no status guard, while `remove` two hundred lines away does. A
 delete-and-re-persist wipes the lines and totals of a quote the client has
@@ -307,7 +307,7 @@ This is the failure §4m rejected variations-by-rewrite to avoid.
 
 `quotes.service.ts:441`, `quotes/[id]/edit/page.tsx:8`
 
-### F9 — editing a quote silently strips `markupPct`, lowering the total · OPEN
+### F9 — editing a quote silently strips `markupPct`, lowering the total · **CLOSED**
 
 The web builder never captures it — **zero occurrences** in `QuoteBuilder.tsx`
 and the edit page — and `update` replaces lines wholesale. Open Edit, change
@@ -316,7 +316,7 @@ nothing, Save: subtotal, GCT and total all drop by the markup. `priceSource`,
 
 `quotes/[id]/edit/page.tsx:44-75`, `line-editor.ts:750`
 
-### F10 — the public share page computes line amounts itself · OPEN
+### F10 — the public share page computes line amounts itself · **CLOSED**
 
 A recompute in display code, and it *cannot* be right: `markupPct` is correctly
 withheld from the public select, so the page has nothing to compute with. The
@@ -325,7 +325,7 @@ and the emailed PDF disagrees with the link.
 
 `q/[token]/page.tsx:83`
 
-### F11 — `discountPct` is disclosed to the client and never rendered · OPEN
+### F11 — `discountPct` is disclosed to the client and never rendered · **CLOSED**
 
 On a $100,000 quote at 10% off, the client sees a Subtotal, GCT and Total that do
 not add up, with the discount they were given invisible. The tenant page has the
@@ -384,6 +384,36 @@ Seven more things, three of them regressions I introduced:
 | **The guard was much narrower than advertised**: `apps/web` only — and four of six defects were in `apps/api`; subtractions only — and three of six were COMPARISONS; and its comment-stripper ate string literals, so a `//` in a URL could hide an offender | Moved to core, scans every workspace, covers both shapes, asserts each root contributed files, and strips comments without eating strings. Verified by reintroducing a comparison in `apps/api` |
 
 core 280, api 672, web 458, mobile 28. Typecheck 6/6, lint 2/2.
+
+---
+
+## The quote-edit and share cluster — CLOSED
+
+**F8, F9, F10, F11.**
+
+| Was | Now |
+|---|---|
+| `PATCH /quotes/:id` had **no status guard** — `remove` two hundred lines below always refused anything but DRAFT — so an ACCEPTED quote could be rewritten, possibly one holding a live share token the client was reading | DRAFT only, with the error naming `revise` — which already existed for exactly this and links the copy by `parentQuoteId`, so what the client agreed to survives as its own record. The edit PAGE redirects too: a hidden Edit button is a suggestion, and `/quotes/<accepted-id>/edit` was reachable by typing it |
+| The builder **never captured `markupPct`**, and `update` replaces lines wholesale — so opening a saved quote and pressing Save, changing nothing, **lowered its total by every line's markup** | Carried through `InitialLine` → `DraftLine` → `lineToLineInput`, along with `priceSource`, `supplierId` and `overrideNote`. The web's own payload type did not declare them either, which is why nothing caught it |
+| The public page computed line amounts itself and **could not be right**: `markupPct` is correctly withheld, so its figures did not sum to the subtotal printed beneath them — while the emailed PDF, which does have the markup, showed different numbers for the same quote | The server sends `amountCents`, computed with the same `lineAmountCents` that builds the subtotal. **`unitPriceCents` no longer crosses the wire at all** — sending the answer instead of two of its three inputs is both correct and strictly less disclosure |
+| `discountPct` was **sent to the client and never rendered**, so on a $100,000 quote at 10% off the subtotal, GCT and total did not add up and the reduction was invisible | A Discount row, derived as `subtotal + gct - total` so it closes the gap by construction |
+
+**The disclosure guard had to move, and that is worth understanding.** The Prisma
+select was the line allow-list; it now reads `markupPct` in order to apply and drop
+it, so the boundary is the `publicLine` mapper. The guard follows it and pins the
+mapper's returned keys, with `markupPct` and `unitPriceCents` both named forbidden
+and the reasons kept. Verified in both directions: leaking `markupPct` into the
+output fails, and *removing* the read fails too — because dropping it would make
+the amount silently wrong rather than disclosive, which is quieter and just as bad
+for the client.
+
+**Caught while doing it:** my first edit put `markupPct` into the ALLOWED list by a
+careless find-and-replace — the exact inversion of the fix. TypeScript then caught
+an invented `PriceSource.SUPPLIER` member and the undeclared payload fields. And
+the read fixture omitted `markupPct`, so `Number(undefined)` gave `NaN` and the
+right answer only came out because `NaN > 0` is false; `== null` now catches both.
+
+core 285, api 681, web 462, mobile 28.
 
 ---
 

@@ -802,6 +802,16 @@ export interface NewQuoteLineInput {
   unitLabel?: string;
   unitPriceCents: number;
   gctTreatment: QuoteLineItemInput["gctTreatment"];
+  /**
+   * Pricing provenance, round-tripped on edit. Same story as `unitLabel` above,
+   * and worse: `markupPct` is part of the SUBTOTAL, so a builder that did not
+   * declare it — and therefore did not send it — silently LOWERED the total every
+   * time a saved quote was opened and re-saved.
+   */
+  markupPct?: number;
+  priceSource?: QuoteLineItemInput["priceSource"];
+  supplierId?: string;
+  overrideNote?: string;
   /** Job ("job type") provenance — set only when this line was built
    * from an job. The snapshot keeps historical quotes stable. */
   jobId?: string;

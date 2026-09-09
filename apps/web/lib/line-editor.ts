@@ -9,7 +9,15 @@
  * the two builders, neither of which can be render-tested in this repo.
  * Money is always integer cents.
  */
-import { coverageBreakdown, formatJmd, GctTreatment, JobComponentKind, LineCategory, RateUnit } from "@jamquote/core";
+import {
+  coverageBreakdown,
+  formatJmd,
+  GctTreatment,
+  JobComponentKind,
+  LineCategory,
+  PriceSource,
+  RateUnit,
+} from "@jamquote/core";
 import type { InvoiceLineItemInput, NewJobInput, NewQuoteLineInput } from "./api-client";
 import { ADD_NEW_OPTION_VALUE } from "./catalog-options";
 import { materialLineDescription } from "./material-display";
@@ -214,6 +222,21 @@ export interface DraftLine {
    * as the description is hand-edited (see patchLine()), since at that point
    * the line no longer necessarily represents that favourite. */
   materialFavouriteId?: string;
+  /**
+   * Pricing provenance, round-tripped on edit and NEVER shown to the client.
+   *
+   * `markupPct` is part of the SUBTOTAL — `computeTotals` builds it from the
+   * after-markup amount — so a builder that did not carry it silently LOWERED the
+   * total every time a quote was opened and re-saved. The other three are
+   * provenance with no money effect, dropped the same way.
+   *
+   * The comment above `unitLabel` records the identical bug being found and fixed
+   * for that field. These four were left, and they are the ones that move money.
+   */
+  markupPct?: number;
+  priceSource?: PriceSource;
+  supplierId?: string;
+  overrideNote?: string;
 }
 
 let counter = 0;
@@ -510,6 +533,21 @@ export interface InitialLine {
   jobName?: string;
   jobUnit?: string;
   jobComponents?: QuoteLineJobComponent[];
+  /**
+   * Pricing provenance, round-tripped on edit and NEVER shown to the client.
+   *
+   * `markupPct` is part of the SUBTOTAL — `computeTotals` builds it from the
+   * after-markup amount — so a builder that did not carry it silently LOWERED the
+   * total every time a quote was opened and re-saved. The other three are
+   * provenance with no money effect, dropped the same way.
+   *
+   * The comment above `unitLabel` records the identical bug being found and fixed
+   * for that field. These four were left, and they are the ones that move money.
+   */
+  markupPct?: number;
+  priceSource?: PriceSource;
+  supplierId?: string;
+  overrideNote?: string;
 }
 export interface InitialSection {
   title: string;
@@ -540,6 +578,12 @@ export function draftLineFromInitial(l: InitialLine, heading: Heading): DraftLin
     jobName: l.jobName,
     jobUnit: l.jobUnit,
     jobComponents: l.jobComponents,
+    // Round-tripped, not recreated. markupPct is part of the subtotal, so losing
+    // it here lowered the total on every re-save.
+    markupPct: l.markupPct,
+    priceSource: l.priceSource,
+    supplierId: l.supplierId,
+    overrideNote: l.overrideNote,
   };
 }
 
@@ -756,6 +800,13 @@ export function lineToLineInput(l: DraftLine): NewQuoteLineInput {
     ...(l.unitLabel ? { unitLabel: l.unitLabel } : {}),
     unitPriceCents: toCents(l.unitPriceDollars),
     gctTreatment: l.gctTreatment,
+    // Pricing provenance, sent back exactly as it came. Omitted when absent so a
+    // hand-typed line does not acquire a 0% markup it never had — the DTO defaults
+    // priceSource and leaves the rest optional.
+    ...(l.markupPct !== undefined ? { markupPct: l.markupPct } : {}),
+    ...(l.priceSource ? { priceSource: l.priceSource } : {}),
+    ...(l.supplierId ? { supplierId: l.supplierId } : {}),
+    ...(l.overrideNote ? { overrideNote: l.overrideNote } : {}),
     // Job provenance rides along only for job-type lines; a plain line
     // omits all of these entirely.
     ...(l.jobId

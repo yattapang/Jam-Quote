@@ -88,7 +88,12 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
                       </span>
                     </td>
                     <td className={styles.amount}>
-                      {formatJmd(Math.round(Number(l.quantity) * l.unitPriceCents))}
+                      {/* The server's figure, markup included. Computing it here
+                          from the unit price could not include the markup, so the
+                          lines did not add up to the subtotal below — and the
+                          emailed PDF, which does have it, showed different
+                          numbers for the same quote. */}
+                      {formatJmd(l.amountCents)}
                     </td>
                   </tr>
                 ))}

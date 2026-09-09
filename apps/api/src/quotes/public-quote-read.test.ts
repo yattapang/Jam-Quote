@@ -46,6 +46,9 @@ function quoteRow(over: Record<string, unknown> = {}) {
         rateUnit: "UNIT",
         unitLabel: null,
         unitPriceCents: 40_000,
+        // A real markup, so the amount the client is sent is not the bare
+        // extension. 2.5 x 40,000 = 100,000, plus 20% = 120,000.
+        markupPct: new Prisma.Decimal("20.00"),
         gctTreatment: "STANDARD",
       },
     ],
@@ -62,6 +65,7 @@ function quoteRow(over: Record<string, unknown> = {}) {
             rateUnit: "DAY",
             unitLabel: "day",
             unitPriceCents: 800_000,
+            markupPct: null,
             gctTreatment: "EXEMPT",
           },
         ],
@@ -109,6 +113,10 @@ describe("findByShareToken — the anonymous read", () => {
     expect(view.business.name).toBe("Blackwood Construction");
     expect(view.lineItems).toHaveLength(1);
     expect(view.sections[0]?.lineItems).toHaveLength(1);
+    // The amount, markup included, computed by the service. The page used to work
+    // this out itself from the unit price and could not include the markup.
+    expect(view.lineItems[0]?.amountCents).toBe(120_000);
+    expect(view.sections[0]?.lineItems[0]?.amountCents).toBe(2_400_000);
   });
 
   it("carries the totals as integer cents, unchanged", async () => {

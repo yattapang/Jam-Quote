@@ -37,7 +37,11 @@ export const publicQuoteLineWire = z
     rateUnit: z.nativeEnum(RateUnit),
     unitLabel: z.string().nullable(),
     /** Integer cents. Money is never a Decimal in this system. */
-    unitPriceCents: z.number().int(),
+    // The line AMOUNT, markup included — not the unit price. The client's page only
+  // ever multiplied the unit price, and could not include the markup (correctly
+  // withheld), so the lines did not sum to the subtotal beneath them. Sending the
+  // answer rather than two of its three inputs is also strictly less disclosure.
+  amountCents: z.number().int(),
     gctTreatment: z.nativeEnum(GctTreatment),
   })
   .strict();

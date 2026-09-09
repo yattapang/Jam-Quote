@@ -24,7 +24,7 @@ const line = {
   quantity: new Prisma.Decimal("10"),
   rateUnit: "UNIT",
   unitLabel: "bag",
-  unitPriceCents: 120_000,
+  amountCents: 1_440_000,
   gctTreatment: "STANDARD",
 } as const;
 

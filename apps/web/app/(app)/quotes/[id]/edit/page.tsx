@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getQuote, getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates, getEquipment, getBusiness, getTrades } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
@@ -7,6 +7,12 @@ export const metadata = { title: "Edit quote · JamQuote" };
 export default async function EditQuotePage({ params }: { params: { id: string } }) {
   const quote = await getQuote(params.id);
   if (!quote) notFound();
+
+  // Not editable once sent, and this page refuses rather than relying on the Edit
+  // button being hidden. The API refuses too — a hidden button is a suggestion,
+  // and `/quotes/<accepted-id>/edit` was reachable by typing it. Redirecting to
+  // the quote itself is kinder than a 404: the quote exists, and Revise is there.
+  if (quote.status !== "DRAFT") redirect(`/quotes/${params.id}`);
 
   const [clients, projects, favourites, jobs, labourRates, equipment, business, trades] = await Promise.all([
     getClients(),
@@ -55,6 +61,13 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             jobName: l.jobName,
             jobUnit: l.jobUnit,
             jobComponents: l.jobComponents,
+            // markupPct is part of the subtotal. Without it here, opening a saved
+            // quote and pressing Save lowered its total by every line's markup —
+            // the same shape of bug the unitLabel comment above records.
+            markupPct: l.markupPct,
+            priceSource: l.priceSource,
+            supplierId: l.supplierId,
+            overrideNote: l.overrideNote,
           })),
         sections: quote.sections?.map((s) => ({
           title: s.title,
@@ -72,6 +85,13 @@ export default async function EditQuotePage({ params }: { params: { id: string }
             jobName: l.jobName,
             jobUnit: l.jobUnit,
             jobComponents: l.jobComponents,
+            // markupPct is part of the subtotal. Without it here, opening a saved
+            // quote and pressing Save lowered its total by every line's markup —
+            // the same shape of bug the unitLabel comment above records.
+            markupPct: l.markupPct,
+            priceSource: l.priceSource,
+            supplierId: l.supplierId,
+            overrideNote: l.overrideNote,
           })),
         })),
       }}

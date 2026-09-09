@@ -14,10 +14,11 @@ import { assertPublicShape } from "./public-view.js";
  * property checking applies only to fresh object literals, so a wider payload
  * compiled.
  *
- * The source-scanning disclosure test DOES pin `PUBLIC_LINE_SELECT`, and that is
- * what keeps the markup out. What it never looked at was the `client`, `business`
- * and `sections` selects — so a client's TRN or a business phone number could be
- * added and everything still passed.
+ * The source-scanning disclosure test does pin the line boundary — now the
+ * `publicLine` MAPPER rather than the select, since the select had to widen to read
+ * the markup it applies and drops. What that guard never looked at was the
+ * `client`, `business` and `sections` selects, so a client's TRN or a business
+ * phone number could be added and everything still passed.
  *
  * These tests are written against the fields that guard could not see.
  */
@@ -44,7 +45,7 @@ function validView() {
         quantity: "10",
         rateUnit: "UNIT",
         unitLabel: null,
-        unitPriceCents: 10_000,
+        amountCents: 100_000,
         gctTreatment: "STANDARD",
       },
     ],

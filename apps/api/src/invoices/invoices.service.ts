@@ -14,6 +14,7 @@ import {
   type RateUnit,
   type TotalsLineInput,
   publicInvoiceWire,
+  lineAmountCents,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
@@ -138,7 +139,7 @@ function existingLinesForTotals(entity: {
  * An explicit select, so a field reaches a client only by being named here and
  * any future disclosure is a visible line in a diff.
  */
-const PUBLIC_LINE_SELECT = {
+const PUBLIC_LINE_READ = {
   id: true,
   category: true,
   description: true,
@@ -146,6 +147,7 @@ const PUBLIC_LINE_SELECT = {
   rateUnit: true,
   unitLabel: true,
   unitPriceCents: true,
+  markupPct: true,
   gctTreatment: true,
 } as const;
 
@@ -164,7 +166,48 @@ export interface PublicInvoiceLine {
   rateUnit: RateUnit;
   unitLabel: string | null;
   gctTreatment: GctTreatment;
+  /**
+   * The line amount, markup included — the figure printed on the document.
+   *
+   * Replaces `unitPriceCents`, which the client's page only multiplied. It could
+   * not include the markup (correctly withheld), so the lines did not sum to the
+   * subtotal shown beneath them. See the quote twin for the full reasoning; these
+   * two views must not drift.
+   */
+  amountCents: number;
+}
+
+/** A read row reduced to what a client may see, with the amount worked out. */
+function publicLine(l: {
+  id: string;
+  category: LineCategory;
+  description: string;
+  quantity: Prisma.Decimal;
+  rateUnit: RateUnit;
+  unitLabel: string | null;
   unitPriceCents: number;
+  markupPct: Prisma.Decimal | null;
+  gctTreatment: GctTreatment;
+}): PublicInvoiceLine {
+  return {
+    id: l.id,
+    category: l.category,
+    description: l.description,
+    quantity: l.quantity,
+    rateUnit: l.rateUnit,
+    unitLabel: l.unitLabel,
+    gctTreatment: l.gctTreatment,
+    // The same helper computeTotals uses, so a line cannot disagree with the
+    // subtotal it contributes to.
+    amountCents: lineAmountCents({
+      quantity: Number(l.quantity),
+      unitPriceCents: l.unitPriceCents,
+      // `== null` catches undefined as well as null. With a strict `=== null`,
+      // an absent field became Number(undefined) = NaN, and the right answer
+      // only came out because `NaN > 0` is false. Luck is not a rounding rule.
+      markupPct: l.markupPct == null ? undefined : Number(l.markupPct),
+    }),
+  };
 }
 
 
@@ -574,14 +617,14 @@ export class InvoicesService {
         lineItems: {
           where: { sectionId: null },
           orderBy: { sort: "asc" as const },
-          select: PUBLIC_LINE_SELECT,
+          select: PUBLIC_LINE_READ,
         },
         sections: {
           orderBy: { sort: "asc" as const },
           select: {
             id: true,
             title: true,
-            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_SELECT },
+            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_READ },
           },
         },
         client: { select: { firstName: true, lastName: true } },
@@ -616,8 +659,12 @@ export class InvoicesService {
       paidCents: invoice.paidCents,
       retentionCents: invoice.retentionCents,
       retentionReleased: Boolean(invoice.retentionReleasedAt),
-      lineItems: invoice.lineItems,
-      sections: invoice.sections,
+      lineItems: invoice.lineItems.map(publicLine),
+      sections: invoice.sections.map((sec) => ({
+        id: sec.id,
+        title: sec.title,
+        lineItems: sec.lineItems.map(publicLine),
+      })),
       clientName: [invoice.client?.firstName, invoice.client?.lastName]
         .filter((p) => p?.trim())
         .join(" ") || null,

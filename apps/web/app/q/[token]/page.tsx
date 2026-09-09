@@ -80,7 +80,12 @@ export default async function SharedQuotePage({ params }: { params: { token: str
                       </span>
                     </td>
                     <td className={styles.amount}>
-                      {formatJmd(Math.round(Number(l.quantity) * l.unitPriceCents))}
+                      {/* The server's figure, markup included. Computing it here
+                          from the unit price could not include the markup, so the
+                          lines did not add up to the subtotal below — and the
+                          emailed PDF, which does have it, showed different
+                          numbers for the same quote. */}
+                      {formatJmd(l.amountCents)}
                     </td>
                   </tr>
                 ))}
@@ -94,6 +99,20 @@ export default async function SharedQuotePage({ params }: { params: { token: str
             <dt>Subtotal</dt>
             <dd>{formatJmd(quote.subtotalCents)}</dd>
           </div>
+          {/* The discount was SENT and never shown. On a $100,000 quote at 10%
+              off, the client saw a subtotal, a GCT figure and a total that did
+              not add up, with the reduction they had been given invisible. */}
+          {Number(quote.discountPct) > 0 ? (
+            <div>
+              <dt>Discount ({Number(quote.discountPct)}%)</dt>
+              <dd>
+                -
+                {formatJmd(
+                  quote.subtotalCents + quote.gctCents - quote.totalCents,
+                )}
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt>GCT</dt>
             <dd>{formatJmd(quote.gctCents)}</dd>

@@ -41,8 +41,20 @@ import { describe, expect, it } from "vitest";
 
 const SERVICE = join(process.cwd(), "src", "invoices", "invoices.service.ts");
 
-/** Exactly what a client may see. Adding to this list is a disclosure decision
- * and should be argued for in the diff that adds it. */
+/**
+ * Exactly what a client may see on a line.
+ *
+ * **This is now the OUTPUT shape, not the Prisma select.** The select had to widen
+ * — the line AMOUNT is `quantity x unitPrice x (1 + markup)`, and the client's page
+ * was computing it from the unit price alone, which cannot include the markup and
+ * so did not sum to the subtotal printed beneath it. The markup is now read,
+ * applied, and dropped inside the service.
+ *
+ * That moves the allow-list from `PUBLIC_LINE_READ` to the `publicLine` function,
+ * and this guard follows it. `unitPriceCents` is deliberately NOT here: the client
+ * needs the amount, and sending the answer instead of two of its three inputs is
+ * strictly less disclosure than before.
+ */
 const ALLOWED_LINE_FIELDS = [
   "id",
   "category",
@@ -50,42 +62,78 @@ const ALLOWED_LINE_FIELDS = [
   "quantity",
   "rateUnit",
   "unitLabel",
-  "unitPriceCents",
+  "amountCents",
   "gctTreatment",
 ];
 
 /** Fields that must NEVER reach a client, named so the reason survives. */
 const FORBIDDEN_LINE_FIELDS: Record<string, string> = {
-  markupPct: "the contractor's margin on the line",
+  markupPct: "the contractor's margin on the line — READ to compute the amount, never sent",
+  unitPriceCents: "read to compute the amount; the client is shown the amount itself",
   supplierId: "which merchant the contractor buys from",
   priceSource: "how the price was arrived at",
   overrideNote: "an internal note about a price override",
-  invoiceId: "internal plumbing",
+  quoteId: "internal plumbing",
   sectionId: "internal plumbing",
   deletedAt: "internal plumbing",
 };
 
-function publicLineSelect(src: string): string[] {
-  const start = src.indexOf("const PUBLIC_LINE_SELECT = {");
-  expect(start, "PUBLIC_LINE_SELECT should exist").toBeGreaterThan(-1);
-  const end = src.indexOf("} as const;", start);
-  const block = src.slice(start, end);
-  return [...block.matchAll(/^\s{2,}(\w+)\s*:\s*true,?\s*$/gm)].map((m) => m[1]!);
+/**
+ * The keys the `publicLine` mapper actually returns.
+ *
+ * Read from the function body rather than from the select, because the select is
+ * no longer the boundary. A field added to `PUBLIC_LINE_READ` and left out of this
+ * mapper is fine; a field added HERE is a disclosure.
+ */
+function publicLineOutputKeys(src: string): string[] {
+  const start = src.indexOf("function publicLine(");
+  expect(start, "publicLine should exist").toBeGreaterThan(-1);
+  const bodyStart = src.indexOf("return {", start);
+  expect(bodyStart, "publicLine should return an object literal").toBeGreaterThan(-1);
+  let depth = 0;
+  let i = src.indexOf("{", bodyStart);
+  const open = i;
+  for (; i < src.length; i += 1) {
+    if (src[i] === "{") depth += 1;
+    else if (src[i] === "}") {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  const body = src.slice(open, i + 1);
+  // Top-level keys only: nested calls (lineAmountCents({...})) must not leak their
+  // argument names into the key set.
+  let flat = "";
+  depth = 0;
+  for (const ch of body.slice(1, -1)) {
+    if (ch === "{" || ch === "(") depth += 1;
+    else if (ch === "}" || ch === ")") depth -= 1;
+    else if (depth === 0) flat += ch;
+    if ((ch === "{" || ch === "(") && depth === 1) flat = flat.replace(/[\w]+\s*:\s*$/, "");
+  }
+  return [...flat.matchAll(/(\w+)\s*:/g)].map((m) => m[1]!);
 }
 
-describe("the public invoice line select", () => {
+describe("the public invoice line", () => {
   const src = readFileSync(SERVICE, "utf8");
 
-  it("names exactly the fields the client page renders", () => {
-    expect(publicLineSelect(src).sort()).toEqual([...ALLOWED_LINE_FIELDS].sort());
+  it("sends exactly the fields the client page renders", () => {
+    expect(publicLineOutputKeys(src).sort()).toEqual([...ALLOWED_LINE_FIELDS].sort());
   });
 
   it.each(Object.entries(FORBIDDEN_LINE_FIELDS))(
     "never discloses %s (%s)",
     (field) => {
-      expect(publicLineSelect(src)).not.toContain(field);
+      expect(publicLineOutputKeys(src)).not.toContain(field);
     },
   );
+
+  it("reads the markup, so the amount it sends is the one on the document", () => {
+    // The other half. Dropping markupPct from the READ would make the amount wrong
+    // rather than disclosive — quieter, and just as bad for the client.
+    expect(src).toContain("markupPct: true");
+    expect(src).toContain("lineAmountCents(");
+  });
 
   /**
    * Every OTHER select inside `findByShareToken`, pinned by key set.
