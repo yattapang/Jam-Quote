@@ -464,7 +464,10 @@ export class InvoicesService {
           // old client attached to an invoice the user just detached. Only an
           // ABSENT key means "leave as is".
           clientId: input.clientId === undefined ? existing.clientId : input.clientId,
-          dueDate: input.dueDate ?? existing.dueDate,
+          // Same reasoning as clientId directly above, which had it right while
+          // this line did not: dueDate is nullable, so `??` meant a due date
+          // could be set but never cleared.
+          dueDate: input.dueDate === undefined ? existing.dueDate : input.dueDate,
           issueDate: input.issueDate ?? existing.issueDate,
           terms: input.terms ?? existing.terms,
           detailLevel,
@@ -474,6 +477,19 @@ export class InvoicesService {
           subtotalCents: totals.subtotalCents,
           gctCents: totals.gctCents,
           totalCents: totals.totalCents,
+          // Re-snapshotted with the total it is a percentage OF. Without this, a
+          // draft edited after conversion kept the amount computed from the old
+          // total: double the lines and the invoice held 5% while both screens
+          // still labelled it "Retention held (10%)" — the percentage shown and
+          // the amount held disagreeing on a document the client receives.
+          //
+          // Only while DRAFT. `update` already refuses anything else, and that is
+          // the point of the snapshot: once issued, the held amount is what the
+          // client was told, and a later edit to the project's percentage must not
+          // restate a document they hold.
+          ...(existing.retentionPct
+            ? { retentionCents: retentionCents(totals.totalCents, Number(existing.retentionPct)) }
+            : {}),
         },
       });
       return id;

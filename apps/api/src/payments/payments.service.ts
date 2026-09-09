@@ -1,5 +1,6 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { PaymentMethod, InvoiceStatus } from "@jamquote/core";
+import { amountToRequest, settlementOf, type RetainableInvoice } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { WiPayService } from "./wipay.service.js";
 
@@ -10,9 +11,14 @@ import { WiPayService } from "./wipay.service.js";
  * it could not have had a payment in the first place, and sending one back
  * there would make an already-sent invoice editable again.
  */
-function statusForPaid(paidCents: number, totalCents: number): InvoiceStatus {
-  if (paidCents >= totalCents) return InvoiceStatus.PAID;
-  if (paidCents > 0) return InvoiceStatus.PARTIAL;
+function statusForPaid(invoice: RetainableInvoice): InvoiceStatus {
+  // Against what is DUE NOW, not the total. An invoice for $100,000 with 10%
+  // held is fully settled when $90,000 arrives; comparing against the total left
+  // it PARTIAL for ever, which then let the overdue sweep flip it to OVERDUE and
+  // the nightly digest chase money nobody owes yet.
+  const { settledForNow } = settlementOf(invoice);
+  if (settledForNow) return InvoiceStatus.PAID;
+  if (invoice.paidCents > 0) return InvoiceStatus.PARTIAL;
   return InvoiceStatus.INVOICED;
 }
 
@@ -38,7 +44,23 @@ export class PaymentsService {
     });
     if (!invoice) throw new NotFoundException("Invoice not found");
 
-    const balance = invoice.totalCents - invoice.paidCents;
+    if (invoice.status === InvoiceStatus.DRAFT) {
+      // A draft has not been issued to anyone. Taking money against one would
+      // record a payment on a document the client has never seen.
+      throw new BadRequestException("This invoice has not been issued yet");
+    }
+
+    // What the client actually owes today. `totalCents - paidCents` would open a
+    // checkout for the retained amount — money the contract says they keep — and
+    // on a fully-settled retention invoice it charged the whole retention.
+    const { outstandingCents: balance, heldCents } = amountToRequest(invoice);
+    if (balance <= 0) {
+      throw new BadRequestException(
+        heldCents > 0
+          ? "Nothing is due on this invoice right now — the balance is retention still held"
+          : "This invoice is already paid",
+      );
+    }
     const { paymentUrl, providerRef } = await this.wipay.createPaymentRequest({
       // The invoice UUID, NOT invoice.number. Numbers are unique per tenant
       // (@@unique([businessId, number])) and every business starts from
@@ -114,10 +136,11 @@ export class PaymentsService {
 
       if (succeeded) {
         const paidCents = invoice.paidCents + amountCents;
-        const status =
-          paidCents >= invoice.totalCents
-            ? InvoiceStatus.PAID
-            : InvoiceStatus.PARTIAL;
+        // Same question as statusForPaid, and it had the same bug: measured
+        // against the total, a retention invoice could never reach PAID.
+        const status = settlementOf({ ...invoice, paidCents }).settledForNow
+          ? InvoiceStatus.PAID
+          : InvoiceStatus.PARTIAL;
         await tx.invoice.update({
           where: { id: invoice.id },
           data: { paidCents, status },
@@ -172,14 +195,21 @@ export class PaymentsService {
       const updated = await tx.invoice.update({
         where: { id: invoice.id },
         data: { paidCents: { increment: input.amountCents } },
-        select: { paidCents: true, totalCents: true },
+        // The retention columns are part of the question now: status is decided
+        // against what is DUE, and due-now is total less anything still held.
+        select: {
+          paidCents: true,
+          totalCents: true,
+          retentionCents: true,
+          retentionReleasedAt: true,
+        },
       });
 
       // Status is derived from the post-increment truth rather than a
       // prediction made before it.
       await tx.invoice.update({
         where: { id: invoice.id },
-        data: { status: statusForPaid(updated.paidCents, updated.totalCents) },
+        data: { status: statusForPaid(updated) },
       });
     });
   }
@@ -225,12 +255,19 @@ export class PaymentsService {
       const updated = await tx.invoice.update({
         where: { id: payment.invoiceId },
         data: { paidCents: { decrement: payment.amountCents } },
-        select: { paidCents: true, totalCents: true },
+        // The retention columns are part of the question now: status is decided
+        // against what is DUE, and due-now is total less anything still held.
+        select: {
+          paidCents: true,
+          totalCents: true,
+          retentionCents: true,
+          retentionReleasedAt: true,
+        },
       });
 
       await tx.invoice.update({
         where: { id: payment.invoiceId },
-        data: { status: statusForPaid(updated.paidCents, updated.totalCents) },
+        data: { status: statusForPaid(updated) },
       });
     });
   }

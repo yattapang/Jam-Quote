@@ -1,7 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { Resend } from "resend";
-import { InvoiceStatus, JAMAICA_UTC_OFFSET_MS } from "@jamquote/core";
+import {
+  InvoiceStatus,
+  JAMAICA_UTC_OFFSET_MS,
+  settlementOf,
+  type RetainableInvoice,
+} from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { addressableEmail } from "../common/notify-recipient.js";
 
@@ -67,12 +72,33 @@ export class InvoiceOverdueService {
    */
   private async markOverdue(now: Date): Promise<number> {
     const startOfToday = jamaicaTodayAsUtcMidnight(now);
-    const { count } = await this.prisma.invoice.updateMany({
+
+    // Two steps rather than one updateMany, because retention makes this a
+    // question SQL cannot answer with a literal: an invoice is late only if
+    // something is unpaid of what is DUE NOW, and due-now is the total less
+    // anything still held. A single updateMany comparing against the total
+    // flipped fully-settled retention invoices to OVERDUE, after which the
+    // nightly digest chased the client for money nobody owed yet.
+    const candidates = await this.prisma.invoice.findMany({
       where: {
         deletedAt: null,
         status: { in: [InvoiceStatus.INVOICED, InvoiceStatus.PARTIAL] },
         dueDate: { lt: startOfToday, not: null },
       },
+      select: {
+        id: true,
+        totalCents: true,
+        paidCents: true,
+        retentionCents: true,
+        retentionReleasedAt: true,
+      },
+    });
+
+    const late = candidates.filter((i) => !settlementOf(i).settledForNow).map((i) => i.id);
+    if (late.length === 0) return 0;
+
+    const { count } = await this.prisma.invoice.updateMany({
+      where: { id: { in: late } },
       data: { status: InvoiceStatus.OVERDUE },
     });
     return count;
@@ -98,7 +124,14 @@ export class InvoiceOverdueService {
         users: { where: { email: { not: null } }, select: { email: true, role: true } },
         invoices: {
           where: { deletedAt: null, status: InvoiceStatus.OVERDUE },
-          select: { number: true, totalCents: true, paidCents: true, dueDate: true },
+          select: {
+            number: true,
+            totalCents: true,
+            paidCents: true,
+            retentionCents: true,
+            retentionReleasedAt: true,
+            dueDate: true,
+          },
           orderBy: { dueDate: "asc" },
         },
       },
@@ -112,8 +145,9 @@ export class InvoiceOverdueService {
       const to = addressableEmail(business);
       if (!to) continue;
 
+      // What is actually chaseable. `total - paid` counted retention as arrears.
       const outstandingCents = business.invoices.reduce(
-        (n, i) => n + (i.totalCents - i.paidCents),
+        (n, i) => n + settlementOf(i).outstandingCents,
         0,
       );
 
@@ -133,7 +167,7 @@ export class InvoiceOverdueService {
   private async sendDigest(
     to: string,
     businessName: string,
-    invoices: { number: string; totalCents: number; paidCents: number; dueDate: Date | null }[],
+    invoices: (RetainableInvoice & { number: string; dueDate: Date | null })[],
     outstandingCents: number,
   ): Promise<boolean> {
     const apiKey = process.env.RESEND_API_KEY;
@@ -147,7 +181,7 @@ export class InvoiceOverdueService {
     const rows = invoices
       .map(
         (i) =>
-          `<li>${i.number} — ${money(i.totalCents - i.paidCents)} outstanding${
+          `<li>${i.number} — ${money(settlementOf(i).outstandingCents)} outstanding${
             i.dueDate ? `, due ${i.dueDate.toISOString().slice(0, 10)}` : ""
           }</li>`,
       )

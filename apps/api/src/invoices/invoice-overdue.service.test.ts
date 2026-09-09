@@ -3,10 +3,27 @@ import { InvoiceOverdueService } from "./invoice-overdue.service.js";
 
 const NOW = new Date("2026-08-20T09:00:00.000Z");
 
-function build(opts: { businesses?: unknown[]; marked?: number } = {}) {
+function build(opts: { businesses?: unknown[]; marked?: number; candidates?: unknown[] } = {}) {
   const businessUpdates: Record<string, unknown>[] = [];
   const prisma = {
-    invoice: { updateMany: vi.fn().mockResolvedValue({ count: opts.marked ?? 0 }) },
+    invoice: {
+      // The sweep now READS the candidates its date filter selects and decides in
+      // TS which are actually late, because an invoice is late only if something
+      // is unpaid of what is DUE NOW — and due-now is the total less retention
+      // still held, which a single updateMany cannot express.
+      findMany: vi.fn().mockResolvedValue(
+        opts.candidates ?? [
+          {
+            id: "inv-late",
+            totalCents: 500_000,
+            paidCents: 100_000,
+            retentionCents: 0,
+            retentionReleasedAt: null,
+          },
+        ],
+      ),
+      updateMany: vi.fn().mockResolvedValue({ count: opts.marked ?? 0 }),
+    },
     business: {
       findMany: vi.fn().mockResolvedValue(opts.businesses ?? []),
       update: vi.fn().mockImplementation((args: Record<string, unknown>) => {
@@ -24,17 +41,69 @@ const overdueInvoice = (over: Record<string, unknown> = {}) => ({
   number: "INV-0001",
   totalCents: 500_000,
   paidCents: 100_000,
+  // Part of the select now: the digest reports what is CHASEABLE, and retention
+  // still held is not arrears.
+  retentionCents: 0,
+  retentionReleasedAt: null,
   dueDate: new Date("2026-08-01T00:00:00.000Z"),
   ...over,
 });
 
 describe("marking invoices overdue", () => {
+  it("does NOT mark an invoice whose only unpaid balance is retention still held", async () => {
+    // The defect. $100,000 invoice, 10% held, $90,000 paid: fully settled for now.
+    // Comparing the payment against the TOTAL left it PARTIAL, the sweep flipped
+    // it to OVERDUE in critical red, and the nightly digest told the contractor to
+    // chase a client for money the contract says they may keep.
+    const { svc, prisma } = build({
+      candidates: [
+        {
+          id: "inv-retention",
+          totalCents: 10_000_000,
+          paidCents: 9_000_000,
+          retentionCents: 1_000_000,
+          retentionReleasedAt: null,
+        },
+      ],
+    });
+    await svc.run(NOW);
+    expect(prisma.invoice.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("DOES mark it once the retention has been released and still not paid", async () => {
+    // Release is the moment the held money becomes payable. After that, unpaid is
+    // unpaid and late is late.
+    const { svc, prisma } = build({
+      candidates: [
+        {
+          id: "inv-released",
+          totalCents: 10_000_000,
+          paidCents: 9_000_000,
+          retentionCents: 1_000_000,
+          retentionReleasedAt: new Date("2026-08-15T00:00:00.000Z"),
+        },
+      ],
+    });
+    await svc.run(NOW);
+    expect(prisma.invoice.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ["inv-released"] } } }),
+    );
+  });
+
+  it("marks a genuinely late invoice, so the guard above is not just switching it off", async () => {
+    const { svc, prisma } = build();
+    await svc.run(NOW);
+    expect(prisma.invoice.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ["inv-late"] } } }),
+    );
+  });
+
   it("targets only INVOICED and PARTIAL past their due date", async () => {
     // PAID for the obvious reason; DRAFT because it was never sent to anyone,
     // so it cannot be late.
     const { svc, prisma } = build();
     await svc.run(NOW);
-    const where = prisma.invoice.updateMany.mock.calls[0]![0].where;
+    const where = prisma.invoice.findMany.mock.calls[0]![0].where;
     expect(where.status.in).toEqual(["INVOICED", "PARTIAL"]);
     // Start of today, NOT `now`: an invoice due today is not late.
     // Today's JAMAICA date at UTC midnight — the same representation dueDate
@@ -48,7 +117,7 @@ describe("marking invoices overdue", () => {
     // terms the business never agreed to into their figures.
     const { svc, prisma } = build();
     await svc.run(NOW);
-    expect(prisma.invoice.updateMany.mock.calls[0]![0].where.dueDate.not).toBeNull();
+    expect(prisma.invoice.findMany.mock.calls[0]![0].where.dueDate.not).toBeNull();
   });
 
   it("does not mark an invoice due TODAY as overdue", async () => {
@@ -57,7 +126,7 @@ describe("marking invoices overdue", () => {
     // would have a contractor chasing someone who is not yet late.
     const { svc, prisma } = build();
     await svc.run(NOW);
-    const cutoff = prisma.invoice.updateMany.mock.calls[0]![0].where.dueDate.lt as Date;
+    const cutoff = prisma.invoice.findMany.mock.calls[0]![0].where.dueDate.lt as Date;
     // Due today, stored the way the invoice builder stores it.
     const dueToday = new Date("2026-08-20T00:00:00.000Z");
     expect(dueToday.getTime() < cutoff.getTime()).toBe(false);
@@ -68,7 +137,7 @@ describe("marking invoices overdue", () => {
     // 19th still has hours left and must not be overdue. Caught on live data.
     const { svc, prisma } = build();
     await svc.run(new Date("2026-08-20T00:15:00.000Z"));
-    const cutoff = prisma.invoice.updateMany.mock.calls[0]![0].where.dueDate.lt as Date;
+    const cutoff = prisma.invoice.findMany.mock.calls[0]![0].where.dueDate.lt as Date;
     expect(cutoff).toEqual(new Date("2026-08-19T00:00:00.000Z"));
   });
 

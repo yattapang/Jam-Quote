@@ -58,3 +58,63 @@ export function invoiceSettlement(params: {
     settledForNow: params.paidCents >= dueNowCents,
   };
 }
+
+/**
+ * The four columns every settlement question needs.
+ *
+ * Named so a caller cannot pass a total where a paid amount belongs, and so
+ * `retentionReleasedAt` is converted in ONE place rather than at each of the
+ * dozen call sites that used to write `Boolean(inv.retentionReleasedAt)`.
+ */
+export interface RetainableInvoice {
+  totalCents: Cents;
+  paidCents: Cents;
+  retentionCents: Cents;
+  retentionReleasedAt: Date | null;
+}
+
+/**
+ * Settlement straight from an invoice row. **Prefer this to `invoiceSettlement`.**
+ *
+ * ## Why this exists
+ *
+ * A review of every money path found six places comparing a payment against
+ * `totalCents` when the question was "how much is payable now?". The total and the
+ * due-now amount differ by exactly the retention, so on any contract with a
+ * retention clause all six were wrong in the same direction — against the client:
+ *
+ * - a WiPay checkout opened for money the contract says the client keeps
+ * - an invoice that could never reach PAID, because paid could never reach total
+ * - a settled invoice flipped to OVERDUE and chased in the nightly digest
+ * - the PDF and its covering email both demanding the retained amount
+ *
+ * The helper was right and each surface reimplemented the subtraction. So this is
+ * the one to call, taking the row rather than four loose numbers: a caller that
+ * has an invoice cannot get the arguments wrong, and there is a single name to
+ * grep for when checking that a new surface asks the right question.
+ */
+export function settlementOf(invoice: RetainableInvoice): InvoiceSettlement {
+  return invoiceSettlement({
+    totalCents: invoice.totalCents,
+    paidCents: invoice.paidCents,
+    retentionCents: invoice.retentionCents,
+    retentionReleased: invoice.retentionReleasedAt !== null,
+  });
+}
+
+/**
+ * What the balance owed on an invoice actually is, for a client-facing document.
+ *
+ * `total - paid` is the wrong sum whenever retention is held, and it was the sum
+ * on the PDF, in the covering email and in the card-payment amount. This returns
+ * what the client should be asked for, and `heldCents` alongside it so a document
+ * can show the held line rather than silently omitting it.
+ */
+export function amountToRequest(invoice: RetainableInvoice): {
+  dueNowCents: Cents;
+  heldCents: Cents;
+  outstandingCents: Cents;
+} {
+  const s = settlementOf(invoice);
+  return { dueNowCents: s.dueNowCents, heldCents: s.heldCents, outstandingCents: s.outstandingCents };
+}
