@@ -1,6 +1,6 @@
 # JamQuote — Working Plan
 
-**Last updated:** 2026-08-19 (late)
+**Last updated:** 2026-09-08
 **Status:** feature-complete for a first commercial test. Audit closed;
 subscription billing built (§4e–4f A–C); quote delivery works end to end via
 public share links; job costing covers materials AND labour; packaging decided
@@ -1741,6 +1741,65 @@ contractor as settled for money still in the client's account
 
 ---
 
+## 4n. Commercial framework, review agents and the test suite — 2026-09-08
+
+The owner's ask: *"build the framework for a potential commercial build… build
+independent agents to review each section of the application as well as the
+wiring between the applications… create the many different scenarios and
+combinations for testing all the input forms on the tenant side, and on the
+backend… before we build the mobile."*
+
+Scope chosen with the owner: **structural work first, then visual and UX
+polish**, and **Phase A + B** (input validation and component rendering) with
+HTTP-level and end-to-end tests deferred.
+
+### What landed
+
+| Piece | Where | State |
+|---|---|---|
+| Nine review agents, one per section plus the wiring seam | `.claude/agents/` | Written. **Never run** — see below |
+| Drift management across the four seams | `CONTRACTS.md` | Written and in force |
+| The standing test register | `TESTING.md` | Live; update it when a row finishes |
+| Wire contracts for every shape on a money path | `packages/core/src/wire/` | Done — the web declares none of them |
+| Every DTO string bounded | `apps/api/src/common/input-bounds.test.ts` | 139 fields, 0 unbounded, allow-list empty |
+| Seven component suites | `apps/web` | Each verified by reintroducing the defect it pins |
+
+### The one real security finding
+
+**Both public share views were sending the contractor's markup to anonymous
+link-holders.** The views reused the TENANT's Prisma include, so every line
+carried the whole row — `markupPct`, `supplierId`, `priceSource`,
+`overrideNote`. Verified it had **never leaked**: all three columns are null
+across all 50 line items and no quote holds a live share token.
+
+The root cause is worth keeping, because it is not a typo. The view's own
+comment claimed everything sent was already printed on the PDF — true of the
+top-level fields, which were hand-listed, and false of the nested rows pulled in
+by a spread. **A spread inherits decisions nobody re-made.** Closed with explicit
+selects, `.strict()` public contracts, and tests that read the source.
+
+### Also fixed in passing
+
+- **Validation parity.** `POST /clients` demanded a valid email and a real
+  parish; `POST /sync` took any string for both. Same divergence for projects,
+  hidden by a comment about `stage` sitting two lines from a free-text `parish`.
+  Fixed at the seam by sharing the value rules, which bounded 18 fields as a
+  side effect.
+- **Two dead response shapes** (`ApiInvoiceSection`, `ApiInvoiceLineItem`) still
+  reading as the truth about an endpoint they no longer described.
+
+### Still owed
+
+| Item | Note |
+|---|---|
+| **Run the nine review agents** | They were built for this and have never been run. They read only — the risk is reviewer time, not the code |
+| **Visual and UX polish** | The owner's chosen second half. Not started |
+| Three component suites | `LineItemsEditor`, `RetentionPanel`, `MaterialForm`. None protects something that has broken since it was fixed |
+| Thirteen hand-written `Api*` shapes | None on a money path; the guard stops the list growing |
+| HTTP-level and E2E tests | Deliberately deferred by the Phase A+B choice, not forgotten |
+
+---
+
 ## 5. Standing outstanding items
 
 ### Blocking or risky
@@ -1748,7 +1807,7 @@ contractor as settled for money still in the client's account
 | Item | State |
 |---|---|
 | **Nothing has met a real user** | Every feature listed in §2 is unexercised. The largest risk here, and the reason §4b comes before §4c. |
-| ~~`npm run build` cannot run here~~ | **FIXED `c20c64a`.** The next/font diagnosis was wrong; the build was failing on a CSS-Module purity error in the print rules. `npm run -w @jamquote/web build` now passes locally — run it before every deploy. |
+| `npm run build` cannot run on this machine | **Two different causes, and only one is fixed.** `c20c64a` fixed a real CSS-Module purity error in the print rules, and the next/font diagnosis at the time WAS wrong. It is now failing again for the reason originally suspected: `next/font` fetches from `fonts.googleapis.com` at build time and that host returns 000 here. Confirmed environmental by stashing all changes and watching a known-good tree fail the same way. Vercel builds fine. Do not "fix" this in the code — verify with typecheck, lint and tests, and let the deploy prove the build. |
 | **Deploy API and web TOGETHER** | Field renames, moved routes, and `issueDate` now required on the reports invoice type. Mismatched halves fail requests rather than degrading. |
 | ~~Migration endpoint~~ | **CLOSED `a7bb66c` + `f62d3c2`.** `directUrl` + `DIRECT_URL` runs migrations unpooled; the stopgap is out of `render.yaml` and `DIRECT_URL` is now declared there (required — Prisma will NOT fall back to the pooled URL). **Last manual step: delete `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK` from the Render dashboard** if it was set there by hand. |
 | Card checkout (WiPay) | **Blocked** on API credentials. Manual record + void work. |
