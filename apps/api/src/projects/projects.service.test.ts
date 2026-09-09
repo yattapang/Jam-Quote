@@ -9,7 +9,16 @@ function withPrisma(job: Partial<Record<string, unknown>> = {}) {
     // A client the caller owns. `create`/`update` now prove a caller-supplied
     // clientId belongs to this business before writing it (see
     // common/assert-owned.ts) — an id in the body is not a capability.
-    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
+    client: {
+      findFirst: vi.fn(({ where }: { where: { id?: string; businessId?: string } }) =>
+        // Honours `where`. A fake resolving regardless would also pass for a
+        // service that transposed the arguments — both are strings, so TypeScript
+        // cannot object. Echoes the id back so it works whatever the test names it.
+        Promise.resolve(
+          where.businessId === "biz-1" && where.id ? { id: where.id, businessId: where.businessId } : null,
+        ),
+      ),
+    },
     project: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue({ id: "job-1", businessId: "biz-1" }),

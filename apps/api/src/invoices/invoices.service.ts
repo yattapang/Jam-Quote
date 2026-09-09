@@ -624,8 +624,13 @@ export class InvoicesService {
       select: { name: true },
     });
     const client = invoice.clientId
-      ? await this.prisma.client.findUnique({
-          where: { id: invoice.clientId },
+      ? // Scoped, though the write side now refuses a foreign clientId. Two
+        // reasons this is not redundant: rows written BEFORE that check existed
+        // were never validated, and this read is what actually leaked - it
+        // returned the address in `sentTo` and then emailed that person under
+        // this business's name. A second layer costs one clause.
+        await this.prisma.client.findFirst({
+          where: { id: invoice.clientId, businessId, deletedAt: null },
           select: { firstName: true, lastName: true, email: true, phone: true },
         })
       : null;

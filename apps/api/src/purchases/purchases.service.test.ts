@@ -147,8 +147,12 @@ describe("did this job make money?", () => {
     const { svc, prisma } = build({ invoices: [invoiced] });
     await svc.projectProfit("biz-1", "proj-1");
     expect(prisma.invoice.findMany).toHaveBeenCalled();
+    // `deletedAt: null` is new and deliberate. This module kept its own private
+    // ownership check, which omitted it — so spend could be attached to a project
+    // the contractor had deleted while a quote could not. It now delegates to the
+    // shared helper, which is stricter.
     expect(prisma.project.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "proj-1", businessId: "biz-1" } }),
+      expect.objectContaining({ where: { id: "proj-1", businessId: "biz-1", deletedAt: null } }),
     );
   });
 

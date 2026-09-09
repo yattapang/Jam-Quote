@@ -75,7 +75,7 @@ surfaces.
 These either move money, misstate money to someone outside the business, or
 cross a tenant boundary.
 
-### F1 `[reviewed]` — a caller-supplied `clientId` is never checked for ownership · **FIXED, awaiting independent review**
+### F1 `[reviewed]` — a caller-supplied `clientId` is never checked for ownership · **FIXED + reviewed; one action left**
 
 `assertClientOwned` does not exist anywhere in the API. Borrow another tenant's
 client uuid on `POST /invoices`, then `POST /invoices/:id/reminders`: the service
@@ -109,6 +109,32 @@ this defect survived in the first place.
 
 Invoices take no `projectId` — TypeScript caught that when I added the check.
 They inherit their project from the quote they convert from, which is scoped.
+
+**The independent review rejected the first version of this fix.** The wiring was
+complete, but nothing kept it that way:
+
+| What it found | What changed |
+|---|---|
+| The guard was satisfied by the IMPORT line — delete the call, keep the import, it passed. `noUnusedLocals` is off and **there is no CI**, so nothing else objected | Rewritten to discover services from disk and require a CALL (`\s*\(`). Re-verified by removing only the call, import retained: all four fail |
+| My verification was invalid — the removal script deleted the import too, so it proved something no attacker has to do | Stated in the test's own docblock, so the next reader sees the trap |
+| The "a new service cannot skip the check" assertion compared a hand-written list against a copy of itself. It read no files and **could not fail** | Replaced with filesystem discovery. Running it immediately found a real gap: `ProjectsService.create` writes `{ ...input }`, so a `clientId:` pattern never sees it — 3 writers detected where there are 4 |
+| The read that actually leaked was untouched, and defence in depth is one clause | `sendReminderEmail` now uses `findFirst` scoped by `businessId` and `deletedAt` |
+| Fakes resolved regardless of `where`, so a service calling `assertClientOwned(prisma, clientId, businessId)` — arguments transposed, both strings — would pass every test | All fakes honour `where` and reject a wrong business |
+| `"foreign"` is documented as "belongs to another business", but was being returned for a soft-deleted client of THIS business — a device treating it as "discard my copy" would destroy the contractor's own offline project | Split into `clientReferenceState` returning `owned`/`foreign`/`deleted`, with a new `"invalid_ref"` outcome |
+| `PurchasesService` — the module held up as the model — kept its own private check that **omitted `deletedAt`**, so spend could attach to a deleted project while a quote could not | Delegates to the shared helper. Its test now asserts the stricter `where` |
+
+**Still open, and it needs the owner:** rows written before this check existed were
+never validated. `apps/api/scripts/audit-client-refs.mjs` finds any, and
+`revise`/`createVariation`/`convertFromQuote` copy `clientId` forward, so a bad
+reference multiplies rather than ageing out. **I could not run it — Neon was
+unreachable (free tier asleep).** Run it before contractor testing:
+
+```
+cd apps/api && node --env-file=.env scripts/audit-client-refs.mjs
+```
+
+It reports and exits 1 rather than repairing: detaching a client silently rewrites
+a document the contractor may already have sent, so the list is a decision.
 
 ### F2 `[reviewed]` — a card-payment helper fabricates a WiPay checkout · OPEN
 

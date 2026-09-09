@@ -94,7 +94,16 @@ function harness(quote = acceptedQuote()) {
     // A client the caller owns. create/update now prove a caller-supplied
     // clientId belongs to this business before writing it — an id in the body
     // is not a capability. See common/assert-owned.ts.
-    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
+    client: {
+      findFirst: vi.fn(({ where }: { where: { id?: string; businessId?: string } }) =>
+        // Honours `where`. A fake resolving regardless would also pass for a
+        // service that transposed the arguments — both are strings, so TypeScript
+        // cannot object. Echoes the id back so it works whatever the test names it.
+        Promise.resolve(
+          where.businessId === "b1" && where.id ? { id: where.id, businessId: where.businessId } : null,
+        ),
+      ),
+    },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     quote: {
       findFirst: vi.fn().mockResolvedValue(quote),
@@ -267,7 +276,16 @@ function existingInvoiceHarness(invoice: any) {
     // A client the caller owns. create/update now prove a caller-supplied
     // clientId belongs to this business before writing it — an id in the body
     // is not a capability. See common/assert-owned.ts.
-    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
+    client: {
+      findFirst: vi.fn(({ where }: { where: { id?: string; businessId?: string } }) =>
+        // Honours `where`. A fake resolving regardless would also pass for a
+        // service that transposed the arguments — both are strings, so TypeScript
+        // cannot object. Echoes the id back so it works whatever the test names it.
+        Promise.resolve(
+          where.businessId === "b1" && where.id ? { id: where.id, businessId: where.businessId } : null,
+        ),
+      ),
+    },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     invoice: {
       findFirst: vi.fn().mockResolvedValue(invoice),

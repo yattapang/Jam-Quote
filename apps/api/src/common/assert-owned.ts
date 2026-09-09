@@ -78,22 +78,28 @@ export async function assertProjectOwned(
 }
 
 /**
- * The same question without the throw, for the offline sync push.
+ * The same question without a throw, for the offline sync push.
  *
  * Sync answers per change with an OUTCOME rather than an exception — one bad row
- * in a batch must not fail the batch — and it already has the right word for
- * this: `"foreign"`. Returning false lets the caller report that instead of
- * accepting the reference or throwing away the whole push.
+ * in a batch must not fail the batch. Three answers rather than two, because
+ * "not usable" and "not yours" are different facts and the client acts on them
+ * differently: `"foreign"` is documented as belonging to another business, and a
+ * device treating that as "discard my copy" would be right to. A client of THIS
+ * business that has been deleted must not cause the contractor's own project to
+ * be thrown away.
  */
-export async function isClientOwned(
+export type ClientRefState = "owned" | "foreign" | "deleted";
+
+export async function clientReferenceState(
   prisma: ClientLookup,
   businessId: string,
   clientId?: string | null,
-): Promise<boolean> {
-  if (!clientId) return true;
+): Promise<ClientRefState> {
+  if (!clientId) return "owned";
   const client = await prisma.client.findFirst({
-    where: { id: clientId, businessId, deletedAt: null },
-    select: { id: true },
+    where: { id: clientId, businessId },
+    select: { deletedAt: true },
   });
-  return client !== null;
+  if (!client) return "foreign";
+  return client.deletedAt ? "deleted" : "owned";
 }

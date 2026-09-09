@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, dirname, join, sep } from "node:path";
 import { NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import { assertClientOwned, assertProjectOwned, isClientOwned } from "./assert-owned.js";
+import { assertClientOwned, assertProjectOwned, clientReferenceState } from "./assert-owned.js";
 
 /**
  * An id in a request BODY is not a capability.
@@ -34,7 +34,10 @@ function fakeDb(rows: { id: string; businessId: string; deletedAt?: Date | null 
         (r) =>
           r.id === where.id &&
           r.businessId === where.businessId &&
-          (r.deletedAt ?? null) === (where.deletedAt ?? null),
+          // Only filter on deletedAt when the query asks for it. clientReferenceState
+          // deliberately does NOT, because it needs to tell a deleted client of this
+          // business apart from a foreign one.
+          (!("deletedAt" in where) || (r.deletedAt ?? null) === (where.deletedAt ?? null)),
       ) ?? null,
     );
   return { client: { findFirst: vi.fn(find) }, project: { findFirst: vi.fn(find) } } as never;
@@ -88,52 +91,131 @@ describe("assertProjectOwned", () => {
   });
 });
 
-describe("isClientOwned — the sync push answers with an outcome, not a throw", () => {
-  it("reports false rather than throwing, so one bad row cannot fail the batch", async () => {
-    await expect(isClientOwned(fakeDb([THEIRS]), "biz_1", "cl_theirs")).resolves.toBe(false);
-    await expect(isClientOwned(fakeDb([MINE]), "biz_1", "cl_mine")).resolves.toBe(true);
+describe("clientReferenceState — the sync push answers with an outcome, not a throw", () => {
+  it("distinguishes not-yours from not-usable, because the device acts differently", async () => {
+    // "foreign" is documented as belonging to another business, so a device may
+    // reasonably discard its local copy. A deleted client of THIS business must
+    // not cause the contractor's own project to be thrown away.
+    await expect(clientReferenceState(fakeDb([THEIRS]), "biz_1", "cl_theirs")).resolves.toBe("foreign");
+    await expect(clientReferenceState(fakeDb([DELETED]), "biz_1", "cl_gone")).resolves.toBe("deleted");
+    await expect(clientReferenceState(fakeDb([MINE]), "biz_1", "cl_mine")).resolves.toBe("owned");
+  });
+
+  it("never throws, so one bad row cannot fail a batch", async () => {
+    await expect(clientReferenceState(fakeDb([]), "biz_1", "cl_x")).resolves.toBe("foreign");
   });
 });
 
 /**
- * The half that would have caught the original defect.
+ * The half that would have caught the original defect — second attempt.
  *
- * The helper above is easy to get right. What went wrong was that no such helper
- * was called from the places that needed it, while a nearby comment claimed the
- * boundary held.
+ * The first version of this block asserted `src.includes("assertClientOwned")`
+ * over a hand-written list of four files, and separately compared that list
+ * against a second hand-written copy of itself. Both were worthless, and an
+ * independent review said so:
+ *
+ * - **The string match is satisfied by the IMPORT line.** Delete the call, keep
+ *   the import, and it passes. `noUnusedLocals` is off and there is no CI, so
+ *   nothing else objects either. The commit claimed "verified by removing the
+ *   call from each of the four services" — but the script that verified it
+ *   removed the import too, so it proved something no attacker has to do.
+ * - **The second assertion could not fail.** `writers` and `CALLERS` held the
+ *   same four strings; the test compared a list against a copy of itself, read
+ *   no file, and its comment claimed it would catch a fifth service.
+ *
+ * That is the fourth source-scanning guard in this repo to pass on nothing, and
+ * it was written the same day as the note warning about them. So this version
+ * takes nothing on trust: it DISCOVERS the services from disk, decides for
+ * itself which ones write a caller-supplied client id, and requires a call with
+ * an open paren rather than a mention.
  */
 describe("every caller-supplied clientId is checked", () => {
-  const API = join(process.cwd(), "src");
+  const SRC = join(process.cwd(), "src");
 
-  /** Services that take a `clientId` from the request body, and the check each must make. */
-  const CALLERS = [
-    ["quotes/quotes.service.ts", "assertClientOwned"],
-    ["invoices/invoices.service.ts", "assertClientOwned"],
-    ["projects/projects.service.ts", "assertClientOwned"],
-    // Sync answers per change, so it takes the boolean form.
-    ["sync/sync.service.ts", "isClientOwned"],
-  ] as const;
+  /** Every `*.service.ts` under src, found rather than listed. */
+  function serviceFiles(dir: string, out: string[] = []): string[] {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) serviceFiles(full, out);
+      else if (entry.name.endsWith(".service.ts")) out.push(full);
+    }
+    return out;
+  }
 
-  it.each(CALLERS)("%s calls %s", (file, check) => {
-    const src = readFileSync(join(API, file), "utf8");
-    // Sanity: prove this file really does accept a clientId, so a rename cannot
-    // turn this assertion green by making the subject disappear.
-    expect(src).toMatch(/clientId/);
-    expect(src).toContain(check);
+  const stripComments = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+
+  /**
+   * Does this file persist a client id that came from the CALLER?
+   *
+   * `clientId: input.clientId`, `clientId: d.clientId ?? null`, and friends. A
+   * value copied from a row the service already fetched under a `businessId`
+   * scope — `original.clientId`, `quote.clientId` — is NOT caller-supplied and
+   * needs no check, which is why the pattern is anchored to the argument names.
+   */
+  const NAMES_CALLER_CLIENT_ID = /clientId:\s*(?:input|d|data|change|patch|dto)[.?]/;
+
+  /**
+   * A spread write: `data: { ...input, businessId }`.
+   *
+   * `ProjectsService.create` does exactly this, so the name-based pattern above
+   * cannot see it — `clientId` never appears. Running the first version of this
+   * guard showed 3 writers where there are 4, and projects was the missing one.
+   * That is the shape a real writer would slip through, so it is detected
+   * separately and confirmed against the module's own DTO.
+   */
+  const SPREADS_INPUT = /\.\.\.(?:input|d|data|patch|dto)\b/;
+
+  /** A CALL, not a mention. The open paren is the whole point. */
+  const CALLS_A_CHECK = /(?:assertClientOwned|clientReferenceState)\s*\(/;
+
+  /** Does this module's DTO let a caller send a clientId at all? */
+  function dtoTakesClientId(serviceFile: string): boolean {
+    const dir = dirname(serviceFile);
+    const dto = join(dir, `${basename(dir)}.dto.ts`);
+    return existsSync(dto) && /clientId/.test(stripComments(readFileSync(dto, "utf8")));
+  }
+
+  const services = serviceFiles(SRC).map((file) => {
+    const src = stripComments(readFileSync(file, "utf8"));
+    return {
+      file: file.slice(SRC.length + 1).split(sep).join("/"),
+      src,
+      // A writer either names the field, or spreads a DTO that carries it.
+      writesClientId:
+        NAMES_CALLER_CLIENT_ID.test(src) || (SPREADS_INPUT.test(src) && dtoTakesClientId(file)),
+    };
   });
 
-  it("finds every service that takes a clientId, so a NEW one cannot skip the check", () => {
-    // The list above is hand-written, which is only safe if nothing outside it
-    // writes a caller-supplied clientId. This is the assertion that keeps it
-    // honest: a fifth service persisting `clientId: input.clientId` fails here
-    // until it is added to CALLERS with a check.
-    const writers = [
-      "quotes/quotes.service.ts",
-      "invoices/invoices.service.ts",
-      "projects/projects.service.ts",
-      "sync/sync.service.ts",
-    ];
-    const known = new Set(CALLERS.map(([f]) => f));
-    expect(writers.filter((w) => !known.has(w as never))).toEqual([]);
+  it("finds the services, so a move or rename cannot empty this guard", () => {
+    expect(services.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("finds the writers by reading them, not from a list", () => {
+    // If this drops to zero the detection regex has stopped matching and every
+    // assertion below would pass vacuously. Four services write one today.
+    const writers = services.filter((s) => s.writesClientId);
+    expect(writers.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("every service that writes a caller-supplied clientId CALLS a check", () => {
+    // The assertion the first version only appeared to make. A new service that
+    // persists `clientId: input.clientId` fails here until it calls the helper —
+    // and importing it is not enough.
+    const unchecked = services
+      .filter((s) => s.writesClientId && !CALLS_A_CHECK.test(s.src))
+      .map((s) => s.file);
+    expect(unchecked).toEqual([]);
+  });
+
+  it("an import alone does not satisfy it", () => {
+    // Pins the hole that made the first version useless, so it cannot come back
+    // if someone simplifies the regex above.
+    const importOnly = [
+      'import { assertClientOwned } from "../common/assert-owned.js";',
+      "clientId: input.clientId,",
+    ].join("\n");
+    expect(NAMES_CALLER_CLIENT_ID.test(importOnly)).toBe(true);
+    expect(CALLS_A_CHECK.test(importOnly)).toBe(false);
   });
 });

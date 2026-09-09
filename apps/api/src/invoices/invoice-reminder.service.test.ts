@@ -35,7 +35,11 @@ function harness(invoice: Record<string, unknown> = {}) {
     invoice: { findFirst: vi.fn(() => Promise.resolve(stored)) },
     business: { findUnique: vi.fn(() => Promise.resolve({ name: "Blackwood Construction" })) },
     client: {
-      findUnique: vi.fn(() =>
+      // findFirst, not findUnique: the reminder read is now scoped by businessId
+      // and deletedAt. The write side refuses a foreign clientId, but rows
+      // written before that check existed were never validated, and this read is
+      // the one that leaked.
+      findFirst: vi.fn(() =>
         Promise.resolve({
           firstName: "Marcia",
           lastName: "Brown",

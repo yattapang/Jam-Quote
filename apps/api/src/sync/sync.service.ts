@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Client, Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { ClientChange, ProjectChange, PushInput } from "./sync.dto.js";
-import { isClientOwned } from "../common/assert-owned.js";
+import { clientReferenceState } from "../common/assert-owned.js";
 
 export interface PullResult {
   cursor: string;
@@ -15,7 +15,8 @@ export interface PullResult {
 export type PushOutcome =
   | "applied" // the change was written
   | "server_kept" // server's version was newer (LWW) — client should reconcile
-  | "foreign"; // id belongs to another business — ignored
+  | "foreign" // id belongs to another business — ignored
+  | "invalid_ref"; // a referenced row is this business's but unusable (deleted)
 
 export interface PushRowResult {
   table: "clients" | "projects";
@@ -109,7 +110,14 @@ export class SyncService {
     // The project is proven not foreign above; the CLIENT it points at was not.
     // Answered as an outcome rather than a throw so one bad row cannot fail the
     // whole push.
-    if (!(await isClientOwned(this.prisma, businessId, d.clientId))) return "foreign";
+    // Separated deliberately. "foreign" is documented as "belongs to another
+    // business", and a device treating it as "discard my copy" would be right to.
+    // A client of THIS business that has been deleted is not that: the project is
+    // the contractor's own and must not be thrown away.
+    const clientRef = await clientReferenceState(this.prisma, businessId, d.clientId);
+    if (clientRef === "foreign") return "foreign";
+    if (clientRef === "deleted") return "invalid_ref";
+
     const fields = {
       name: d.name,
       clientId: d.clientId ?? null,

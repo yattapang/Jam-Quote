@@ -19,7 +19,14 @@ function makePrisma() {
       // applyProject proves the CLIENT a project points at is not foreign, and
       // answers "foreign" rather than throwing so one bad row cannot fail the
       // batch. Default to a client this business owns.
-      findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }),
+      findFirst: vi.fn(({ where }: { where: { id?: string; businessId?: string } }) =>
+        // Honours `where`. A fake resolving regardless would also pass for a
+        // service that transposed the arguments — both are strings, so TypeScript
+        // cannot object. Echoes the id back so it works whatever the test names it.
+        Promise.resolve(
+          where.businessId === "11111111-1111-4111-8111-111111111111" && where.id ? { id: where.id, businessId: where.businessId } : null,
+        ),
+      ),
       update: vi.fn().mockResolvedValue({}),
       upsert: vi.fn().mockResolvedValue({}),
     },

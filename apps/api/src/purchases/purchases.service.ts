@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Purchase } from "@prisma/client";
 import { computeJobProfit, labourEntryCostCents, type JobProfit } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+// Aliased so the private wrapper below cannot be read as recursive.
+import { assertProjectOwned as assertProjectOwnedBy } from "../common/assert-owned.js";
 import type {
   CreateLabourEntryInput,
   CreatePurchaseInput,
@@ -230,14 +232,17 @@ export class PurchasesService {
     if (!rate) throw new NotFoundException("Labour rate not found");
   }
 
-  /** Ids are not capabilities: without this a tenant could attach their spend
-   * to another business's job by guessing an id. */
-  private async assertProjectOwned(businessId: string, projectId?: string | null): Promise<void> {
-    if (!projectId) return;
-    const project = await this.prisma.project.findFirst({
-      where: { id: projectId, businessId },
-      select: { id: true },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+  /**
+   * Ids are not capabilities: without this a tenant could attach their spend to
+   * another business's job by guessing an id.
+   *
+   * This module had the principle right before anywhere else did, with its own
+   * private copy. It now delegates to the shared helper, because the private one
+   * omitted `deletedAt: null` — so a purchase could be attached to a project the
+   * contractor had deleted while a quote could not. Two helpers answering one
+   * question differently is how the answers drift.
+   */
+  private assertProjectOwned(businessId: string, projectId?: string | null): Promise<void> {
+    return assertProjectOwnedBy(this.prisma, businessId, projectId);
   }
 }
