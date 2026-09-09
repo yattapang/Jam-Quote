@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 49 | 563 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 50 | 571 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -151,7 +151,7 @@ same way, with `projectFieldRules`.
 | `Invoice` | Owed — nested sections, line items, retention, payments, reminders |
 | `Quote` | Owed — nested, plus variations and the client decision fields |
 | `PublicQuoteView` | **Done, and guarded twice.** A source-reading disclosure test over the Prisma `select`, plus a `.strict()` wire contract — the only strict schema in `wire/`, because here an unexpected field is a disclosure rather than a shrug. The web derives from it |
-| `PublicInvoiceView` | Disclosure test done; the `.strict()` contract still owed — same shape as the quote one |
+| `PublicInvoiceView` | **Done.** Disclosure test plus a `.strict()` contract that refuses the payment and reminder ledgers by name. The web derives from it |
 
 ---
 
@@ -208,6 +208,33 @@ browser cannot be broken by data it never reads. Here an extra field IS the
 harm, so the parse fails. Verified by removing `.strict()` and watching three
 tests go red. The web now derives its public types from that contract, which also
 retired two more `string | number` unions.
+
+---
+
+### What the invoice contract adds, and what it refuses
+
+An invoice discloses four things a quote does not, and each is the client's own
+business: `paidCents` (what they paid), `retentionCents` and `retentionReleased`
+(what they are holding under the contract — hiding it would make the balance look
+wrong), and `issueDate` / `dueDate` (what is owed, and by when).
+
+**What it refuses by name, with tests:**
+
+- **The payment ledger.** `paidCents` is a total the client is entitled to. Which
+  method, which date, which bank reference is the contractor's record of their own
+  banking, and a client needs none of it to pay an invoice.
+- **The reminder ledger.** How many times a contractor has chased this client, and
+  when, is between the contractor and their own records.
+
+Neither was ever exposed — the view's return object always listed its top-level
+fields by hand, so `payments` and `reminders` were fetched by the include and
+dropped. **Only the nested LINE rows leaked**, because `lineItems` passed whole
+rows through. Worth stating precisely: the allow-list worked exactly where someone
+had written it out, and failed exactly where a spread stood in for it.
+
+The line shape is **shared** between the two contracts rather than restated. A
+quote line and an invoice line disclose identically, and two copies of a
+disclosure boundary are two boundaries that will eventually differ.
 
 ---
 
