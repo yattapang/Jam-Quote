@@ -110,7 +110,7 @@ bytes, so anything beyond that is discarded before hashing anyway.
 | ~~Bound the free-text fields~~ | **DONE — all 139.** See the table above for how the count moved, and why two of the figures were my own error |
 | **Validation matrices for the money DTOs** | `quotes`, `invoices`, `payments`, `purchases`: empty, zero, negative, fractional cents, huge, unicode, formula-leading `=`, and cents-vs-dollars confusion |
 | **Date-string boundaries** | Every `.datetime()` field against the Jamaica UTC-5 edge cases that have produced the same bug three times |
-| **Id fields that should be `.uuid()`** | `clientId`, `projectId`, `jobId`, `supplierId` and friends are free strings. Tenant checks make this safe, not clean — a bad id 404s instead of being rejected |
+| **Id fields that should be `.uuid()`** | `clientId`, `projectId`, `jobId`, `supplierId` and friends are free strings. **This row used to say tenant checks made that safe. It was false, and it is why F1 in `REVIEW-FINDINGS.md` survived** — there is no `assertClientOwned` anywhere in the API, and a borrowed `clientId` does not 404, it succeeds. A belief recorded here reads to the next reader as a decision already taken. |
 
 ### Found while measuring — a real defect, not a test gap
 

@@ -1887,3 +1887,32 @@ that no unit test catches.
 
 **Commit protection:** commit and push in increments. Session limits and one
 disk-full incident have both cost work here.
+
+---
+
+## 4o. Review findings — nine reviewers, 2026-09-08
+
+The nine agents in `.claude/agents/` were run for the first time. **46 findings,
+every one re-verified by hand.** The ranked register is `REVIEW-FINDINGS.md`;
+work from there, not from here.
+
+| Tier | Count | What it means |
+|---|---|---|
+| 1 | 11 | Moves money, misstates it to someone outside the business, or crosses a tenant boundary. Fix before contractors share the platform |
+| 2 | 19 | Wrong figures and false statements inside the business |
+| 3 | 16 | Client/server disagreements, dead controls, prose drift |
+
+**The one boundary crossing:** a caller-supplied `clientId` is never checked for
+ownership, so a tenant can attach another contractor's client to their own
+invoice and the app will email that person. Not brute-forceable (UUIDv4), so
+latent rather than breached. F1 in the register.
+
+**Also recorded there:** eight claims in `TESTING.md` and `CONTRACTS.md` that the
+reviewers found overstated, including that the markup-disclosure fix was locked
+by its `.strict()` contracts. It is not — the contract validates a hand-written
+sample while the service assigns from a Prisma result, so nothing fails if a
+field is added back to the select.
+
+**The pattern behind five of the top findings:** a comment asserts correctness
+over the cases someone hand-listed, and the defect is in the case they did not
+list. One of those comments was mine, and it is why F1 survived.
