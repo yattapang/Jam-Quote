@@ -2,12 +2,17 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { CreateProjectInput, UpdateProjectInput } from "./projects.dto.js";
+import { assertClientOwned } from "../common/assert-owned.js";
 
 @Injectable()
 export class ProjectsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(businessId: string, input: CreateProjectInput): Promise<Project> {
+  async create(businessId: string, input: CreateProjectInput): Promise<Project> {
+    // An id in the body is not a capability: the row being written is scoped to
+    // this business, but `clientId` arrives from the caller and the database only
+    // enforces that the client exists.
+    await assertClientOwned(this.prisma, businessId, input.clientId);
     return this.prisma.project.create({ data: { ...input, businessId } });
   }
 
@@ -26,6 +31,7 @@ export class ProjectsService {
 
   async update(businessId: string, id: string, input: UpdateProjectInput): Promise<Project> {
     await this.findOne(businessId, id);
+    await assertClientOwned(this.prisma, businessId, input.clientId);
     return this.prisma.project.update({ where: { id }, data: input });
   }
 

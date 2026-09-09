@@ -91,6 +91,10 @@ function harness(quote = acceptedQuote()) {
     quote: { update: vi.fn().mockResolvedValue({}) },
   };
   const prisma = {
+    // A client the caller owns. create/update now prove a caller-supplied
+    // clientId belongs to this business before writing it — an id in the body
+    // is not a capability. See common/assert-owned.ts.
+    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     quote: {
       findFirst: vi.fn().mockResolvedValue(quote),
@@ -260,6 +264,10 @@ function existingInvoiceHarness(invoice: any) {
     quote: { update: vi.fn().mockResolvedValue({}) },
   };
   const prisma = {
+    // A client the caller owns. create/update now prove a caller-supplied
+    // clientId belongs to this business before writing it — an id in the body
+    // is not a capability. See common/assert-owned.ts.
+    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     invoice: {
       findFirst: vi.fn().mockResolvedValue(invoice),

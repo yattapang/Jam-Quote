@@ -16,6 +16,10 @@ function makePrisma() {
     client: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
+      // applyProject proves the CLIENT a project points at is not foreign, and
+      // answers "foreign" rather than throwing so one bad row cannot fail the
+      // batch. Default to a client this business owns.
+      findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }),
       update: vi.fn().mockResolvedValue({}),
       upsert: vi.fn().mockResolvedValue({}),
     },

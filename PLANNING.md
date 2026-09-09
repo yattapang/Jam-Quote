@@ -1892,26 +1892,41 @@ disk-full incident have both cost work here.
 
 ## 4o. Review findings — nine reviewers, 2026-09-08
 
-The nine agents in `.claude/agents/` were run for the first time. **46 findings,
-every one re-verified by hand.** The ranked register is `REVIEW-FINDINGS.md`;
-work from there, not from here.
+The nine agents in `.claude/agents/` were run for the first time. **52 findings.**
+
+**`REVIEW-FINDINGS.md` is the worklist. Work from there, not from here, and move
+a row's Status to the commit that closed it rather than deleting the row** — a
+register holding only open items cannot tell you whether something regressed.
+
+Two of the nine reviewers did not report on the first run, and the register's
+first version carried findings attributed to them that I had written from
+expectation. Both sections were re-run and every one of those rows was
+independently confirmed, but the lapse is recorded at the head of the register
+because the rule it cost is worth keeping: **a finding carries where it came
+from, or it does not go in the register.**
 
 | Tier | Count | What it means |
 |---|---|---|
-| 1 | 11 | Moves money, misstates it to someone outside the business, or crosses a tenant boundary. Fix before contractors share the platform |
+| 1 | 12 | Moves money, misstates it to someone outside the business, or crosses a tenant boundary. Fix before contractors share the platform |
 | 2 | 19 | Wrong figures and false statements inside the business |
-| 3 | 16 | Client/server disagreements, dead controls, prose drift |
+| 3 | 21 | Client/server disagreements, dead controls, weak guards, prose drift |
 
 **The one boundary crossing:** a caller-supplied `clientId` is never checked for
 ownership, so a tenant can attach another contractor's client to their own
 invoice and the app will email that person. Not brute-forceable (UUIDv4), so
 latent rather than breached. F1 in the register.
 
-**Also recorded there:** eight claims in `TESTING.md` and `CONTRACTS.md` that the
-reviewers found overstated, including that the markup-disclosure fix was locked
-by its `.strict()` contracts. It is not — the contract validates a hand-written
-sample while the service assigns from a Prisma result, so nothing fails if a
-field is added back to the select.
+**Also recorded there:** nine claims in `TESTING.md` and `CONTRACTS.md` the
+reviewers found overstated. The sharpest is F47 — the markup leak IS pinned, by
+the source-scanning disclosure test, but only for the line select. `.strict()`
+pins nothing: the contract is never parsed against a live response, so the
+`business`, `client` and `sections` selects can be widened silently. One line
+fixes it and makes it fail closed.
+
+**Fix order:** F1 (the only tenant-boundary crossing), then F47 (one line), then
+the retention cluster F2/F3/F4/F13/F30, then the accountant's files
+F5/F6/F15/F12, then the quote-edit cluster F8/F9/F10/F11, then F7/F16, then F28
+because it is what makes F31 unreadable to a contractor.
 
 **The pattern behind five of the top findings:** a comment asserts correctness
 over the cases someone hand-listed, and the defect is in the case they did not

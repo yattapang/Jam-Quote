@@ -16,6 +16,7 @@ import {
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
+import { assertClientOwned } from "../common/assert-owned.js";
 import type {
   CreateInvoiceInput,
   InvoiceLineItemInput,
@@ -211,6 +212,13 @@ export class InvoicesService {
    * and hardcoding it here would silently diverge from every other document.
    */
   async create(businessId: string, input: CreateInvoiceInput): Promise<InvoiceWithLines> {
+    // An id in the body is not a capability. Without this, a borrowed clientId
+    // reached sendReminderEmail, which read the client with no businessId and
+    // emailed another contractor's customer under this business's name.
+    await assertClientOwned(this.prisma, businessId, input.clientId);
+    // No projectId check: the invoice DTO carries none. An invoice inherits its
+    // project from the quote it was converted from, which is already scoped.
+
     const business = await this.businessService.findById(businessId);
 
     // Reserved outside the transaction: reserveInvoiceNumber runs its own
@@ -404,6 +412,7 @@ export class InvoicesService {
     if (existing.status !== InvoiceStatus.DRAFT) {
       throw new BadRequestException("Invoice can only be edited while draft");
     }
+    await assertClientOwned(this.prisma, businessId, input.clientId);
 
     const replacingLines = input.sections !== undefined || input.lineItems !== undefined;
     const gctRatePct = input.gctRatePct ?? Number(existing.gctRate);

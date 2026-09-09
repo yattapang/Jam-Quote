@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import type { Client, Project } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { ClientChange, ProjectChange, PushInput } from "./sync.dto.js";
+import { isClientOwned } from "../common/assert-owned.js";
 
 export interface PullResult {
   cursor: string;
@@ -105,6 +106,10 @@ export class SyncService {
     }
 
     const d = change.data!;
+    // The project is proven not foreign above; the CLIENT it points at was not.
+    // Answered as an outcome rather than a throw so one bad row cannot fail the
+    // whole push.
+    if (!(await isClientOwned(this.prisma, businessId, d.clientId))) return "foreign";
     const fields = {
       name: d.name,
       clientId: d.clientId ?? null,

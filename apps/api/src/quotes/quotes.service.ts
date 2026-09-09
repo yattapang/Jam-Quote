@@ -20,6 +20,7 @@ import {
   type TotalsLineInput,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
 import { BusinessService } from "../business/business.service.js";
 import { PricingService } from "../billing/pricing.service.js";
 import { startOfCurrentMonth } from "../common/month.util.js";
@@ -272,6 +273,11 @@ export class QuotesService {
       depositCents,
     });
 
+    // An id in the body is not a capability. Both are optional, so a draft with
+    // no client still passes.
+    await assertClientOwned(this.prisma, businessId, input.clientId);
+    await assertProjectOwned(this.prisma, businessId, input.projectId);
+
     const number = await this.businessService.reserveQuoteNumber(businessId);
 
     const quoteId = await this.prisma.$transaction(async (tx) => {
@@ -440,6 +446,8 @@ export class QuotesService {
 
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {
     const existing = await this.findOne(businessId, id);
+    await assertClientOwned(this.prisma, businessId, input.clientId);
+    await assertProjectOwned(this.prisma, businessId, input.projectId);
 
     const replacingLines = input.sections !== undefined || input.lineItems !== undefined;
     const gctRatePct = input.gctRatePct ?? Number(existing.gctRate);

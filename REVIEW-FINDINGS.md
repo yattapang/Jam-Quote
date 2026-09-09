@@ -75,7 +75,7 @@ surfaces.
 These either move money, misstate money to someone outside the business, or
 cross a tenant boundary.
 
-### F1 — a caller-supplied `clientId` is never checked for ownership · OPEN
+### F1 `[reviewed]` — a caller-supplied `clientId` is never checked for ownership · **FIXED, awaiting independent review**
 
 `assertClientOwned` does not exist anywhere in the API. Borrow another tenant's
 client uuid on `POST /invoices`, then `POST /invoices/:id/reminders`: the service
@@ -94,6 +94,21 @@ not capabilities."*
 `invoices.service.ts:617`, `quotes.service.ts:281,479`,
 `invoices.service.ts:239,443`, `projects.service.ts:11,29`,
 `sync.service.ts:110`
+
+**Fix:** `apps/api/src/common/assert-owned.ts` — `assertClientOwned`,
+`assertProjectOwned`, and `isClientOwned` for the sync push, which answers with
+the outcome `"foreign"` rather than throwing so one bad row cannot fail a batch.
+Wired into all six writes. A 404 rather than a 403, because a 403 would confirm
+the id names a real client of another tenant.
+
+`assert-owned.test.ts` pins both halves: the helper's behaviour, and that **every
+service taking a caller-supplied `clientId` calls it** — verified by removing the
+call from each of the four in turn and watching the guard fail all four times.
+The second half is the one that matters: a correct helper nobody calls is how
+this defect survived in the first place.
+
+Invoices take no `projectId` — TypeScript caught that when I added the check.
+They inherit their project from the quote they convert from, which is scoped.
 
 ### F2 `[reviewed]` — a card-payment helper fabricates a WiPay checkout · OPEN
 

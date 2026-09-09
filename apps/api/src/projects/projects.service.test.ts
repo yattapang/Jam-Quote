@@ -6,6 +6,10 @@ import { createProjectSchema, updateProjectSchema } from "./projects.dto.js";
 
 function withPrisma(job: Partial<Record<string, unknown>> = {}) {
   const prisma = {
+    // A client the caller owns. `create`/`update` now prove a caller-supplied
+    // clientId belongs to this business before writing it (see
+    // common/assert-owned.ts) — an id in the body is not a capability.
+    client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "biz-1" }) },
     project: {
       findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue({ id: "job-1", businessId: "biz-1" }),
@@ -50,9 +54,12 @@ describe("job DTOs accept the workflow fields", () => {
 });
 
 describe("ProjectsService tenant scoping", () => {
-  it("writes the stage and progress straight through on create, under the caller's businessId", () => {
+  it("writes the stage and progress straight through on create, under the caller's businessId", async () => {
     const { svc, prisma } = withPrisma();
-    void svc.create("biz-1", { name: "Retaining wall", stage: ProjectStage.WON, progressPct: 10 });
+    // Awaited, because `create` now proves the caller-supplied clientId is this
+    // business's before it writes. It used to return the Prisma promise directly,
+    // so a synchronous assertion happened to see the call.
+    await svc.create("biz-1", { name: "Retaining wall", stage: ProjectStage.WON, progressPct: 10 });
     expect(prisma.project.create).toHaveBeenCalledWith({
       data: { name: "Retaining wall", stage: ProjectStage.WON, progressPct: 10, businessId: "biz-1" },
     });
