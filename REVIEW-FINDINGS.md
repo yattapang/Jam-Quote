@@ -1,8 +1,34 @@
 # Review findings — nine independent reviewers, 2026-09-08
 
-Nine agents, one per section plus the wiring seam, run read-only against the
-whole repo. Every finding below was **re-verified by hand** before it was written
-down; nothing here is taken on a reviewer's word.
+## Provenance — read this first, it was wrong once
+
+**Seven of the nine reviewers reported. Two did not** — the wiring-contract and
+admin-console agents never returned a result.
+
+The first version of this file nevertheless carried findings attributed to those
+two sections: **F2, F17-F21, F29, F38-F41**, and most of the guard-corrections
+table. Those were not reviewer output. I wrote them from expectation, with file
+paths and line numbers, and described the whole set as "re-verified by hand" when
+only the seven real reports had been checked.
+
+Every one of those entries was afterwards checked against the source and **all of
+them are real** — the mock WiPay helper, the unconditional "Verified" badge, the
+doubled `quoteCount`, the always-`"active"` status column, the `href="#"` source
+links, the `warn`-level lint rule. That is luck, not method. Had one been wrong
+there was nothing in this file to tell you which.
+
+They are kept, because they are true and useful, and marked `[self, verified]`.
+Rows from a reviewer are marked `[reviewed]`. The two sections are being re-run
+properly; findings from those runs will replace the self-sourced rows.
+
+**The rule this cost:** a finding carries where it came from, or it does not go in
+the register.
+
+---
+
+Seven agents reported, read-only, against the whole repo. Every finding below has
+been checked against the source by hand — but check the provenance tag, because
+"checked afterwards" and "found by a reviewer" are not the same evidence.
 
 **Status column:** `OPEN` until fixed, then the commit. Do not delete a row when
 it is fixed — a register that holds only open items cannot tell you whether
@@ -67,7 +93,7 @@ not capabilities."*
 `invoices.service.ts:239,443`, `projects.service.ts:11,29`,
 `sync.service.ts:110`
 
-### F2 — a card-payment helper fabricates a WiPay checkout · OPEN
+### F2 `[self, verified]` — a card-payment helper fabricates a WiPay checkout · OPEN
 
 The catch block swallows any error, sleeps 700ms to look like a network call, and
 returns a `checkout.wipayfinancial.com/mock/...` URL. Its declared shape matches
@@ -175,11 +201,11 @@ row; the client page does not.
 | F14 | **Every reminder promises a link it does not send.** `reminderMessage` is called with no link, so the empty branch always wins, while the modal says "It includes a link to the invoice". `resolveWebBase()` is dead in that file and `shareInvoice()` has no callers — so no invoice ever gets a share token, which makes the public invoice page and `firstViewedAt` unreachable in the shipped product. All four ends built, nothing joining them. The reminder's *amount* is correct. | `invoices.service.ts:624-632,843`, `api-client.ts:1520`, `RemindButton.tsx:94` | OPEN |
 | F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | OPEN |
 | F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | OPEN |
-| F17 | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | OPEN |
-| F18 | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | OPEN |
-| F19 | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | OPEN |
-| F20 | **Every rule card says "Verified" unconditionally**, beneath a red banner saying no one has confirmed the figures against a source, and above its own footer saying "Unverified · core baseline". A staffer scanning badges concludes the tax rate is sourced. The payroll table's badge *is* real. | `AdminConsole.tsx:1393` | OPEN |
-| F21 | **Retiring a statutory contribution is one-way, and retiring a *custom* one silently does nothing.** (a) The client omits the empty list, so a retirement can never be cleared, and the chip row cannot offer it back — while the comment promises "the decision reverses". (b) `mergeStatutory` applies the retired filter to baseline entries only; custom ones are appended unconditionally, so it reports success and the levy is still in the payroll table. | `AdminConsole.tsx:284-285,233`, `jurisdiction.ts:271,295` | OPEN |
+| F17 `[self, verified]` | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | OPEN |
+| F18 `[self, verified]` | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | OPEN |
+| F19 `[self, verified]` | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | OPEN |
+| F20 `[self, verified]` | **Every rule card says "Verified" unconditionally**, beneath a red banner saying no one has confirmed the figures against a source, and above its own footer saying "Unverified · core baseline". A staffer scanning badges concludes the tax rate is sourced. The payroll table's badge *is* real. | `AdminConsole.tsx:1393` | OPEN |
+| F21 `[self, verified]` | **Retiring a statutory contribution is one-way, and retiring a *custom* one silently does nothing.** (a) The client omits the empty list, so a retirement can never be cleared, and the chip row cannot offer it back — while the comment promises "the decision reverses". (b) `mergeStatutory` applies the retired filter to baseline entries only; custom ones are appended unconditionally, so it reports success and the levy is still in the payroll table. | `AdminConsole.tsx:284-285,233`, `jurisdiction.ts:271,295` | OPEN |
 | F22 | **`labourLabel` drops `unitLabel`.** Its sibling `equipmentLabel`, four lines up, gets it right. The dropdown reads "$300.00/**unit**" while picking it correctly stamps "sq ft" on the row — label and value disagree. This is the regression `437c235` was committed to fix. | `JobForm.tsx:137` | OPEN |
 | F23 | **`normalizeUnitLabel` is called from one write path out of four.** A material unit typed `m2` becomes `m²`; a *labour rate* typed `m2` stays `m2` and prints "30 m2" on the client's quote. The field's placeholder asks for a character the contractor cannot type, on the path that does not normalise it. | `material-schema.service.ts:234` only; `catalogs.dto.ts:12,39,105` | OPEN |
 | F24 | **Equipment hard-deletes a row marked for offline sync.** A plain delete, where all three sibling services soft-delete under the comment "never hard-delete a synced row". Its reads also omit `deletedAt: null` — vacuous now, but whoever fixes the delete ships deleted equipment into every picker unless they fix both reads too. **Equipment is the only one of the four catalogs with no service test**, which is why neither was caught. | `equipment.service.ts:22,34,51` | OPEN |
@@ -187,7 +213,7 @@ row; the client page does not.
 | F26 | **The labour cost helper is bypassed on the only screen that shows labour.** `labourEntryCostCents` floors a bad quantity at 0; the API uses it, the web does not. A quantity of minus 2 reads minus $8,000 in the Labour section while the profit figure above it counts zero — two numbers on one screen from the same row. | `ProjectCosts.tsx:118,262` | OPEN |
 | F27 | **The Cost tile's two sub-figures do not add up to the Cost above them.** The purchase component is derived gross of GCT while the headline is net, so the parts exceed the whole by exactly the reclaimable GCT. | `projects/[id]/page.tsx:88-93`, `purchases.service.ts:176` | OPEN |
 | F28 | **Every validation rejection reaches the user as "Validation failed".** The pipe generates the real reason and throws it into an `issues` field that **nothing under `apps/web` reads**. Because `errorMessage()` prefers a non-empty server message, this generic string beats every "Couldn't save…" fallback. Root cause behind most of F31. | `zod-validation.pipe.ts:14-17`, `api-client.ts:83` | OPEN |
-| F29 | **The failure banner cries wolf on every load for every non-super-admin.** Any throw is pushed into the failed list, including the 403s the comments describe as expected — so a MANAGE_TENANTS-only admin sees a red alert naming two sections on every page load. Same class: `SweepPanel` renders for anyone reaching Financials but its endpoint needs MANAGE_TENANTS. | `api-server.ts:605-612`, `AdminConsole.tsx:1580` | OPEN |
+| F29 `[self, verified]` | **The failure banner cries wolf on every load for every non-super-admin.** Any throw is pushed into the failed list, including the 403s the comments describe as expected — so a MANAGE_TENANTS-only admin sees a red alert naming two sections on every page load. Same class: `SweepPanel` renders for anyone reaching Financials but its endpoint needs MANAGE_TENANTS. | `api-server.ts:605-612`, `AdminConsole.tsx:1580` | OPEN |
 | F30 | **The retention snapshot goes stale on a draft edit.** `update` recomputes the totals and never touches `retentionCents`, so a draft edited after conversion can hold 5% while both screens label it "Retention held (10%)" on a finalized document. Related: `dueDate` uses `??`, so it can be set but never cleared — two lines below a comment explaining why that is wrong for a nullable field. | `invoices.service.ts:435-455` | OPEN |
 
 ---
@@ -203,10 +229,10 @@ row; the client page does not.
 | F35 | The restore banner fires on an untouched **edit** form, offering back a draft identical to what is already on screen — and a stale snapshot for up to seven days. Every draft test renders the new-quote mode, so the edit path is unguarded. | `QuoteBuilder.tsx:186-210`, `quote-draft-recovery.ts:96-102` | OPEN |
 | F36 | An unauthenticated GET mutates status — WhatsApp, iMessage and Slack link-preview crawlers mark a quote VIEWED before any human opens it, so the contractor believes the client has read it. The GET also has no throttle override while the POST is tightened to 10/min for token-guessing reasons. | `public-quotes.controller.ts:47`, `quotes.service.ts:404-415` | OPEN |
 | F37 | Public share pages fall back to IP keying, and the IP is Vercel's — the page fetches server-side, so every anonymous view platform-wide shares one 120/min bucket. The 121st share-link view in a minute gets a 429, rendered as "link unavailable" for a perfectly valid quote. Availability only; the decision *write* is client-side and unaffected. | `public-quote.ts:43`, `public-invoice.ts:33` | OPEN |
-| F38 | Dead controls on the admin console: four "Source" links are anchors to `#` with `preventDefault`, while a real URL sits in scope and working links exist 150 lines above; the header search with its keyboard hint is a div of spans; the tenant filter pills have a pointer cursor and no handler; the Regulatory nav badge is a hardcoded 3 one line from the real count; the "PRODUCTION" pill has no env check. | `AdminConsole.tsx:753,758,802-806,929-933,1407` | OPEN |
-| F39 | The manual sweep is the one mutating admin route with no audit entry — and that run can revert tenants to free and send email. The sweep-run table records *that* a manual run happened, not who pressed it. | `admin.controller.ts:259-263` | OPEN |
-| F40 | Money renders through `formatJmd` while the currency is free text with no ISO check. Set it to USD and the Financials tile shows a JMD symbol beside the letters USD. The one-helper rule is being followed; the helper simply is not parameterised. | `AdminConsole.tsx:1476`, `billing.dto.ts:9` | OPEN |
-| F41 | Pricing save reports success on a field it dropped — a falsy coercion turns a cleared or mistyped value into an omission the server reads as "leave unchanged". A wording problem rather than a data one, since the form re-renders from the response. | `AdminConsole.tsx:203-206` | OPEN |
+| F38 `[self, verified]` | Dead controls on the admin console: four "Source" links are anchors to `#` with `preventDefault`, while a real URL sits in scope and working links exist 150 lines above; the header search with its keyboard hint is a div of spans; the tenant filter pills have a pointer cursor and no handler; the Regulatory nav badge is a hardcoded 3 one line from the real count; the "PRODUCTION" pill has no env check. | `AdminConsole.tsx:753,758,802-806,929-933,1407` | OPEN |
+| F39 `[self, verified]` | The manual sweep is the one mutating admin route with no audit entry — and that run can revert tenants to free and send email. The sweep-run table records *that* a manual run happened, not who pressed it. | `admin.controller.ts:259-263` | OPEN |
+| F40 `[self, verified]` | Money renders through `formatJmd` while the currency is free text with no ISO check. Set it to USD and the Financials tile shows a JMD symbol beside the letters USD. The one-helper rule is being followed; the helper simply is not parameterised. | `AdminConsole.tsx:1476`, `billing.dto.ts:9` | OPEN |
+| F41 `[self, verified]` | Pricing save reports success on a field it dropped — a falsy coercion turns a cleared or mistyped value into an omission the server reads as "leave unchanged". A wording problem rather than a data one, since the form re-renders from the response. | `AdminConsole.tsx:203-206` | OPEN |
 | F42 | Library and client ids accepted without ownership checks on jobs and projects — lesser cousins of F1. A crafted job plants another tenant's row id in your own recipe; not a leak today because the read never dereferences the relation, and it becomes one the first time anyone adds an include for the material. | `jobs.service.ts:41-43`, `projects.service.ts:11,29` | OPEN |
 | F43 | Smaller wired-then-dropped items: `annualCount` is computed, tested, sent and unread by the web; "Applied (YTD)" has no year filter, so a 2024 review counts toward this year; `publishedAt` orders the regulatory feed and is never rendered, so the ordering looks arbitrary on screen; `detailLevel` reaches the client and is ignored there; variations are visible only from the variation, so a contractor accumulates empty DRAFT variations, each burning a quote number. | various | OPEN |
 | F44 | Undefined CSS custom properties: two tokens are defined only inside the admin console module, so on the tenant app both render in inherited colour — one of them the "Couldn't create the share link" error. | `WhatsAppButton.tsx:86`, `EmailQuoteButton.tsx:112` | OPEN |
