@@ -1792,7 +1792,8 @@ selects, `.strict()` public contracts, and tests that read the source.
 
 | Item | Note |
 |---|---|
-| **Run the nine review agents** | They were built for this and have never been run. They read only — the risk is reviewer time, not the code |
+| ~~Run the nine review agents~~ | **DONE.** 52 findings in `REVIEW-FINDINGS.md`. F1 (tenant boundary) and F46 (no CI) closed |
+| ~~No CI~~ | **DONE `71e5611`.** `verify.yml` gates typecheck, lint and test on every push. Nothing gated anything before |
 | **Visual and UX polish** | The owner's chosen second half. Not started |
 | Three component suites | `LineItemsEditor`, `RetentionPanel`, `MaterialForm`. None protects something that has broken since it was fixed |
 | Thirteen hand-written `Api*` shapes | None on a money path; the guard stops the list growing |
