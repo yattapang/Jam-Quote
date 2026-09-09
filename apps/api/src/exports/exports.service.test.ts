@@ -129,7 +129,12 @@ describe("ExportsService — what the files promise", () => {
     // midnight silently drops a day of revenue with nothing to show for it.
     const { svc, prisma } = harness();
     await svc.invoicesIssued("b1", RANGE);
-    const { lte } = prisma.invoice.findMany.mock.calls[0]?.[0].where.issueDate;
+    // Not `calls[0]?.[0]`: if the call never happened, `?.` yields undefined and
+    // the property access after it throws a TypeError that reads like a bug in the
+    // service. Assert the call first, then read it.
+    const call = prisma.invoice.findMany.mock.calls[0];
+    expect(call).toBeDefined();
+    const { lte } = call![0].where.issueDate;
     expect(lte.toISOString()).toBe("2026-08-31T23:59:59.999Z");
   });
 

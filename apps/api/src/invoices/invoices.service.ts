@@ -852,9 +852,7 @@ export interface PublicInvoiceView {
   };
 }
 
-/** The public origin links are built against. Same resolution as
- * auth.service's reset links — one env var, first entry of the allow-list. */
-function resolveWebBase(): string {
-  const first = process.env.WEB_ORIGIN?.split(",")[0]?.trim();
-  return first || "http://localhost:3000";
-}
+// `resolveWebBase()` used to sit here, unused. It existed so a reminder could
+// carry a link to the invoice — see F14 in REVIEW-FINDINGS.md, where the link is
+// promised in the UI and never sent. The live copy is in auth.service.ts; when
+// F14 is fixed, extract THAT one to common/ rather than reinstating a second.

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { Job, JobComponent, Prisma } from "@prisma/client";
+import type { Job, Prisma } from "@prisma/client";
 import { computeJobUnitCostCents } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type {

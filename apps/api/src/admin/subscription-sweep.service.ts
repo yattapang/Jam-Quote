@@ -192,10 +192,10 @@ export class SubscriptionSweepService implements OnModuleInit {
     // The subscriber's own choice first; then an OWNER; then any user with an
     // address, because a reminder that reaches the wrong colleague still beats
     // one that reaches nobody.
-    const owner = business.users.find((u) => u.role === "OWNER" && u.email);
-    const anyUser = business.users.find((u) => u.email);
-    const to =
-      addressableEmail(business);
+    // addressableEmail already walks billing contact -> OWNER -> any addressable
+    // user. This used to recompute the OWNER and any-user fallbacks inline and then
+    // discard them, which is what the unused-variable rule was marking.
+    const to = addressableEmail(business);
     if (!to) {
       this.logger.warn(`No billing contact or owner email for business ${business.id} — ${kind} not sent`);
       return "failed";

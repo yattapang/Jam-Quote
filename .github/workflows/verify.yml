@@ -1,0 +1,77 @@
+# Typecheck, lint and test on every push and pull request.
+#
+# ## Why this exists
+#
+# It didn't, until now. The repo had 628 API tests, 453 web tests, 269 core tests,
+# source-scanning guards for tenancy and disclosure — and the only workflow was a
+# keep-warm ping. **Nothing gated anything.** A security review put it plainly:
+# the reason a guard could be satisfied by an import line and nobody noticed is
+# that no automated run had to agree before code shipped.
+#
+# `apps/api` lint was also ungated and had accumulated one error and five
+# warnings, two of which were themselves review findings — a dead
+# `resolveWebBase` and two recomputed-then-discarded reads in the billing sweep.
+# Warnings that fail nothing become a list nobody reads.
+#
+# ## What it does NOT do
+#
+# It does not run `build`. `next build` fetches fonts from Google at build time
+# and cannot complete on every network; Vercel builds the web app on deploy and is
+# the honest gate for that. Adding it here would make a red X the normal state,
+# which is worse than not checking.
+#
+# It does not deploy. Render and Vercel own that, from their own triggers.
+#
+# ## Concurrency
+#
+# A new push to the same ref cancels the previous run. Two runs of the same branch
+# tell you nothing extra and the free minutes are finite.
+name: Verify
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch: {}
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what the lockfile
+      # says, so a run cannot pass against different dependencies than a colleague
+      # has locally.
+      - name: Install
+        run: npm ci
+
+      # The API tests import the generated Prisma client, and some replay
+      # migrations against an in-process Postgres (PGlite). Neither needs a live
+      # database, but both need the client to exist.
+      - name: Generate Prisma client
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      # Each step runs even if an earlier one failed, so one push tells you
+      # everything that is wrong rather than only the first thing.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test

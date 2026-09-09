@@ -156,7 +156,6 @@ describe("voiding a payment", () => {
   const coversUntil = new Date("2026-09-01T00:00:00.000Z");
   const payment = { id: "sp-1", businessId: "biz-1", amountCents: 200_000, coversFrom, coversUntil, voidedAt: null };
 
-  const MONTH = 31 * 86_400_000;
 
   it("returns paid-through to the start when the only payment is voided", async () => {
     const { svc, subscriptionWrites } = build({
