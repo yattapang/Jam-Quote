@@ -167,6 +167,18 @@ export interface PublicInvoiceLine {
   unitPriceCents: number;
 }
 
+
+/**
+ * Validates the public invoice view, with the parameter concretely typed.
+ *
+ * Not a generic, deliberately: a fresh literal passed to a generic infers its own
+ * type and loses excess-property checking. See `asPublicQuoteView` for the full
+ * reasoning — the two views are twins and must not drift.
+ */
+function asPublicInvoiceView(view: PublicInvoiceView): PublicInvoiceView {
+  return assertPublicShape(publicInvoiceWire, view, "PublicInvoiceView");
+}
+
 @Injectable()
 export class InvoicesService {
   constructor(
@@ -547,20 +559,13 @@ export class InvoicesService {
       throw new NotFoundException("Invoice not found");
     }
 
-    if (!invoice.firstViewedAt) {
-      await this.prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { firstViewedAt: new Date() },
-      });
-    }
-
     // An explicit allow-list, not the row — the same security decision as
     // PublicQuoteView. Everything here is already printed on the invoice the
     // client was sent, and nothing else: no ids, no internal timestamps, and
     // no payment history beyond the totals the document itself shows.
     // Validated against the .strict() contract on the way out — see
     // assertPublicShape. The twin of the quote view, and the same reasoning.
-    return assertPublicShape(publicInvoiceWire, {
+    const view = asPublicInvoiceView({
       number: invoice.number,
       status: invoice.status,
       issueDate: invoice.issueDate,
@@ -582,7 +587,18 @@ export class InvoicesService {
         .filter((p) => p?.trim())
         .join(" ") || null,
       business: invoice.business,
-    }, "PublicInvoiceView");
+    });
+
+    // After the response is built and validated, not before: a refusal must not
+    // leave firstViewedAt set for a client who received a 500 and saw nothing.
+    if (!invoice.firstViewedAt) {
+      await this.prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { firstViewedAt: new Date() },
+      });
+    }
+
+    return view;
   }
 
   /**

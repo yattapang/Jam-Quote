@@ -162,7 +162,7 @@ lacks the `Api` prefix.
 
 `apps/web/lib/api-client.ts:1257-1272`
 
-### F47 `[reviewed]` — the public view is coupled for LINE fields only · **CLOSED**
+### F47 `[reviewed]` — the public view is coupled for LINE fields only · **CLOSED** (`b9978a3` + review follow-up)
 
 I said the `.strict()` contracts pinned the disclosure fix. They pin less than I
 thought, and the reviewer found the actual boundary.
@@ -229,6 +229,23 @@ disclose anything, because `clientName` is derived from the two name parts and t
 row never leaves the service. The column is fetched needlessly, and it is now
 pinned anyway — the next person to return `client` whole would be shipping
 whatever had accumulated there.
+
+**I marked this CLOSED too early.** The independent review confirmed the runtime
+layer is real — and that nested objects genuinely ARE `.strict()`, which is the
+load-bearing fact — but found five things wrong, four of them mine:
+
+| What it found | What changed |
+|---|---|
+| **I had silently DELETED a compile-time guard.** Passing a fresh literal to a generic `assertPublicShape` infers the literal's own type, which erases excess-property checking — so adding a field to the returned literal went from a compile error to a runtime 500 | Concretely-typed wrappers `asPublicQuoteView` / `asPublicInvoiceView`. Verified: adding `clientTrn` to the literal is `error TS2353` again |
+| The sections scan was bounded by `indexOf("lineItems:")`, so a field APPENDED after that entry passed — and appending is where a person adds one | `common/select-scan.ts` matches braces properly and strips nested blocks. All three bypasses now fail |
+| The scan matched `(\w+)\s*:\s*true`, so a trailing `...SPREAD` or a `Boolean(true)` was invisible | It now **refuses anything it cannot parse** rather than ignoring it |
+| `firstViewedAt` was written BEFORE the guard ran, so a fail-closed 500 still marked a quote VIEWED for a client who saw nothing — and that field is meant to be evidence a link landed | Build and validate first, record after. Pinned by a test |
+| **Nothing in the repo called `findByShareToken`.** The guard now gating every share link had no test of its success path — and fail-closed is only safe if the closed case is exceptional | `public-quote-read.test.ts`, 7 tests through a fake Prisma with real `Decimal` and `Date` values |
+| A new Prisma enum member that `packages/core` lacks would 500 every share link at once — and `ENQUIRY` was added on one side only once before | `common/enum-parity.test.ts` compares all 14 Prisma enums against core. Verified by adding `SQ_METRE` to Prisma alone |
+
+Left as-is deliberately: the check validates a serialized COPY while Nest serializes
+the original separately. Deterministic today; it stops being a guarantee if anything
+gains a custom `toJSON`.
 
 ### F3 — card payment charges the retained money · OPEN
 

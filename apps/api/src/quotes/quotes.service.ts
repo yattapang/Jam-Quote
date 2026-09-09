@@ -200,6 +200,22 @@ const PUBLIC_LINE_SELECT = {
   gctTreatment: true,
 } as const;
 
+
+/**
+ * Validates the public quote view, and keeps TypeScript checking the literal.
+ *
+ * The parameter is `PublicQuoteView` rather than a generic, and that is the whole
+ * point. Passing a fresh object literal to a generic function infers the literal's
+ * own type, which **erases excess-property checking** — so wrapping the return in
+ * a generic `assertPublicShape` silently turned "adding a field to this literal is
+ * a compile error" into "adding a field is a runtime 500". An independent review
+ * caught that; this restores the compile-time half, and the runtime half still
+ * catches a widened Prisma select, which types cannot see.
+ */
+function asPublicQuoteView(view: PublicQuoteView): PublicQuoteView {
+  return assertPublicShape(publicQuoteWire, view, "PublicQuoteView");
+}
+
 @Injectable()
 export class QuotesService {
   private readonly logger = new Logger(QuotesService.name);
@@ -409,19 +425,6 @@ export class QuotesService {
       throw new NotFoundException("Quote not found");
     }
 
-    if (!quote.firstViewedAt) {
-      // SENT -> VIEWED only. Never drag ACCEPTED or DECLINED backwards
-      // because the client happened to reopen the link.
-      const advances = quote.status === QuoteStatus.SENT;
-      await this.prisma.quote.update({
-        where: { id: quote.id },
-        data: {
-          firstViewedAt: new Date(),
-          ...(advances ? { status: QuoteStatus.VIEWED } : {}),
-        },
-      });
-    }
-
     // An explicit allow-list, not the row. This is the only response in the
     // API an anonymous caller can read, so what it contains is a security
     // decision rather than a serialization detail: everything here is already
@@ -431,7 +434,7 @@ export class QuotesService {
     // select fails here instead of disclosing. The hand-listed fields below are
     // exactly the check that was ALREADY believed to be happening — see
     // assertPublicShape for why it was not.
-    return assertPublicShape(publicQuoteWire, {
+    const view = asPublicQuoteView({
       number: quote.number,
       status: quote.status,
       validUntil: quote.validUntil,
@@ -447,7 +450,25 @@ export class QuotesService {
       sections: quote.sections,
       clientName: quote.client ? `${quote.client.firstName} ${quote.client.lastName}`.trim() : null,
       business: quote.business,
-    }, "PublicQuoteView");
+    });
+
+    // Recorded only AFTER the response has been built and validated. The other
+    // order marked a quote VIEWED for a client who then received a 500 and saw
+    // nothing — and firstViewedAt is meant to be evidence that a link landed.
+    if (!quote.firstViewedAt) {
+      // SENT -> VIEWED only. Never drag ACCEPTED or DECLINED backwards because
+      // the client happened to reopen the link.
+      const advances = quote.status === QuoteStatus.SENT;
+      await this.prisma.quote.update({
+        where: { id: quote.id },
+        data: {
+          firstViewedAt: new Date(),
+          ...(advances ? { status: QuoteStatus.VIEWED } : {}),
+        },
+      });
+    }
+
+    return view;
   }
 
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {
