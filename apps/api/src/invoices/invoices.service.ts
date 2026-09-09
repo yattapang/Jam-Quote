@@ -13,10 +13,12 @@ import {
   type LineCategory,
   type RateUnit,
   type TotalsLineInput,
+  publicInvoiceWire,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
 import { assertClientOwned } from "../common/assert-owned.js";
+import { assertPublicShape } from "../common/public-view.js";
 import type {
   CreateInvoiceInput,
   InvoiceLineItemInput,
@@ -556,7 +558,9 @@ export class InvoicesService {
     // PublicQuoteView. Everything here is already printed on the invoice the
     // client was sent, and nothing else: no ids, no internal timestamps, and
     // no payment history beyond the totals the document itself shows.
-    return {
+    // Validated against the .strict() contract on the way out — see
+    // assertPublicShape. The twin of the quote view, and the same reasoning.
+    return assertPublicShape(publicInvoiceWire, {
       number: invoice.number,
       status: invoice.status,
       issueDate: invoice.issueDate,
@@ -578,7 +582,7 @@ export class InvoicesService {
         .filter((p) => p?.trim())
         .join(" ") || null,
       business: invoice.business,
-    };
+    }, "PublicInvoiceView");
   }
 
   /**

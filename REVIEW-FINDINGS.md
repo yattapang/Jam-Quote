@@ -162,7 +162,7 @@ lacks the `Api` prefix.
 
 `apps/web/lib/api-client.ts:1257-1272`
 
-### F47 `[reviewed]` — the public view is coupled for LINE fields only · OPEN
+### F47 `[reviewed]` — the public view is coupled for LINE fields only · **CLOSED**
 
 I said the `.strict()` contracts pinned the disclosure fix. They pin less than I
 thought, and the reviewer found the actual boundary.
@@ -198,6 +198,37 @@ sample stops type-checking when the select widens.
 
 `quotes.service.ts:373-437`, `invoices.service.ts:509`,
 `public-quote-wire.test.ts:34`
+
+**Fixed in two layers, because one was not enough.**
+
+*Runtime, protects production.* `common/public-view.ts` — `assertPublicShape`
+validates the real response against the `.strict()` contract on the way out of
+both `findByShareToken` methods, and fails CLOSED with a 500 whose message names
+nothing (the offending field goes to the log, not to an anonymous caller). It
+validates a serialized copy and returns the original, because the contract
+describes JSON while the service's type holds real `Decimal` and `Date` objects.
+One extra serialize per share-link read, which is affordable on a single-document
+page a client opens once.
+
+*Source-scanning, stops it reaching production.* The disclosure guard parsed
+`PUBLIC_LINE_SELECT` and nothing else. It now pins the `business`, `client` and
+`sections` selects inside `findByShareToken` by key set, on both views.
+
+**Why both:** a fake Prisma returns what the fake says and ignores the select
+entirely, so no service-level test can catch a widened select — I checked, by
+adding `billingContactEmail: true` to the business letterhead. It compiled and
+all 636 tests passed. Reading the source is the only thing that fails in CI; the
+runtime check is what saves you if something slips past it anyway.
+
+Verified by injecting three real widenings and watching each fail: a
+`billingContactEmail` on the quote letterhead, a `currency` on the invoice
+letterhead, and a section's internal `quoteId`.
+
+One correction to the finding as written: widening the **client** select does not
+disclose anything, because `clientName` is derived from the two name parts and the
+row never leaves the service. The column is fetched needlessly, and it is now
+pinned anyway — the next person to return `client` whole would be shipping
+whatever had accumulated there.
 
 ### F3 — card payment charges the retained money · OPEN
 

@@ -18,9 +18,11 @@ import {
   type LineCategory,
   type RateUnit,
   type TotalsLineInput,
+  publicQuoteWire,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
+import { assertPublicShape } from "../common/public-view.js";
 import { BusinessService } from "../business/business.service.js";
 import { PricingService } from "../billing/pricing.service.js";
 import { startOfCurrentMonth } from "../common/month.util.js";
@@ -425,7 +427,11 @@ export class QuotesService {
     // decision rather than a serialization detail: everything here is already
     // printed on the PDF the client is being sent, and nothing else — no ids,
     // no timestamps, no internal status beyond what the document shows.
-    return {
+    // Validated against the .strict() contract on the way out, so a widened
+    // select fails here instead of disclosing. The hand-listed fields below are
+    // exactly the check that was ALREADY believed to be happening — see
+    // assertPublicShape for why it was not.
+    return assertPublicShape(publicQuoteWire, {
       number: quote.number,
       status: quote.status,
       validUntil: quote.validUntil,
@@ -441,7 +447,7 @@ export class QuotesService {
       sections: quote.sections,
       clientName: quote.client ? `${quote.client.firstName} ${quote.client.lastName}`.trim() : null,
       business: quote.business,
-    };
+    }, "PublicQuoteView");
   }
 
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {

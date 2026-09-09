@@ -64,6 +64,14 @@ const FORBIDDEN_LINE_FIELDS: Record<string, string> = {
   deletedAt: "internal plumbing",
 };
 
+/** The body of `findByShareToken`, so a select elsewhere in the file cannot satisfy these. */
+function shareTokenBody(src: string): string {
+  const start = src.indexOf("async findByShareToken");
+  expect(start, "findByShareToken should exist").toBeGreaterThan(-1);
+  const end = src.indexOf("\n  async ", start + 10);
+  return src.slice(start, end === -1 ? undefined : end);
+}
+
 function publicLineSelect(src: string): string[] {
   const start = src.indexOf("const PUBLIC_LINE_SELECT = {");
   expect(start, "PUBLIC_LINE_SELECT should exist").toBeGreaterThan(-1);
@@ -85,6 +93,57 @@ describe("the public quote line select", () => {
       expect(publicLineSelect(src)).not.toContain(field);
     },
   );
+
+  /**
+   * Every OTHER select inside `findByShareToken`, pinned by key set.
+   *
+   * This guard used to parse `PUBLIC_LINE_SELECT` and nothing else, and
+   * `TESTING.md` called the public view "guarded twice" on that basis. An
+   * independent review found the rest of the read unpinned: adding
+   * `billingContactEmail: true` to the `business` select compiled and passed the
+   * whole suite. A fake Prisma cannot catch it either, because a fake returns
+   * what the fake says and ignores the select entirely — so reading the source is
+   * the only thing that can fail in CI.
+   *
+   * `assertPublicShape` catches it at runtime and fails closed, which protects
+   * production. This is what stops it reaching production.
+   */
+  describe("the rest of the public read", () => {
+    /** The `select: { ... }` immediately following a named relation. */
+    function relationSelect(relation: string): string[] {
+      const body = shareTokenBody(src);
+      const at = body.indexOf(`${relation}: {`);
+      expect(at, `${relation} should be selected in findByShareToken`).toBeGreaterThan(-1);
+      const open = body.indexOf("select: {", at);
+      expect(open, `${relation} should use an explicit select`).toBeGreaterThan(-1);
+      const close = body.indexOf("}", open + "select: {".length);
+      return [...body.slice(open, close).matchAll(/(\w+)\s*:\s*true/g)].map((m) => m[1]!);
+    }
+
+    it("sends only the letterhead fields the document prints", () => {
+      // A business row also holds billingContactEmail, currency, logoUrl and the
+      // subscription. The client is shown a letterhead, not an account.
+      expect(relationSelect("business").sort()).toEqual(
+        ["addressLine", "name", "parish", "town", "trn"].sort(),
+      );
+    });
+
+    it("reads only the two client name parts, because clientName is derived", () => {
+      // Not a disclosure risk today — clientName is built from these and the row
+      // never leaves. Pinned anyway: the next person to return `client` whole
+      // would be shipping whatever was added here.
+      expect(relationSelect("client").sort()).toEqual(["firstName", "lastName"].sort());
+    });
+
+    it("sends only a section's title, never its internal columns", () => {
+      const body = shareTokenBody(src);
+      const at = body.indexOf("sections: {");
+      const open = body.indexOf("select: {", at);
+      const close = body.indexOf("lineItems:", open);
+      const keys = [...body.slice(open, close).matchAll(/(\w+)\s*:\s*true/g)].map((m) => m[1]!);
+      expect(keys.sort()).toEqual(["id", "title"].sort());
+    });
+  });
 
   it("does NOT reuse the tenant's detail include for the public view", () => {
     // The original defect in one line. The tenant read returns whole rows; the
