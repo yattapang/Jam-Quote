@@ -1,5 +1,14 @@
 import { Injectable } from "@nestjs/common";
-import { InvoiceStatus, csvDate, csvMoney, csvText, toCsv, type CsvValue } from "@jamquote/core";
+import {
+  COLLECTED_PAYMENT_STATUSES,
+  InvoiceStatus,
+  csvDate,
+  csvMoney,
+  csvText,
+  toCsv,
+  type CsvValue,
+  lineAmountCents,
+} from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 
 /** A generated file, ready to stream. */
@@ -70,6 +79,12 @@ export class ExportsService {
       i.status,
       clientName(i.client),
       csvMoney(i.subtotalCents),
+      // Derived by REARRANGING the stored figures, not recomputed from the
+      // percentage. computeTotals defines total = subtotal - discount + gct, so
+      // the discount is exactly subtotal + gct - total. That needs no rounding
+      // decision of its own, which means this column closes the gap by
+      // construction rather than by agreeing with a second implementation.
+      csvMoney(i.subtotalCents + i.gctCents - i.totalCents),
       csvMoney(i.gctCents),
       csvMoney(i.totalCents),
       csvMoney(i.paidCents),
@@ -87,6 +102,11 @@ export class ExportsService {
       "Status",
       "Client",
       "Subtotal",
+      // Without this the file does not add up: computeTotals is
+      // subtotal - discount + gct, and subtotal is PRE-discount. An accountant
+      // saw Subtotal + GCT exceed Total with nothing to explain the difference,
+      // on any invoice carrying a discount — which the demo fixtures already do.
+      "Discount",
       "GCT",
       "Total",
       "Paid",
@@ -129,6 +149,14 @@ export class ExportsService {
       ];
       for (const { line, heading } of all) {
         const quantity = Number(line.quantity);
+        // markupPct INCLUDED. This is what makes the file reconcile: computeTotals
+        // builds the subtotal from the after-markup amount, so a line total without
+        // it summed to less than the Subtotal column of invoices-issued.
+        const lineTotalCents = lineAmountCents({
+          quantity,
+          unitPriceCents: line.unitPriceCents,
+          markupPct: line.markupPct === null ? undefined : Number(line.markupPct),
+        });
         rows.push([
           invoice.number,
           csvDate(invoice.issueDate),
@@ -139,10 +167,9 @@ export class ExportsService {
           quantity,
           line.unitLabel ?? line.rateUnit,
           csvMoney(line.unitPriceCents),
-          // The extended amount, rounded the same way computeTotals rounds it.
-          // Any other rounding here and the file stops reconciling with the
-          // summary — which is the one thing it must not do.
-          csvMoney(Math.round(quantity * line.unitPriceCents)),
+          // One function, shared with computeTotals, so the two cannot round
+          // differently — or, as happened here, read different fields.
+          csvMoney(lineTotalCents),
           line.gctTreatment,
           "JMD",
         ]);
@@ -176,6 +203,16 @@ export class ExportsService {
     const payments = await this.prisma.payment.findMany({
       where: {
         deletedAt: null,
+        // Cash that actually arrived. Opening a WiPay checkout writes a `pending`
+        // row for the full balance with paidAt defaulting to now, and an abandoned
+        // checkout is never upgraded and never removed — so with no status filter
+        // this file carried money that never came, dated today, for ever. A
+        // `failed` callback leaves a row too.
+        //
+        // The Reports page has always filtered on this list. It sat on the same
+        // screen as the download link, disagreeing, and the file is the one an
+        // accountant sums.
+        status: { in: COLLECTED_PAYMENT_STATUSES },
         paidAt: { gte: range.from, lte: endOfDay(range.to) },
         invoice: { businessId, deletedAt: null },
       },

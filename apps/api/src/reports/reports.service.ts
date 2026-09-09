@@ -8,17 +8,12 @@ import {
   type ReportQuote,
   type ReportsRange,
   type ReportsSummary,
+  COLLECTED_PAYMENT_STATUSES,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 
-/**
- * Payment.status values that represent cash the contractor actually has.
- * "completed" is what recordPayment writes for a manual entry and what the
- * verified WiPay webhook upgrades a card payment to; "recorded" is the
- * schema's column default, kept here so any row written without an explicit
- * status still counts. "pending" and "failed" are deliberately absent.
- */
-const COLLECTED_PAYMENT_STATUSES = ["completed", "recorded"];
+// COLLECTED_PAYMENT_STATUSES moved to core: the accountant's export needed the
+// same list and had none, so the two disagreed on the same screen.
 
 /** Jamaica-local midnight (00:00) on the given Jamaica calendar date,
  * expressed as the real UTC instant it corresponds to. */

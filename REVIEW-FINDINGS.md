@@ -266,7 +266,7 @@ client's hand says Amount due $10,000.
 
 `InvoicePdf.tsx:192`, `invoices/[id]/email/route.ts:69`
 
-### F5 — the cash export counts checkouts that were merely opened · OPEN
+### F5 — the cash export counts checkouts that were merely opened · **CLOSED**
 
 No status filter. A pending row is written for the full balance the moment a
 checkout opens, with `paidAt` defaulting to now, so an abandoned checkout stays
@@ -276,7 +276,7 @@ with the file.
 
 `exports.service.ts:176`
 
-### F6 — `invoice-lines` ignores `markupPct` · OPEN
+### F6 — `invoice-lines` ignores `markupPct` · **CLOSED**
 
 The line total is quantity times unit price, while `computeTotals` builds the
 subtotal from `afterMarkupCents`. So the lines file sums to less than
@@ -391,10 +391,10 @@ core 280, api 672, web 458, mobile 28. Typecheck 6/6, lint 2/2.
 
 | # | Finding | Where | Status |
 |---|---|---|---|
-| F12 | **Job profit compares GCT-inclusive revenue against GCT-exclusive cost.** Revenue sums the invoice total, including output GCT remitted to TAJ, while cost correctly nets off reclaimable input tax. It only ever flatters: 65.2% shown where the truth is 60%. Correct for unregistered contractors, which is why it survived. Both fields needed for the fix are already on `Invoice`. | `job-profit.ts:77,89` | OPEN |
+| F12 | **Job profit compares GCT-inclusive revenue against GCT-exclusive cost.** Revenue sums the invoice total, including output GCT remitted to TAJ, while cost correctly nets off reclaimable input tax. It only ever flatters: 65.2% shown where the truth is 60%. Correct for unregistered contractors, which is why it survived. Both fields needed for the fix are already on `Invoice`. | `job-profit.ts:77,89` | **CLOSED** |
 | F13 **CLOSED `3556b25`** | **A settled-for-now invoice is marked OVERDUE and chased.** `statusForPaid` compares against the total, so a retention invoice stays PARTIAL, the sweep flips it OVERDUE in critical red, and the nightly digest emails the contractor to go chase it. | `payments.service.ts:13-17`, `invoice-overdue.service.ts:73,116,150` | **CLOSED `3556b25`** |
 | F14 | **Every reminder promises a link it does not send.** `reminderMessage` is called with no link, so the empty branch always wins, while the modal says "It includes a link to the invoice". `resolveWebBase()` is dead in that file and `shareInvoice()` has no callers — so no invoice ever gets a share token, which makes the public invoice page and `firstViewedAt` unreachable in the shipped product. All four ends built, nothing joining them. The reminder's *amount* is correct. | `invoices.service.ts:624-632,843`, `api-client.ts:1520`, `RemindButton.tsx:94` | OPEN |
-| F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | OPEN |
+| F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | **CLOSED** |
 | F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | OPEN |
 | F17 `[reviewed]` | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | OPEN |
 | F18 `[reviewed]` | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | OPEN |
@@ -406,10 +406,41 @@ core 280, api 672, web 458, mobile 28. Typecheck 6/6, lint 2/2.
 | F24 | **Equipment hard-deletes a row marked for offline sync.** A plain delete, where all three sibling services soft-delete under the comment "never hard-delete a synced row". Its reads also omit `deletedAt: null` — vacuous now, but whoever fixes the delete ships deleted equipment into every picker unless they fix both reads too. **Equipment is the only one of the four catalogs with no service test**, which is why neither was caught. | `equipment.service.ts:22,34,51` | OPEN |
 | F25 | **"Send on WhatsApp" on a DRAFT mints a token, opens a well-formed message, and the link 404s.** `EmailQuoteButton` handles exactly this by advancing DRAFT to SENT after a confirmed send. WhatsApp — the channel the file's own comment calls the one contractors actually use — does not. | `WhatsAppButton.tsx:49-66`, `quotes/[id]/page.tsx:88` | OPEN |
 | F26 | **The labour cost helper is bypassed on the only screen that shows labour.** `labourEntryCostCents` floors a bad quantity at 0; the API uses it, the web does not. A quantity of minus 2 reads minus $8,000 in the Labour section while the profit figure above it counts zero — two numbers on one screen from the same row. | `ProjectCosts.tsx:118,262` | OPEN |
-| F27 | **The Cost tile's two sub-figures do not add up to the Cost above them.** The purchase component is derived gross of GCT while the headline is net, so the parts exceed the whole by exactly the reclaimable GCT. | `projects/[id]/page.tsx:88-93`, `purchases.service.ts:176` | OPEN |
+| F27 | **The Cost tile's two sub-figures do not add up to the Cost above them.** The purchase component is derived gross of GCT while the headline is net, so the parts exceed the whole by exactly the reclaimable GCT. | `projects/[id]/page.tsx:88-93`, `purchases.service.ts:176` | **CLOSED** |
 | F28 | **Every validation rejection reaches the user as "Validation failed".** The pipe generates the real reason and throws it into an `issues` field that **nothing under `apps/web` reads**. Because `errorMessage()` prefers a non-empty server message, this generic string beats every "Couldn't save…" fallback. Root cause behind most of F31. | `zod-validation.pipe.ts:14-17`, `api-client.ts:83` | OPEN |
 | F29 `[reviewed]` | **The failure banner cries wolf on every load for every non-super-admin.** Any throw is pushed into the failed list, including the 403s the comments describe as expected — so a MANAGE_TENANTS-only admin sees a red alert naming two sections on every page load. Same class: `SweepPanel` renders for anyone reaching Financials but its endpoint needs MANAGE_TENANTS. | `api-server.ts:605-612`, `AdminConsole.tsx:1580` | OPEN |
 | F30 **CLOSED `3556b25`** | **The retention snapshot goes stale on a draft edit.** `update` recomputes the totals and never touches `retentionCents`, so a draft edited after conversion can hold 5% while both screens label it "Retention held (10%)" on a finalized document. Related: `dueDate` uses `??`, so it can be set but never cleared — two lines below a comment explaining why that is wrong for a nullable field. | `invoices.service.ts:435-455` | **CLOSED `3556b25`** |
+
+---
+
+## The accountant's files — CLOSED
+
+**F5, F6, F15, F12, F27.** Four files that an accountant sums, and they could not
+be reconciled against each other.
+
+| Was | Now |
+|---|---|
+| `payments-received` had **no status filter**, so a WiPay checkout that was merely opened — a `pending` row for the full balance, `paidAt` defaulting to now — stayed in the file for ever. The Reports page filtered correctly and sat on the same screen disagreeing | `COLLECTED_PAYMENT_STATUSES` moved to core and both import it. Asserted on the QUERY, not the output: filtering after the read would still pull every pending row into memory and rely on a second list matching the first |
+| `invoice-lines` printed `quantity × unitPrice` and **never read `markupPct`**, so it summed to less than the Subtotal column of `invoices-issued` — the one reconciliation invariant PLANNING §4g requires | `lineAmountCents` extracted into core and used by BOTH the export and `computeTotals`. Rounding once in one place is the only way two files can be relied on to agree |
+| `invoices-issued` had **no Discount column**, so Subtotal + GCT exceeded Total with nothing to explain it | A Discount column derived by rearranging the stored figures — `subtotal + gct - total` — so it needs no rounding decision of its own and closes the gap by construction rather than by agreeing with a second implementation |
+| Job profit compared **GCT-inclusive revenue against GCT-exclusive cost**. Only ever flattered: 65.2% where the truth was 60% | Revenue is `totalCents - gctCents`, which is exactly the discounted subtotal. Output GCT is collected for TAJ and never the contractor's — true whether or not they are registered; registration decides whether INPUT tax is reclaimable |
+| The Cost tile's two components were derived gross while the headline was net, so **the parts exceeded the whole** by the reclaimable GCT | Both derived from `costExGctCents` |
+
+**`collectedCents` is deliberately still gross**, and asymmetric with revenue on
+purpose: it is a bank figure, the client paid the GCT-inclusive amount, and a
+reconciliation against a statement has to match what the bank saw.
+
+**Why these survived.** Every fixture in `job-profit.test.ts` had no GCT on either
+side, where both the old and new arithmetic agree — so the asymmetry was invisible.
+And the export fixtures omitted `markupPct` and `discountPct` under a comment
+calling them "the shape the real data has". Both corrected, and
+`invoicesWithMarkupAndDiscount` is now the honest shape.
+
+Each fix verified by reverting it: F5, F6 and F15 each fail their own test, and F5
+was **not** pinned on the first attempt — the payment fake returned nothing, so
+removing the filter passed. That gap is closed.
+
+core 285, api 677, web 458, mobile 28.
 
 ---
 

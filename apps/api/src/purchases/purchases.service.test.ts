@@ -116,7 +116,10 @@ describe("listing purchases", () => {
 });
 
 describe("did this job make money?", () => {
-  const invoiced = { status: "INVOICED", totalCents: 500_000, paidCents: 200_000 };
+  // gctCents: 0 — an unregistered contractor charging none, which is what these
+  // cases were implicitly testing all along. Revenue is measured net of output
+  // GCT, because it is collected for TAJ and never the contractor's money.
+  const invoiced = { status: "INVOICED", totalCents: 500_000, paidCents: 200_000, gctCents: 0 };
 
   it("nets reclaimable GCT off cost when the business has a TRN", async () => {
     const { svc } = build({
@@ -163,7 +166,7 @@ describe("did this job make money?", () => {
 });
 
 describe("labour is part of the cost, and it is the biggest part", () => {
-  const invoiced = { status: "INVOICED", totalCents: 1_000_000, paidCents: 0 };
+  const invoiced = { status: "INVOICED", totalCents: 1_000_000, paidCents: 0, gctCents: 0 };
 
   it("counts wages against the job", async () => {
     // Before this existed every profit figure overstated: costs counted the
@@ -198,7 +201,10 @@ describe("labour is part of the cost, and it is the biggest part", () => {
     });
     const p = await svc.projectProfit("biz-1", "proj-1");
     expect(p.labourCostCents).toBe(150_000);
-    expect(p.purchaseCostCents).toBe(115_000);
+    // 100_000, not 115_000: purchaseCostCents is now derived from costExGctCents
+    // so the two components add up to the Cost figure shown above them. Taken
+    // from the gross cost, the parts exceeded the whole by the reclaimable GCT.
+    expect(p.purchaseCostCents).toBe(100_000);
     expect(p.costCents).toBe(265_000);
   });
 

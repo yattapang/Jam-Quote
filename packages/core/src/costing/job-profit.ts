@@ -23,6 +23,16 @@ export interface JobRevenueLine {
   totalCents: Cents;
   /** Cash actually received against this invoice. */
   paidCents: Cents;
+  /**
+   * Output GCT charged on this invoice — collected for TAJ, never the
+   * contractor's money.
+   *
+   * Required, because profit cannot be answered without it. Revenue used to be
+   * `totalCents`, GCT included, while cost had reclaimable input tax correctly
+   * netted off — an asymmetry that only ever flattered. On a registered
+   * contractor's job it showed a 65.2% margin where the truth was 60%.
+   */
+  gctCents: Cents;
 }
 
 export interface JobCostLine {
@@ -74,7 +84,12 @@ export function computeJobProfit(
   let collectedCents = 0;
   for (const r of revenue) {
     if (r.status === DRAFT) continue;
-    revenueCents += r.totalCents;
+    // Net of output GCT. `totalCents - gctCents` is exactly the discounted
+    // subtotal — what the contractor bills and keeps — and it is the only figure
+    // that can be compared with a cost from which input tax has been removed.
+    // Correct for an unregistered contractor too: they charge no GCT, so this
+    // subtracts nothing.
+    revenueCents += r.totalCents - r.gctCents;
     collectedCents += r.paidCents;
   }
 

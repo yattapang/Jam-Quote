@@ -138,7 +138,9 @@ export class PurchasesService {
     const [invoices, purchases, labour, business] = await Promise.all([
       this.prisma.invoice.findMany({
         where: { businessId, projectId, deletedAt: null },
-        select: { status: true, totalCents: true, paidCents: true },
+        // gctCents is part of the profit question: it is collected for TAJ and
+        // never the contractor's, so revenue is measured without it.
+        select: { status: true, totalCents: true, paidCents: true, gctCents: true },
       }),
       this.prisma.purchase.findMany({
         where: { businessId, projectId, deletedAt: null },
@@ -175,7 +177,11 @@ export class PurchasesService {
     return {
       ...profit,
       labourCostCents,
-      purchaseCostCents: profit.costCents - labourCostCents,
+      // Derived from costExGctCents, not costCents, so the two components add up
+      // to the figure shown above them. Taking it from the gross cost made the
+      // parts exceed the whole by exactly the reclaimable GCT — visible arithmetic
+      // nonsense on the tile for any registered business with a taxed purchase.
+      purchaseCostCents: profit.costExGctCents - labourCostCents,
     };
   }
 

@@ -543,3 +543,27 @@ function computeProjectsSummary(projects: ReportProject[], range: ReportsRange):
 
   return { projectsCreated: inRangeProjects.length, projectsByStage, topClientsByProjects };
 }
+
+/**
+ * Payment statuses that represent cash the contractor actually has.
+ *
+ * `"completed"` is what a manual entry writes and what the verified WiPay webhook
+ * upgrades a card payment to; `"recorded"` is the schema's column default, kept so
+ * a row written without an explicit status still counts.
+ *
+ * **`"pending"` and `"failed"` are deliberately absent, and the reason is the
+ * defect this list was extracted to fix.** Opening a WiPay checkout writes a
+ * `pending` row for the full invoice balance with `paidAt` defaulting to now. If
+ * the client abandons the page, that row is never upgraded and never removed — so
+ * anything counting it reports money that never arrived.
+ *
+ * It lived privately inside the Reports service, which used it correctly, while
+ * the accountant's `payments-received` export queried payments with no status
+ * filter at all. The two sat on the same screen disagreeing, and the export is the
+ * one an accountant sums. Sharing the list is the fix; a second copy would drift
+ * the same way.
+ */
+// Not `as const`: Prisma's generated `in` filter wants a mutable string[], and a
+// readonly tuple cannot be assigned to it. The list is short and its meaning is
+// documented above, which is stronger protection than the type would give.
+export const COLLECTED_PAYMENT_STATUSES: string[] = ["completed", "recorded"];

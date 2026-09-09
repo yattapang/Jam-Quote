@@ -1935,6 +1935,7 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F46 | There was **no CI at all** — 1400 tests gated nothing. `verify.yml` now gates typecheck, lint and test |
 | F47 | The public share view was pinned for line fields only; `.strict()` was never parsed against a live response |
 | F2, F3, F4, F13, F30 | The retention cluster: six surfaces asked "total minus paid" when the question was "what is payable now" |
+| F5, F6, F15, F12, F27 | The accountant's files, which could not be reconciled against each other — a cash export counting abandoned checkouts, a lines file ignoring markup, a summary with no Discount column, and job profit measuring GCT-inclusive revenue against GCT-exclusive cost |
 
 **What the reviews caught that I had reported as done:** a guard satisfied by an
 import line rather than a call; a compile-time check I deleted while adding a
@@ -1942,9 +1943,8 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** the accountant's files F5/F6/F15/F12, then the quote-edit
-cluster F8/F9/F10/F11, then F7/F16, then F28 because it is what makes F31
-unreadable to a contractor.
+**Remaining order:** the quote-edit cluster F8/F9/F10/F11, then F7/F16, then F28
+because it is what makes F31 unreadable to a contractor.
 
 **The pattern behind five of the top findings:** a comment asserts correctness
 over the cases someone hand-listed, and the defect is in the case they did not

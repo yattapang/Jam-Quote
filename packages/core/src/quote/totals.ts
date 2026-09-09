@@ -50,18 +50,39 @@ export interface QuoteTotals {
  * lines. ZERO_RATED and EXEMPT lines never attract GCT. Discount is spread
  * proportionally across all lines so the taxable base is reduced fairly.
  */
+
+/**
+ * What ONE line contributes to the subtotal: the extension plus its markup.
+ *
+ * Extracted because the accountant's `invoice-lines` export printed
+ * `quantity * unitPrice` and never read `markupPct` at all — so on any invoice
+ * carrying a line-level markup the lines file summed to LESS than the Subtotal
+ * column of `invoices-issued`, breaking the one reconciliation invariant PLANNING
+ * §4g says must hold.
+ *
+ * The comment above that line claimed "rounded the same way computeTotals rounds
+ * it… any other rounding here and the file stops reconciling". The rounding was
+ * right. The field it did not mention was the one that broke it — and its test
+ * passed because the fixtures omitted `markupPct`, under a comment calling them
+ * "the shape the real data has".
+ *
+ * So there is now one function, and both callers use it. Rounding once, in one
+ * place, is the only way two files can be relied on to agree.
+ */
+export function lineAmountCents(line: Pick<TotalsLineInput, "quantity" | "unitPriceCents" | "markupPct">): Cents {
+  const extensionCents = lineExtension(line.quantity, line.unitPriceCents);
+  const markup = line.markupPct ?? 0;
+  return markup > 0 ? extensionCents + applyPct(extensionCents, markup) : extensionCents;
+}
+
 export function computeTotals(input: TotalsInput): QuoteTotals {
   const discountPct = input.discountPct ?? 0;
 
-  const lineTotals: LineTotal[] = input.lines.map((l) => {
-    const extensionCents = lineExtension(l.quantity, l.unitPriceCents);
-    const markup = l.markupPct ?? 0;
-    const afterMarkupCents =
-      markup > 0
-        ? extensionCents + applyPct(extensionCents, markup)
-        : extensionCents;
-    return { extensionCents, afterMarkupCents, gctTreatment: l.gctTreatment };
-  });
+  const lineTotals: LineTotal[] = input.lines.map((l) => ({
+    extensionCents: lineExtension(l.quantity, l.unitPriceCents),
+    afterMarkupCents: lineAmountCents(l),
+    gctTreatment: l.gctTreatment,
+  }));
 
   const subtotalCents = lineTotals.reduce(
     (sum, l) => sum + l.afterMarkupCents,

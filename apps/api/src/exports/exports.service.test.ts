@@ -9,8 +9,15 @@ const RANGE = {
   to: new Date("2026-08-31T00:00:00.000Z"),
 };
 
-/** Two invoices whose line totals sum to their stated subtotals — the shape
- * the real data has, so reconciliation is a meaningful assertion. */
+/**
+ * Two invoices whose line totals sum to their stated subtotals.
+ *
+ * This used to be described as "the shape the real data has". It is not: it omits
+ * `markupPct` and `discountPct`, and both change the arithmetic. A review pointed
+ * out that the reconciliation test below therefore passed while the lines file was
+ * out by every line's markup. `invoicesWithMarkupAndDiscount` is the honest shape;
+ * these two stay for the simple case.
+ */
 function invoices() {
   return [
     {
@@ -67,13 +74,16 @@ function invoices() {
   ];
 }
 
-function harness(rows = invoices()) {
+// `rows` is deliberately loose: the fixtures differ by design — one carries
+// markup and a discount, the others do not — and inferring the type from one of
+// them would make adding the honest shape a type error rather than a test.
+function harness(rows: any[] = invoices(), payments: unknown[] = []) {
   // Typed with the args parameter so the tests below can assert on the WHERE
   // clause — the filtering (drafts out, tenant scoping, the range) is the part
   // worth pinning, and it is only observable in the query.
   const prisma = {
     invoice: { findMany: vi.fn((_args: any) => Promise.resolve(rows)) },
-    payment: { findMany: vi.fn((_args: any) => Promise.resolve([])) },
+    payment: { findMany: vi.fn((_args: any) => Promise.resolve(payments)) },
     client: { findMany: vi.fn((_args: any) => Promise.resolve([])) },
   };
   return { svc: new ExportsService(prisma as any), prisma };
@@ -230,5 +240,141 @@ describe("ExportsService — what the files promise", () => {
     const out = await svc.invoicesIssued("b1", RANGE);
     expect(out.csv).toContain("Invoice number");
     expect(dataRows(out.csv, "Invoice number,Issue date,Due date")).toEqual([]);
+  });
+});
+
+
+/**
+ * An invoice carrying the two fields the fixtures above leave out.
+ *
+ * Line-level markup and an invoice-level discount are both ordinary, and each
+ * breaks a different reconciliation:
+ *
+ * - `markupPct` is part of the SUBTOTAL, so a lines file that ignores it sums low.
+ * - `discountPct` sits between the subtotal and the total, so a summary file with
+ *   no Discount column shows Subtotal + GCT exceeding Total with nothing to
+ *   explain the difference.
+ *
+ * Figures: one line, 10 x $120.00 = $1,200.00, plus 20% markup = $1,440.00
+ * subtotal. 10% discount = $144.00. GCT at 15% on the discounted base = $194.40.
+ * Total = $1,440.00 - $144.00 + $194.40 = $1,490.40.
+ */
+function invoicesWithMarkupAndDiscount() {
+  return [
+    {
+      number: "INV-0009",
+      issueDate: new Date("2026-08-10T00:00:00.000Z"),
+      dueDate: null,
+      status: InvoiceStatus.INVOICED,
+      client: { firstName: "Ann", lastName: "Grant" },
+      subtotalCents: 144_000,
+      gctCents: 19_440,
+      totalCents: 149_040,
+      discountPct: 10,
+      paidCents: 0,
+      retentionCents: 0,
+      lineItems: [
+        {
+          sectionId: null,
+          sort: 0,
+          category: "MATERIAL",
+          description: "Blockwork",
+          quantity: 10,
+          rateUnit: "UNIT",
+          unitLabel: null,
+          unitPriceCents: 12_000,
+          markupPct: 20,
+          gctTreatment: "STANDARD",
+        },
+      ],
+      sections: [],
+    },
+  ];
+}
+
+describe("the accountant's two accrual files reconcile on real data", () => {
+  it("invoice-lines sums to the Subtotal column, WITH markup", async () => {
+    // The defect: the lines file printed quantity x unit price and never read
+    // markupPct, so it summed to $1,200.00 against a stated subtotal of $1,440.00.
+    // The comment above the offending line claimed any other rounding would break
+    // reconciliation — the rounding was right; the unread field was the problem.
+    const { svc } = harness(invoicesWithMarkupAndDiscount());
+    const summary = await svc.invoicesIssued("b1", RANGE);
+    const detail = await svc.invoiceLines("b1", RANGE);
+
+    const subtotal = Number(
+      dataRows(summary.csv, "Invoice number,Issue date,Due date")[0]!.split(",")[5],
+    );
+    const lineSum = dataRows(detail.csv, "Invoice number,Issue date,Client").reduce(
+      (n, r) => n + Number(r.split(",")[9]),
+      0,
+    );
+    expect(subtotal).toBe(1_440);
+    expect(lineSum).toBe(subtotal);
+  });
+
+  it("Subtotal - Discount + GCT equals Total", async () => {
+    // Without a Discount column an accountant saw 1440 + 194.40 against a total of
+    // 1490.40 and no way to account for the missing 144.
+    const { svc } = harness(invoicesWithMarkupAndDiscount());
+    const row = dataRows(
+      (await svc.invoicesIssued("b1", RANGE)).csv,
+      "Invoice number,Issue date,Due date",
+    )[0]!.split(",");
+    const [subtotal, discount, gct, total] = [5, 6, 7, 8].map((i) => Number(row[i]));
+    expect(discount).toBe(144);
+    expect(subtotal! - discount! + gct!).toBe(total);
+  });
+});
+
+
+describe("payments-received carries only cash that actually arrived", () => {
+  const payment = (over: Record<string, unknown> = {}) => ({
+    paidAt: new Date("2026-08-05T00:00:00.000Z"),
+    amountCents: 500_000,
+    method: "CARD",
+    status: "completed",
+    providerCode: null,
+    reference: null,
+    invoice: { number: "INV-0001", client: { firstName: "Marcia", lastName: "Brown" } },
+    ...over,
+  });
+
+  it("asks the database for completed and recorded payments only", () => {
+    // The defect: no status filter at all. Opening a WiPay checkout writes a
+    // `pending` row for the FULL invoice balance with paidAt defaulting to now, and
+    // an abandoned checkout is never upgraded and never removed — so this file
+    // carried money that never came, dated today, for ever. A contractor
+    // downloading August would have handed their accountant a phantom $500,000.
+    //
+    // Asserted on the QUERY rather than the output, because that is where the
+    // exclusion has to happen: filtering after the read would still pull every
+    // pending row into memory and rely on a second list matching the first.
+    const { svc, prisma } = harness();
+    void svc.paymentsReceived("b1", RANGE);
+    expect(prisma.payment.findMany.mock.calls[0]![0].where.status).toEqual({
+      in: ["completed", "recorded"],
+    });
+  });
+
+  it("uses the SAME list the Reports page uses", async () => {
+    // The two sat on one screen disagreeing: Reports filtered, the download did
+    // not. The list now lives in core and both import it, so a third surface
+    // cannot invent a fourth answer.
+    const { COLLECTED_PAYMENT_STATUSES } = await import("@jamquote/core");
+    const { svc, prisma } = harness();
+    void svc.paymentsReceived("b1", RANGE);
+    expect(prisma.payment.findMany.mock.calls[0]![0].where.status.in).toEqual(
+      COLLECTED_PAYMENT_STATUSES,
+    );
+  });
+
+  it("still lists a payment that did arrive, so the filter is not simply off", async () => {
+    const { svc } = harness(invoices(), [payment({ method: "CASH" })]);
+    const file = await svc.paymentsReceived("b1", RANGE);
+    expect(dataRows(file.csv, "Date received,Invoice number")).toHaveLength(1);
+    // No thousands separator: csvMoney emits plain digits so a spreadsheet reads
+    // the cell as a number rather than text.
+    expect(file.csv).toContain("5000.00");
   });
 });
