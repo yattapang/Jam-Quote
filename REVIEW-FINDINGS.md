@@ -75,7 +75,7 @@ surfaces.
 These either move money, misstate money to someone outside the business, or
 cross a tenant boundary.
 
-### F1 `[reviewed]` — a caller-supplied `clientId` is never checked for ownership · **FIXED + reviewed; one action left**
+### F1 `[reviewed]` — a caller-supplied `clientId` is never checked for ownership · **CLOSED** (`098c52f` + data audit clean)
 
 `assertClientOwned` does not exist anywhere in the API. Borrow another tenant's
 client uuid on `POST /invoices`, then `POST /invoices/:id/reminders`: the service
@@ -123,18 +123,33 @@ complete, but nothing kept it that way:
 | `"foreign"` is documented as "belongs to another business", but was being returned for a soft-deleted client of THIS business — a device treating it as "discard my copy" would destroy the contractor's own offline project | Split into `clientReferenceState` returning `owned`/`foreign`/`deleted`, with a new `"invalid_ref"` outcome |
 | `PurchasesService` — the module held up as the model — kept its own private check that **omitted `deletedAt`**, so spend could attach to a deleted project while a quote could not | Delegates to the shared helper. Its test now asserts the stricter `where` |
 
-**Still open, and it needs the owner:** rows written before this check existed were
-never validated. `apps/api/scripts/audit-client-refs.mjs` finds any, and
-`revise`/`createVariation`/`convertFromQuote` copy `clientId` forward, so a bad
-reference multiplies rather than ageing out. **I could not run it — Neon was
-unreachable (free tier asleep).** Run it before contractor testing:
+**Pre-existing data: CHECKED AND CLEAN, 2026-09-09.** Rows written before this
+check existed were never validated, and `revise`/`createVariation`/
+`convertFromQuote` copy `clientId` forward, so a bad reference would multiply
+rather than age out. `apps/api/scripts/audit-client-refs.mjs` run against
+production:
 
 ```
-cd apps/api && node --env-file=.env scripts/audit-client-refs.mjs
+examined 46 reference(s) across 3 business(es), 10 client(s)
+cross-tenant client references: 0
+cross-tenant project references: 0
+Clean.
 ```
+
+**The denominator is the point.** A zero from a query that matched nothing means
+nothing, so the script now prints what it examined first and says outright when a
+clean result would be vacuous — fewer than two businesses, or no references at
+all. 46 references across 3 tenants is a meaningful zero.
+
+Two things the script had to learn, both worth keeping: `Project` is the physical
+table `"Job"`, and the link column is **not** named consistently — `Quote."jobId"`
+but `Invoice."projectId"`. The vocabulary rename renamed the Prisma fields and
+left the physical columns alone, unevenly. The first run failed on the assumption
+that both were `jobId`.
 
 It reports and exits 1 rather than repairing: detaching a client silently rewrites
-a document the contractor may already have sent, so the list is a decision.
+a document the contractor may already have sent, so the list is a decision. Re-run
+it after any bulk import or restore.
 
 ### F2 `[reviewed]` — a card-payment helper fabricates a WiPay checkout · OPEN
 

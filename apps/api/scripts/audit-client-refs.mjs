@@ -16,10 +16,12 @@
  *
  * ## Table names
  *
- * `Project` maps to the physical table `"Job"` and `projectId` to the column
- * `"jobId"` — the vocabulary rename (JOB = priced template, PROJECT = client
- * work) deliberately left the physical schema alone. Raw SQL has to use the
- * physical names.
+ * `Project` maps to the physical table `"Job"`. The link column is NOT named
+ * consistently, which raw SQL has to respect: it is `Quote."jobId"` but
+ * `Invoice."projectId"`. Verified against `information_schema`, after this script
+ * failed on the assumption that both were `jobId`. The vocabulary rename (JOB =
+ * priced template, PROJECT = client work) renamed the Prisma fields and left the
+ * physical columns alone — unevenly.
  *
  * ## Running it
  *
@@ -57,7 +59,7 @@ try {
      WHERE q."businessId" <> j."businessId"
     UNION ALL
     SELECT 'invoice', i.id, i."businessId", j."businessId"
-      FROM "Invoice" i JOIN "Job" j ON j.id = i."jobId"
+      FROM "Invoice" i JOIN "Job" j ON j.id = i."projectId"
      WHERE i."businessId" <> j."businessId"`;
 
   const report = (label, rows) => {
@@ -66,6 +68,38 @@ try {
       console.log(`  ${r.kind} ${r.id} owned by ${r.ownerBusinessId} -> references ${r.refBusinessId}`);
     }
   };
+
+  // Print what was EXAMINED before what was found. A zero from a query that
+  // matched no rows means nothing, and this repo has been caught by a vacuous
+  // pass four times. If `businesses` is 1 the check is meaningless by definition:
+  // there is no other tenant to cross to.
+  const [scope] = await prisma.$queryRaw`
+    SELECT
+      (SELECT count(*) FROM "Business")                              AS businesses,
+      (SELECT count(*) FROM "Client")                                AS clients,
+      (SELECT count(*) FROM "Quote"   WHERE "clientId"  IS NOT NULL) AS quote_client_refs,
+      (SELECT count(*) FROM "Invoice" WHERE "clientId"  IS NOT NULL) AS invoice_client_refs,
+      (SELECT count(*) FROM "Job"     WHERE "clientId"  IS NOT NULL) AS project_client_refs,
+      (SELECT count(*) FROM "Quote"   WHERE "jobId"     IS NOT NULL) AS quote_project_refs,
+      (SELECT count(*) FROM "Invoice" WHERE "projectId" IS NOT NULL) AS invoice_project_refs`;
+  const n = (v) => Number(v);
+  const examined =
+    n(scope.quote_client_refs) +
+    n(scope.invoice_client_refs) +
+    n(scope.project_client_refs) +
+    n(scope.quote_project_refs) +
+    n(scope.invoice_project_refs);
+
+  console.log(
+    `examined ${examined} reference(s) across ${n(scope.businesses)} business(es), ` +
+      `${n(scope.clients)} client(s)`,
+  );
+  if (n(scope.businesses) < 2) {
+    console.log("NOTE: fewer than two businesses — a cross-tenant check cannot mean anything here.");
+  }
+  if (examined === 0) {
+    console.log("NOTE: no references to check. A clean result below is vacuous.");
+  }
 
   report("cross-tenant client references", clientRefs);
   report("cross-tenant project references", projectRefs);
