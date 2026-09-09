@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 50 | 571 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 51 | 581 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -146,12 +146,34 @@ same way, with `projectFieldRules`.
 
 | Shape | State |
 |---|---|
-| `Client`, `Business`, `Project`, `LabourRate`, `EquipmentItem` | **Done.** Web infers; API proves |
-| `MaterialFavourite` | Owed — flat, quick |
+| `Client`, `Business`, `Project`, `LabourRate`, `EquipmentItem`, `MaterialFavourite` | **Done — every flat shape.** Web infers; API proves |
 | `Invoice` | Owed — nested sections, line items, retention, payments, reminders |
 | `Quote` | Owed — nested, plus variations and the client decision fields |
 | `PublicQuoteView` | **Done, and guarded twice.** A source-reading disclosure test over the Prisma `select`, plus a `.strict()` wire contract — the only strict schema in `wire/`, because here an unexpected field is a disclosure rather than a shrug. The web derives from it |
 | `PublicInvoiceView` | **Done.** Disclosure test plus a `.strict()` contract that refuses the payment and reminder ledgers by name. The web derives from it |
+
+---
+
+### What `MaterialFavourite` taught, being the richest flat shape
+
+Its old declaration marked **every** field optional-and-nullable, which flattened
+three genuinely different facts into one:
+
+| Fact | Fields | What the flattening cost |
+|---|---|---|
+| Always present, sometimes null | `unit`, `category`, `description`, `measureUnit`, `coveragePerSellUnit` | Nothing much — this is the honest case |
+| Always present, **never** null | `nameCustom`, `priceCents` | `=== undefined` and `=== null` checks that can never be true |
+| **Genuinely** optional | `unitRef` | The real one, hidden among the noise |
+
+`unitRef` is the one that matters, and it has history: materials once lost their
+unit on create because `create` and `update` omitted `include: { unitRef: true }`
+while the reads had it — a fresh material came back without its unit and the quote
+line read "30 units". It is a JOIN, not a column, so it is legitimately optional,
+and the contract now says so where the old declaration said it of everything.
+
+The tests cover the joined payload, the unjoined one and a null `unitRef`, rather
+than pretending only one shape exists. They also cover a pre-2a row, since both
+generations of `unit`/`category` still live in the column set.
 
 ---
 

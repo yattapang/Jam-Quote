@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, ProjectWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, MaterialFavouriteWire, ProjectWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -173,31 +173,21 @@ export interface ApiLineItem {
   jobUnit?: string | null;
   jobComponents?: ApiLineJobComponent[] | null;
 }
-export interface ApiMaterialFavourite {
-  id: string;
-  name: string;
-  /** True when the contractor pinned the name rather than letting the server
-   * compose it from the category's attributes (#26 Phase 2a). */
-  nameCustom?: boolean | null;
-  /** LEGACY free-text unit, superseded by unitId. */
-  unit?: string | null;
-  unitId?: string | null;
-  /** The resolved MaterialUnit, included by the API on reads so the unit can
-   * be rendered without a second lookup against the schema endpoint. */
-  unitRef?: { id: string; key: string; label: string } | null;
-  priceCents: number;
-  supplierId?: string | null;
-  /** LEGACY free-text category, superseded by categoryDefId. */
-  category?: string | null;
-  categoryDefId?: string | null;
-  /** Keyed by MaterialAttributeDef.key as of 2a (was keyed by display label). */
-  specs?: Record<string, string> | null;
-  description?: string | null;
-  measureUnit?: string | null;
-  // Prisma Decimal arrives as a numeric string over JSON.
-  coveragePerSellUnit?: number | string | null;
-  wastePct?: number | string | null;
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * The old declaration marked EVERY field optional-and-nullable, which flattened
+ * three different facts into one: always-present-sometimes-null (`unit`,
+ * `category`, `description`), always-present-never-null (`nameCustom`,
+ * `priceCents`), and genuinely-optional (`unitRef`, which is a JOIN rather than a
+ * column). A reader had to handle all three branches on every field to be safe.
+ *
+ * `unitRef` is the one that is really optional, and it matters: materials once
+ * lost their unit on create because `create` and `update` omitted
+ * `include: { unitRef: true }` while the reads had it, and a quote line then
+ * showed "30 units".
+ */
+export type ApiMaterialFavourite = MaterialFavouriteWire;
 
 /**
  * GET /catalogs/material-schema — the attribute tree this business may use:

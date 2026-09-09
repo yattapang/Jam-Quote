@@ -27,3 +27,4 @@ export * from "./wire/project.js";
 export * from "./wire/catalog.js";
 export * from "./wire/public-quote.js";
 export * from "./wire/public-invoice.js";
+export * from "./wire/material-favourite.js";
