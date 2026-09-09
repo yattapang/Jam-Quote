@@ -15,6 +15,8 @@ import {
   QuoteDetailLevel,
   QuoteStatus,
   type GctTreatment,
+  type LineCategory,
+  type RateUnit,
   type TotalsLineInput,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -67,6 +69,27 @@ type QuoteWithLines = Prisma.QuoteGetPayload<{ include: typeof QUOTE_DETAIL_INCL
  * must not silently widen it. Everything here already appears on the PDF the
  * client is being sent.
  */
+/**
+ * One priced line, as an anonymous holder of a share token may see it.
+ *
+ * Spelled out rather than derived from `QuoteWithLines["lineItems"]`, which is
+ * what it used to be. That alias quietly widened this boundary to the whole
+ * Prisma row — including `markupPct`, the contractor's margin — and a type that
+ * says "whatever the tenant read returns" cannot be reviewed as a disclosure
+ * decision. Eight fields, each of which appears on the document the client was
+ * already sent.
+ */
+export interface PublicQuoteLine {
+  id: string;
+  category: LineCategory;
+  description: string;
+  quantity: Prisma.Decimal;
+  rateUnit: RateUnit;
+  unitLabel: string | null;
+  unitPriceCents: number;
+  gctTreatment: GctTreatment;
+}
+
 export interface PublicQuoteView {
   number: string;
   status: string;
@@ -79,8 +102,8 @@ export interface PublicQuoteView {
   subtotalCents: number;
   gctCents: number;
   totalCents: number;
-  lineItems: QuoteWithLines["lineItems"];
-  sections: QuoteWithLines["sections"];
+  lineItems: PublicQuoteLine[];
+  sections: { id: string; title: string; lineItems: PublicQuoteLine[] }[];
   clientName: string | null;
   business: {
     name: string;
@@ -137,6 +160,42 @@ function lineItemCreateData(
     sort: li.sort ?? idx,
   };
 }
+
+/**
+ * The ONLY line fields an anonymous holder of a share token may read.
+ *
+ * Previously the public views passed the whole `QuoteLineItem` / `InvoiceLineItem`
+ * row through, because they reused the same include as the tenant-facing detail
+ * read. That sent a client:
+ *
+ * - **`markupPct`** — the contractor's margin on that line. The single most
+ *   commercially sensitive number in a quote, and the client is the last person
+ *   who should have it.
+ * - `supplierId` — who they buy from
+ * - `priceSource` and `overrideNote` — how the price was arrived at, and any
+ *   internal note about why it was overridden
+ * - `quoteId`, `sectionId`, `updatedAt`, `deletedAt` — plumbing
+ *
+ * The client page reads NONE of those. It renders description, quantity, unit
+ * and amount. So this is an explicit select rather than an omission by include:
+ * a field reaches a client only by being named here, which makes any future
+ * disclosure a visible line in a diff.
+ *
+ * Note the allow-list comment on the view itself claimed "everything here is
+ * already printed on the PDF, and nothing else". That was true of the top-level
+ * fields and false of the nested rows, which is exactly the kind of gap a
+ * spread hides.
+ */
+const PUBLIC_LINE_SELECT = {
+  id: true,
+  category: true,
+  description: true,
+  quantity: true,
+  rateUnit: true,
+  unitLabel: true,
+  unitPriceCents: true,
+  gctTreatment: true,
+} as const;
 
 @Injectable()
 export class QuotesService {
@@ -315,7 +374,21 @@ export class QuotesService {
     const quote = await this.prisma.quote.findFirst({
       where: { shareToken: token, deletedAt: null },
       include: {
-        ...QUOTE_DETAIL_INCLUDE,
+        // NOT `QUOTE_DETAIL_INCLUDE`. That is the tenant's read and returns whole
+        // line rows, including the contractor's markup. See PUBLIC_LINE_SELECT.
+        lineItems: {
+          where: { sectionId: null },
+          orderBy: { sort: "asc" as const },
+          select: PUBLIC_LINE_SELECT,
+        },
+        sections: {
+          orderBy: { sort: "asc" as const },
+          select: {
+            id: true,
+            title: true,
+            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_SELECT },
+          },
+        },
         client: { select: { firstName: true, lastName: true } },
         business: {
           select: { name: true, addressLine: true, town: true, parish: true, trn: true },

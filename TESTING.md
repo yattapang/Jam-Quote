@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 46 | 535 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds |
+| `apps/api` | 48 | 555 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -150,7 +150,56 @@ same way, with `projectFieldRules`.
 | `MaterialFavourite` | Owed — flat, quick |
 | `Invoice` | Owed — nested sections, line items, retention, payments, reminders |
 | `Quote` | Owed — nested, plus variations and the client decision fields |
-| `PublicQuoteView`, `PublicInvoiceView` | Owed, and **the most valuable of the lot**: these are allow-lists on the only unauthenticated surface, so the schema becomes the specification of what an anonymous token-holder may read, and adding a field becomes visible in a diff |
+| `PublicQuoteView`, `PublicInvoiceView` | **Guarded, and it found a real disclosure — see §4b.** Not Zod schemas in the end: the boundary is decided by a Prisma `select`, which is a fact about the source, so the guard reads the source |
+
+---
+
+## 4b. The public views were over-disclosing
+
+**Found 2026-09-08 while starting on their wire contracts.**
+
+Both public views reused the TENANT's include (`QUOTE_DETAIL_INCLUDE` /
+`INVOICE_DETAIL_INCLUDE`), so every line sent to an anonymous share-token holder
+carried the whole Prisma row:
+
+| Field | What it tells the client |
+|---|---|
+| **`markupPct`** | **The contractor's margin on that line** |
+| `supplierId` | Which merchant they buy from |
+| `priceSource` | How the price was arrived at |
+| `overrideNote` | An internal note about why a price was overridden |
+| `quoteId`, `sectionId`, `updatedAt`, `deletedAt` | Plumbing |
+
+The client page reads none of them — it renders description, quantity, unit and
+amount, eight fields in total.
+
+**`markupPct` is the one that matters.** A contractor's margin is the most
+commercially sensitive number in a quote, and the client is the one person who
+must not have it.
+
+**It had never leaked.** All three sensitive columns are null across every line
+item in production, and no quote currently holds a live share token — verified
+before writing this up. So it was latent, not an incident. But the column is
+real and the app supports markup, so the first contractor to use it and share a
+quote would have handed their client the margin.
+
+**How it happened, and the lesson.** The view's own comment read *"everything
+here is already printed on the PDF the client is being sent, and nothing else"* —
+true of the top-level fields it listed by hand, and false of the nested rows it
+pulled in with a spread. **A spread inherits decisions nobody re-made.** The
+declared type said the same thing: `lineItems: QuoteWithLines["lineItems"]` means
+"whatever the tenant read returns", which cannot be reviewed as a disclosure
+decision.
+
+**Fixed** with an explicit `PUBLIC_LINE_SELECT` in both services and a spelled-out
+`PublicQuoteLine` / `PublicInvoiceLine` type. A field now reaches a client only by
+being named, so any future disclosure is a visible line in a diff.
+
+**Pinned** by `public-quote-disclosure.test.ts` and its invoice twin, which read
+the source — because the boundary is a `select`, and a test over a sample row
+would pass the moment someone widened it and the sample happened to lack the new
+field. Each forbidden field is listed with the reason it is forbidden. Verified
+by adding `markupPct` and `supplierId` back and watching both go red.
 
 ---
 

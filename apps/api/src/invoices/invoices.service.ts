@@ -10,6 +10,8 @@ import {
   invoiceSettlement,
   reminderMessage,
   type GctTreatment,
+  type LineCategory,
+  type RateUnit,
   type TotalsLineInput,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -119,6 +121,47 @@ function existingLinesForTotals(entity: {
     markupPct: li.markupPct ? Number(li.markupPct) : undefined,
     gctTreatment: li.gctTreatment as GctTreatment,
   }));
+}
+
+/**
+ * The ONLY line fields an anonymous holder of an invoice share token may read.
+ *
+ * Identical reasoning to `PUBLIC_LINE_SELECT` in `quotes.service.ts`, and the
+ * same original defect: this view reused `INVOICE_DETAIL_INCLUDE`, the TENANT's
+ * read, so every public line carried the whole row — `markupPct` (the
+ * contractor's margin), `supplierId`, `priceSource`, `overrideNote` and the
+ * internal ids. The client page renders description, quantity, unit and amount.
+ *
+ * An explicit select, so a field reaches a client only by being named here and
+ * any future disclosure is a visible line in a diff.
+ */
+const PUBLIC_LINE_SELECT = {
+  id: true,
+  category: true,
+  description: true,
+  quantity: true,
+  rateUnit: true,
+  unitLabel: true,
+  unitPriceCents: true,
+  gctTreatment: true,
+} as const;
+
+/**
+ * One priced line as a client may see it.
+ *
+ * Spelled out rather than aliased to `InvoiceWithLines["lineItems"]`, which is
+ * what widened this boundary silently: a type meaning "whatever the tenant read
+ * returns" cannot be reviewed as a disclosure decision.
+ */
+export interface PublicInvoiceLine {
+  id: string;
+  category: LineCategory;
+  description: string;
+  quantity: Prisma.Decimal;
+  rateUnit: RateUnit;
+  unitLabel: string | null;
+  gctTreatment: GctTreatment;
+  unitPriceCents: number;
 }
 
 @Injectable()
@@ -467,7 +510,22 @@ export class InvoicesService {
     const invoice = await this.prisma.invoice.findFirst({
       where: { shareToken: token, deletedAt: null },
       include: {
-        ...INVOICE_DETAIL_INCLUDE,
+        // NOT `INVOICE_DETAIL_INCLUDE`. That is the tenant's read and returns
+        // whole line rows, including the contractor's markup. See
+        // PUBLIC_LINE_SELECT.
+        lineItems: {
+          where: { sectionId: null },
+          orderBy: { sort: "asc" as const },
+          select: PUBLIC_LINE_SELECT,
+        },
+        sections: {
+          orderBy: { sort: "asc" as const },
+          select: {
+            id: true,
+            title: true,
+            lineItems: { orderBy: { sort: "asc" as const }, select: PUBLIC_LINE_SELECT },
+          },
+        },
         client: { select: { firstName: true, lastName: true } },
         business: {
           select: { name: true, addressLine: true, town: true, parish: true, trn: true },
@@ -768,8 +826,8 @@ export interface PublicInvoiceView {
   paidCents: number;
   retentionCents: number;
   retentionReleased: boolean;
-  lineItems: InvoiceWithLines["lineItems"];
-  sections: InvoiceWithLines["sections"];
+  lineItems: PublicInvoiceLine[];
+  sections: { id: string; title: string; lineItems: PublicInvoiceLine[] }[];
   clientName: string | null;
   business: {
     name: string;
