@@ -3,7 +3,8 @@ import { Resend } from "resend";
 import { getInvoice, getClients, getBusiness, getLogoBytes } from "@/lib/api-server";
 import { getSession } from "@/lib/session";
 import { emailSendingStatus } from "@/lib/email-sending";
-import { getQuoteTotals, invoiceBalanceCents } from "@/lib/quote-totals";
+import { getQuoteTotals } from "@/lib/quote-totals";
+import { settlementOf } from "@jamquote/core";
 import { buildInvoiceEmail, LOGO_CID } from "@/lib/invoice-email";
 import InvoicePdf from "@/lib/pdf/InvoicePdf";
 
@@ -65,8 +66,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return Response.json({ error: "This client has no email address on file." }, { status: 400 });
   }
 
-  // The email must ask for the BALANCE, not the total — see invoiceBalanceCents.
-  const balanceDueCents = invoiceBalanceCents(getQuoteTotals(invoice).totalCents, invoice.paidCents);
+  // The email must ask for what is DUE NOW — not the total, and not the total
+  // less payments. Retention is money the client keeps under the terms, so asking
+  // for it demands what the contract says they may withhold. This figure is
+  // computed the same way the attached PDF computes it, which is the whole reason
+  // both go through core rather than each doing its own subtraction.
+  const balanceDueCents = settlementOf({
+    totalCents: getQuoteTotals(invoice).totalCents,
+    paidCents: invoice.paidCents,
+    retentionCents: invoice.retentionReleased ? 0 : invoice.retentionCents,
+    retentionReleasedAt: null,
+  }).outstandingCents;
   const buffer = await renderToBuffer(
     InvoicePdf({ invoice, client, business, logo: logo ?? undefined }),
   );

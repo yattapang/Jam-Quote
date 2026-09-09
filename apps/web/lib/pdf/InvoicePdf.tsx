@@ -12,12 +12,11 @@ import {
   type TextProps,
   type ImageProps,
 } from "@react-pdf/renderer";
-import { computeTotals, formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel, formatTrn } from "@jamquote/core";
+import { computeTotals, formatJmd, QuoteDetailLevel, groupJobComponents, componentQuantityLabel, formatTrn, settlementOf } from "@jamquote/core";
 import type { Business, Client } from "@/lib/types";
 import type { Invoice } from "@/lib/api-client";
 import {
   groupLinesByHeading,
-  invoiceBalanceCents,
   lineUnitLabel,
   GCT_TREATMENT_LABEL,
 } from "@/lib/quote-totals";
@@ -187,9 +186,22 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
   const detailed = invoice.detailLevel === QuoteDetailLevel.DETAILED;
 
   const paidCents = invoice.paidCents ?? 0;
-  // Shared with the invoice email (#34) so the figure the covering message
-  // asks for is by construction the figure printed below.
-  const balanceCents = invoiceBalanceCents(totals.totalCents, paidCents);
+  // Shared with the invoice email (#34) so the figure the covering message asks
+  // for is by construction the figure printed below.
+  //
+  // `settlementOf`, not `total - paid`. This document is what the CLIENT reads,
+  // and it used to demand the retained money: on a $100,000 invoice with 10%
+  // held and $90,000 paid, the app's own screens said "fully paid apart from
+  // retention" while the PDF in the client's hand said Amount due $10,000. The
+  // word "retention" appeared nowhere in this file.
+  const settlement = settlementOf({
+    totalCents: totals.totalCents,
+    paidCents,
+    retentionCents: invoice.retentionReleased ? 0 : invoice.retentionCents,
+    retentionReleasedAt: null,
+  });
+  const balanceCents = settlement.outstandingCents;
+  const heldCents = settlement.heldCents;
   const settled = balanceCents === 0;
 
   const amountByLineId = new Map<string, number>();
@@ -298,8 +310,22 @@ export default function InvoicePdf({ invoice, client, business, logo }: InvoiceP
             </View>
           ) : null}
 
+          {/* The held line, stated rather than silently subtracted. A client who
+              sees a smaller "amount due" with no explanation reads it as an
+              error in their favour and queries it. */}
+          {heldCents > 0 ? (
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>
+                Retention held{invoice.retentionPct ? ` (${invoice.retentionPct}%)` : ""}
+              </Text>
+              <Text style={styles.totalValue}>-{formatJmd(heldCents)}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.dueRow}>
-            <Text style={styles.dueLabel}>{settled ? "Paid in full" : "Amount due"}</Text>
+            <Text style={styles.dueLabel}>
+              {settled ? (heldCents > 0 ? "Paid — retention held" : "Paid in full") : "Amount due"}
+            </Text>
             <Text style={settled ? styles.paidValue : styles.dueValue}>
               {formatJmd(balanceCents)}
             </Text>

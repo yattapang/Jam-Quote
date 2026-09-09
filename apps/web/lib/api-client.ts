@@ -1254,23 +1254,27 @@ export async function updateAdminRulePack(
   return apiClient.patch<EffectiveRulePack>(`/admin/rulepack?country=${country}`, input);
 }
 
-export interface CardPaymentResponse {
-  checkoutUrl: string;
-  reference: string;
-}
+/**
+ * `payInvoiceByCard` used to live here, and it lied.
+ *
+ * Its catch block swallowed every error, slept 700ms to look like a network
+ * round trip, and returned a fabricated `checkout.wipayfinancial.com/mock/<id>`
+ * URL with a `WPY-MOCK-<id>` reference — so on a 500, a 401, or an unreachable
+ * API the caller received a RESOLVED promise carrying a checkout that does not
+ * exist. That is the worst defect this app can ship: an action reporting success
+ * while doing nothing.
+ *
+ * It also declared `checkoutUrl` and `reference`, while the endpoint sends
+ * `{ paymentUrl }` — so even the happy path would have navigated to `undefined`.
+ *
+ * Nothing called it, which is why it survived: it was invisible to the
+ * hand-written-shapes guard (the name lacks the `Api` prefix) and to any test.
+ * Removed rather than fixed, because the endpoint it wraps is behind WiPay
+ * credentials the business does not yet hold — see PLANNING §4i. When card
+ * payment is wired, write this against `{ paymentUrl }` and let a failure throw
+ * like every other call in this file.
+ */
 
-/** POST /api/payments/invoices/:id/card — WiPay hosted-checkout handoff. */
-export async function payInvoiceByCard(invoiceId: string): Promise<CardPaymentResponse> {
-  try {
-    return await apiClient.post<CardPaymentResponse>(`/payments/invoices/${invoiceId}/card`);
-  } catch {
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    return {
-      checkoutUrl: `https://checkout.wipayfinancial.com/mock/${invoiceId}`,
-      reference: `WPY-MOCK-${invoiceId}`,
-    };
-  }
-}
 
 // --- Billing (Phase-1 subscription tiers) ------------------------------------
 

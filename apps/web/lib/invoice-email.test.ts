@@ -1,19 +1,70 @@
 import { describe, it, expect } from "vitest";
 import { buildInvoiceEmail, LOGO_CID } from "./invoice-email";
 import { escapeHtml } from "./escape-html";
-import { invoiceBalanceCents } from "./quote-totals";
+import { settlementOf } from "@jamquote/core";
 
-describe("invoiceBalanceCents", () => {
-  it("is the total when nothing has been paid", () => {
-    expect(invoiceBalanceCents(18_000_000, 0)).toBe(18_000_000);
+/**
+ * What a client-facing document should ASK FOR.
+ *
+ * This used to test `invoiceBalanceCents(total, paid)`, which is the wrong sum on
+ * any contract with a retention clause — and the PDF and the covering email both
+ * used it. On a $100,000 invoice with 10% held and $90,000 paid, the app's own
+ * screens said "fully paid apart from retention" while the document in the
+ * client's hand asked for $10,000 of money the contract says they keep.
+ *
+ * `invoiceBalanceCents` is gone rather than deprecated. A helper that computes a
+ * plausible-looking wrong figure is worse than none: the next person to want a
+ * balance would have found it and used it.
+ */
+describe("what a document asks the client for", () => {
+  const held = { totalCents: 10_000_000, retentionCents: 1_000_000, retentionReleasedAt: null };
+
+  it("is the whole total when nothing is paid and nothing is held", () => {
+    expect(
+      settlementOf({ totalCents: 18_000_000, paidCents: 0, retentionCents: 0, retentionReleasedAt: null })
+        .outstandingCents,
+    ).toBe(18_000_000);
   });
 
   it("subtracts payments already recorded", () => {
-    expect(invoiceBalanceCents(18_000_000, 9_000_000)).toBe(9_000_000);
+    expect(
+      settlementOf({
+        totalCents: 18_000_000,
+        paidCents: 9_000_000,
+        retentionCents: 0,
+        retentionReleasedAt: null,
+      }).outstandingCents,
+    ).toBe(9_000_000);
+  });
+
+  it("does NOT ask for retention still held", () => {
+    // The defect, in one assertion. 90% of a $100,000 invoice with 10% held is
+    // everything currently payable.
+    const s = settlementOf({ ...held, paidCents: 9_000_000 });
+    expect(s.outstandingCents).toBe(0);
+    expect(s.heldCents).toBe(1_000_000);
+    expect(s.settledForNow).toBe(true);
+  });
+
+  it("asks for it once it has been released", () => {
+    const s = settlementOf({
+      ...held,
+      paidCents: 9_000_000,
+      retentionReleasedAt: new Date("2026-09-01T00:00:00.000Z"),
+    });
+    expect(s.outstandingCents).toBe(1_000_000);
+    expect(s.heldCents).toBe(0);
   });
 
   it("clamps an overpayment to zero rather than showing a negative amount due", () => {
-    expect(invoiceBalanceCents(18_000_000, 20_000_000)).toBe(0);
+    expect(
+      settlementOf({
+        totalCents: 18_000_000,
+        paidCents: 20_000_000,
+        retentionCents: 0,
+        retentionReleasedAt: null,
+      }).outstandingCents,
+    ).toBe(0);
   });
 });
 
