@@ -29,3 +29,4 @@ export * from "./wire/public-quote.js";
 export * from "./wire/public-invoice.js";
 export * from "./wire/material-favourite.js";
 export * from "./wire/quote.js";
+export * from "./wire/invoice.js";

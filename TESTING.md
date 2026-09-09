@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 52 | 593 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 53 | 605 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -148,7 +148,8 @@ same way, with `projectFieldRules`.
 |---|---|
 | `Client`, `Business`, `Project`, `LabourRate`, `EquipmentItem`, `MaterialFavourite` | **Done — every flat shape.** Web infers; API proves |
 | `Quote` | **Done.** Two exports, because the LIST read genuinely sends a different shape from the DETAIL read — see below |
-| `Invoice` | Owed — the last one. Nested, plus retention, payments and reminders |
+| `Invoice` | **Done.** Two exports like the quote, plus the payment and reminder ledgers |
+| **The nine shapes the app actually turns on** | **All done.** Every entity a contractor reads or writes crosses the seam under contract |
 | `PublicQuoteView` | **Done, and guarded twice.** A source-reading disclosure test over the Prisma `select`, plus a `.strict()` wire contract — the only strict schema in `wire/`, because here an unexpected field is a disclosure rather than a shrug. The web derives from it |
 | `PublicInvoiceView` | **Done.** Disclosure test plus a `.strict()` contract that refuses the payment and reminder ledgers by name. The web derives from it |
 
@@ -291,6 +292,35 @@ had written it out, and failed exactly where a spread stood in for it.
 The line shape is **shared** between the two contracts rather than restated. A
 quote line and an invoice line disclose identically, and two copies of a
 disclosure boundary are two boundaries that will eventually differ.
+
+---
+
+### Seam 1: what is done, and what is honestly left
+
+**Done — every shape the app turns on:** `Client`, `Business`, `Project`,
+`LabourRate`, `EquipmentItem`, `MaterialFavourite`, `Quote`, `Invoice`, and both
+public views. The web declares none of them; each is `z.infer<>` of a contract in
+`packages/core/src/wire/`, and the API proves it keeps each promise.
+
+**Sixteen hand-written `Api*` interfaces remain**, and they are deliberately
+lower priority rather than forgotten:
+
+| Group | Shapes | Why it can wait |
+|---|---|---|
+| Material schema tree | `ApiMaterialSchema`, `ApiMaterialAttribute`, `ApiMaterialCategory`, `ApiMaterialUnit`, `ApiMaterialAttributeOption` | Read-mostly configuration. A drift here empties a picker, which is loud |
+| Job library | `ApiJob`, `ApiJobComponent` | Same shape family as quote lines, already contract-covered in effect |
+| Costing | `ApiPurchase`, `ApiLabourEntry`, `ApiSupplier`, `ApiSupplierPrice` | Real candidates — money fields. Next in line |
+| Admin / misc | `ApiRegulatoryUpdate`, `ApiHiddenCatalogEntry`, `ApiLogoMeta`, `ApiErrorBody`, `ApiInvoiceSection` | Staff-facing or trivial |
+
+**The costing group is the one worth doing next**, because `ApiPurchase` and
+`ApiLabourEntry` carry cents and feed job profitability — the same money seam that
+has been bitten twice.
+
+**The pattern that made all of this cheap** is worth restating: a contract plus a
+typed sample. TypeScript checks the sample against Prisma's generated type, so a
+renamed column breaks compilation; Zod checks it against what the web reads, so a
+dropped field fails the parse. Neither alone is enough, and together they cost
+about forty lines per shape.
 
 ---
 

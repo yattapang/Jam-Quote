@@ -172,6 +172,14 @@ const apiInvoice = {
   quoteId: "qt-0142",
   number: "INV-0007",
   status: "DRAFT",
+  // Sent on every read. Retention is three fields with three meanings: the
+  // percentage AGREED (null = not agreed, distinct from "0" = none on this
+  // contract), a SNAPSHOT of the amount so a later edit cannot restate a
+  // document the client holds, and the release timestamp.
+  retentionPct: null,
+  retentionCents: 0,
+  retentionReleasedAt: null,
+  detailLevel: "SUMMARY",
   gctRate: "15",
   discountPct: "5",
   depositCents: 5_000_000,

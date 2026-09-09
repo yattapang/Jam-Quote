@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, LineJobComponentWire, MaterialFavouriteWire, ProjectWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceReminderWire, InvoiceWire, LineJobComponentWire, MaterialFavouriteWire, PaymentWire, ProjectWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -276,54 +276,28 @@ export type ApiQuote = QuoteWire;
 /** Invoice line items share the exact persistence shape as quote line items
  * (both come from the same `quoteLineItemSchema`-shaped table columns). */
 export type ApiInvoiceLineItem = ApiLineItem;
-export interface ApiPayment {
-  id: string;
-  amountCents: number;
-  method: PaymentMethod;
-  /** Cheque number / bank reference / wallet transaction id. Named for its
-   * WiPay origin; reused for manual references. */
-  providerRef?: string | null;
-  status: string;
-  paidAt: string;
-}
+/** NOT declared here - see `packages/core/src/wire/README.md`. */
+export type ApiPayment = PaymentWire;
 
 export interface ApiInvoiceSection {
   title: string;
   lineItems: ApiInvoiceLineItem[];
 }
-export interface ApiInvoice {
-  id: string;
-  businessId: string;
-  clientId?: string | null;
-  quoteId?: string | null;
-  number: string;
-  status: InvoiceStatus;
-  // Prisma Decimal fields — may come over JSON as numeric strings.
-  gctRate: number | string;
-  discountPct: number | string;
-  depositCents: number;
-  terms?: string | null;
-  dueDate?: string | null;
-  issueDate: string;
-  /** Withheld until sign-off. Owned by this invoice, defaulted from the job. */
-  retentionPct?: number | string | null;
-  /** Snapshot of the withheld amount, so it cannot drift from the printed
-   * document if the percentage is later edited. */
-  retentionCents?: number;
-  retentionReleasedAt?: string | null;
-  reminders?: ApiInvoiceReminder[];
-  subtotalCents: number;
-  gctCents: number;
-  totalCents: number;
-  paidCents: number;
-  /** Recorded payments, newest first. Present on detail reads (#32). */
-  payments?: ApiPayment[] | null;
-  createdAt: string;
-  updatedAt: string;
-  detailLevel?: QuoteDetailLevel | null;
-  lineItems?: ApiInvoiceLineItem[];
-  sections?: ApiInvoiceSection[];
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`. Seam 1's last shape.
+ *
+ * Like the quote, it has two shapes: the LIST read carries the columns, the
+ * DETAIL read adds sections, lines, payments and reminders. Core exports
+ * `invoiceDetailWire` for callers that need those guaranteed.
+ *
+ * The old declaration hedged retention three ways at once
+ * (`retentionPct?: number | string | null`, `retentionCents?: number`), for three
+ * fields that mean three different things: the percentage AGREED (nullable,
+ * because null is "not agreed" and "0" is "none on this contract"), a SNAPSHOT of
+ * the amount so a later edit cannot restate a document the client holds, and the
+ * release timestamp.
+ */
+export type ApiInvoice = InvoiceWire;
 
 // --- Pure mappers (exported; reused by api-server.ts and tests) -------------
 
@@ -1527,13 +1501,8 @@ export async function createQuoteVariation(quoteId: string): Promise<{ id: strin
   return apiClient.post<{ id: string }>(`/quotes/${quoteId}/variation`, {});
 }
 
-export interface ApiInvoiceReminder {
-  id: string;
-  channel: string;
-  sentTo?: string | null;
-  outstandingCents: number;
-  sentAt: string;
-}
+/** NOT declared here - see `packages/core/src/wire/README.md`. */
+export type ApiInvoiceReminder = InvoiceReminderWire;
 
 /** One chase, as it happened. */
 export interface InvoiceReminder {
