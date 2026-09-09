@@ -13,7 +13,7 @@
  * api-server.ts.
  */
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, MaterialFavouriteWire, ProjectWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, LineJobComponentWire, MaterialFavouriteWire, ProjectWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -144,35 +144,19 @@ export type ApiClientRow = ClientWire;
  * had to handle all three. What arrives is `string | null`.
  */
 export type ApiProject = ProjectWire;
-export interface ApiLineJobComponent {
-  kind: JobComponentKind;
-  description: string;
-  // Prisma Decimal / JSON snapshot — may come over as a numeric string.
-  quantityPerUnit: number | string;
-  unitLabel?: string | null;
-  unitPriceCents: number;
-}
-export interface ApiLineItem {
-  id: string;
-  category: QuoteLineItemInput["category"];
-  description: string;
-  quantity: number | string;
-  rateUnit: QuoteLineItemInput["rateUnit"];
-  /** Display unit snapshot for how the material is sold ("bag", "sheet").
-   * Falls back to rateUnit's label when unset — see QuotePdf. */
-  unitLabel?: string | null;
-  unitPriceCents: number;
-  priceSource: QuoteLineItemInput["priceSource"];
-  gctTreatment: QuoteLineItemInput["gctTreatment"];
-  markupPct?: number | string | null;
-  // Job ("job type") provenance — present only on lines built from an
-  // job. jobComponents is a display-only snapshot (see
-  // quotes.dto.ts quoteLineJobComponentSchema).
-  jobId?: string | null;
-  jobName?: string | null;
-  jobUnit?: string | null;
-  jobComponents?: ApiLineJobComponent[] | null;
-}
+/** NOT declared here - see `packages/core/src/wire/README.md`. Its
+ * `quantityPerUnit` union is honest: the value comes from a JSON snapshot, so a
+ * serialized Decimal is a string while an older client may have written a
+ * number. */
+export type ApiLineJobComponent = LineJobComponentWire;
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * Carries `markupPct`, the contractor's margin, because this is their OWN read.
+ * `publicQuoteWire` is `.strict()` and rejects it: the two contracts disagree
+ * deliberately, and that asymmetry IS the disclosure boundary.
+ */
+export type ApiLineItem = QuoteLineWire;
 /**
  * NOT declared here - see `packages/core/src/wire/README.md`.
  *
@@ -274,33 +258,20 @@ export interface ApiJob {
  * fallbacks that could never fire and hid where the real default lives.
  */
 export type ApiBusiness = BusinessWire;
-export interface ApiQuote {
-  id: string;
-  clientId?: string | null;
-  projectId?: string | null;
-  /** Set when this quote is extra work agreed after another was accepted. */
-  variationOfQuoteId?: string | null;
-  /** The client's own answer through the share link — distinct from the
-   * contractor setting the status by hand. */
-  decidedAt?: string | null;
-  decidedByName?: string | null;
-  declineReason?: string | null;
-  number: string;
-  status: QuoteStatus;
-  gctRate: number | string;
-  discountPct: number | string;
-  depositCents: number;
-  subtotalCents: number;
-  gctCents: number;
-  totalCents: number;
-  validUntil?: string | null;
-  createdAt: string;
-  // Per-quote presentation setting; absent on older quotes (mapQuote defaults
-  // to SUMMARY).
-  detailLevel?: QuoteDetailLevel | null;
-  lineItems?: ApiLineItem[];
-  sections?: { title: string; lineItems: ApiLineItem[] }[];
-}
+/**
+ * NOT declared here - see `packages/core/src/wire/README.md`.
+ *
+ * `lineItems` and `sections` are optional for a real reason worth knowing:
+ * `GET /quotes` runs a `findMany` with NO include, so a list row carries the
+ * columns and nothing else, while `GET /quotes/:id` includes them. Same entity,
+ * two shapes. Core also exports `quoteDetailWire` for callers that need the
+ * lines guaranteed, which turns a runtime check into a type.
+ *
+ * The old declaration had `gctRate` and `discountPct` as `number | string` and
+ * `detailLevel` as optional-and-nullable; a serialized Decimal is always a
+ * string, and detailLevel is non-nullable with a default.
+ */
+export type ApiQuote = QuoteWire;
 
 /** Invoice line items share the exact persistence shape as quote line items
  * (both come from the same `quoteLineItemSchema`-shaped table columns). */

@@ -124,6 +124,14 @@ const apiQuote = {
   projectId: "job-0142",
   number: "QT-0142",
   status: "ACCEPTED",
+  // Sent on every read, so the fixture says so. `detailLevel` is non-nullable
+  // with a default; the decision fields are null until the CLIENT answers
+  // through the share link.
+  detailLevel: "SUMMARY",
+  variationOfQuoteId: null,
+  decidedAt: null,
+  decidedByName: null,
+  declineReason: null,
   gctRate: "15",
   discountPct: "5",
   depositCents: 5_000_000,
@@ -139,10 +147,19 @@ const apiQuote = {
       description: "Cement",
       quantity: "40",
       rateUnit: "UNIT",
+      // Present-and-null, not absent. The API sends every column on a detail
+      // read; these were omitted here only because the hand-written interface
+      // made them optional, which let the fixture claim a payload the API never
+      // actually produces.
+      unitLabel: null,
       unitPriceCents: 115_000,
       priceSource: "LOOKUP",
       gctTreatment: "STANDARD",
       markupPct: null,
+      jobId: null,
+      jobName: null,
+      jobUnit: null,
+      jobComponents: null,
     },
   ],
   sections: [],
@@ -174,10 +191,19 @@ const apiInvoice = {
       description: "Cement",
       quantity: "40",
       rateUnit: "UNIT",
+      // Present-and-null, not absent. The API sends every column on a detail
+      // read; these were omitted here only because the hand-written interface
+      // made them optional, which let the fixture claim a payload the API never
+      // actually produces.
+      unitLabel: null,
       unitPriceCents: 115_000,
       priceSource: "LOOKUP",
       gctTreatment: "STANDARD",
       markupPct: null,
+      jobId: null,
+      jobName: null,
+      jobUnit: null,
+      jobComponents: null,
     },
   ],
   sections: [],
@@ -362,10 +388,16 @@ describe("pure mappers", () => {
               description: "Delivery truck",
               quantity: "1",
               rateUnit: "JOB",
+              // Present-and-null: the API sends every column on a detail read.
+              unitLabel: null,
               unitPriceCents: 8_000,
               priceSource: "MANUAL",
               gctTreatment: "STANDARD",
               markupPct: null,
+              jobId: null,
+              jobName: null,
+              jobUnit: null,
+              jobComponents: null,
             },
           ],
         },

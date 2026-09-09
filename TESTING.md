@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 51 | 581 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 52 | 593 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -147,8 +147,8 @@ same way, with `projectFieldRules`.
 | Shape | State |
 |---|---|
 | `Client`, `Business`, `Project`, `LabourRate`, `EquipmentItem`, `MaterialFavourite` | **Done — every flat shape.** Web infers; API proves |
-| `Invoice` | Owed — nested sections, line items, retention, payments, reminders |
-| `Quote` | Owed — nested, plus variations and the client decision fields |
+| `Quote` | **Done.** Two exports, because the LIST read genuinely sends a different shape from the DETAIL read — see below |
+| `Invoice` | Owed — the last one. Nested, plus retention, payments and reminders |
 | `PublicQuoteView` | **Done, and guarded twice.** A source-reading disclosure test over the Prisma `select`, plus a `.strict()` wire contract — the only strict schema in `wire/`, because here an unexpected field is a disclosure rather than a shrug. The web derives from it |
 | `PublicInvoiceView` | **Done.** Disclosure test plus a `.strict()` contract that refuses the payment and reminder ledgers by name. The web derives from it |
 
@@ -174,6 +174,40 @@ and the contract now says so where the old declaration said it of everything.
 The tests cover the joined payload, the unjoined one and a null `unitRef`, rather
 than pretending only one shape exists. They also cover a pre-2a row, since both
 generations of `unit`/`category` still live in the column set.
+
+---
+
+### The quote contract: two shapes, and one principle applied against myself
+
+`GET /quotes` runs a `findMany` with **no include**, so a list row carries the
+columns and nothing else; `GET /quotes/:id` includes the sections and lines. Same
+entity, two shapes.
+
+The old interface expressed that by marking `lineItems` and `sections` optional —
+accurate, but it told a reader nothing about why, and it left every caller
+checking at runtime. There are now two exports: `quoteWire` for what any endpoint
+sends, and `quoteDetailWire` where the nested items are guaranteed, so a caller
+that needs the lines says so in a type.
+
+**Where the principle bit back.** The API sends a section `id`, and my first
+draft required it — at which point three test fixtures failed for omitting a
+value nothing consumes. The web keys sections by index and never reads that id.
+`wire/README.md` says a contract is *"the fields the web RELIES ON, not a mirror
+of every column"*, so the honest move was to drop it from the schema rather than
+edit three fixtures into agreeing with a field nobody uses. Written down because
+the temptation ran the other way.
+
+**What the tightening did surface** was real: the mapper fixtures had been
+omitting `unitLabel`, `jobId`, `jobName`, `jobUnit` and `jobComponents`, and
+claiming a payload the API never produces. They compiled only because the old
+interface made everything optional. A fixture that describes an impossible
+response is a test asserting something about nothing.
+
+**One union kept on purpose.** `jobComponents[].quantityPerUnit` accepts a string
+or a number, because it comes from a JSON snapshot rather than a column — a
+serialized `Decimal` is a string, but an older client may have written a number.
+That is the one place in `wire/` where a union is honest rather than lazy, and
+both branches are tested.
 
 ---
 
