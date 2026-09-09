@@ -11,14 +11,14 @@ const newPasswordSchema = z.string().min(8);
 export const registerSchema = z.object({
   email: z.string().email(),
   password: newPasswordSchema,
-  fullName: z.string().min(1).optional(),
-  businessName: z.string().min(1),
+  fullName: z.string().max(120).min(1).optional(),
+  businessName: z.string().max(200).min(1),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().max(256).min(1),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 
@@ -28,7 +28,7 @@ export const forgotPasswordSchema = z.object({
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 
 export const resetPasswordSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().max(512).min(1),
   newPassword: newPasswordSchema,
 });
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
@@ -37,7 +37,7 @@ export const changePasswordSchema = z.object({
   // The strength rule deliberately does NOT apply here: this field is checked
   // against the stored hash, not stored, so enforcing today's minimum would
   // lock out anyone whose existing password predates it. Same min(1) as login.
-  currentPassword: z.string().min(1),
+  currentPassword: z.string().max(256).min(1),
   newPassword: newPasswordSchema,
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

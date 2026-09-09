@@ -18,26 +18,37 @@ import { describe, expect, it } from "vitest";
  *
  * None of those fail loudly. They fail in front of the contractor's client.
  *
- * ## Why an allow-list rather than a fix-everything commit
+ * ## What it took to get here
  *
- * Eleven remain. Choosing a limit is a product judgement — how long is a
- * legitimate `terms` block? — and guessing at all of them in one commit is a
- * chance to reject something a real contractor types. So the debt is recorded
- * here and the guard stops it growing; each entry becomes a deliberate decision
- * when someone bounds it.
+ * The count went 29 -> 11 -> 58 -> 0, and each step is worth knowing.
  *
- * It started at 29. Sharing the client and project field rules across the REST
- * and sync doors bounded eighteen of them as a side effect, which is the
- * argument for fixing a seam over patching each side.
+ * **29** was the first measurement. Sharing the client and project field rules
+ * across the REST and sync doors bounded **18 of them as a side effect**, which
+ * is the argument for fixing a seam rather than patching each side.
+ *
+ * **11** was wrong. The guard counted `.min()` as a constraint, and `.min(1)`
+ * stops an empty string while saying nothing about a 100kb one. Correcting it to
+ * require an UPPER bound revealed **58**.
+ *
+ * **0** now. Limits are far beyond what a real contractor types — `terms` allows
+ * 5000 characters, `description` 500 — because the point is to stop a payload,
+ * not to police wording.
  */
 
 const SRC = join(process.cwd(), "src");
 
-/** Anything that constrains the VALUE, not merely its presence. */
-const CONSTRAINTS = [
-  ".max(", ".min(", ".length(", ".email(", ".uuid(", ".url(",
+/**
+ * Anything that puts a CEILING on the value.
+ *
+ * `.min()` is deliberately absent, and its absence is the whole point. The first
+ * version of this guard counted it, on the reasoning that a constrained field is
+ * a checked field — but `.min(1)` stops an EMPTY string and says nothing about a
+ * 100kb one, which is the failure this test exists to prevent. Counting it hid
+ * 47 fields: the guard reported 11 unbounded when the real figure was 58.
+ */
+const UPPER_BOUNDS = [
+  ".max(", ".length(", ".email(", ".uuid(", ".url(",
   ".regex(", ".datetime(", ".date(", ".cuid(", ".ip(",
-  ".startsWith(", ".endsWith(", ".includes(",
 ];
 
 /**
@@ -49,12 +60,9 @@ const CONSTRAINTS = [
  * client reads.
  */
 const KNOWN_UNBOUNDED: Record<string, string[]> = {
-  admin: ["actionNeeded"],
-  business: ["addressLine", "tradeType"],
-  catalogs: ["category", "skillTier", "unit", "vendor", "vendorPhone"],
-  clients: ["lastName"],
-  invoices: ["terms"],
-  quotes: ["terms"],
+  // EMPTY, and it should stay that way. Every string input has an upper bound.
+  // If a new field needs to go here, that is a decision to argue for in the diff
+  // rather than a place to park one.
 };
 
 function stripComments(src: string): string {
@@ -67,7 +75,7 @@ function stringFields(src: string): { name: string; constrained: boolean }[] {
   for (const line of stripComments(src).split("\n")) {
     const m = line.match(/^\s{2,}([A-Za-z_]\w*)\s*:\s*(z\.string\(\).*)$/);
     if (!m?.[1] || !m[2]) continue;
-    out.push({ name: m[1], constrained: CONSTRAINTS.some((c) => m[2]!.includes(c)) });
+    out.push({ name: m[1], constrained: UPPER_BOUNDS.some((c) => m[2]!.includes(c)) });
   }
   return out;
 }

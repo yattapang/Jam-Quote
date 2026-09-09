@@ -5,13 +5,13 @@ import { JobComponentKind } from "@jamquote/core";
 // not required — a component may be freeform (no library link).
 export const assemblyComponentInputSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
-  materialFavouriteId: z.string().min(1).optional(),
-  labourRateId: z.string().min(1).optional(),
-  equipmentItemId: z.string().min(1).optional(),
-  description: z.string().min(1),
+  materialFavouriteId: z.string().max(64).min(1).optional(),
+  labourRateId: z.string().max(64).min(1).optional(),
+  equipmentItemId: z.string().max(64).min(1).optional(),
+  description: z.string().max(500).min(1),
   quantityPerUnit: z.number().positive(),
   /** What the quantity counts — "trip", "day". Free text; absent prints bare. */
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: z.string().max(40).min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
   sort: z.number().int().nonnegative().optional(),
 });
@@ -19,8 +19,8 @@ export type JobComponentInput = z.infer<typeof assemblyComponentInputSchema>;
 
 /** Create shape: `components` groups the job's material/labour/other recipe lines. */
 export const createJobSchema = z.object({
-  name: z.string().min(1),
-  unit: z.string().min(1),
+  name: z.string().max(200).min(1),
+  unit: z.string().max(40).min(1),
   markupPct: z.number().min(0).optional(),
   components: z.array(assemblyComponentInputSchema).default([]),
 });
@@ -32,8 +32,8 @@ export type CreateJobInput = z.infer<typeof createJobSchema>;
  * insert new). Omitting `components` leaves the existing recipe untouched.
  */
 export const updateJobSchema = z.object({
-  name: z.string().min(1).optional(),
-  unit: z.string().min(1).optional(),
+  name: z.string().max(200).min(1).optional(),
+  unit: z.string().max(40).min(1).optional(),
   markupPct: z.number().min(0).optional(),
   components: z.array(assemblyComponentInputSchema).optional(),
 });

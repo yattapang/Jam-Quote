@@ -23,7 +23,7 @@ export const projectFieldRules = {
 } as const;
 
 export const createProjectSchema = z.object({
-  clientId: z.string().min(1).optional(),
+  clientId: z.string().max(64).min(1).optional(),
   // Required on create; updateProjectSchema derives from this via .partial().
   name: projectFieldRules.name,
   addressLine: projectFieldRules.addressLine.optional(),

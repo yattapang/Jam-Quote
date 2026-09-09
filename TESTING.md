@@ -70,33 +70,36 @@ never failed proves only that it runs.**
 The owner's original ask: *"many different scenarios and combinations for
 testing all the input forms, on the tenant side and on the backend"*.
 
-### Measured state, 2026-09-08
+### Measured state — every string input is now bounded
 
-**146 `z.string()` fields across 16 DTOs. 117 carry a value constraint**
-(`.max`, `.min`, `.email`, `.uuid`, `.datetime`, `.regex`). **29 carry none.**
+**139 `z.string()` fields across 16 DTOs. All 139 carry an upper bound.**
 
-> An earlier pass in this session reported 103 unconstrained. That was **wrong**
-> — the regex behind it did not count `.datetime()`, `.min()` or `.regex()` as
-> constraints. The real figure is 29, and the DTOs are in much better shape than
-> that first number suggested. Recorded because a wrong measurement in a
-> planning document is worse than none.
+The count went **29 → 11 → 58 → 0**, and every step is worth knowing because
+three of them were my own measurement being wrong:
 
-The 29, by module: `admin` (actionNeeded); `business` (addressLine, tradeType);
-`catalogs` (category, skillTier, unit, vendor, vendorPhone); `clients`
-(addressLine, lastName, notes, phone, whatsapp); `invoices` (terms); `projects`
-(addressLine); `quotes` (terms); `sync` (11, mostly the client mirror).
+| Count | What it was |
+|---|---|
+| **29** | The first measurement of fields with no value constraint |
+| **11** | After sharing the client and project field rules across the REST and sync doors, which bounded **18 as a side effect** — the argument for fixing a seam over patching each side |
+| **58** | The real figure. The guard had been counting `.min()` as a constraint, and `.min(1)` stops an EMPTY string while saying nothing about a 100kb one — which is the failure it exists to prevent. It hid 47 fields |
+| **0** | All bounded. `input-bounds.test.ts` now requires an upper bound specifically, and its allow-list is empty |
 
-Most are free text where an upper bound is the only real want — a 100kb
-`description` will not break the database but will break a PDF and make a CSV
-cell unreadable. Express caps a JSON body at 100kb by default, so this is a
-robustness and cost issue rather than a security one.
+> An even earlier pass reported **103**. That was also wrong — the regex behind it
+> did not count `.datetime()`, `.min()` or `.regex()` at all. Recorded because a
+> wrong number in a planning document is worse than no number, and this one was
+> wrong twice in opposite directions.
+
+**Limits are generous on purpose** — `terms` allows 5000 characters, `description`
+500, ids 64 (a UUID is 36). The point is to stop a payload, not to police
+wording. `password` is capped at 256 with a note: bcrypt only reads the first 72
+bytes, so anything beyond that is discarded before hashing anyway.
 
 ### Owed
 
 | Item | Notes |
 |---|---|
-| ~~Guard: no NEW unconstrained string field~~ | **DONE.** `input-bounds.test.ts`. It also refuses to let its own allow-list rot, which caught the list twice while the seam fixes below were landing |
-| **Bound the remaining 11** | Started at 29. Sharing the client and project field rules across the two doors bounded **18 of them as a side effect** — the argument for fixing a seam rather than patching each side. `terms` is the one that matters most: it prints on the document a client reads |
+| ~~Guard: no NEW unconstrained string field~~ | **DONE.** `input-bounds.test.ts`, now requiring an UPPER bound. It also refuses to let its own allow-list rot, which caught the list three times while the fixes landed |
+| ~~Bound the free-text fields~~ | **DONE — all 139.** See the table above for how the count moved, and why two of the figures were my own error |
 | **Validation matrices for the money DTOs** | `quotes`, `invoices`, `payments`, `purchases`: empty, zero, negative, fractional cents, huge, unicode, formula-leading `=`, and cents-vs-dollars confusion |
 | **Date-string boundaries** | Every `.datetime()` field against the Jamaica UTC-5 edge cases that have produced the same bug three times |
 | **Id fields that should be `.uuid()`** | `clientId`, `projectId`, `jobId`, `supplierId` and friends are free strings. Tenant checks make this safe, not clean — a bad id 404s instead of being rejected |

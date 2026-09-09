@@ -5,7 +5,7 @@ export const updatePricingSchema = z
     freeQuotesPerMonth: z.number().int().positive(),
     proMonthlyPriceCents: z.number().int().positive(),
     proAnnualPriceCents: z.number().int().positive(),
-    currency: z.string().min(1),
+    currency: z.string().max(8).min(1),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, {

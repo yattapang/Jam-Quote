@@ -13,11 +13,11 @@ import {
  */
 export const quoteLineJobComponentSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
-  description: z.string().min(1),
+  description: z.string().max(500).min(1),
   quantityPerUnit: z.number().positive(),
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: z.string().max(40).min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
 });
 export type QuoteLineJobComponentInput = z.infer<
@@ -33,16 +33,16 @@ export type QuoteLineJobComponentInput = z.infer<
 export const quoteLineItemInputSchema = quoteLineItemSchema.and(
   z.object({
     sort: z.number().int().nonnegative().optional(),
-    jobId: z.string().min(1).optional(),
-    jobName: z.string().min(1).optional(),
-    jobUnit: z.string().min(1).optional(),
+    jobId: z.string().max(64).min(1).optional(),
+    jobName: z.string().max(200).min(1).optional(),
+    jobUnit: z.string().max(40).min(1).optional(),
     jobComponents: z.array(quoteLineJobComponentSchema).optional(),
   }),
 );
 export type QuoteLineItemInput = z.infer<typeof quoteLineItemInputSchema>;
 
 export const quoteSectionInputSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().max(200).min(1),
   sort: z.number().int().nonnegative().optional(),
   lineItems: z.array(quoteLineItemInputSchema).default([]),
 });
@@ -54,13 +54,13 @@ export type QuoteSectionInput = z.infer<typeof quoteSectionInputSchema>;
  * optional and may be combined.
  */
 export const createQuoteSchema = z.object({
-  clientId: z.string().min(1).optional(),
-  projectId: z.string().min(1).optional(),
+  clientId: z.string().max(64).min(1).optional(),
+  projectId: z.string().max(64).min(1).optional(),
   gctRatePct: z.number().min(0).max(100).optional(),
   discountPct: z.number().min(0).max(100).optional(),
   depositCents: z.number().int().nonnegative().optional(),
   validUntil: z.coerce.date().optional(),
-  terms: z.string().optional(),
+  terms: z.string().max(5000).optional(),
   // Display setting only (defaults to SUMMARY in the service): does not
   // affect totals math, only whether job lines render collapsed or
   // expanded into their component snapshot.

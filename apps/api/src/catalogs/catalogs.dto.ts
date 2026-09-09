@@ -2,14 +2,14 @@ import { z } from "zod";
 import { PARISHES, RateUnit } from "@jamquote/core";
 
 export const createLabourRateSchema = z.object({
-  trade: z.string().min(1),
-  skillTier: z.string().optional(),
+  trade: z.string().max(80).min(1),
+  skillTier: z.string().max(40).optional(),
   rateCents: z.number().int().nonnegative(),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
   // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: z.string().max(40).min(1).optional(),
 });
 export type CreateLabourRateInput = z.infer<typeof createLabourRateSchema>;
 export const updateLabourRateSchema = createLabourRateSchema.partial();
@@ -19,7 +19,7 @@ export const createMaterialFavouriteSchema = z.object({
   // Optional as of 2a: when the material has a category, the name is COMPOSED
   // from its includeInName attributes (MaterialSchemaService.normalizeForWrite)
   // rather than typed. Supply a name together with nameCustom to pin one.
-  name: z.string().min(1).optional(),
+  name: z.string().max(200).min(1).optional(),
   nameCustom: z.boolean().optional(),
   // Controlled vocabulary for how the material is sold. Validated against the
   // rows this business may see — a curated unit or one of its own.
@@ -42,8 +42,8 @@ export const createMaterialFavouriteSchema = z.object({
   // LEGACY free-text fields, still accepted so pre-2a clients (the mobile app,
   // any cached web bundle) keep working against this endpoint. Superseded by
   // categoryDefId / unitId, which win when both are supplied.
-  category: z.string().optional(),
-  unit: z.string().optional(),
+  category: z.string().max(80).optional(),
+  unit: z.string().max(40).optional(),
 });
 export type CreateMaterialFavouriteInput = z.infer<typeof createMaterialFavouriteSchema>;
 export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial();
@@ -56,10 +56,10 @@ export const materialFavouriteQuerySchema = z.object({
   // Case-insensitive search across name, description, and the values inside
   // the `specs` JSON (see MaterialFavouritesService.findAll for how the
   // specs match is done). Blank/whitespace-only is treated as "no filter".
-  q: z.string().trim().min(1).optional(),
+  q: z.string().max(200).trim().min(1).optional(),
   // Exact match on the legacy free-text category string. Kept for pre-2a
   // clients; new callers filter with categoryDefId.
-  category: z.string().trim().min(1).optional(),
+  category: z.string().max(80).trim().min(1).optional(),
   categoryDefId: z.string().uuid().optional(),
   // Coerced from the query string; capped (not rejected) at
   // MATERIAL_FAVOURITE_QUERY_MAX_LIMIT so a caller asking for too much just
@@ -93,16 +93,16 @@ export const createMaterialUnitSchema = z.object({
 export type CreateMaterialUnitInput = z.infer<typeof createMaterialUnitSchema>;
 
 export const createEquipmentItemSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().max(200).min(1),
   owned: z.boolean().default(false),
-  vendor: z.string().optional(),
-  vendorPhone: z.string().optional(),
+  vendor: z.string().max(120).optional(),
+  vendorPhone: z.string().max(40).optional(),
   rateCents: z.number().int().nonnegative(),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
   // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: z.string().max(40).min(1).optional(),
 });
 export type CreateEquipmentItemInput = z.infer<typeof createEquipmentItemSchema>;
 export const updateEquipmentItemSchema = createEquipmentItemSchema.partial();
@@ -116,7 +116,7 @@ export type UpdateEquipmentItemInput = z.infer<typeof updateEquipmentItemSchema>
  * on the model for the legacy platform rows that predate tenant ownership.
  */
 export const createSupplierSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().max(200).min(1),
   website: z.string().url().optional(),
   parish: z.enum(PARISHES).optional(),
 });

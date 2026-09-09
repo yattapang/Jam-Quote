@@ -12,8 +12,8 @@ export const createPurchaseSchema = z
   .object({
     /** Null or omitted = an overhead with no job behind it (fuel, phone,
      * insurance). Required would make contractors invent a job. */
-    projectId: z.string().min(1).nullable().optional(),
-    supplierId: z.string().min(1).nullable().optional(),
+    projectId: z.string().max(64).min(1).nullable().optional(),
+    supplierId: z.string().max(64).min(1).nullable().optional(),
     description: z.string().min(1).max(200),
     amountCents: z.number().int().positive(),
     gctCents: z.number().int().nonnegative().optional(),
@@ -32,8 +32,8 @@ export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema>;
  * explicit null detaches a relation — the same convention as the invoice
  * client picker. */
 export const updatePurchaseSchema = z.object({
-  projectId: z.string().min(1).nullable().optional(),
-  supplierId: z.string().min(1).nullable().optional(),
+  projectId: z.string().max(64).min(1).nullable().optional(),
+  supplierId: z.string().max(64).min(1).nullable().optional(),
   description: z.string().min(1).max(200).optional(),
   amountCents: z.number().int().positive().optional(),
   gctCents: z.number().int().nonnegative().optional(),
@@ -67,9 +67,9 @@ export type PurchaseQuery = z.infer<typeof purchaseQuerySchema>;
  */
 export const createLabourEntrySchema = z.object({
   /** Null or omitted = admin/office time with no job behind it. */
-  projectId: z.string().min(1).nullable().optional(),
+  projectId: z.string().max(64).min(1).nullable().optional(),
   /** The rate book entry this came from, when it came from one. */
-  labourRateId: z.string().min(1).nullable().optional(),
+  labourRateId: z.string().max(64).min(1).nullable().optional(),
   description: z.string().min(1).max(200),
   /** Hours or days — half-days and part-hours are normal, so not an integer. */
   quantity: z.number().positive().max(100_000),

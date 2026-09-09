@@ -2,17 +2,17 @@ import { z } from "zod";
 import { PARISHES, trnSchema } from "@jamquote/core";
 
 export const createBusinessSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().max(200).min(1),
   trn: trnSchema.optional(),
   logoUrl: z.string().url().optional(),
-  addressLine: z.string().optional(),
+  addressLine: z.string().max(200).optional(),
   // Free text: no authoritative town list exists to validate against.
   town: z.string().max(80).optional(),
   parish: z.enum(PARISHES).optional(),
-  tradeType: z.string().optional(),
+  tradeType: z.string().max(80).optional(),
   defaultGctRate: z.number().min(0).max(100).optional(),
-  quotePrefix: z.string().min(1).optional(),
-  invoicePrefix: z.string().min(1).optional(),
+  quotePrefix: z.string().max(16).min(1).optional(),
+  invoicePrefix: z.string().max(16).min(1).optional(),
   jmdPerUsd: z.number().positive().optional(),
   /**
    * Where subscription renewal and receipt mail goes.

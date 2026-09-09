@@ -12,11 +12,11 @@ import {
  */
 export const invoiceLineJobComponentSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
-  description: z.string().min(1),
+  description: z.string().max(500).min(1),
   quantityPerUnit: z.number().positive(),
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
-  unitLabel: z.string().min(1).optional(),
+  unitLabel: z.string().max(40).min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
 });
 export type InvoiceLineJobComponentInput = z.infer<
@@ -32,16 +32,16 @@ export type InvoiceLineJobComponentInput = z.infer<
 export const invoiceLineItemInputSchema = quoteLineItemSchema.and(
   z.object({
     sort: z.number().int().nonnegative().optional(),
-    jobId: z.string().min(1).optional(),
-    jobName: z.string().min(1).optional(),
-    jobUnit: z.string().min(1).optional(),
+    jobId: z.string().max(64).min(1).optional(),
+    jobName: z.string().max(200).min(1).optional(),
+    jobUnit: z.string().max(40).min(1).optional(),
     jobComponents: z.array(invoiceLineJobComponentSchema).optional(),
   }),
 );
 export type InvoiceLineItemInput = z.infer<typeof invoiceLineItemInputSchema>;
 
 export const invoiceSectionInputSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().max(200).min(1),
   sort: z.number().int().nonnegative().optional(),
   lineItems: z.array(invoiceLineItemInputSchema).default([]),
 });
@@ -57,12 +57,12 @@ export const updateInvoiceSchema = z.object({
   // Nullable, not merely optional: sending null detaches the client, while
   // omitting the key leaves whoever is attached alone. The editor's client
   // picker offers a blank option, and that option has to mean something.
-  clientId: z.string().min(1).nullable().optional(),
+  clientId: z.string().max(64).min(1).nullable().optional(),
   dueDate: z.coerce.date().optional(),
   // The date the invoice bears. Reports attribute revenue to it, so it is a
   // financial field, not a cosmetic one — see Invoice.issueDate in schema.
   issueDate: z.coerce.date().optional(),
-  terms: z.string().optional(),
+  terms: z.string().max(5000).optional(),
   gctRatePct: z.number().min(0).max(100).optional(),
   discountPct: z.number().min(0).max(100).optional(),
   depositCents: z.number().int().nonnegative().optional(),
@@ -87,12 +87,12 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
  * it can be reviewed before being finalized.
  */
 export const createInvoiceSchema = z.object({
-  clientId: z.string().min(1).optional(),
+  clientId: z.string().max(64).min(1).optional(),
   dueDate: z.coerce.date().optional(),
   // The date the invoice bears. Reports attribute revenue to it, so it is a
   // financial field, not a cosmetic one — see Invoice.issueDate in schema.
   issueDate: z.coerce.date().optional(),
-  terms: z.string().optional(),
+  terms: z.string().max(5000).optional(),
   // Defaults are applied from the business's own settings when omitted — see
   // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
   gctRatePct: z.number().min(0).max(100).optional(),
