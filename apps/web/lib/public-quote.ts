@@ -1,3 +1,4 @@
+import type { PublicQuoteLineWire, PublicQuoteWire } from "@jamquote/core";
 import { API_BASE_URL } from "@/lib/api-client";
 
 /**
@@ -9,41 +10,30 @@ import { API_BASE_URL } from "@/lib/api-client";
  * alongside it would only confuse which credential was doing the work.
  */
 
-export interface PublicQuoteLine {
-  id: string;
-  category: string;
-  description: string;
-  quantity: string | number;
-  rateUnit: string;
-  unitLabel: string | null;
-  unitPriceCents: number;
-  gctTreatment: string;
-  heading?: string | null;
-}
+/**
+ * NOT declared here. Both shapes come from `@jamquote/core`'s wire contract —
+ * see `packages/core/src/wire/public-quote.ts`.
+ *
+ * That contract is `.strict()`, unlike the rest of `wire/`, because this is the
+ * only unauthenticated surface in the API: an unexpected field is a disclosure,
+ * not a shrug. The boundary widened silently once — the view reused the tenant's
+ * Prisma include and every line arrived carrying `markupPct`, the contractor's
+ * margin.
+ *
+ * The declarations replaced here also had `quantity` and `gctRate` as
+ * `string | number`, unions nobody could resolve. A serialized Prisma Decimal is
+ * always a string, and the API tests now prove it.
+ *
+ * `heading` is the one addition: the PAGE groups lines under a section title and
+ * hangs it on the line for rendering. It never comes from the API, which is why
+ * it is added here rather than in the contract.
+ */
+export type PublicQuoteLine = PublicQuoteLineWire & { heading?: string | null };
 
-export interface PublicQuote {
-  number: string;
-  status: string;
-  validUntil: string | null;
-  terms: string | null;
-  detailLevel: string;
-  gctRate: string | number;
-  discountPct: string | number;
-  depositCents: number;
-  subtotalCents: number;
-  gctCents: number;
-  totalCents: number;
+export type PublicQuote = Omit<PublicQuoteWire, "lineItems" | "sections"> & {
   lineItems: PublicQuoteLine[];
   sections: { id: string; title: string; lineItems: PublicQuoteLine[] }[];
-  clientName: string | null;
-  business: {
-    name: string;
-    addressLine: string | null;
-    town: string | null;
-    parish: string | null;
-    trn: string | null;
-  };
-}
+};
 
 /** Undefined for an unknown, revoked or still-draft token — the API returns
  * the same 404 for all three so the response cannot be used to probe which

@@ -14,7 +14,7 @@ conversation is a backlog that gets re-derived badly.
 | Suite | Files | Tests | Kind |
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
-| `apps/api` | 48 | 555 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
+| `apps/api` | 49 | 563 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
 | `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
@@ -150,7 +150,8 @@ same way, with `projectFieldRules`.
 | `MaterialFavourite` | Owed — flat, quick |
 | `Invoice` | Owed — nested sections, line items, retention, payments, reminders |
 | `Quote` | Owed — nested, plus variations and the client decision fields |
-| `PublicQuoteView`, `PublicInvoiceView` | **Guarded, and it found a real disclosure — see §4b.** Not Zod schemas in the end: the boundary is decided by a Prisma `select`, which is a fact about the source, so the guard reads the source |
+| `PublicQuoteView` | **Done, and guarded twice.** A source-reading disclosure test over the Prisma `select`, plus a `.strict()` wire contract — the only strict schema in `wire/`, because here an unexpected field is a disclosure rather than a shrug. The web derives from it |
+| `PublicInvoiceView` | Disclosure test done; the `.strict()` contract still owed — same shape as the quote one |
 
 ---
 
@@ -195,11 +196,18 @@ decision.
 `PublicQuoteLine` / `PublicInvoiceLine` type. A field now reaches a client only by
 being named, so any future disclosure is a visible line in a diff.
 
-**Pinned** by `public-quote-disclosure.test.ts` and its invoice twin, which read
-the source — because the boundary is a `select`, and a test over a sample row
+**Guarded twice, at different levels.** `public-quote-disclosure.test.ts` and its
+invoice twin read the source — because the boundary is a `select`, and a test over a sample row
 would pass the moment someone widened it and the sample happened to lack the new
 field. Each forbidden field is listed with the reason it is forbidden. Verified
 by adding `markupPct` and `supplierId` back and watching both go red.
+
+And `publicQuoteWire` is `.strict()` — the ONLY strict schema in `wire/`, since
+everywhere else a schema is a floor and extra fields are tolerated because the
+browser cannot be broken by data it never reads. Here an extra field IS the
+harm, so the parse fails. Verified by removing `.strict()` and watching three
+tests go red. The web now derives its public types from that contract, which also
+retired two more `string | number` unions.
 
 ---
 

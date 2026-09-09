@@ -25,3 +25,4 @@ export * from "./wire/client.js";
 export * from "./wire/business.js";
 export * from "./wire/project.js";
 export * from "./wire/catalog.js";
+export * from "./wire/public-quote.js";
