@@ -52,12 +52,10 @@ const UPPER_BOUNDS = [
 ];
 
 /**
- * Known-unbounded fields, as measured on 2026-09-08. **Do not add to this list
- * to make a test pass** — bound the field instead. It exists to stop the count
- * growing while these eleven are worked through with real limits.
+ * Fields allowed to have no upper bound.
  *
- * `terms` is the one that matters most: it prints on the quote and the invoice a
- * client reads.
+ * **Empty, and it should stay empty.** Adding a name here to make a test pass is
+ * the failure this guard exists to prevent — bound the field instead.
  */
 const KNOWN_UNBOUNDED: Record<string, string[]> = {
   // EMPTY, and it should stay that way. Every string input has an upper bound.

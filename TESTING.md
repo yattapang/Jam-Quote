@@ -15,12 +15,16 @@ conversation is a backlog that gets re-derived badly.
 |---|---|---|---|
 | `packages/core` | 23 | 269 | Pure logic — totals, money, dates, settlement, vocabulary |
 | `apps/api` | 54 | 616 | Services with a fake Prisma, PGlite migration replays, wire contracts, write-path parity, input bounds, public disclosure |
-| `apps/web` | 30 | 436 | Pure logic, source guards, and **6 component suites** |
+| `apps/web` | 31 | 449 | Pure logic, source guards, and **7 component suites** |
 
 **The structural gap that closed on 2026-09-08:** nothing had ever rendered a
 component. Every form defect the owner found by clicking was invisible to the
 suite — whether a button is disabled, or a field groups its digits, is a
 property of the rendered output.
+
+The web suite takes ~36s of test time (~50s wall), up from ~7s before the DOM
+suites — almost all of it jsdom environment setup, which is why jsdom is opted
+into per file rather than switched on globally.
 
 **The gap still open:** nothing exercises the tenant↔API boundary over HTTP. All
 API tests use a fake Prisma or an in-process Postgres; no test makes a request.
@@ -42,12 +46,21 @@ never failed proves only that it runs.**
 | `ProjectForm` | Blank retention vs a typed `0`; the PROJECT/JOB vocabulary on screen |
 | `RemindButton` | WhatsApp and email each disabled for their OWN reason, each stated in text rather than a tooltip; the chase count; the API's real refusal |
 | `DeleteRowButton` | Confirms first; the API's own reason on refusal; blames the network only when the fetch never completed; a failed delete does not navigate |
+| `QuoteDecision` (public accept/decline) | A settled quote offers NO buttons — two people opening the same link is the common case; a name is required; the API's own refusal sentence is shown rather than "is the API running?"; an acceptance never carries a decline reason |
 | `QuoteBuilder` draft recovery | The banner appears only for a draft worth restoring, never on an untouched form; Restore repopulates; Start fresh clears; and **typing dismisses it and starts autosaving** |
 
 ### Owed, highest value first
 
 | Suite | Why it matters | Defect precedent |
 |---|---|---|
+| `LineItemsEditor` | Unit label per line via `lineUnitLabel`; the category dropdown showing its options | "30 units" for a job sold by the metre; the invisible datalist |
+| `RetentionPanel` | Held vs due-now; release disabled on a draft | Retention read as a shortfall |
+| `MaterialForm` | Coverage hint; the unit picker; `m2` → `m²` | All three were owner findings |
+
+None of the three is protecting something that has actually broken since it was
+fixed, and `LineItemsEditor`'s two defects already have a source guard behind
+them. They are worth doing; they are not what is holding anything up.
+
 **Two notes from writing these**, both about the tests rather than the code:
 
 - `vi.mock` factories are HOISTED, so a class declared below them is not
@@ -57,11 +70,6 @@ never failed proves only that it runs.**
   so a name query matches both once the modal opens. Handled in the test, but
   noted as a real if minor accessibility smell — two controls with one name, one
   of them destructive. Renaming the confirm is a product decision, not a test's.
-
-| `LineItemsEditor` | Unit label per line via `lineUnitLabel`; the category dropdown showing its options | "30 units" for a job sold by the metre; the invisible datalist |
-| `RetentionPanel` | Held vs due-now; release disabled on a draft | Retention read as a shortfall |
-| `MaterialForm` | Coverage hint; the unit picker; `m2` → `m²` | All three were owner findings |
-| `QuoteDecision` (public) | Accept/decline once only; a settled quote offers no buttons | New, unexercised |
 
 ---
 
