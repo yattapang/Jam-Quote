@@ -680,6 +680,49 @@ core 293, api 729, web 466, mobile 28.
 
 ---
 
+## F31/F32 closed, and two HIGH corrections from review
+
+**F31 — the form and the server disagreed field by field.** `discountPct` was
+`.min(0).max(100)` in the DTO and a bare `<Input type="number">` on screen. The telling
+detail: `QuoteBuilder`'s Deposit field, two lines from Discount, already had
+`min`/`max`. The pattern was known and not applied.
+
+Fixed structurally: `BOUNDS` in core, spent by BOTH the DTO and the input, so they
+cannot drift. **The guard found eight more bounds I had not** — `PaymentsPanel`,
+`ProjectCosts` (four), `EditBusinessButton`, `SupplierPricePanel`, waste percentage —
+all hand-written copies of a server rule. All converted; the allow-list holds only the
+admin console and two files with a stated reason.
+
+**F32** — `Number("abc") || 0`. Verified rather than assumed: an
+`<input type="number">` sanitises unparseable text to the empty string, and empty *is*
+zero for a discount. With bounds now on the inputs, the practical surface is closed.
+
+### The review found two HIGH problems with my previous fix
+
+**My vacated-period rule tested a single instant, so a void could rewind a term far
+longer than the period it emptied.** Simulated: voiding one stale one-month cheque cost
+an annual tenant **eight months of the year they had just paid for** — because for a
+term longer than the gap the date half of the test can never fire, and the rule
+collapsed to vacated-only, which had already been found to be a regression. A term may
+now only refill a window it fits inside **entirely**. Six ledgers simulated before
+changing anything.
+
+**My clientless-revision exemption handed back the exact hole the guard existed for.**
+A clientless original produces a clientless descendant, so the exemption let it be
+retargeted — one draft, revised repeatedly, a new client each time. `revise` and
+`createVariation` are now GATED (they still do not COUNT: the job was counted when the
+original was made, and charging for a correction is wrong — but at the cap they are
+refused). Both verified by ungating each in turn.
+
+**One claim I did not accept.** The review called the `until === paidAt` boundary a
+bug. Simulation showed all three candidate rules give the same answer there, so it is
+not a rule defect — it is the deliberate "money buys the earliest unpaid month" policy
+adopted earlier. It is now an owner question rather than a silent change.
+
+core 293, api 733, web 474, mobile 28.
+
+---
+
 ## F28 — CLOSED: a rejected form now names the field
 
 Every rejection answered with the literal string **"Validation failed"**. The reason
@@ -729,8 +772,8 @@ core 293, api 721, web 466, mobile 28.
 
 | # | Finding | Where | Status |
 |---|---|---|---|
-| F31 | Forms accept what the API refuses, so the save fails with F28's unreadable message: Discount, GCT and Deposit carry no min or max while the sibling Deposit field two lines away has both; `coveragePerSellUnit` allows zero against a positive-only rule; Rate and Price have no floor; `progressPct` accepts 50.5 against an integer rule. | `InvoiceBuilder.tsx:333-335`, `QuoteBuilder.tsx:391`, `MaterialForm.tsx:466-514`, `LabourRateForm.tsx:106-111`, `ProjectForm.tsx:182-190` | OPEN |
-| F32 | Non-numeric input is silently coerced to zero in both builders — the preview shows 0% and nothing tells the user their input was ignored. | `QuoteBuilder.tsx:242`, `InvoiceBuilder.tsx:195` | OPEN |
+| F31 | Forms accept what the API refuses, so the save fails with F28's unreadable message: Discount, GCT and Deposit carry no min or max while the sibling Deposit field two lines away has both; `coveragePerSellUnit` allows zero against a positive-only rule; Rate and Price have no floor; `progressPct` accepts 50.5 against an integer rule. | `InvoiceBuilder.tsx:333-335`, `QuoteBuilder.tsx:391`, `MaterialForm.tsx:466-514`, `LabourRateForm.tsx:106-111`, `ProjectForm.tsx:182-190` | **CLOSED** |
+| F32 | Non-numeric input is silently coerced to zero in both builders — the preview shows 0% and nothing tells the user their input was ignored. | `QuoteBuilder.tsx:242`, `InvoiceBuilder.tsx:195` | **CLOSED** |
 | F33 | **The UTC-5 trap, fifth appearance.** `ProjectCosts` defaults the purchase and labour dates from `toISOString()`, so after 7pm Jamaica time the picker opens on *tomorrow*. `PaymentsPanel:33` already subtracts the offset, with a comment saying why. Two more raw uses to check while in there: `reports/page.tsx:63`, `AdminConsole.tsx:1244`. | `ProjectCosts.tsx:68,77` | OPEN |
 | F34 | `dueDate` renders a day early through a raw `toLocaleDateString` — masked by UTC hosts today, wrong in any browser-side mapping in Jamaica and on the PDF the moment a host sets `TZ`. `jamaicaTodayAsUtcMidnight` is private to one service and not exported from core, which is why this could not have used it. | `api-client.ts:310-314,559` | OPEN |
 | F35 | The restore banner fires on an untouched **edit** form, offering back a draft identical to what is already on screen — and a stale snapshot for up to seven days. Every draft test renders the new-quote mode, so the edit path is unguarded. | `QuoteBuilder.tsx:186-210`, `quote-draft-recovery.ts:96-102` | OPEN |

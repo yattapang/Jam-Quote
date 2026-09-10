@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProjectStage, PARISHES } from "@jamquote/core";
+import { BOUNDS, PARISHES, ProjectStage } from "@jamquote/core";
 
 /**
  * What a valid value for each project field IS, with no statement about
@@ -32,7 +32,7 @@ export const createProjectSchema = z.object({
   // Both hand-set (#36): the server knows about quotes and invoices, not about
   // whether the block work has started, so neither is ever derived.
   stage: z.nativeEnum(ProjectStage).optional(),
-  progressPct: z.number().int().min(0).max(100).optional(),
+  progressPct: z.number().int().min(BOUNDS.progressPct.min).max(BOUNDS.progressPct.max).optional(),
   /**
    * Default retention for invoices raised on this job — a percentage the
    * client withholds until sign-off, normal in Jamaican construction.

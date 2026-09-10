@@ -900,6 +900,11 @@ export class QuotesService {
    * as the original, which is what makes job costing add up.
    */
   async createVariation(businessId: string, quoteId: string): Promise<QuoteWithLines> {
+    // Gated, for the same reason as `revise`: a variation does not count against the
+    // allowance, but at the cap it is refused. Both were ungated, and the retarget
+    // guard alone did not close the loop.
+    await this.assertCanCreateQuote(businessId);
+
     const original = await this.findOne(businessId, quoteId);
 
     // Only something the client has actually agreed to can be varied. Varying
@@ -945,6 +950,16 @@ export class QuotesService {
    *   @@unique([businessId, number, version]).
    */
   async revise(businessId: string, id: string): Promise<QuoteWithLines> {
+    // Gated, like `create`. A revision does not COUNT against the allowance — the job
+    // it descends from was counted when the original was made, and charging a
+    // contractor to correct their own quote is wrong — but at the cap it is refused,
+    // because otherwise it is an unlimited supply of sendable documents.
+    //
+    // The retarget guard in `update` was meant to be enough. It was not: a CLIENTLESS
+    // original produces a clientless descendant, and the exemption added so such a
+    // revision could be given a client at all handed the loop straight back.
+    await this.assertCanCreateQuote(businessId);
+
     const original = await this.findOne(businessId, id);
     const isClosed =
       original.status === QuoteStatus.ACCEPTED || original.status === QuoteStatus.INVOICED;

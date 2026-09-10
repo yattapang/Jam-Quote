@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
+import { BOUNDS, formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -310,7 +310,7 @@ export default function ProjectCosts({
               <Input
                 label="How many"
                 type="number"
-                min={0}
+                min={BOUNDS.quantity.min}
                 step="0.5"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
@@ -324,7 +324,7 @@ export default function ProjectCosts({
               <Input
                 label="Rate $"
                 type="number"
-                min={0}
+                min={BOUNDS.moneyDollars.min}
                 step="0.01"
                 value={rate}
                 onChange={(e) => setRate(e.target.value)}
@@ -367,7 +367,7 @@ export default function ProjectCosts({
               <Input
                 label="Amount paid $"
                 type="number"
-                min={0}
+                min={BOUNDS.moneyDollars.min}
                 step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -378,7 +378,7 @@ export default function ProjectCosts({
               <Input
                 label="of which GCT $"
                 type="number"
-                min={0}
+                min={BOUNDS.moneyDollars.min}
                 step="0.01"
                 value={gct}
                 onChange={(e) => setGct(e.target.value)}

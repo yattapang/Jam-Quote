@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
+import { BOUNDS, inputMin } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -467,6 +468,7 @@ export default function MaterialForm({
         <Input
           label="Price $"
           type="number"
+          min={BOUNDS.moneyDollars.min}
           value={values.priceDollars}
           onChange={(e) => set("priceDollars", e.target.value)}
         />
@@ -513,7 +515,12 @@ export default function MaterialForm({
           <Input
             label={`Covers per ${soldByUnit ? soldByUnit.label : "sell unit"}`}
             type="number"
-            min={0}
+            // Not 0: the server takes `.positive()`, because zero coverage is a
+            // MISSING value rather than a fact about a material — and
+            // `coverageConfigFromFavourite` treats a half-configured material as
+            // unconfigured. HTML `min` is inclusive, so the smallest step above zero
+            // is the closest it can express.
+            min={inputMin(BOUNDS.coveragePerSellUnit)}
             step="any"
             placeholder="e.g. 1.5"
             value={values.coveragePerSellUnit}
@@ -522,8 +529,8 @@ export default function MaterialForm({
           <Input
             label="Waste %"
             type="number"
-            min={0}
-            max={100}
+            min={BOUNDS.wastePct.min}
+            max={BOUNDS.wastePct.max}
             step="any"
             placeholder="e.g. 10"
             value={values.wastePct}

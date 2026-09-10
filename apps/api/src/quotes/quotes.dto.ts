@@ -4,6 +4,7 @@ import {
   QuoteDetailLevel,
   QuoteStatus,
   quoteLineItemSchema,
+  BOUNDS,
 } from "@jamquote/core";
 
 /**
@@ -56,8 +57,8 @@ export type QuoteSectionInput = z.infer<typeof quoteSectionInputSchema>;
 export const createQuoteSchema = z.object({
   clientId: z.string().max(64).min(1).optional(),
   projectId: z.string().max(64).min(1).optional(),
-  gctRatePct: z.number().min(0).max(100).optional(),
-  discountPct: z.number().min(0).max(100).optional(),
+  gctRatePct: z.number().min(BOUNDS.gctRatePct.min).max(BOUNDS.gctRatePct.max).optional(),
+  discountPct: z.number().min(BOUNDS.discountPct.min).max(BOUNDS.discountPct.max).optional(),
   depositCents: z.number().int().nonnegative().optional(),
   validUntil: z.coerce.date().optional(),
   terms: z.string().max(5000).optional(),

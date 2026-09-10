@@ -260,8 +260,23 @@ export class SubscriptionPaymentsService {
     const vacated = all
       .filter((p) => p.voidedAt !== null)
       .map((p) => ({ from: p.coversFrom, until: p.coversUntil }));
-    const isVacated = (at: Date): boolean =>
-      vacated.some((v) => at.getTime() >= v.from.getTime() && at.getTime() < v.until.getTime());
+    /**
+     * Does the WHOLE term fit inside one vacated window?
+     *
+     * Testing a single instant was not enough. `isVacated(from)` was true whenever
+     * the chain end happened to land in any vacated window, however small — so a
+     * voided one-month cheque let a subsequent ANNUAL payment be rewound a full
+     * year. Simulated: voiding one stale monthly payment cost an annual tenant
+     * **eight months of the year they had just paid for**, because for a term longer
+     * than the gap the date test can never fire and the rule collapsed to
+     * vacated-only.
+     *
+     * A term may only refill a period that was actually emptied — all of it.
+     */
+    const termFitsVacated = (from: Date, until: Date): boolean =>
+      vacated.some(
+        (v) => from.getTime() >= v.from.getTime() && until.getTime() <= v.until.getTime(),
+      );
 
     let end = anchor;
     for (const p of all) {
@@ -285,7 +300,7 @@ export class SubscriptionPaymentsService {
       // month for a year's fee. Each test catches what the other misses.
       let from = end;
       let until = nextTermEnd(p.interval, from.toISOString(), from);
-      const refillsVacated = isVacated(from);
+      const refillsVacated = termFitsVacated(from, until);
       if (from.getTime() < p.paidAt.getTime() && (!refillsVacated || until.getTime() < p.paidAt.getTime())) {
         from = p.paidAt;
         until = nextTermEnd(p.interval, from.toISOString(), from);

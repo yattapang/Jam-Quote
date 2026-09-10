@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { computeTotals, depositCentsFrom, DepositMode, QuoteDetailLevel } from "@jamquote/core";
+import { BOUNDS, computeTotals, depositCentsFrom, DepositMode, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -395,7 +395,14 @@ export default function QuoteBuilder({
       <div className={shared.grid2}>
         <Card>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <Input label="Discount %" type="number" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
+            <Input
+              label="Discount %"
+              type="number"
+              min={BOUNDS.discountPct.min}
+              max={BOUNDS.discountPct.max}
+              value={discountPct}
+              onChange={(e) => setDiscountPct(e.target.value)}
+            />
             {/* Deposit takes a dollar amount or a percentage of the total —
                 "half up front" is as common as a flat figure, and working the
                 percentage out by hand is where a wrong number gets quoted. */}
@@ -403,7 +410,7 @@ export default function QuoteBuilder({
               <Input
                 label={depositMode === DepositMode.PERCENT ? "Deposit %" : "Deposit $"}
                 type="number"
-                min={0}
+                min={BOUNDS.moneyDollars.min}
                 {...(depositMode === DepositMode.PERCENT ? { max: 100 } : {})}
                 value={depositInput}
                 onChange={(e) => setDepositInput(e.target.value)}
@@ -423,7 +430,7 @@ export default function QuoteBuilder({
                 onChange={(e) => setDepositMode(e.target.value as DepositMode)}
               />
             </div>
-            <Input label="Valid for (days)" type="number" min={1} value={validDays} onChange={(e) => setValidDays(e.target.value)} />
+            <Input label="Valid for (days)" type="number" min={BOUNDS.validDays.min} value={validDays} onChange={(e) => setValidDays(e.target.value)} />
           </div>
         </Card>
         <Card>

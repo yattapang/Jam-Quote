@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useEffect, useRef} from "react";
 import { useRouter } from "next/navigation";
-import { computeTotals, QuoteDetailLevel } from "@jamquote/core";
+import { BOUNDS, computeTotals, QuoteDetailLevel } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -333,9 +333,29 @@ export default function InvoiceBuilder({
               onChange={(e) => setTerms(e.target.value)}
             />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <Input label="GCT %" type="number" value={gctRatePct} onChange={(e) => setGctRatePct(e.target.value)} />
-              <Input label="Discount %" type="number" value={discountPct} onChange={(e) => setDiscountPct(e.target.value)} />
-              <Input label="Deposit $" type="number" value={depositDollars} onChange={(e) => setDepositDollars(e.target.value)} />
+              <Input
+                label="GCT %"
+                type="number"
+                min={BOUNDS.gctRatePct.min}
+                max={BOUNDS.gctRatePct.max}
+                value={gctRatePct}
+                onChange={(e) => setGctRatePct(e.target.value)}
+              />
+              <Input
+                label="Discount %"
+                type="number"
+                min={BOUNDS.discountPct.min}
+                max={BOUNDS.discountPct.max}
+                value={discountPct}
+                onChange={(e) => setDiscountPct(e.target.value)}
+              />
+              <Input
+                label="Deposit $"
+                type="number"
+                min={BOUNDS.moneyDollars.min}
+                value={depositDollars}
+                onChange={(e) => setDepositDollars(e.target.value)}
+              />
             </div>
           </div>
         </Card>

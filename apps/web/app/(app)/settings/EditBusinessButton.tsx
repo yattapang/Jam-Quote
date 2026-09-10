@@ -8,7 +8,7 @@ import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import TradeSelectField from "@/components/forms/TradeSelectField";
 import { updateBusiness, type Trade } from "@/lib/api-client";
-import { PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
+import { BOUNDS, PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
 import type { Business } from "@/lib/types";
 
 import { errorMessage } from "@/lib/error-message";
@@ -106,8 +106,8 @@ export default function EditBusinessButton({
               <Input
                 label="Default GCT rate (%)"
                 type="number"
-                min={0}
-                max={100}
+                min={BOUNDS.gctRatePct.min}
+                max={BOUNDS.gctRatePct.max}
                 step="0.01"
                 value={gctPct}
                 onChange={(e) => setGctPct(e.target.value)}

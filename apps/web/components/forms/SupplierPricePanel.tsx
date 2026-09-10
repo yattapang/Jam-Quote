@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PARISHES } from "@jamquote/core";
+import { BOUNDS, PARISHES } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
@@ -265,7 +265,7 @@ export default function SupplierPricePanel({
           <Input
             label="Price $"
             type="number"
-            min="0"
+            min={BOUNDS.moneyDollars.min}
             step="0.01"
             value={priceDollars}
             onChange={(e) => setPriceDollars(e.target.value)}

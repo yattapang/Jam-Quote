@@ -36,13 +36,12 @@ describe("QuotesService.create", () => {
       quoteLineItem: { create: vi.fn() },
     };
     const prisma = {
+      // The allowance gate runs before revise now; a pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
       quote: {
         findFirst: vi.fn().mockResolvedValue({ id: "q1", lineItems: [], sections: [] }),
       },
-      // "pro" so the free-tier gate returns early without needing
-      // pricingService/quote.count mocks for this unrelated test.
-      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
     };
 
     const svc = new QuotesService(prisma as any, businessService as any, {} as any);
@@ -132,6 +131,8 @@ describe("QuotesService.create — job lines + detail level", () => {
       },
     };
     const prisma = {
+      // The allowance gate runs before revise now; a pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
       quote: {
         findFirst: vi.fn(() =>
@@ -143,7 +144,6 @@ describe("QuotesService.create — job lines + detail level", () => {
           }),
         ),
       },
-      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
     };
     const svc = new QuotesService(prisma as any, businessService as any, {} as any);
     return { svc };
@@ -268,6 +268,10 @@ describe("QuotesService.updateStatus", () => {
   function serviceForQuote(status: QuoteStatus) {
     const quote = { id: "q1", status, lineItems: [], sections: [] };
     const prisma = {
+      // The allowance gate runs first now: `revise` and `createVariation` were
+      // ungated, so a tenant at the cap had an unlimited supply of sendable
+      // documents. A pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       quote: {
         findFirst: vi.fn().mockResolvedValue(quote),
         update: vi.fn().mockResolvedValue({}),
@@ -344,6 +348,8 @@ describe("QuotesService.revise", () => {
       reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0200"),
     };
     const prisma = {
+      // The allowance gate runs before revise now; a pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
       quote: {
         findFirst: vi
@@ -448,6 +454,10 @@ describe("QuotesService.revise", () => {
 describe("QuotesService.remove", () => {
   function serviceForQuote(status: QuoteStatus) {
     const prisma = {
+      // The allowance gate runs first now: `revise` and `createVariation` were
+      // ungated, so a tenant at the cap had an unlimited supply of sendable
+      // documents. A pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       quote: {
         findFirst: vi.fn().mockResolvedValue({ id: "q1", status, lineItems: [], sections: [] }),
         // `remove` soft-deletes now: the schema declares deletedAt for offline
@@ -508,6 +518,10 @@ describe("variations", () => {
     // a variation ADDS to something already agreed — and rewriting an accepted
     // quote would destroy the record of what the client actually agreed to.
     const prisma = {
+      // The allowance gate runs first now: `revise` and `createVariation` were
+      // ungated, so a tenant at the cap had an unlimited supply of sendable
+      // documents. A pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       quote: {
         findFirst: vi.fn().mockResolvedValue({
           id: "q1",
@@ -526,6 +540,10 @@ describe("variations", () => {
   it("inherits the job from the original, so the extra work counts against it", async () => {
     const created: Record<string, unknown>[] = [];
     const prisma = {
+      // The allowance gate runs first now: `revise` and `createVariation` were
+      // ungated, so a tenant at the cap had an unlimited supply of sendable
+      // documents. A pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       quote: {
         findFirst: vi
           .fn()
@@ -565,6 +583,10 @@ describe("variations", () => {
   it("starts EMPTY — a variation is the new work, not a copy of the old", async () => {
     const created: Record<string, unknown>[] = [];
     const prisma = {
+      // The allowance gate runs first now: `revise` and `createVariation` were
+      // ungated, so a tenant at the cap had an unlimited supply of sendable
+      // documents. A pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       quote: {
         findFirst: vi
           .fn()
@@ -687,6 +709,8 @@ describe("what the free allowance counts", () => {
 describe("a descendant quote cannot be retargeted at another client", () => {
   function editHarness(existing: Record<string, unknown>) {
     const prisma = {
+      // The allowance gate runs before revise now; a pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
         cb({
           quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
@@ -789,6 +813,8 @@ describe("a revision of a CLIENTLESS quote can still be given a client", () => {
     // the retarget guard refused the one legitimate case it should allow, with a
     // message about keeping a client that did not exist.
     const prisma = {
+      // The allowance gate runs before revise now; a pro plan short-circuits it.
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
         cb({
           quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
@@ -819,5 +845,57 @@ describe("a revision of a CLIENTLESS quote can still be given a client", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new QuotesService(prisma as any, {} as any, {} as any);
     await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
+  });
+});
+
+
+/**
+ * `revise` and `createVariation` are gated, even though they do not COUNT.
+ *
+ * The allowance excludes descendants on purpose — the job was counted when the
+ * original was made, and charging a contractor to correct their own quote is wrong.
+ * But both paths mint a fully-priced, sendable DRAFT and neither consulted the gate,
+ * so a tenant at the cap had an unlimited supply.
+ *
+ * The retarget guard in `update` was supposed to be enough. It was not: a CLIENTLESS
+ * original produces a clientless descendant, and the exemption added so such a
+ * revision could be given a client at all handed the loop straight back — one
+ * clientless draft, revised repeatedly, retargeted each time. A review found that in
+ * the commit that claimed to close it.
+ */
+describe("the allowance gate covers every path that mints a quote", () => {
+  function harnessAtCap(status: string) {
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "free" }) },
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "q1",
+          businessId: "b1",
+          status,
+          clientId: null,
+          projectId: null,
+          number: "Q-0001",
+          version: 1,
+          lineItems: [],
+          sections: [],
+        }),
+        count: vi.fn().mockResolvedValue(5),
+      },
+    };
+    const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: 5 }) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return new QuotesService(prisma as any, {} as any, pricingService as any);
+  }
+
+  it("refuses `revise` at the cap", async () => {
+    await expect(harnessAtCap("SENT").revise("b1", "q1")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
+    });
+  });
+
+  it("refuses `createVariation` at the cap", async () => {
+    await expect(harnessAtCap("ACCEPTED").createVariation("b1", "q1")).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
+    });
   });
 });

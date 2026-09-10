@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { InvoiceStatus, PaymentMethod } from "@jamquote/core";
+import { BOUNDS, InvoiceStatus, PaymentMethod } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -185,7 +185,7 @@ export default function PaymentsPanel({
               <Input
                 label="Amount $"
                 type="number"
-                min="0"
+                min={BOUNDS.moneyDollars.min}
                 step="0.01"
                 value={amountDollars}
                 onChange={(e) => setAmountDollars(e.target.value)}

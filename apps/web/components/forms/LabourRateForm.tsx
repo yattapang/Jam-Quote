@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RateUnit } from "@jamquote/core";
+import { BOUNDS, RateUnit } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import RateUnitField from "@/components/forms/RateUnitField";
@@ -106,6 +106,7 @@ export default function LabourRateForm({
         <Input
           label="Rate $"
           type="number"
+          min={BOUNDS.moneyDollars.min}
           value={values.rateDollars}
           onChange={(e) => set("rateDollars", e.target.value)}
         />

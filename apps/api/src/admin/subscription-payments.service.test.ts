@@ -516,3 +516,53 @@ describe("voiding an old payment leaves a current tenant current", () => {
     expect(JSON.stringify(subscriptionWrites)).toContain("2027-01-01");
   });
 });
+
+
+/**
+ * A void must not rewind a term LONGER than the period it emptied.
+ *
+ * The rule tested a single instant: "is the chain end inside any vacated window?".
+ * A voided one-month cheque therefore let a subsequent ANNUAL payment be pulled back
+ * a full year — because for a term longer than the gap the date half of the test can
+ * never fire, and the rule silently collapsed to vacated-only, which is the version
+ * that had already been found to be a regression.
+ *
+ * Simulated across six ledgers before changing anything: voiding one stale monthly
+ * payment cost an annual tenant **eight months of the year they had just paid for**.
+ */
+describe("a void only refills the period it actually emptied", () => {
+  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+
+  it("does not rewind an ANNUAL term into a one-month vacated window", async () => {
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2027-09-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2026-02-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-09-01"), coversFrom: at("2026-09-01"), coversUntil: at("2027-09-01"), interval: "annual", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    const written = JSON.stringify(subscriptionWrites);
+    // A year from when the money arrived — the same answer as if the void had never
+    // happened, which is the point: voiding someone else's stale cheque must not
+    // shorten the year this payment bought.
+    expect(written).toContain("2027-09-01");
+    expect(written).not.toContain("2027-01-01");
+  });
+
+  it("still refills a vacated month with a MONTHLY payment", async () => {
+    // The behaviour that must survive: the term fits the window exactly.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-04-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-02-01"), coversFrom: at("2026-02-01"), coversUntil: at("2026-03-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-03-01"), coversFrom: at("2026-03-01"), coversUntil: at("2026-04-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    expect(JSON.stringify(subscriptionWrites)).toContain("2026-03-01");
+  });
+});
