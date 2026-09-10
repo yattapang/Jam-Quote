@@ -613,11 +613,14 @@ describe("what the free allowance counts", () => {
     await svc.create("b1", { sections: [], lineItems: [line] } as never).catch(() => undefined);
 
     const where = prisma.quote.count.mock.calls[0]![0].where;
-    // version 1 excludes a revision; a null variationOfQuoteId excludes a
-    // variation. Without both, a contractor's own corrections consumed the
-    // allowance they were given for quoting jobs.
-    expect(where.version).toBe(1);
+    // Keyed on LINEAGE, not version. The first attempt used `version: 1`, and a
+    // review found that `revise` of a CLOSED quote reserves a new number and starts
+    // again at version 1 — so the ordinary "client agreed, then we corrected the
+    // sheet" path still ate an allowance. parentQuoteId catches all three kinds of
+    // descendant; version caught two.
+    expect(where.parentQuoteId).toBeNull();
     expect(where.variationOfQuoteId).toBeNull();
+    expect(where.version, "version is the wrong key — see above").toBeUndefined();
   });
 
   it("still scopes the count to this business and this month", async () => {
@@ -628,5 +631,93 @@ describe("what the free allowance counts", () => {
     const where = prisma.quote.count.mock.calls[0]![0].where;
     expect(where.businessId).toBe("b1");
     expect(where.createdAt.gte).toBeInstanceOf(Date);
+  });
+});
+
+
+/**
+ * A revision keeps the client of the quote it came from.
+ *
+ * This is what actually closes the free-plan bypass, and the first attempt at F16
+ * missed it entirely. `revise` and `createVariation` are ungated on purpose — the
+ * job they descend from already consumed an allowance, and charging a contractor to
+ * correct their own quote is wrong. But a revision is a fully-priced DRAFT, and
+ * `update` let its `clientId` be changed:
+ *
+ *   POST /quotes/:id/revise   -> a priced DRAFT, no allowance consumed
+ *   PATCH /quotes/:newId      -> point it at a different client
+ *   PATCH .../status -> SENT, then share
+ *
+ * Two requests, repeatable without limit, from one seed quote. A tenant at the cap
+ * had an unlimited supply of sendable quotes for new clients. The previous commit
+ * described that as "a nudge toward Pro, not DRM" — reframing a revenue hole as a
+ * design stance, and PLANNING §4e is explicit that the free tier IS the trial.
+ *
+ * Quoting a different client is a different job, and a different job is a new quote.
+ */
+describe("a descendant quote cannot be retargeted at another client", () => {
+  function editHarness(existing: Record<string, unknown>) {
+    const prisma = {
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
+          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
+          quote: { update: vi.fn().mockResolvedValue({}) },
+        }),
+      ),
+      quote: { findFirst: vi.fn().mockResolvedValue(existing) },
+      client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-2", businessId: "b1" }) },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    return { svc, prisma };
+  }
+
+  const draft = {
+    id: "q2",
+    businessId: "b1",
+    status: "DRAFT",
+    clientId: "cl-1",
+    projectId: null,
+    parentQuoteId: null,
+    variationOfQuoteId: null,
+    version: 1,
+    gctRate: 15,
+    discountPct: 0,
+    depositCents: 0,
+    detailLevel: "SUMMARY",
+    lineItems: [],
+    sections: [],
+  };
+
+  it("REFUSES a client change on a revision", async () => {
+    const { svc } = editHarness({ ...draft, parentQuoteId: "q1" });
+    await expect(svc.update("b1", "q2", { clientId: "cl-2" } as never)).rejects.toThrow(
+      /keeps the client/,
+    );
+  });
+
+  it("REFUSES a client change on a variation", async () => {
+    const { svc } = editHarness({ ...draft, variationOfQuoteId: "q1" });
+    await expect(svc.update("b1", "q2", { clientId: "cl-2" } as never)).rejects.toThrow(
+      /keeps the client/,
+    );
+  });
+
+  it("ALLOWS a client change on an original draft", async () => {
+    // The ordinary case has to keep working: a contractor who picked the wrong
+    // client on a quote they have not sent must be able to fix it.
+    const { svc } = editHarness(draft);
+    await expect(
+      svc.update("b1", "q2", { clientId: "cl-2", discountPct: 0 } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it("ALLOWS editing a revision as long as the client is unchanged", async () => {
+    // Correcting the sheet is the whole point of a revision, and it stays free.
+    const { svc } = editHarness({ ...draft, parentQuoteId: "q1" });
+    await expect(
+      svc.update("b1", "q2", { clientId: "cl-1", discountPct: 5 } as never),
+    ).resolves.toBeDefined();
   });
 });

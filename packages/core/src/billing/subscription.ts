@@ -101,9 +101,21 @@ export function nextTermEnd(
   const currentMs = currentRenewsAt ? new Date(currentRenewsAt).getTime() : 0;
   const base = new Date(Math.max(currentMs, now.getTime()));
 
+  // UTC accessors, not local ones. `setMonth`/`getMonth` read the host's timezone,
+  // and every date here is a UTC-midnight instant — so in America/Jamaica (UTC-5,
+  // where this ships) a UTC midnight is the PREVIOUS day locally and the month
+  // arithmetic overflowed or undershot. Measured: 1 Feb -> 4 Mar (31 days), but
+  // 1 Mar -> 29 Mar (28 days). It went both ways, in every month, and the answer
+  // depended on the server's TZ env — under UTC all of them were exact.
+  //
+  // This was filed as an owner question about whether "monthly" should mean the
+  // same day each month. It is not a preference: it is a correctness bug, and a
+  // review found that it also broke the void re-anchoring the lapse fix in
+  // `reallocateTerms` is built around, in the timezone the product actually runs
+  // in. A term is now exactly one calendar month or year, wherever the host is.
   const end = new Date(base);
-  if (interval === SubscriptionInterval.ANNUAL) end.setFullYear(end.getFullYear() + 1);
-  else end.setMonth(end.getMonth() + 1);
+  if (interval === SubscriptionInterval.ANNUAL) end.setUTCFullYear(end.getUTCFullYear() + 1);
+  else end.setUTCMonth(end.getUTCMonth() + 1);
   return end;
 }
 

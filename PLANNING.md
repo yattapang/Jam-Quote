@@ -1973,7 +1973,10 @@ the API refuses), then the Tier 3 admin-console items.
 | Question | Why it matters |
 |---|---|
 | A `gctRegistered` column on Business | `registeredForGct` is inferred from `Boolean(business.trn)`, and in Jamaica every individual has a TRN. A sole trader who fills in their personal TRN has input tax netted off and **margin overstated on every job** |
-| Should "monthly" mean the same DAY each month? | `nextTermEnd` advances a calendar month from a base, so a term starting 1 February ends 4 March. It changes when tenants are billed |
+| ~~Should "monthly" mean the same DAY each month?~~ | **NOT a preference — it was a bug, now fixed.** `nextTermEnd` used local `setMonth` on UTC-midnight instants, so in Jamaica terms ran 28–31 days in both directions and the answer depended on the host's `TZ`. It was also breaking the void re-anchoring the lapse fix depends on. UTC accessors now |
+| Bound `paidAt` on the admin payment form | It is unbounded `z.string().datetime()` free text and is now load-bearing for `renewsAt`. A typo'd year grants a year of Pro, and poisons every later payment's allocation |
+| Guard `startCardPayment` against duplicate pending rows, and sweep stale ones | F53 fixed the callback symptom; the root is that every call writes another pending row for the full balance, for ever. Invisible today because three surfaces filter them — the moment a fourth forgets, the triple-counted ledger returns |
+| Should `remove` soft-delete a DRAFT quote? | The schema declares `deletedAt` for offline sync and `remove` hard-deletes, so the monthly allowance count can be decremented by create-PDF-delete. Weaker than the revision bypass — `share` refuses DRAFT, so only a PDF is obtainable |
 | Should `pending`/`failed` payments be visible anywhere? | They are written by code and read by no surface, so "I paid by card and it didn't show" is unanswerable on the invoice screen, and a stuck pending row has no expiry sweep |
 
 **Still owed, and NOT a code fix:** the visual and UX polish phase, the second half

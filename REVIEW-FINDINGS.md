@@ -520,7 +520,71 @@ core 285, api 687, web 466, mobile 28.
 
 ---
 
-## Billing correctness — F7 and F16 CLOSED
+## Billing correctness — F7 and F16, corrected after review
+
+**I marked both closed prematurely, and the review was blunt about why.**
+
+### F16 was not fixed. The stated primary hole was fully open.
+
+`revise` returns a fully-priced DRAFT and `update` let its `clientId` be changed.
+So: `POST /quotes/:id/revise`, `PATCH /quotes/:newId` with another client, set SENT,
+share. **Two requests, repeatable without limit**, and a tenant at the cap had an
+unlimited supply of sendable quotes for new clients.
+
+My commit called that "a nudge toward Pro, not DRM" — which **reframed a revenue
+hole as a design stance**, and PLANNING §4e is explicit that the free tier IS the
+trial, so the cap is the whole conversion lever. The framing is what got the finding
+marked closed.
+
+Closed properly at the step that makes it a bypass: **a descendant keeps the client
+of the quote it came from.** Quoting a different client is a different job, and a
+different job is a new quote. Corrections stay free and ungated.
+
+**The over-charging half was also only half fixed.** `version: 1` was the wrong key:
+`revise` of a CLOSED quote reserves a NEW number and starts again at version 1, so
+the ordinary "client agreed, then we corrected the sheet" path still ate an
+allowance. `parentQuoteId: null` catches all three kinds of descendant; version
+caught two.
+
+### F7's rule fixed the reproduction, not the class.
+
+The date proxy — "a term may start before the payment date but not END before it" —
+absorbed any gap **shorter than one interval**, because the chained term still ended
+after the money arrived:
+
+| Ledger | Paid for | Got |
+|---|---|---|
+| annual, lapsed, paid December | a year | **one month** |
+| monthly, lapsed, paid 20 days late | a month | 12 days |
+
+The proxy stood in for a question the loop could answer outright. It has `voidedAt`
+on every row and discarded it one line after reading it. **A surviving payment may be
+pulled back only into a period a VOID vacated** — a gap nobody paid for is not
+refillable, because the tenant was on the free tier through it.
+
+### And the "owner question" was a correctness bug my own fix depended on.
+
+`nextTermEnd` used local `getMonth`/`setMonth` on UTC-midnight instants. In
+America/Jamaica — UTC-5, where this ships — a UTC midnight is the previous day
+locally, so terms came out 28 to 31 days **in both directions**, and the answer
+depended on the host's `TZ`. I recorded it as a preference about billing dates.
+
+It also **broke the void re-anchoring the lapse rule is built around**, in the
+shipping timezone: a term starting 1 March ended 29 March, which made the proxy fire
+on the very case it existed to protect. So the two behaviours I said "had to hold at
+once" did not. Fixed with UTC accessors and pinned across five months, an annual
+term, a fourteen-term chain, and the 31 January month-end case.
+
+**Still open and now recorded properly, not as a preference:** `startCardPayment`
+creates an unbounded pending row per call with no expiry sweep — F53 fixed the
+callback symptom, not the root; and `remove` hard-deletes a DRAFT, so the monthly
+count can be decremented by create-PDF-delete (only a PDF is obtainable, since
+`share` refuses DRAFT). Also: `paidAt` is unbounded admin free text and is now
+load-bearing for `renewsAt`, so a typo'd year grants a year of Pro.
+
+core 293, api 707, web 466, mobile 28.
+
+### The original entry, for the record
 
 **F7 — paying after a lapse reverted the tenant the same day.** `reallocateTerms`
 chained every surviving payment from the earliest `coversFrom`: right for

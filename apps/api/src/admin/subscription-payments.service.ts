@@ -239,33 +239,38 @@ export class SubscriptionPaymentsService {
       all[0]!.coversFrom,
     );
 
+    // Periods a VOIDED payment used to cover. These are the only periods a
+    // surviving payment may be pulled backwards into.
+    //
+    // The first fix here used a date proxy — "a term may start before the payment
+    // date but not END before it" — which held for the monthly lapse it was written
+    // against and failed for the class. A review broke it three ways: an annual
+    // tenant who lapsed and paid in December got ONE month for a year's fee (the
+    // chained annual term ended after the payment date, so the guard never fired);
+    // a monthly tenant who paid 20 days late got 12 days; and in the shipping
+    // timezone the old month arithmetic made the guard fire on the void case it
+    // existed to protect.
+    //
+    // The proxy was standing in for a question the loop can answer outright: WHY is
+    // the run's end behind this payment? A period vacated by a void should be
+    // refilled — that is the money moving onto cover the tenant is now entitled to.
+    // A gap where nobody paid should not be, because the tenant was on the free tier
+    // through it and those months are not owed. `voidedAt` distinguishes them, and
+    // it was being discarded one line after it was read.
+    const vacated = all
+      .filter((p) => p.voidedAt !== null)
+      .map((p) => ({ from: p.coversFrom, until: p.coversUntil }));
+    const isVacated = (at: Date): boolean =>
+      vacated.some((v) => at.getTime() >= v.from.getTime() && at.getTime() < v.until.getTime());
+
     let end = anchor;
     for (const p of all) {
       if (p.voidedAt !== null) continue; // voided money buys no period
 
-      // Chain from where cover ran out — UNLESS that would allocate a term that
-      // had already ended before the money arrived.
-      //
-      // Both behaviours have to hold at once, and the naive chain got one of them
-      // wrong. Voiding the first of two consecutive months must slide the survivor
-      // back onto the outstanding month: it paid for cover it is now entitled to
-      // earlier. But a tenant who LAPSED and paid again six months later must not
-      // have that payment rewritten back into the gap — they were on the free tier
-      // through it, those months are not owed, and the old chain produced a
-      // `renewsAt` in the PAST. The tenant then read PAST_DUE the moment they
-      // paid, the next sweep reverted them to free, and recovering from one lapse
-      // took as many payments as months missed.
-      //
-      // The rule that separates them: a term may start before the payment date,
-      // but it may not END before it. Voiding leaves the survivor a term ending
-      // exactly at its own payment date, which is allowed. A six-month-old gap
-      // ends long before, which is not.
-      let from = end;
-      let until = nextTermEnd(p.interval, from.toISOString(), from);
-      if (until.getTime() < p.paidAt.getTime()) {
-        from = p.paidAt;
-        until = nextTermEnd(p.interval, from.toISOString(), from);
-      }
+      // Chain from where cover ran out, unless that would reach back into a period
+      // nobody vacated — a lapse. Then the money buys cover from when it arrived.
+      const from = end.getTime() < p.paidAt.getTime() && !isVacated(end) ? p.paidAt : end;
+      const until = nextTermEnd(p.interval, from.toISOString(), from);
       // Only write when the allocation actually moved, so an ordinary payment
       // does not rewrite every earlier row it did not affect.
       if (p.coversFrom.getTime() !== from.getTime() || p.coversUntil.getTime() !== until.getTime()) {

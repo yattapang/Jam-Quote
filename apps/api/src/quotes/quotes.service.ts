@@ -325,8 +325,12 @@ export class QuotesService {
       where: {
         businessId,
         createdAt: { gte: startOfCurrentMonth() },
-        // Originals only: version 1 and not a variation of anything.
-        version: 1,
+        // Originals only, keyed on LINEAGE rather than version. `version: 1` was
+        // wrong: `revise` of a CLOSED quote (ACCEPTED or INVOICED) reserves a NEW
+        // number and starts again at version 1, so the ordinary "client agreed,
+        // then we corrected the sheet" path still ate an allowance. parentQuoteId
+        // catches all three kinds of descendant.
+        parentQuoteId: null,
         variationOfQuoteId: null,
       },
     });
@@ -587,6 +591,31 @@ export class QuotesService {
         "Only draft quotes can be edited. Use Revise to change one that has been sent.",
       );
     }
+
+    // A descendant keeps its client, and that is what closes the free-plan bypass.
+    //
+    // `revise` and `createVariation` are ungated on purpose — the job they descend
+    // from already consumed an allowance, and charging a contractor to correct their
+    // own quote is wrong. But a revision is a fully-priced DRAFT, and `update` let
+    // its `clientId` be changed: revise, retarget, send. Two requests, repeatable
+    // without limit, and a tenant at the cap had an unlimited supply of sendable
+    // quotes for new clients. A previous commit called that residual "a nudge toward
+    // Pro, not DRM" — which reframed a revenue hole as a design stance. PLANNING
+    // §4e is explicit that the free tier IS the trial, so the cap is the whole
+    // conversion lever.
+    //
+    // Quoting a different client is a different job, and a different job is a new
+    // quote. Refusing the retarget says exactly that, and leaves corrections free.
+    if (
+      input.clientId !== undefined &&
+      input.clientId !== existing.clientId &&
+      (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null)
+    ) {
+      throw new BadRequestException(
+        "A revision keeps the client of the quote it came from. Create a new quote for a different client.",
+      );
+    }
+
     await assertClientOwned(this.prisma, businessId, input.clientId);
     await assertProjectOwned(this.prisma, businessId, input.projectId);
 

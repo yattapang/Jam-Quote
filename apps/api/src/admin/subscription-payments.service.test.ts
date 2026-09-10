@@ -356,3 +356,91 @@ describe("recording a payment after a lapse", () => {
     expect(renewsAt.getUTCMonth()).toBe(2); // March
   });
 });
+
+
+/**
+ * The lapse rule, on the cases that broke its first version.
+ *
+ * The first fix used a date proxy — "a term may start before the payment date but
+ * not END before it". It held for the monthly reproduction F7 was filed against and
+ * failed for the class: any gap SHORTER than one interval was absorbed silently,
+ * because the chained term still ended after the money arrived.
+ *
+ * The rule now asks the question the proxy stood in for: a surviving payment may be
+ * pulled back only into a period a VOID vacated. A gap nobody paid for is not
+ * refillable, because the tenant was on the free tier through it.
+ */
+describe("the lapse rule across intervals and gap sizes", () => {
+  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+
+  it("gives an ANNUAL tenant a full year after a lapse, not the remainder of an old one", async () => {
+    // The worst case the review found. Annual from Jan 2025, lapsed, paid again in
+    // December 2026. The chained term (Jan 2026 -> Jan 2027) ends AFTER the payment
+    // date, so the old proxy never fired: the tenant paid a year's fee and got one
+    // month, then read DUE_SOON within days.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-01-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2025-01-01"), coversFrom: at("2025-01-01"), coversUntil: at("2026-01-01"), interval: "annual", voidedAt: null },
+        { id: "sp-2", paidAt: at("2026-12-01"), coversFrom: at("2026-12-01"), coversUntil: at("2027-12-01"), interval: "annual", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    // A year from when the money arrived.
+    expect(JSON.stringify(subscriptionWrites)).toContain("2027-12-01");
+  });
+
+  it("gives a MONTHLY tenant a full month when they pay 20 days late", async () => {
+    // A gap smaller than the interval. The old proxy absorbed it and handed over
+    // twelve days of cover for a month's fee.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-02-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2026-02-01"), interval: "monthly", voidedAt: null },
+        { id: "sp-2", paidAt: at("2026-02-20"), coversFrom: at("2026-02-20"), coversUntil: at("2026-03-20"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    expect(JSON.stringify(subscriptionWrites)).toContain("2026-03-20");
+  });
+
+  it("STILL pulls a survivor back into a period a void vacated", async () => {
+    // The behaviour the rule must not break, now expressed as the vacated period it
+    // actually is rather than as a date comparison that happened to agree.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-04-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-02-01"), coversFrom: at("2026-02-01"), coversUntil: at("2026-03-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-03-01"), coversFrom: at("2026-03-01"), coversUntil: at("2026-04-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    // The survivor takes the vacated February, so cover ends 1 March — not the
+    // 1 April it was holding before the void.
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2026-03-01");
+    expect(written).not.toContain("2026-04-01");
+  });
+
+  it("works in MARCH, where the old month arithmetic broke the void case", async () => {
+    // Under the old local-time `setMonth`, a term starting 1 March ended 29 March —
+    // a 28-day month — which made the date proxy fire on this ledger and STOP the
+    // survivor sliding back. The bug was recorded as a preference about billing
+    // dates; it was breaking the fix that depended on it.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-05-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-03-01"), coversFrom: at("2026-03-01"), coversUntil: at("2026-04-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-03-30"), coversFrom: at("2026-04-01"), coversUntil: at("2026-05-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    expect(JSON.stringify(subscriptionWrites)).toContain("2026-04-01");
+  });
+});

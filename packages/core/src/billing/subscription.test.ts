@@ -149,3 +149,64 @@ describe("shouldRevertToFree", () => {
     expect(shouldRevertToFree({ plan: "free", interval: "monthly", renewsAt: inDays(-9) }, NOW)).toBe(false);
   });
 });
+
+/**
+ * A term is exactly one calendar month or year, wherever the host is.
+ *
+ * `nextTermEnd` used local `getMonth`/`setMonth` on UTC-midnight instants. In
+ * America/Jamaica — UTC-5, where this ships — a UTC midnight is the previous day
+ * locally, so the arithmetic overflowed or undershot: 1 Feb ended 4 March (31
+ * days) while 1 March ended 29 March (28 days). It went both ways, in every month,
+ * and the answer depended on the server's `TZ`.
+ *
+ * It was recorded as an owner question about whether "monthly" should mean the same
+ * day each month. It was not a preference. A review showed it also broke the void
+ * re-anchoring that `reallocateTerms`'s lapse rule depends on, in the shipping
+ * timezone — so the two behaviours the rule was written to hold at once did not.
+ */
+describe("nextTermEnd is timezone-independent", () => {
+  const day = (iso: string) => new Date(iso);
+
+  it.each([
+    ["2026-01-01", "2026-02-01"],
+    // The one that used to give 4 March.
+    ["2026-02-01", "2026-03-01"],
+    // The one that used to give 29 March — a 28-day "month", the other direction.
+    ["2026-03-01", "2026-04-01"],
+    ["2026-05-01", "2026-06-01"],
+    ["2026-12-01", "2027-01-01"],
+  ])("monthly: %s -> %s", (from, expected) => {
+    expect(nextTermEnd("monthly", `${from}T00:00:00.000Z`, day(`${from}T00:00:00.000Z`))
+      .toISOString()
+      .slice(0, 10)).toBe(expected);
+  });
+
+  it("annual lands on the same date a year later", () => {
+    expect(
+      nextTermEnd("annual", "2026-02-01T00:00:00.000Z", day("2026-02-01T00:00:00.000Z"))
+        .toISOString()
+        .slice(0, 10),
+    ).toBe("2027-02-01");
+  });
+
+  it("does not drift over a long chain of monthly terms", () => {
+    // Fourteen renewals from 1 January must land on 1 March, not somewhere near it.
+    // The old arithmetic walked the day-of-month, giving away days in some months
+    // and taking them in others.
+    let at = new Date("2026-01-01T00:00:00.000Z");
+    for (let i = 0; i < 14; i += 1) at = nextTermEnd("monthly", at.toISOString(), at);
+    expect(at.toISOString().slice(0, 10)).toBe("2027-03-01");
+  });
+
+  it("handles a month-end start without silently changing the day", () => {
+    // 31 January + one month has no 31 February. JavaScript rolls it to 3 March,
+    // which is the documented behaviour of setUTCMonth and the same answer any
+    // calendar-month implementation has to pick. Pinned so the choice is visible
+    // rather than discovered by a tenant.
+    expect(
+      nextTermEnd("monthly", "2026-01-31T00:00:00.000Z", day("2026-01-31T00:00:00.000Z"))
+        .toISOString()
+        .slice(0, 10),
+    ).toBe("2026-03-03");
+  });
+});
