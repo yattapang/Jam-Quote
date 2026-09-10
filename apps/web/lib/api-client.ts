@@ -431,6 +431,11 @@ function mapLine(l: ApiLineItem): Quote["lines"][number] {
     priceSource: l.priceSource,
     gctTreatment: l.gctTreatment,
     markupPct: l.markupPct == null ? undefined : Number(l.markupPct),
+    // Read so the builder can send them back. Without these the edit page's reads
+    // were always undefined and every re-save nulled the columns — a round trip
+    // that looked complete and moved no data.
+    supplierId: l.supplierId ?? undefined,
+    overrideNote: l.overrideNote ?? undefined,
     jobId: l.jobId ?? undefined,
     jobName: l.jobName ?? undefined,
     jobUnit: l.jobUnit ?? undefined,

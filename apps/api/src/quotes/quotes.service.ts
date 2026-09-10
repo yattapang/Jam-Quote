@@ -459,7 +459,7 @@ export class QuotesService {
       where: { shareToken: token, deletedAt: null },
       include: {
         // NOT `QUOTE_DETAIL_INCLUDE`. That is the tenant's read and returns whole
-        // line rows, including the contractor's markup. See PUBLIC_LINE_SELECT.
+        // line rows, including the contractor's markup. See PUBLIC_LINE_READ.
         lineItems: {
           where: { sectionId: null },
           orderBy: { sort: "asc" as const },

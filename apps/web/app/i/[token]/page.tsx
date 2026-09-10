@@ -107,6 +107,17 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
             <dt>Subtotal</dt>
             <dd>{formatJmd(invoice.subtotalCents)}</dd>
           </div>
+          {/* The identical F11 to the quote page, in the file the same commit
+              touched for amountCents and walked straight past. A discounted
+              invoice's public page did not add up either. */}
+          {Number(invoice.discountPct) > 0 ? (
+            <div>
+              <dt>Discount ({Number(invoice.discountPct)}%)</dt>
+              <dd>
+                -{formatJmd(invoice.subtotalCents + invoice.gctCents - invoice.totalCents)}
+              </dd>
+            </div>
+          ) : null}
           <div>
             <dt>GCT</dt>
             <dd>{formatJmd(invoice.gctCents)}</dd>

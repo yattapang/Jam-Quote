@@ -73,6 +73,18 @@ export const quoteLineWire = z.object({
    * exactly that reason.
    */
   markupPct: z.string().nullable(),
+  /**
+   * Where the price came from, and why it was overridden.
+   *
+   * Added because the builder was found to DROP them on every re-save: the edit
+   * page read them, but the wire never carried them, so they were always
+   * undefined and the API nulled them. `supplierId` is which merchant the price
+   * came from and `overrideNote` is the contractor's own explanation — both are
+   * internal provenance on the tenant's own read, and both are correctly absent
+   * from the public contracts.
+   */
+  supplierId: z.string().nullable(),
+  overrideNote: z.string().nullable(),
 
   /** Job provenance — set only on lines built from the job library. */
   jobId: z.string().nullable(),

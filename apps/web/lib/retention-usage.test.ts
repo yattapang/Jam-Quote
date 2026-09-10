@@ -42,3 +42,39 @@ describe("the client-facing document states retention rather than hiding it", ()
     expect(stripComments(readFileSync(route, "utf8"))).toContain("settlementOf(");
   });
 });
+
+
+/**
+ * Every figure a client is SENT is either rendered or deliberately not.
+ *
+ * `discountPct` was sent to both public pages and rendered on neither, so a
+ * discounted document showed a subtotal, a GCT figure and a total that did not add
+ * up, with the reduction invisible. It was fixed on the quote page first and the
+ * invoice page was missed — in the same commit that edited that very file.
+ *
+ * So this asserts the pair together. Two pages that must agree are exactly where a
+ * per-file fix goes half-done.
+ */
+describe("the public documents render the discount they are sent", () => {
+  const pages = [
+    ["quote", join(WEB, "app", "q", "[token]", "page.tsx")],
+    ["invoice", join(WEB, "app", "i", "[token]", "page.tsx")],
+  ] as const;
+
+  it.each(pages)("the public %s page renders a Discount row", (_which, file) => {
+    const src = stripComments(readFileSync(file, "utf8"));
+    // The contract sends discountPct; a page that reads it and prints nothing is
+    // showing the client arithmetic that does not close.
+    expect(src).toMatch(/discountPct/);
+    expect(src).toMatch(/Discount/);
+  });
+
+  it.each(pages)("the public %s page does not work out line amounts itself", (_which, file) => {
+    // The server sends amountCents, computed with the markup it withholds. A page
+    // multiplying quantity by a unit price cannot include the markup, so its lines
+    // would not sum to the subtotal printed beneath them.
+    const src = stripComments(readFileSync(file, "utf8"));
+    expect(src).not.toMatch(/quantity\)\s*\*/);
+    expect(src).toMatch(/amountCents/);
+  });
+});

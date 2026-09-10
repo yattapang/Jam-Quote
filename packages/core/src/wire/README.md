@@ -63,3 +63,29 @@ unauthenticated surface in the API**. For those, the schema is the
 specification of what an anonymous holder of a share token may read, so it is
 exhaustive rather than a floor, and adding a field to one is a disclosure
 decision that should be obvious in a diff.
+
+
+## Removing or renaming a field is a lockstep deploy
+
+The API is on Render and the web is on Vercel — **separate deploy targets**. A
+field ADDED to a contract is safe in either order: the old client ignores it, and
+the new client tolerates its absence until the API catches up.
+
+**Removing or renaming one is not.** `unitPriceCents` was replaced by
+`amountCents` on both public line contracts, and either skew direction puts
+nonsense in front of a contractor's client:
+
+| Skew | What the client sees |
+|---|---|
+| API new, web old | `Number(l.quantity) * undefined` → `formatJmd(NaN)` |
+| API old, web new | `formatJmd(undefined)` |
+
+`PLANNING.md` §5 already says "deploy API and web TOGETHER", and that row was
+written for field renames. This is the same rule with teeth: for a public share
+view there is no stale-client tail to wait out — `cache: "no-store"` means the very
+next request uses the new code — but there IS a skew window for the length of the
+two deploys.
+
+**So: when a contract loses or renames a field, deploy the API and the web in one
+window, and check a real share link afterwards.** A review found this rule written
+nowhere while a breaking change was already merged.

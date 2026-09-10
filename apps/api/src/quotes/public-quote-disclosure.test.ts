@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { methodBody, relationSelectKeys } from "../common/select-scan.js";
+import { methodBody, relationSelectKeys, stripComments } from "../common/select-scan.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -81,37 +81,78 @@ const FORBIDDEN_LINE_FIELDS: Record<string, string> = {
 /**
  * The keys the `publicLine` mapper actually returns.
  *
- * Read from the function body rather than from the select, because the select is
- * no longer the boundary. A field added to `PUBLIC_LINE_READ` and left out of this
- * mapper is fine; a field added HERE is a disclosure.
+ * A review defeated the first version with five legal refactors, every one of which
+ * leaked a forbidden field while the guard reported green:
+ *
+ * | refactor | why it passed |
+ * |---|---|
+ * | shorthand `{ …, markupPct }` | the key regex required a colon |
+ * | conditional spread `...(c ? { markupPct: x } : {})` | stripped as nested |
+ * | `{ ...l, … }` | spread keys are invisible |
+ * | leak in a SECOND `return {` | only the first was read |
+ * | `return buildLine(l)` | `indexOf("return {")` walked into the NEXT function |
+ *
+ * So this version refuses rather than guesses. It requires the mapper to be one
+ * object literal with no spreads and no shorthand — which is a real constraint on
+ * the code, and the right one for a function whose whole job is to be an
+ * exhaustive, readable allow-list.
  */
 function publicLineOutputKeys(src: string): string[] {
   const start = src.indexOf("function publicLine(");
   expect(start, "publicLine should exist").toBeGreaterThan(-1);
-  const bodyStart = src.indexOf("return {", start);
-  expect(bodyStart, "publicLine should return an object literal").toBeGreaterThan(-1);
+
+  // Bound the search to THIS function, so a missing literal cannot silently
+  // parse the next one.
+  const nextFn = src.indexOf("\nfunction ", start + 1);
+  const fn = src.slice(start, nextFn === -1 ? undefined : nextFn);
+
+  const returns = [...fn.matchAll(/return\s/g)];
+  expect(returns.length, "publicLine must have exactly one return — an early exit could leak").toBe(1);
+
+  const bodyStart = fn.indexOf("return {");
+  expect(bodyStart, "publicLine must return an object literal directly").toBeGreaterThan(-1);
+
   let depth = 0;
-  let i = src.indexOf("{", bodyStart);
+  let i = fn.indexOf("{", bodyStart);
   const open = i;
-  for (; i < src.length; i += 1) {
-    if (src[i] === "{") depth += 1;
-    else if (src[i] === "}") {
+  for (; i < fn.length; i += 1) {
+    if (fn[i] === "{") depth += 1;
+    else if (fn[i] === "}") {
       depth -= 1;
       if (depth === 0) break;
     }
   }
-  const body = src.slice(open, i + 1);
-  // Top-level keys only: nested calls (lineAmountCents({...})) must not leak their
-  // argument names into the key set.
-  let flat = "";
+  // Comments out first: a doc line inside the literal is not an output key, and
+  // the strict entry parser below correctly refused to guess what one was.
+  const body = stripComments(fn.slice(open + 1, i));
+
+  // No spreads: a spread can carry anything, and this literal is the allow-list.
+  expect(body, "the public line literal must not spread — list the fields").not.toMatch(/\.\.\./);
+
+  // Top-level entries only; a nested call's argument names are not output keys.
+  const entries: string[] = [];
+  let buf = "";
   depth = 0;
-  for (const ch of body.slice(1, -1)) {
-    if (ch === "{" || ch === "(") depth += 1;
-    else if (ch === "}" || ch === ")") depth -= 1;
-    else if (depth === 0) flat += ch;
-    if ((ch === "{" || ch === "(") && depth === 1) flat = flat.replace(/[\w]+\s*:\s*$/, "");
+  for (const ch of body) {
+    if (ch === "{" || ch === "(" || ch === "[") depth += 1;
+    else if (ch === "}" || ch === ")" || ch === "]") depth -= 1;
+    if (ch === "," && depth === 0) {
+      entries.push(buf);
+      buf = "";
+    } else buf += ch;
   }
-  return [...flat.matchAll(/(\w+)\s*:/g)].map((m) => m[1]!);
+  entries.push(buf);
+
+  return entries
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0)
+    .map((entry) => {
+      // `name: value` or bare shorthand `name` — both are output keys, and the
+      // first version saw only the former.
+      const m = entry.match(/^(\w+)\s*(?::|$)/);
+      expect(m, `could not parse public line entry: ${entry}`).not.toBeNull();
+      return m![1]!;
+    });
 }
 
 describe("the public quote line", () => {
@@ -183,7 +224,11 @@ describe("the public quote line", () => {
     const end = src.indexOf("async ", start + 10);
     const body = src.slice(start, end === -1 ? undefined : end);
     expect(body).not.toContain("...QUOTE_DETAIL_INCLUDE");
-    expect(body).toContain("PUBLIC_LINE_SELECT");
+    // PUBLIC_LINE_READ, the current name. This asserted the OLD name and passed
+    // only because a stale comment in the method body still mentioned it — so
+    // deleting a comment would have turned a security guard red for no reason,
+    // while nothing about the select was being checked at all.
+    expect(body).toContain("PUBLIC_LINE_READ");
   });
 
   it("declares the public line type explicitly, not as an alias of the tenant row", () => {

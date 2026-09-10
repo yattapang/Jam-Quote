@@ -7,7 +7,7 @@ import { assertPublicShape } from "./public-view.js";
  * The public share response is checked against its contract on the way out.
  *
  * `TESTING.md` claimed the markup-disclosure fix was "guarded twice" — by the
- * explicit `PUBLIC_LINE_SELECT` and by a `.strict()` wire contract. An
+ * explicit line select and by a `.strict()` wire contract. An
  * independent review found the second guard inert: `publicQuoteWire.parse`
  * appeared only inside test files, against a hand-written sample, while the
  * service assigned `business` and `lineItems` from a Prisma result. Excess-
@@ -78,7 +78,7 @@ describe("assertPublicShape", () => {
   });
 
   it("REFUSES a client TRN added to the client select", () => {
-    // A field the disclosure guard cannot see: it parses PUBLIC_LINE_SELECT only.
+    // A field the disclosure guard cannot see: it parses the line boundary only.
     // Before this, adding `trn: true` to the client select compiled and passed.
     const view = { ...validView(), clientTrn: "099-888-777" };
     expect(() => assertPublicShape(publicQuoteWire, view, "PublicQuoteView")).toThrow(

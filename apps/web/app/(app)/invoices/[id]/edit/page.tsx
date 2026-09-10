@@ -65,6 +65,13 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             jobName: l.jobName,
             jobUnit: l.jobUnit,
             jobComponents: l.jobComponents,
+            // The same fix as the quote edit page, which is where this defect was
+            // found. markupPct is part of the subtotal, so leaving it out lowered
+            // the invoice's total on every re-save. Two pages, one shared builder,
+            // one shared bug — fixing only the page the finding named would have
+            // left the other live.
+            markupPct: l.markupPct,
+            priceSource: l.priceSource,
           })),
         sections: invoice.sections?.map((s) => ({
           title: s.title,
@@ -80,6 +87,13 @@ export default async function EditInvoicePage({ params }: { params: { id: string
             jobName: l.jobName,
             jobUnit: l.jobUnit,
             jobComponents: l.jobComponents,
+            // The same fix as the quote edit page, which is where this defect was
+            // found. markupPct is part of the subtotal, so leaving it out lowered
+            // the invoice's total on every re-save. Two pages, one shared builder,
+            // one shared bug — fixing only the page the finding named would have
+            // left the other live.
+            markupPct: l.markupPct,
+            priceSource: l.priceSource,
           })),
         })),
       }}

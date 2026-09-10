@@ -9,7 +9,7 @@ const logger = new Logger("PublicView");
  *
  * ## Why this exists
  *
- * The markup-disclosure fix — an explicit `PUBLIC_LINE_SELECT` instead of the
+ * The markup-disclosure fix — an explicit line select instead of the
  * tenant's Prisma include — was described in `TESTING.md` as "guarded twice": by
  * the select, and by a `.strict()` contract in `packages/core/src/wire/`. An
  * independent review found the second guard was doing nothing:
@@ -21,8 +21,10 @@ const logger = new Logger("PublicView");
  *   result, and TypeScript's excess-property check applies only to FRESH object
  *   literals — so a wider payload is structurally assignable and compiles.
  *
- * The source-scanning disclosure test does pin `PUBLIC_LINE_SELECT`, and that is
- * what keeps the markup leak closed. But it parses only that one block. Adding
+ * The source-scanning disclosure test does pin the line boundary — now the
+ * `publicLine` MAPPER, since the select had to widen to read the markup it applies
+ * and drops — and that is what keeps the markup leak closed. But it parses only
+ * that one part of the read. Adding
  * `trn: true` to the `client` select, or `phone: true` to the `business` select,
  * compiled and passed every test. This closes that: the contract now sees the
  * real payload, so a widened select fails on the first request instead of

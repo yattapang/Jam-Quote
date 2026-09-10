@@ -27,6 +27,53 @@ import { expect } from "vitest";
  * anything it cannot understand**, rather than ignoring it.
  */
 
+/**
+ * Strips comments WITHOUT eating string literals.
+ *
+ * The previous version used a bare `//[^\n]*` replace, so a line holding a URL
+ * lost everything after `https:` — including any real offender later on that line.
+ * This walks the source and tracks whether it is inside a string.
+ */
+export function stripComments(src: string): string {
+  let out = "";
+  let i = 0;
+  let quote: string | null = null;
+  while (i < src.length) {
+    const ch = src[i]!;
+    const next = src[i + 1];
+    if (quote) {
+      out += ch;
+      if (ch === "\\") {
+        out += next ?? "";
+        i += 2;
+        continue;
+      }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      while (i < src.length && src[i] !== "\n") i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      i += 2;
+      while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i += 1;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
 /** The balanced `{ ... }` starting at `open`, which must be the index of the `{`. */
 function balancedBlock(src: string, open: number): string {
   let depth = 0;

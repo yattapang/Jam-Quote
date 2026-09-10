@@ -130,7 +130,7 @@ function existingLinesForTotals(entity: {
 /**
  * The ONLY line fields an anonymous holder of an invoice share token may read.
  *
- * Identical reasoning to `PUBLIC_LINE_SELECT` in `quotes.service.ts`, and the
+ * Identical reasoning to `PUBLIC_LINE_READ` in `quotes.service.ts`, and the
  * same original defect: this view reused `INVOICE_DETAIL_INCLUDE`, the TENANT's
  * read, so every public line carried the whole row — `markupPct` (the
  * contractor's margin), `supplierId`, `priceSource`, `overrideNote` and the
@@ -613,7 +613,7 @@ export class InvoicesService {
       include: {
         // NOT `INVOICE_DETAIL_INCLUDE`. That is the tenant's read and returns
         // whole line rows, including the contractor's markup. See
-        // PUBLIC_LINE_SELECT.
+        // PUBLIC_LINE_READ.
         lineItems: {
           where: { sectionId: null },
           orderBy: { sort: "asc" as const },

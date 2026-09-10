@@ -200,6 +200,9 @@ export default function InvoiceBuilder({
           quantity: Number(l.quantity) || 0,
           unitPriceCents: toCents(l.unitPriceDollars),
           gctTreatment: l.gctTreatment,
+          // markupPct INCLUDED, for the same reason as the quote builder: the
+          // figures on screen have to be the figures that get saved.
+          markupPct: l.markupPct,
         })),
         gctRatePct: gctRatePctNum,
         discountPct: Number(discountPct) || 0,

@@ -237,6 +237,13 @@ export default function QuoteBuilder({
             quantity: Number(l.quantity) || 0,
             unitPriceCents: toCents(l.unitPriceDollars),
             gctTreatment: l.gctTreatment,
+            // markupPct INCLUDED. Without it the figures on screen are not the
+            // figures that get saved: `lineToLineInput` sends the markup, the
+            // server builds the subtotal from the after-markup amount, and this
+            // preview would show a lower total than the one stored a moment
+            // later. Worse for a PERCENTAGE deposit, which is resolved against
+            // this total and then persisted.
+            markupPct: l.markupPct,
           })),
           gctRatePct,
           discountPct: Number(discountPct) || 0,
