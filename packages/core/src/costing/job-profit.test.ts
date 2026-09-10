@@ -166,10 +166,20 @@ describe("computeJobProfit — output GCT is not revenue", () => {
     expect(p.netProfitCents).toBe(540_000);
   });
 
-  it("counts cash collected GROSS, because that is what arrived in the bank", () => {
-    // Deliberately not symmetrical with revenue: collected is a bank figure, and
-    // the client paid the GCT-inclusive amount. A reconciliation against a bank
-    // statement has to match what the bank saw.
+  it("counts cash collected GROSS, because the client paid the GCT-inclusive amount", () => {
+    // Deliberately not symmetrical with revenue. The client's cheque was for the
+    // full amount including tax, so that is what "received" means on this tile —
+    // which is why the screen labels it "(incl. GCT)" rather than leaving a bigger
+    // number sitting under a smaller one.
+    //
+    // The first version of this test justified it as "a reconciliation against a
+    // bank statement has to match what the bank saw". That is the argument
+    // PLANNING §6 explicitly REJECTS: `paidCents` is a cumulative total with no
+    // date, so it cannot be reconciled against a statement period at all, and
+    // dated cash comes from `Payment.paidAt`. A review caught the wrong reason
+    // sealed in a passing test. The right reason is narrower: a job's profit is a
+    // POSITION, not a period flow, so an undated to-date total is the correct
+    // input here — and would be the wrong input in a monthly report.
     const p = computeJobProfit([invGct(1_000_000, 15, 1_150_000)], [], true);
     expect(p.collectedCents).toBe(1_150_000);
   });

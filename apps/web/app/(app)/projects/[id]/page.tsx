@@ -79,9 +79,21 @@ export default async function JobDetailPage({ params }: { params: { id: string }
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 16 }}>
                 <div>
-                  <div className={shared.statHint}>Invoiced</div>
+                  {/* "excl. GCT" because it is. Output GCT is collected for TAJ
+                      and never the contractor's, so profit is measured without
+                      it — but the Reports page's "Invoiced" tile is the SALES
+                      figure and includes it, as does the accountant's Total
+                      column. Two tiles with one label and two values is the
+                      disagreement this caption exists to prevent. */}
+                  <div className={shared.statHint}>Invoiced (excl. GCT)</div>
                   <MoneyText cents={profit.revenueCents} size={22} />
-                  <div className={shared.statHint}>{formatJmd(profit.collectedCents)} received</div>
+                  <div className={shared.statHint}>
+                    {/* Labelled, because it is a BANK figure and includes the GCT
+                        the client paid — so it can legitimately exceed the net
+                        figure above it. Unlabelled, that read as the parts
+                        exceeding the whole. */}
+                    {formatJmd(profit.collectedCents)} received (incl. GCT)
+                  </div>
                 </div>
                 <div>
                   <div className={shared.statHint}>Cost</div>
@@ -92,7 +104,11 @@ export default async function JobDetailPage({ params }: { params: { id: string }
                     {formatJmd(profit.labourCostCents)} labour ·{" "}
                     {formatJmd(profit.purchaseCostCents)} materials
                   </div>
-                  {profit.inputTaxCents > 0 && (
+                  {/* Only when the business actually reclaims. An unregistered
+                      sole trader was told "after $X reclaimable GCT" over a cost
+                      figure from which nothing had been reclaimed — the number
+                      was right and the sentence beside it was false. */}
+                  {profit.registeredForGct && profit.inputTaxCents > 0 && (
                     <div className={shared.statHint}>
                       after {formatJmd(profit.inputTaxCents)} reclaimable GCT
                     </div>

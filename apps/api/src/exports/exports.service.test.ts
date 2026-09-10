@@ -89,6 +89,39 @@ function harness(rows: any[] = invoices(), payments: unknown[] = []) {
   return { svc: new ExportsService(prisma as any), prisma };
 }
 
+/**
+ * One cell, located by its HEADER name rather than by counting commas.
+ *
+ * The file already knew better in one place — "descriptions may be quoted and
+ * contain commas, so split on the tail, which is unquoted" — and the tests added
+ * with the Discount column read cells by fixed forward index anyway. A client named
+ * `"Grant, Ann"` gets quoted by `csvCell`, shifts every index, and those assertions
+ * silently read the wrong cells; so does inserting a column.
+ *
+ * This resolves the index from the header row and counts from the END, where the
+ * columns are numeric and unquoted. Both halves matter: the name survives a
+ * reorder, the tail survives a comma in the data.
+ */
+function cellByHeader(csv: string, header: string, column: string): number {
+  const lines = csv.slice(1).split("\r\n").filter((l) => l.length > 0);
+  const headerIndex = lines.findIndex((l) => l.startsWith(header));
+  expect(headerIndex, `header not found: ${header}`).toBeGreaterThan(-1);
+  const columns = lines[headerIndex]!.split(",");
+  const at = columns.indexOf(column);
+  expect(at, `column not found: ${column}`).toBeGreaterThan(-1);
+  const fromEnd = columns.length - at;
+  const row = lines[headerIndex + 1]!.split(",");
+  return Number(row[row.length - fromEnd]);
+}
+
+/** The full header row, so adding or reordering a column has to be deliberate. */
+function headerRow(csv: string, startsWith: string): string[] {
+  const lines = csv.slice(1).split("\r\n").filter((l) => l.length > 0);
+  const line = lines.find((l) => l.startsWith(startsWith));
+  expect(line, `header not found: ${startsWith}`).toBeDefined();
+  return line!.split(",");
+}
+
 /** Data rows only — past the meta block, the blank line and the headers. */
 function dataRows(csv: string, headerStartsWith: string): string[] {
   const lines = csv.slice(1).split("\r\n").filter((l) => l.length > 0);
@@ -302,13 +335,13 @@ describe("the accountant's two accrual files reconcile on real data", () => {
     const summary = await svc.invoicesIssued("b1", RANGE);
     const detail = await svc.invoiceLines("b1", RANGE);
 
-    const subtotal = Number(
-      dataRows(summary.csv, "Invoice number,Issue date,Due date")[0]!.split(",")[5],
-    );
-    const lineSum = dataRows(detail.csv, "Invoice number,Issue date,Client").reduce(
-      (n, r) => n + Number(r.split(",")[9]),
-      0,
-    );
+    const subtotal = cellByHeader(summary.csv, "Invoice number,Issue date,Due date", "Subtotal");
+    const lineSum = dataRows(detail.csv, "Invoice number,Issue date,Client").reduce((n, r) => {
+      // From the tail: a description containing a comma is quoted and shifts every
+      // forward index.
+      const cells = r.split(",");
+      return n + Number(cells[cells.length - 3] ?? 0);
+    }, 0);
     expect(subtotal).toBe(1_440);
     expect(lineSum).toBe(subtotal);
   });
@@ -317,11 +350,11 @@ describe("the accountant's two accrual files reconcile on real data", () => {
     // Without a Discount column an accountant saw 1440 + 194.40 against a total of
     // 1490.40 and no way to account for the missing 144.
     const { svc } = harness(invoicesWithMarkupAndDiscount());
-    const row = dataRows(
-      (await svc.invoicesIssued("b1", RANGE)).csv,
-      "Invoice number,Issue date,Due date",
-    )[0]!.split(",");
-    const [subtotal, discount, gct, total] = [5, 6, 7, 8].map((i) => Number(row[i]));
+    const csv = (await svc.invoicesIssued("b1", RANGE)).csv;
+    const head = "Invoice number,Issue date,Due date";
+    const [subtotal, discount, gct, total] = ["Subtotal", "Discount", "GCT", "Total"].map((c) =>
+      cellByHeader(csv, head, c),
+    );
     expect(discount).toBe(144);
     expect(subtotal! - discount! + gct!).toBe(total);
   });
@@ -376,5 +409,75 @@ describe("payments-received carries only cash that actually arrived", () => {
     // No thousands separator: csvMoney emits plain digits so a spreadsheet reads
     // the cell as a number rather than text.
     expect(file.csv).toContain("5000.00");
+  });
+});
+
+
+/**
+ * The header rows, pinned in full.
+ *
+ * Adding the Discount column changed a header and shifted the meaning of every
+ * forward cell index, and **no test failed** — `dataRows` locates a header by its
+ * first three columns only. An accountant's file is a contract with a spreadsheet
+ * someone else built: a column appearing, moving or being renamed is a change they
+ * have to be told about, so it must never be silent here.
+ */
+describe("the export headers are a contract", () => {
+  it("invoices-issued", async () => {
+    const { svc } = harness();
+    expect(
+      headerRow((await svc.invoicesIssued("b1", RANGE)).csv, "Invoice number,Issue date,Due date"),
+    ).toEqual([
+      "Invoice number",
+      "Issue date",
+      "Due date",
+      "Status",
+      "Client",
+      "Subtotal",
+      "Discount",
+      "GCT",
+      "Total",
+      "Paid",
+      "Outstanding",
+      "Retention held",
+      "Currency",
+    ]);
+  });
+
+  it("invoice-lines", async () => {
+    const { svc } = harness();
+    expect(
+      headerRow((await svc.invoiceLines("b1", RANGE)).csv, "Invoice number,Issue date,Client"),
+    ).toEqual([
+      "Invoice number",
+      "Issue date",
+      "Client",
+      "Section",
+      "Category",
+      "Description",
+      "Quantity",
+      "Unit",
+      "Unit price",
+      "Line total",
+      "GCT treatment",
+      "Currency",
+    ]);
+  });
+
+  it("payments-received", async () => {
+    const { svc } = harness();
+    expect(
+      headerRow((await svc.paymentsReceived("b1", RANGE)).csv, "Date received,Invoice number"),
+    ).toEqual([
+      "Date received",
+      "Invoice number",
+      "Client",
+      "Amount",
+      "Method",
+      "Provider",
+      "Reference",
+      "Status",
+      "Currency",
+    ]);
   });
 });

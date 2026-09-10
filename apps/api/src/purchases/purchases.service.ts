@@ -132,7 +132,9 @@ export class PurchasesService {
   async projectProfit(
     businessId: string,
     projectId: string,
-  ): Promise<JobProfit & { labourCostCents: number; purchaseCostCents: number }> {
+  ): Promise<
+    JobProfit & { registeredForGct: boolean; labourCostCents: number; purchaseCostCents: number }
+  > {
     await this.assertProjectOwned(businessId, projectId);
 
     const [invoices, purchases, labour, business] = await Promise.all([
@@ -176,6 +178,11 @@ export class PurchasesService {
     // half of the answer.
     return {
       ...profit,
+      // Sent so the screen can caption the figure honestly. The tile said
+      // "after $X reclaimable GCT" whenever input tax existed, including for an
+      // unregistered sole trader who reclaims nothing — the number was right and
+      // the sentence beside it was false.
+      registeredForGct,
       labourCostCents,
       // Derived from costExGctCents, not costCents, so the two components add up
       // to the figure shown above them. Taking it from the gross cost made the

@@ -15,6 +15,7 @@ import {
   type TotalsLineInput,
   publicInvoiceWire,
   lineAmountCents,
+  COLLECTED_PAYMENT_STATUSES,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
@@ -48,7 +49,16 @@ const INVOICE_DETAIL_INCLUDE = {
   // way to check which payments that represents — or to spot a duplicate.
   // Newest first: the question is almost always "did the latest one land?".
   payments: {
-    where: { deletedAt: null },
+    // Cash that ARRIVED, matching `paidCents` and the accountant's cash export.
+    //
+    // Without the status filter this list showed a WiPay checkout that had merely
+    // been opened: `startCardPayment` writes a pending row for the full balance
+    // with `paidAt` defaulting to now, and an abandoned checkout is never upgraded.
+    // So the panel rendered "CARD $500,000.00" in money-in green, with a Void
+    // button, directly above a Paid figure of $0.00 — and the `payments-received`
+    // export excluded it, so the screen and the download disagreed. That is the
+    // same disagreement F5 was filed for, one screen over.
+    where: { deletedAt: null, status: { in: COLLECTED_PAYMENT_STATUSES } },
     orderBy: { paidAt: "desc" as const },
   },
   // Chase history. "Have I already reminded them?" is the question a

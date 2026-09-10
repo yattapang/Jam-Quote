@@ -309,9 +309,9 @@ export async function getLabourEntries(params?: {
  * renders "unavailable" rather than an invented zero. */
 export async function getProjectProfit(
   projectId: string,
-): Promise<(JobProfit & { labourCostCents: number; purchaseCostCents: number }) | null> {
+): Promise<(JobProfit & { registeredForGct: boolean; labourCostCents: number; purchaseCostCents: number }) | null> {
   try {
-    return await serverRequest<JobProfit & { labourCostCents: number; purchaseCostCents: number }>(
+    return await serverRequest<JobProfit & { registeredForGct: boolean; labourCostCents: number; purchaseCostCents: number }>(
       `/purchases/project/${projectId}/profit`,
     );
   } catch (err) {

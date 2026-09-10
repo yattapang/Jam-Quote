@@ -474,6 +474,29 @@ core 285, api 677, web 458, mobile 28.
 
 ---
 
+## Follow-ups the reviews demanded — all closed
+
+Each cluster's independent review found something its fix had missed. These are the
+items that outlived their commit.
+
+| Finding | What was wrong | Now |
+|---|---|---|
+| **F5 was live on the invoice SCREEN** | The export was fixed and the invoice detail read was not, so a WiPay checkout merely opened rendered "CARD $500,000.00" in money-in green, with a Void button, above a Paid figure of $0.00 — the screen disagreeing with the download link on it | The detail include filters on `COLLECTED_PAYMENT_STATUSES`, the list core exports to all three surfaces. Pinned by reading the include, because a fake ignores a `where` |
+| **F12 opened two NEW disagreements** | Two tiles both labelled "Invoiced" showed different numbers (project net, Reports and export gross), and "received" — a gross bank figure — sat unlabelled under a now-net headline, the parts appearing to exceed the whole | Labelled "Invoiced (excl. GCT)" and "received (incl. GCT)". The Reports tile is the SALES figure and stays gross, deliberately |
+| **The Cost tile lied to unregistered contractors** | "after $X reclaimable GCT" showed whenever input tax existed, including for a sole trader who reclaims nothing. The number was right; the sentence beside it was false | `registeredForGct` is sent and gates the caption |
+| **My export tests read cells by fixed index** | Reintroducing what a comment three lines away warns about: a client named "Grant, Ann" is quoted, shifts every index, and the assertions silently read the wrong cells. And **neither header row was asserted** — adding the Discount column changed a header and failed nothing | `cellByHeader` resolves the column by NAME and counts from the unquoted tail. All three headers pinned in full. Verified by inserting a column and by putting a comma in a client's name |
+| **A test sealed the wrong justification** | My `collectedCents` test defended it as "a reconciliation against a bank statement has to match what the bank saw" — the argument PLANNING §6 explicitly REJECTS, since `paidCents` is undated and cannot be reconciled to a period | Corrected in place. The real reason is narrower: a job's profit is a POSITION, not a period flow, so an undated to-date total is right here and wrong in a monthly report |
+
+**The pattern, stated plainly:** eight clusters, eight reviews, and **every review
+found something** — three times a regression the fix itself introduced, twice a fix
+applied to the surface the finding named and not its twin, twice a guard that passed
+on nothing. Nothing here is closed before a reviewer that did not write it has
+attacked it.
+
+core 285, api 687, web 466, mobile 28.
+
+---
+
 ## Tier 3 — client/server disagreements, dead controls, prose drift
 
 | # | Finding | Where | Status |

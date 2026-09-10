@@ -21,7 +21,17 @@ import type { Cents } from "../tax/money.js";
 export interface JobRevenueLine {
   status: string;
   totalCents: Cents;
-  /** Cash actually received against this invoice. */
+  /**
+   * Cash received against this invoice, to date.
+   *
+   * A cumulative running total with no date of its own, which is why PLANNING §6
+   * forbids using it for PERIOD reporting — dated cash comes from `Payment.paidAt`.
+   * A job's profit is a POSITION rather than a flow ("has this job made money?"),
+   * so a to-date total is the right input here and the wrong one in a monthly
+   * report. An earlier version of this file's test justified it as matching "what
+   * the bank saw", which is the argument §6 rejects; the real justification is that
+   * this figure is not attributed to any period.
+   */
   paidCents: Cents;
   /**
    * Output GCT charged on this invoice — collected for TAJ, never the
