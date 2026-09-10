@@ -1,6 +1,12 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { PaymentMethod, InvoiceStatus } from "@jamquote/core";
-import { amountToRequest, settlementOf, type RetainableInvoice } from "@jamquote/core";
+import {
+  COLLECTED_PAYMENT_STATUSES,
+  InvoiceStatus,
+  PaymentMethod,
+  amountToRequest,
+  settlementOf,
+  type RetainableInvoice,
+} from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { WiPayService } from "./wipay.service.js";
 
@@ -116,11 +122,25 @@ export class PaymentsService {
       // Only a still-"pending" CARD payment gets transitioned. On a replayed
       // callback the row is already "completed", so `count` is 0 — that gates
       // the balance update below and keeps the webhook idempotent.
+      // Scoped by providerRef, which is what makes this ONE payment rather than
+      // "every pending card row on this invoice".
+      //
+      // Without it, three abandoned checkouts left three pending rows — each for
+      // the full balance, because paidCents had not moved — and the next
+      // successful callback flipped ALL of them to completed with the same
+      // providerRef. The money was credited once (count > 0 gates that), so the
+      // balance stayed right while the LEDGER triple-counted: three green rows on
+      // the invoice screen and three rows in the accountant's cash export, each
+      // dated when its checkout was opened, landing cash in prior periods.
       const { count } = await tx.payment.updateMany({
-        where: { invoiceId: invoice.id, status: "pending", method: "CARD" },
+        where: {
+          invoiceId: invoice.id,
+          status: "pending",
+          method: "CARD",
+          providerRef: payload.transaction_id,
+        },
         data: {
           status: succeeded ? "completed" : "failed",
-          providerRef: payload.transaction_id,
           providerRaw: payload,
         },
       });
@@ -237,7 +257,17 @@ export class PaymentsService {
     const payment = await this.prisma.payment.findFirst({
       // The tenant check goes through the invoice — Payment has no businessId
       // of its own, and an id is not a capability.
-      where: { id: paymentId, deletedAt: null, invoice: { businessId } },
+      // Collected rows only. `voidPayment` decrements paidCents by amountCents,
+      // and a `pending` or `failed` row never incremented it — so voiding one
+      // would understate what the customer has paid by the full balance. The UI
+      // no longer lists those rows, but the endpoint is reachable with an id, and
+      // "no UI path" is not a control.
+      where: {
+        id: paymentId,
+        deletedAt: null,
+        status: { in: COLLECTED_PAYMENT_STATUSES },
+        invoice: { businessId },
+      },
       select: { id: true, amountCents: true, invoiceId: true },
     });
     // Also covers an already-voided payment: re-voiding must not decrement a

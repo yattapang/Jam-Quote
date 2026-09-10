@@ -96,7 +96,13 @@ export default async function JobDetailPage({ params }: { params: { id: string }
                   </div>
                 </div>
                 <div>
-                  <div className={shared.statHint}>Cost</div>
+                  {/* Net of reclaimable GCT for a registered business, which the
+                      caption below explains — but that caption is gated on there
+                      BEING reclaimable tax, so without this the tile showed a net
+                      figure under a bare "Cost". */}
+                  <div className={shared.statHint}>
+                    Cost{profit.registeredForGct ? " (excl. reclaimable GCT)" : ""}
+                  </div>
                   <MoneyText cents={profit.costExGctCents} size={22} />
                   <div className={shared.statHint}>
                     {/* The split, because "cost" alone does not say whether a

@@ -156,9 +156,15 @@ export default async function ReportsPage({
           </div>
         </Card>
         <Card>
-          <div className={shared.statLabel}>Invoiced</div>
+          {/* "(incl. GCT)" because this is the SALES figure — what was billed,
+              matching the Total column of the accountant's accrual file. The
+              project page's "Invoiced (excl. GCT)" is a different question: profit
+              measures what the contractor keeps, and output GCT is collected for
+              TAJ. Labelling only one of the two left a contractor with one word
+              and two numbers. */}
+          <div className={shared.statLabel}>Invoiced (incl. GCT)</div>
           <MoneyText cents={reports.revenue.invoicedCents} size={24} />
-          <div className={shared.statHint}>Total invoiced this period</div>
+          <div className={shared.statHint}>Total billed this period, tax included</div>
         </Card>
         <Card>
           <div className={shared.statLabel}>Collected</div>

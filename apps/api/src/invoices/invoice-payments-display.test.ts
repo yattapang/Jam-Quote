@@ -1,47 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { COLLECTED_PAYMENT_STATUSES } from "@jamquote/core";
+import { INVOICE_DETAIL_INCLUDE } from "./invoices.service.js";
 
 /**
  * The payment history a contractor sees is cash that ARRIVED.
  *
  * `startCardPayment` writes a `pending` Payment row for the full invoice balance,
- * with `paidAt` defaulting to now, the moment a WiPay checkout is opened. If the
- * client abandons the page that row is never upgraded and never removed.
+ * `paidAt` defaulting to now, the moment a WiPay checkout is opened. Abandon the
+ * page and that row is never upgraded and never removed.
  *
- * The `payments-received` export was fixed to exclude those. The invoice DETAIL
- * read was not, so the panel rendered "CARD $500,000.00" in money-in green, with a
- * Void button, directly above a Paid figure of $0.00 — and disagreed with the
- * download link on the same screen. An independent review found it after the
- * export fix was already committed as complete.
+ * The `payments-received` export was fixed to exclude those; the invoice DETAIL
+ * read was not. So the panel rendered "CARD $500,000.00" in money-in green, with a
+ * Void button, directly above a Paid figure of $0.00 — disagreeing with the
+ * download link on the same screen.
  *
- * Asserted by reading the include, because a fake Prisma returns what the fake
- * says and ignores the `where` entirely — the same reason the export's filter is
- * asserted on its query.
+ * ## Why this asserts the object and not the source
+ *
+ * The first version of this test read the file and checked that
+ * `COLLECTED_PAYMENT_STATUSES` appeared inside the `payments:` block. A reviewer
+ * deleted the filter, left a comment mentioning the constant, and **all three
+ * tests passed** — one of them satisfied by the IMPORT line alone. That is
+ * verbatim the failure PLANNING.md records under "a guard satisfied by an import
+ * line rather than a call", reintroduced in the commit that cites it.
+ *
+ * So the include is exported and asserted structurally. No file reading, no
+ * dependence on vitest's cwd, and nothing a comment can satisfy.
  */
 describe("the invoice payment history shows only cash that arrived", () => {
-  const src = readFileSync(
-    join(process.cwd(), "src", "invoices", "invoices.service.ts"),
-    "utf8",
-  );
-
   it("filters the payments include on the shared collected-status list", () => {
-    const at = src.indexOf("payments: {");
-    expect(at, "the detail include should carry payment history").toBeGreaterThan(-1);
-    const block = src.slice(at, src.indexOf("},", at));
-    expect(block).toContain("COLLECTED_PAYMENT_STATUSES");
+    expect(INVOICE_DETAIL_INCLUDE.payments.where).toEqual({
+      deletedAt: null,
+      status: { in: COLLECTED_PAYMENT_STATUSES },
+    });
   });
 
-  it("uses the SAME list as the export and the Reports page", () => {
-    // Three surfaces, one list, imported from core. A fourth copy is how the
-    // export and the Reports page came to disagree in the first place.
-    expect(src).toContain("COLLECTED_PAYMENT_STATUSES");
-    expect(src).not.toMatch(/status:\s*\{\s*in:\s*\[/);
+  it("uses the shared list itself, not a copy of its contents", () => {
+    // Identity, not equality. A local `["completed", "recorded"]` would satisfy a
+    // deep-equal check and then drift the moment the shared list changed — which
+    // is how the export and the Reports page came to disagree in the first place.
+    expect(INVOICE_DETAIL_INCLUDE.payments.where.status.in).toBe(COLLECTED_PAYMENT_STATUSES);
   });
 
-  it("still keeps paidCents as the authority for the total", () => {
-    // The list is what the total is made OF; it must not become the total. paidCents
-    // is incremented only by a verified payment, so the two agree by construction.
-    expect(src).toContain("paidCents");
+  it("still returns the history newest-first", () => {
+    // "Did the latest one land?" is the question, so the order is part of the
+    // answer and worth keeping while the where-clause is being changed.
+    expect(INVOICE_DETAIL_INCLUDE.payments.orderBy).toEqual({ paidAt: "desc" });
   });
 });

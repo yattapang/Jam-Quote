@@ -38,7 +38,12 @@ const ALLOWED_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
   [InvoiceStatus.PAID]: [],
 };
 
-const INVOICE_DETAIL_INCLUDE = {
+/**
+ * Exported so a test can assert its SHAPE rather than grep the file for a
+ * constant name. The first guard on the payments filter was satisfied by the
+ * import line alone — the exact defect this repo has recorded twice.
+ */
+export const INVOICE_DETAIL_INCLUDE = {
   lineItems: { where: { sectionId: null }, orderBy: { sort: "asc" as const } },
   sections: {
     orderBy: { sort: "asc" as const },

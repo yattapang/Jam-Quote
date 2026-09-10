@@ -316,7 +316,17 @@ describe("PaymentsService.voidPayment", () => {
     const { svc, prisma } = voidHarness({ payment: PAYMENT, paidAfter: 10_000 });
     await svc.voidPayment("biz-1", "pay-1");
     expect(prisma.payment.findFirst).toHaveBeenCalledWith({
-      where: { id: "pay-1", deletedAt: null, invoice: { businessId: "biz-1" } },
+      // The status clause is new and deliberate: voiding decrements paidCents by
+      // amountCents, and a `pending` or `failed` row never incremented it — so
+      // voiding one would understate what the customer has paid by the full
+      // balance. The UI no longer lists those rows; the endpoint is still
+      // reachable with an id, and "no UI path" is not a control.
+      where: {
+        id: "pay-1",
+        deletedAt: null,
+        status: { in: ["completed", "recorded"] },
+        invoice: { businessId: "biz-1" },
+      },
       select: { id: true, amountCents: true, invoiceId: true },
     });
   });
@@ -370,5 +380,66 @@ describe("PaymentsService.voidPayment", () => {
     const { svc, tx } = voidHarness({ payment: null });
     await expect(svc.voidPayment("biz-1", "pay-1")).rejects.toBeInstanceOf(NotFoundException);
     expect(tx.payment.update).not.toHaveBeenCalled();
+  });
+});
+
+
+/**
+ * One callback settles ONE payment.
+ *
+ * `startCardPayment` writes a pending row every time it is called, with no guard
+ * against an existing one — and each is for the full balance, because `paidCents`
+ * has not moved. So three abandoned checkouts leave three pending rows.
+ *
+ * The callback's `updateMany` was scoped by invoice + status + method and NOT by
+ * `providerRef`, so the next successful callback flipped **all three** to
+ * `completed`, stamping the same reference on each. The balance stayed correct —
+ * `count > 0` gates that and it fires once — so the money was right and the LEDGER
+ * was wrong: three green rows on the invoice screen, three rows in the
+ * accountant's cash export, each dated when its own checkout was OPENED, landing
+ * cash in prior periods.
+ *
+ * Every existing test here faked `count: 1` or `count: 0`. Nothing exercised the
+ * case that mattered, which is why a review found it and a suite did not.
+ */
+describe("the WiPay callback settles exactly one payment", () => {
+  function build() {
+    const tx = {
+      payment: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      invoice: { update: vi.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      invoice: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: INVOICE_ID,
+          number: "INV-0007",
+          totalCents: 100_000,
+          paidCents: 0,
+          retentionCents: 0,
+          retentionReleasedAt: null,
+        }),
+      },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), tx };
+  }
+
+  it("scopes the transition by providerRef, not just invoice and status", async () => {
+    const { svc, tx } = build();
+    await svc.handleWiPayCallback(successPayload);
+    const where = tx.payment.updateMany.mock.calls[0]![0].where;
+    expect(where.providerRef).toBe(successPayload.transaction_id);
+    expect(where.status).toBe("pending");
+    expect(where.method).toBe("CARD");
+  });
+
+  it("does not stamp the reference over rows it is not settling", async () => {
+    // providerRef moved OUT of the data clause and into the where clause. Written
+    // as data, it overwrote the reference on every row the loose filter matched,
+    // which is what made three abandoned checkouts indistinguishable afterwards.
+    const { svc, tx } = build();
+    await svc.handleWiPayCallback(successPayload);
+    expect(tx.payment.updateMany.mock.calls[0]![0].data.providerRef).toBeUndefined();
   });
 });

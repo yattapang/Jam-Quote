@@ -98,9 +98,21 @@ function harness(rows: any[] = invoices(), payments: unknown[] = []) {
  * `"Grant, Ann"` gets quoted by `csvCell`, shifts every index, and those assertions
  * silently read the wrong cells; so does inserting a column.
  *
- * This resolves the index from the header row and counts from the END, where the
- * columns are numeric and unquoted. Both halves matter: the name survives a
- * reorder, the tail survives a comma in the data.
+ * ## Exactly what this is safe against, and what it is not
+ *
+ * The real invariant is narrower than "comma-safe", and a review said so after the
+ * first docstring overclaimed: **the number of comma-split fields to the RIGHT of
+ * the target must match between the header row and the data row.**
+ *
+ * - A quoted comma BEFORE the target — a client name — is safe. Both
+ *   `columns.length` and `at` shift by one, so the distance from the end does not.
+ * - A quoted comma AFTER the target would return the wrong cell **silently**. No
+ *   column right of the money columns holds free text today; the `headerRow` pins
+ *   below are what would catch one being added.
+ * - A duplicated header name resolves to the first, silently.
+ *
+ * Those limits are tested directly in `cellByHeader — what it is safe against`,
+ * because a helper that guards the exports had no guard of its own.
  */
 function cellByHeader(csv: string, header: string, column: string): number {
   const lines = csv.slice(1).split("\r\n").filter((l) => l.length > 0);
@@ -479,5 +491,45 @@ describe("the export headers are a contract", () => {
       "Status",
       "Currency",
     ]);
+  });
+});
+
+
+/**
+ * The helper that guards the exports, guarded.
+ *
+ * A review broke the first version in four ways and pointed out that the "verified
+ * by hand" in its commit message was exactly that — by hand, not committed. So the
+ * limits are now assertions, including the two cases where it is knowingly wrong,
+ * which is the difference between a documented limit and a latent bug.
+ */
+describe("cellByHeader — what it is safe against", () => {
+  const csv = (header: string, row: string) => "﻿" + ["meta", "", header, row].join("\r\n");
+
+  it("resolves a column by name", () => {
+    expect(cellByHeader(csv("A,B,C", "1,2,3"), "A,B", "B")).toBe(2);
+  });
+
+  it("survives a quoted comma BEFORE the target", () => {
+    // The case that actually occurs: a client named "Grant, Ann".
+    expect(cellByHeader(csv("Client,Subtotal,GCT", '"Grant, Ann",1440,216'), "Client", "Subtotal")).toBe(
+      1440,
+    );
+  });
+
+  it("is NOT safe against a quoted comma AFTER the target, and this pins that", () => {
+    // Documented, not fixed: no column right of the money columns holds free text,
+    // and `headerRow` catches one being added. If this assertion ever starts
+    // failing, someone added such a column and this helper needs a real parser.
+    const wrong = cellByHeader(csv("Subtotal,Notes", '1440,"a, b"'), "Subtotal", "Subtotal");
+    expect(wrong).not.toBe(1440);
+  });
+
+  it("takes the FIRST of a duplicated header name", () => {
+    expect(cellByHeader(csv("Total,Total", "5,9"), "Total", "Total")).toBe(5);
+  });
+
+  it("fails loudly on a column that is not there", () => {
+    expect(() => cellByHeader(csv("A,B", "1,2"), "A,B", "Nope")).toThrow();
   });
 });

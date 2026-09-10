@@ -487,6 +487,29 @@ items that outlived their commit.
 | **My export tests read cells by fixed index** | Reintroducing what a comment three lines away warns about: a client named "Grant, Ann" is quoted, shifts every index, and the assertions silently read the wrong cells. And **neither header row was asserted** — adding the Discount column changed a header and failed nothing | `cellByHeader` resolves the column by NAME and counts from the unquoted tail. All three headers pinned in full. Verified by inserting a column and by putting a comma in a client's name |
 | **A test sealed the wrong justification** | My `collectedCents` test defended it as "a reconciliation against a bank statement has to match what the bank saw" — the argument PLANNING §6 explicitly REJECTS, since `paidCents` is undated and cannot be reconciled to a period | Corrected in place. The real reason is narrower: a job's profit is a POSITION, not a period flow, so an undated to-date total is right here and wrong in a monthly report |
 
+### And the review of THOSE follow-ups found a live money bug underneath them
+
+| Finding | What it was | Now |
+|---|---|---|
+| **F53 — the card ledger triple-counted.** SEVERE | `startCardPayment` writes a pending row every call with no guard, each for the full balance because `paidCents` has not moved. The callback's `updateMany` was scoped by invoice + status + method and **not by `providerRef`**, so one successful callback flipped ALL pending rows to `completed` with the same reference. The money was credited once — so the balance was right and the LEDGER was wrong: three green rows on the screen and three in the accountant's cash export, each dated when its own checkout was opened, landing cash in prior periods. Every existing test faked `count: 1` or `count: 0`; nothing exercised `count > 1` | Scoped by `providerRef`, which moved out of the `data` clause into the `where`. Two tests pin both halves |
+| **F54 — `voidPayment` had no status filter.** | It decrements `paidCents` by `amountCents` for any non-deleted row, and a `pending` row never incremented it — so voiding one understated what the customer paid by the full balance. Filtering the UI list removed the path, and "no UI path" is not a control | The lookup requires a collected status |
+| **My new guard was vacuous, again.** | It read the source for `COLLECTED_PAYMENT_STATUSES` inside the `payments:` block. A reviewer deleted the filter, left a comment naming the constant, and all three tests passed — one satisfied by the **import line alone**. That is verbatim the failure PLANNING records, reintroduced in the commit that cites it | `INVOICE_DETAIL_INCLUDE` is exported and asserted structurally, including **identity** with the shared list so an inlined copy fails. Both bypasses verified failing |
+| **The "Invoiced" disagreement was half-relabelled.** | I captioned the project tile and left the Reports tile as bare "Invoiced" with a different number — documenting the disagreement in a comment the contractor cannot read | Both labelled: "(excl. GCT)" for profit, "(incl. GCT)" for sales. Same for the Cost tile, which showed a net figure under a bare label whenever its explaining caption was gated off |
+| **`cellByHeader`'s docstring overclaimed.** | "Comma-safe" is false: it is safe only to the LEFT of the target. A quoted comma to the right returns the wrong cell silently. And the helper guarding the exports had no test of its own — "verified by hand" was exactly that | The real invariant is stated, and its limits are now assertions — including the two cases where it is knowingly wrong, which is the difference between a documented limit and a latent bug |
+
+**Owner decision recorded, not silently fixed:** `registeredForGct` is derived from
+`Boolean(business.trn)`, and in Jamaica every individual has a TRN. A sole trader
+who fills in their personal TRN so invoices look right is flagged registered — input
+tax netted off, **margin overstated on every job**. The right fix is a
+`gctRegistered` boolean on Business, which is a schema change and a question for the
+owner. Flagged rather than guessed.
+
+**Also open, deliberately:** `pending` and `failed` payments are now written by code
+and read by no surface at all, so "I paid by card and it didn't show" is a question
+the invoice screen cannot answer, and a stuck pending row has no expiry sweep. That
+is a product decision about whether to show an in-progress cue, not a defect to
+quietly patch.
+
 **The pattern, stated plainly:** eight clusters, eight reviews, and **every review
 found something** — three times a regression the fix itself introduced, twice a fix
 applied to the surface the finding named and not its twin, twice a guard that passed

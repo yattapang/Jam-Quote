@@ -1862,9 +1862,22 @@ requires a deliberate decision, not a refactor.
   from Vercel's addresses.
 - **Never trust a caller-supplied client IP header.** A tracker the attacker
   chooses reports as protection while providing none.
-- Reporting semantics: `INVOICED` quotes count as won; cash collected comes
-  from `Payment.paidAt` and never `Invoice.paidCents`; receivables are
-  as-of-now and ignore the reporting window.
+- Reporting semantics: `INVOICED` quotes count as won; cash collected **in a
+  period** comes from `Payment.paidAt` and never `Invoice.paidCents`; receivables
+  are as-of-now and ignore the reporting window.
+  - The period qualifier was added after a review: `paidCents` is a cumulative
+    total with no date, which is exactly why it cannot answer a period question.
+    A POSITION — "has this job made money?" — claims no period, so
+    `computeJobProfit` may and does use it. The rule was previously absolute in
+    text while the code had an exception, and a passing test had sealed the wrong
+    justification for it.
+  - Retention is not a shortfall: **overdue** is measured against what is payable
+    now, while **outstanding** is the accrual figure and includes retention. The
+    accountant's `invoices-issued` export takes the same view deliberately.
+  - Revenue for PROFIT excludes output GCT; revenue for SALES includes it. Both
+    are correct and they are different questions, so every tile that shows one
+    says which — a bare "Invoiced" on two screens with two numbers is the defect
+    this line exists to prevent.
 
 ---
 
