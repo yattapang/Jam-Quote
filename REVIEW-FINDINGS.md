@@ -425,7 +425,7 @@ core 285, api 681, web 462, mobile 28.
 | F13 **CLOSED `3556b25`** | **A settled-for-now invoice is marked OVERDUE and chased.** `statusForPaid` compares against the total, so a retention invoice stays PARTIAL, the sweep flips it OVERDUE in critical red, and the nightly digest emails the contractor to go chase it. | `payments.service.ts:13-17`, `invoice-overdue.service.ts:73,116,150` | **CLOSED `3556b25`** |
 | F14 | **Every reminder promises a link it does not send.** `reminderMessage` is called with no link, so the empty branch always wins, while the modal says "It includes a link to the invoice". `resolveWebBase()` is dead in that file and `shareInvoice()` has no callers — so no invoice ever gets a share token, which makes the public invoice page and `firstViewedAt` unreachable in the shipped product. All four ends built, nothing joining them. The reminder's *amount* is correct. | `invoices.service.ts:624-632,843`, `api-client.ts:1520`, `RemindButton.tsx:94` | OPEN |
 | F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | **CLOSED** |
-| F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | OPEN |
+| F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | **CLOSED** |
 | F17 `[reviewed]` | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | OPEN |
 | F18 `[reviewed]` | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | OPEN |
 | F19 `[reviewed]` | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | OPEN |
@@ -517,6 +517,45 @@ on nothing. Nothing here is closed before a reviewer that did not write it has
 attacked it.
 
 core 285, api 687, web 466, mobile 28.
+
+---
+
+## Billing correctness — F7 and F16 CLOSED
+
+**F7 — paying after a lapse reverted the tenant the same day.** `reallocateTerms`
+chained every surviving payment from the earliest `coversFrom`: right for
+consecutive renewals, wrong across a gap. A January payment, a lapse, and an
+August payment left `renewsAt` in **March** — five months in the past. The tenant
+read PAST_DUE the moment they paid, the next sweep reverted them to free and
+emailed them about it, and recovering from one lapse took as many payments as
+months missed.
+
+Two behaviours had to hold at once, which is why the naive chain got one wrong:
+voiding the first of two consecutive months must slide the survivor **back** onto
+the outstanding month, while a lapse must **not** pull a new payment backwards.
+The rule that separates them: **a term may start before the payment date, but it
+may not END before it.**
+
+The ledger fixtures had no `paidAt` at all, which is why nothing could tell the two
+cases apart.
+
+**F16 — the free allowance counted the wrong thing, in both directions.** It
+counted every `Quote` row this month, so it **over-charged** (two jobs quoted plus
+two revisions = four of five, a contractor's own corrections eating the allowance)
+and **under-charged** (`revise` and `createVariation` mint a usable DRAFT and never
+consulted the gate). It now counts jobs quoted: `version: 1`, no
+`variationOfQuoteId`.
+
+**Residual, stated rather than pretended away:** a revision produces a DRAFT whose
+client can be changed, so a determined tenant can still get an extra document from
+one. The allowance is a nudge toward Pro, not DRM.
+
+**Found while testing, NOT fixed — an owner question:** `nextTermEnd` advances a
+calendar month from a base, so a term starting 1 February ends 4 March. A "monthly"
+subscription drifts by however many days February is short. My first test asserted
+`2026-03-01` and failed on `2026-03-04`; it now asserts the property, not a literal.
+
+core 285, api 699, web 466, mobile 28.
 
 ---
 

@@ -1950,6 +1950,8 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F2, F3, F4, F13, F30 | The retention cluster: six surfaces asked "total minus paid" when the question was "what is payable now" |
 | F5, F6, F15, F12, F27 | The accountant's files, which could not be reconciled against each other — a cash export counting abandoned checkouts, a lines file ignoring markup, a summary with no Discount column, and job profit measuring GCT-inclusive revenue against GCT-exclusive cost |
 | F8, F9, F10, F11 | The quote-edit and share cluster: an ACCEPTED quote could be rewritten, re-saving a quote lowered its total, and the public page's line amounts could not add up to the subtotal beneath them |
+| F53, F54 | The card ledger triple-counted (callback unscoped by providerRef), and voidPayment would decrement paidCents for a row that never incremented it |
+| F7, F16 | Billing: paying after a lapse reverted the tenant the same day, and the free allowance both over- and under-charged |
 
 **Every one of the eight reviews found something.** Three times a regression the
 fix itself introduced; twice a fix applied to the surface the finding named and not
@@ -1962,9 +1964,17 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** F7 and F16 (billing correctness), then F28 — the generic
-"Validation failed" message — because it is what makes F31 unreadable to a
-contractor. Then the Tier 3 admin-console items.
+**Remaining order:** F28 — the generic "Validation failed" message — because it is
+what makes F31 unreadable to a contractor, then F31 itself (forms accepting what
+the API refuses), then the Tier 3 admin-console items.
+
+**Owner questions raised by the work, none guessed at:**
+
+| Question | Why it matters |
+|---|---|
+| A `gctRegistered` column on Business | `registeredForGct` is inferred from `Boolean(business.trn)`, and in Jamaica every individual has a TRN. A sole trader who fills in their personal TRN has input tax netted off and **margin overstated on every job** |
+| Should "monthly" mean the same DAY each month? | `nextTermEnd` advances a calendar month from a base, so a term starting 1 February ends 4 March. It changes when tenants are billed |
+| Should `pending`/`failed` payments be visible anywhere? | They are written by code and read by no surface, so "I paid by card and it didn't show" is unanswerable on the invoice screen, and a stuck pending row has no expiry sweep |
 
 **Still owed, and NOT a code fix:** the visual and UX polish phase, the second half
 of the design work chosen at the start. Untouched since.

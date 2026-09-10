@@ -569,3 +569,64 @@ describe("variations", () => {
     expect(created[0]).not.toHaveProperty("lineItems");
   });
 });
+
+
+/**
+ * The free allowance counts JOBS QUOTED, not documents produced.
+ *
+ * The old count was every `Quote` row created this month, which was wrong twice
+ * over. It **over-charged**: a contractor who quoted two jobs and revised one of
+ * them twice had used four of five, their own corrections eating an allowance
+ * meant to measure how much work they were quoting for. And it **under-charged**,
+ * which was the bigger hole: `revise` and `createVariation` mint a usable DRAFT
+ * and never consulted the gate at all, so a tenant at the cap could keep going.
+ *
+ * A revision replaces an unagreed quote; a variation adds to an accepted one. The
+ * job was counted when the original was created, so neither is counted again.
+ */
+describe("what the free allowance counts", () => {
+  function countHarness(quotesThisMonth: number) {
+    const prisma = {
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb({
+        quote: { create: vi.fn().mockResolvedValue({ id: "q1" }) },
+        quoteSection: { create: vi.fn() },
+        quoteLineItem: { create: vi.fn() },
+      })),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({ id: "q1", lineItems: [], sections: [] }),
+        count: vi.fn().mockResolvedValue(quotesThisMonth),
+      },
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "free" }) },
+    };
+    const businessService = {
+      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
+      reserveQuoteNumber: vi.fn().mockResolvedValue("Q-0001"),
+    };
+    const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: 5 }) };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    return { svc, prisma };
+  }
+
+  it("excludes revisions and variations from the count", async () => {
+    const { svc, prisma } = countHarness(0);
+    await svc.create("b1", { sections: [], lineItems: [line] } as never).catch(() => undefined);
+
+    const where = prisma.quote.count.mock.calls[0]![0].where;
+    // version 1 excludes a revision; a null variationOfQuoteId excludes a
+    // variation. Without both, a contractor's own corrections consumed the
+    // allowance they were given for quoting jobs.
+    expect(where.version).toBe(1);
+    expect(where.variationOfQuoteId).toBeNull();
+  });
+
+  it("still scopes the count to this business and this month", async () => {
+    // The narrowing must not have lost the two clauses that make it a per-tenant
+    // monthly allowance at all.
+    const { svc, prisma } = countHarness(0);
+    await svc.create("b1", { sections: [], lineItems: [line] } as never).catch(() => undefined);
+    const where = prisma.quote.count.mock.calls[0]![0].where;
+    expect(where.businessId).toBe("b1");
+    expect(where.createdAt.gte).toBeInstanceOf(Date);
+  });
+});

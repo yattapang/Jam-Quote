@@ -292,6 +292,29 @@ export class QuotesService {
    * the current calendar month, server time). Throws HTTP 402 with a
    * machine-readable code so the frontend can show an upgrade prompt.
    */
+  /**
+   * The free-plan allowance counts JOBS QUOTED, not documents produced.
+   *
+   * It used to count every `Quote` row, which was wrong in both directions:
+   *
+   * - **It over-charged.** A contractor who quoted twice and revised one of them
+   *   twice had used four of their five. Their own corrections ate an allowance
+   *   meant to measure how much work they were quoting for.
+   * - **It under-charged, and that was the bigger hole.** `revise` and
+   *   `createVariation` mint a usable DRAFT and never consulted this gate at all,
+   *   so a tenant at the cap could keep going indefinitely.
+   *
+   * A revision REPLACES an unagreed quote and a variation ADDS to an accepted one;
+   * in both cases the job was already counted when the original was created. So
+   * the count excludes them and the two lineage paths stay ungated — the original
+   * they descend from has already been paid for, in allowance terms.
+   *
+   * **The residual, stated rather than pretended away:** a revision produces a
+   * DRAFT whose client can then be changed, so a determined tenant can still get
+   * an extra document out of it. The allowance is a nudge toward Pro, not DRM, and
+   * closing that would mean refusing a contractor the ability to correct a quote.
+   * Recorded in REVIEW-FINDINGS rather than left as an unstated hole.
+   */
   private async assertCanCreateQuote(businessId: string): Promise<void> {
     const subscription = await this.prisma.subscription.findUnique({ where: { businessId } });
     const plan = subscription?.plan === "pro" ? "pro" : "free";
@@ -299,7 +322,13 @@ export class QuotesService {
 
     const { freeQuotesPerMonth } = await this.pricingService.get();
     const quotesThisMonth = await this.prisma.quote.count({
-      where: { businessId, createdAt: { gte: startOfCurrentMonth() } },
+      where: {
+        businessId,
+        createdAt: { gte: startOfCurrentMonth() },
+        // Originals only: version 1 and not a variation of anything.
+        version: 1,
+        variationOfQuoteId: null,
+      },
     });
 
     if (quotesThisMonth >= freeQuotesPerMonth) {

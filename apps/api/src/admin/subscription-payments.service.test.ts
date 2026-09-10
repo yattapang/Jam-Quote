@@ -14,7 +14,19 @@ function build(opts: {
   subscription?: unknown;
   payment?: unknown;
   /** Unvoided payments the recompute should see AFTER the operation. */
-  ledger?: { id?: string; coversFrom: Date; coversUntil?: Date; interval: string; voidedAt: Date | null }[];
+  /**
+   * `paidAt` is part of the shape now: the recompute reads it because money
+   * cannot buy a period that was already over when it arrived. Defaulted to
+   * `coversFrom` — the ordinary case, where a term is paid for as it begins.
+   */
+  ledger?: {
+    id?: string;
+    paidAt?: Date;
+    coversFrom: Date;
+    coversUntil?: Date;
+    interval: string;
+    voidedAt: Date | null;
+  }[];
 } = {}) {
   const created: Record<string, unknown>[] = [];
   const subscriptionWrites: Record<string, unknown>[] = [];
@@ -24,7 +36,9 @@ function build(opts: {
       // The whole ledger the recompute reads — voided rows included, because
       // the ANCHOR comes from all payments while the duration comes only from
       // the ones that still stand.
-      findMany: vi.fn().mockResolvedValue(opts.ledger ?? []),
+      findMany: vi.fn().mockResolvedValue(
+        (opts.ledger ?? []).map((r) => ({ paidAt: r.coversFrom, ...r })),
+      ),
       create: vi.fn().mockImplementation((args: { data: Record<string, unknown> }) => {
         created.push(args.data);
         return { id: "sp-1", ...args.data };
@@ -237,5 +251,108 @@ describe("voiding a payment", () => {
   it("refuses a payment that does not exist", async () => {
     const { svc } = build({ payment: null });
     await expect(svc.void("nope", "a")).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+
+/**
+ * Paying after a lapse restores the tenant — it does not revert them the same day.
+ *
+ * `reallocateTerms` chains every surviving payment from the earliest `coversFrom`,
+ * which is right for consecutive renewals and wrong across a gap. A tenant who paid
+ * in January, lapsed, and paid again in August had that August payment rewritten
+ * back into the gap: `renewsAt` came out as March — five months in the PAST. So the
+ * tenant read PAST_DUE the moment they paid, the next sweep reverted them to free
+ * and emailed them about it, and recovering from one lapse took as many payments as
+ * months missed.
+ *
+ * The rule that fixes it without breaking void re-anchoring: a term may START
+ * before the payment date but may not END before it. Voiding leaves a survivor a
+ * term ending exactly at its own payment date, which is allowed; a six-month-old
+ * gap ends long before, which is not.
+ *
+ * The old ledger fixtures had no `paidAt` at all, which is why nothing here could
+ * tell the two cases apart.
+ */
+describe("recording a payment after a lapse", () => {
+  const JAN = new Date("2026-01-01T00:00:00.000Z");
+  const FEB = new Date("2026-02-01T00:00:00.000Z");
+  const AUG = new Date("2026-08-01T00:00:00.000Z");
+  const SEP = new Date("2026-09-01T00:00:00.000Z");
+
+  it("does not rewrite the new payment back into the gap", async () => {
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: FEB },
+      ledger: [
+        // Paid in January, covered January, then lapsed.
+        { id: "sp-1", paidAt: JAN, coversFrom: JAN, coversUntil: FEB, interval: "monthly", voidedAt: null },
+        // Paid in August, seven months later.
+        { id: "sp-2", paidAt: AUG, coversFrom: AUG, coversUntil: SEP, interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    const written = JSON.stringify(subscriptionWrites);
+    // September — a month of cover from when the money arrived.
+    expect(written).toContain(SEP.toISOString());
+    // NOT March, which is what chaining from January produced.
+    expect(written).not.toContain("2026-03-01");
+  });
+
+  it("leaves renewsAt in the FUTURE, so the sweep does not revert them", async () => {
+    // The consequence that made this urgent rather than untidy. A renewsAt in the
+    // past reads as PAST_DUE immediately and the next sweep reverts the plan.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: FEB },
+      ledger: [
+        { id: "sp-1", paidAt: JAN, coversFrom: JAN, coversUntil: FEB, interval: "monthly", voidedAt: null },
+        { id: "sp-2", paidAt: AUG, coversFrom: AUG, coversUntil: SEP, interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    const renewsAt = subscriptionWrites
+      .map((w) => JSON.stringify(w))
+      .join(" ")
+      .match(/2026-\d\d-\d\d/g);
+    expect(renewsAt, "a renewsAt should have been written").not.toBeNull();
+    for (const d of renewsAt!) expect(new Date(d).getTime()).toBeGreaterThan(AUG.getTime());
+  });
+
+  it("still chains two CONSECUTIVE months contiguously", async () => {
+    // The behaviour that must survive: paying early, before cover runs out, extends
+    // from the existing end rather than from the payment date.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: FEB },
+      ledger: [
+        { id: "sp-1", paidAt: JAN, coversFrom: JAN, coversUntil: FEB, interval: "monthly", voidedAt: null },
+        // Paid mid-January for the February month — early, so no gap.
+        {
+          id: "sp-2",
+          paidAt: new Date("2026-01-20T00:00:00.000Z"),
+          coversFrom: FEB,
+          coversUntil: new Date("2026-03-01T00:00:00.000Z"),
+          interval: "monthly",
+          voidedAt: null,
+        },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    // The property, not a literal date. An earlier version of this asserted
+    // "2026-03-01" and failed on 2026-03-04, because `nextTermEnd` advances by
+    // calendar month from a base that February makes 31 days long — arithmetic
+    // this test has no business encoding.
+    //
+    // What matters is that cover was EXTENDED from the existing term end rather
+    // than restarted at the payment date: chaining from 1 Feb lands in March,
+    // while restarting from the 20 Jan payment would land in February.
+    const written = JSON.stringify(subscriptionWrites);
+    const renewsAt = new Date(written.match(/"renewsAt":"([^"]+)"/)![1]!);
+    expect(renewsAt.getTime()).toBeGreaterThan(FEB.getTime());
+    expect(renewsAt.getUTCMonth()).toBe(2); // March
   });
 });

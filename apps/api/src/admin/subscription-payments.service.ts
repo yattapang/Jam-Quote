@@ -221,7 +221,16 @@ export class SubscriptionPaymentsService {
     const all = await tx.subscriptionPayment.findMany({
       where: { businessId },
       orderBy: [{ paidAt: "asc" }, { createdAt: "asc" }],
-      select: { id: true, coversFrom: true, coversUntil: true, interval: true, voidedAt: true },
+      // paidAt is part of the question: money cannot buy a period that was already
+      // over when it arrived. See the `from` calculation below.
+      select: {
+        id: true,
+        paidAt: true,
+        coversFrom: true,
+        coversUntil: true,
+        interval: true,
+        voidedAt: true,
+      },
     });
     if (all.length === 0) return fallback;
 
@@ -233,8 +242,30 @@ export class SubscriptionPaymentsService {
     let end = anchor;
     for (const p of all) {
       if (p.voidedAt !== null) continue; // voided money buys no period
-      const from = end;
-      const until = nextTermEnd(p.interval, from.toISOString(), from);
+
+      // Chain from where cover ran out — UNLESS that would allocate a term that
+      // had already ended before the money arrived.
+      //
+      // Both behaviours have to hold at once, and the naive chain got one of them
+      // wrong. Voiding the first of two consecutive months must slide the survivor
+      // back onto the outstanding month: it paid for cover it is now entitled to
+      // earlier. But a tenant who LAPSED and paid again six months later must not
+      // have that payment rewritten back into the gap — they were on the free tier
+      // through it, those months are not owed, and the old chain produced a
+      // `renewsAt` in the PAST. The tenant then read PAST_DUE the moment they
+      // paid, the next sweep reverted them to free, and recovering from one lapse
+      // took as many payments as months missed.
+      //
+      // The rule that separates them: a term may start before the payment date,
+      // but it may not END before it. Voiding leaves the survivor a term ending
+      // exactly at its own payment date, which is allowed. A six-month-old gap
+      // ends long before, which is not.
+      let from = end;
+      let until = nextTermEnd(p.interval, from.toISOString(), from);
+      if (until.getTime() < p.paidAt.getTime()) {
+        from = p.paidAt;
+        until = nextTermEnd(p.interval, from.toISOString(), from);
+      }
       // Only write when the allocation actually moved, so an ordinary payment
       // does not rewrite every earlier row it did not affect.
       if (p.coversFrom.getTime() !== from.getTime() || p.coversUntil.getTime() !== until.getTime()) {
