@@ -444,3 +444,75 @@ describe("the lapse rule across intervals and gap sizes", () => {
     expect(JSON.stringify(subscriptionWrites)).toContain("2026-04-01");
   });
 });
+
+
+/**
+ * Voiding an old payment must not knock a paid-up tenant offline.
+ *
+ * The rule went through two wrong versions before this. A date test alone absorbed
+ * any gap shorter than one interval — an annual tenant who lapsed and paid in
+ * December got one month for a year's fee. A vacated-period test alone did the
+ * opposite: it pulled a current payment back into any period a void had emptied,
+ * however old, so **voiding one stale bounced cheque stranded a currently paid-up
+ * tenant five months in the past** — F7's symptom with a new trigger, on the button
+ * that exists for correcting a mis-entered payment.
+ *
+ * A review caught the regression and a nine-ledger simulation confirmed it. The rule
+ * is the CONJUNCTION: pull back only into a vacated period, and only when the
+ * resulting term still reaches the payment date. Each test catches what the other
+ * misses, which is why neither alone was enough.
+ */
+describe("voiding an old payment leaves a current tenant current", () => {
+  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+
+  it("does not strand a paid-up tenant when a stale payment is voided", async () => {
+    // The regression, exactly. January voided, nothing paid Feb–Jun, paid again in
+    // July and currently covered. The vacated-only rule rewrote July back to January
+    // and left renewsAt in February.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-08-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2026-02-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-07-01"), coversFrom: at("2026-07-01"), coversUntil: at("2026-08-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2026-08-01");
+    expect(written).not.toContain("2026-02-01");
+  });
+
+  it("does not strand them when TWO consecutive payments are voided", async () => {
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-04-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2026-02-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2026-02-01"), coversFrom: at("2026-02-01"), coversUntil: at("2026-03-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-3", paidAt: at("2026-03-01"), coversFrom: at("2026-03-01"), coversUntil: at("2026-04-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+
+    // The survivor keeps the month it paid for, not the first vacated one.
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2026-04-01");
+    expect(written).not.toContain("2026-02-01");
+  });
+
+  it("does not pull a much later payment into an old vacated month", async () => {
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2027-01-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2026-02-01"), interval: "monthly", voidedAt: null },
+        { id: "sp-2", paidAt: at("2026-02-01"), coversFrom: at("2026-02-01"), coversUntil: at("2026-03-01"), interval: "monthly", voidedAt: new Date() },
+        { id: "sp-3", paidAt: at("2026-12-01"), coversFrom: at("2026-12-01"), coversUntil: at("2027-01-01"), interval: "monthly", voidedAt: null },
+      ],
+    });
+
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    expect(JSON.stringify(subscriptionWrites)).toContain("2027-01-01");
+  });
+});

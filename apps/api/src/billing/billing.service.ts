@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
-import { startOfCurrentMonth } from "../common/month.util.js";
+import { quoteAllowanceWhere } from "../common/quote-allowance.js";
 import { PricingService, type PricingSnapshot } from "./pricing.service.js";
 
 export interface BillingStatus {
@@ -28,9 +28,10 @@ export class BillingService {
     const [subscription, { freeQuotesPerMonth }, quotesThisMonth] = await Promise.all([
       this.prisma.subscription.findUnique({ where: { businessId } }),
       this.pricing.get(),
-      this.prisma.quote.count({
-        where: { businessId, createdAt: { gte: startOfCurrentMonth() } },
-      }),
+      // The SAME clause the gate enforces. This counted every row, so a
+      // contractor's revisions inflated the figure on the Settings card while the
+      // gate counted originals — the number shown was not the number enforced.
+      this.prisma.quote.count({ where: quoteAllowanceWhere(businessId) }),
     ]);
 
     const plan: "free" | "pro" = subscription?.plan === "pro" ? "pro" : "free";

@@ -437,7 +437,7 @@ core 285, api 681, web 462, mobile 28.
 | F25 | **"Send on WhatsApp" on a DRAFT mints a token, opens a well-formed message, and the link 404s.** `EmailQuoteButton` handles exactly this by advancing DRAFT to SENT after a confirmed send. WhatsApp — the channel the file's own comment calls the one contractors actually use — does not. | `WhatsAppButton.tsx:49-66`, `quotes/[id]/page.tsx:88` | OPEN |
 | F26 | **The labour cost helper is bypassed on the only screen that shows labour.** `labourEntryCostCents` floors a bad quantity at 0; the API uses it, the web does not. A quantity of minus 2 reads minus $8,000 in the Labour section while the profit figure above it counts zero — two numbers on one screen from the same row. | `ProjectCosts.tsx:118,262` | OPEN |
 | F27 | **The Cost tile's two sub-figures do not add up to the Cost above them.** The purchase component is derived gross of GCT while the headline is net, so the parts exceed the whole by exactly the reclaimable GCT. | `projects/[id]/page.tsx:88-93`, `purchases.service.ts:176` | **CLOSED** |
-| F28 | **Every validation rejection reaches the user as "Validation failed".** The pipe generates the real reason and throws it into an `issues` field that **nothing under `apps/web` reads**. Because `errorMessage()` prefers a non-empty server message, this generic string beats every "Couldn't save…" fallback. Root cause behind most of F31. | `zod-validation.pipe.ts:14-17`, `api-client.ts:83` | OPEN |
+| F28 | **Every validation rejection reaches the user as "Validation failed".** The pipe generates the real reason and throws it into an `issues` field that **nothing under `apps/web` reads**. Because `errorMessage()` prefers a non-empty server message, this generic string beats every "Couldn't save…" fallback. Root cause behind most of F31. | `zod-validation.pipe.ts:14-17`, `api-client.ts:83` | **CLOSED** |
 | F29 `[reviewed]` | **The failure banner cries wolf on every load for every non-super-admin.** Any throw is pushed into the failed list, including the 403s the comments describe as expected — so a MANAGE_TENANTS-only admin sees a red alert naming two sections on every page load. Same class: `SweepPanel` renders for anyone reaching Financials but its endpoint needs MANAGE_TENANTS. | `api-server.ts:605-612`, `AdminConsole.tsx:1580` | OPEN |
 | F30 **CLOSED `3556b25`** | **The retention snapshot goes stale on a draft edit.** `update` recomputes the totals and never touches `retentionCents`, so a draft edited after conversion can hold 5% while both screens label it "Retention held (10%)" on a finalized document. Related: `dueDate` uses `??`, so it can be set but never cleared — two lines below a comment explaining why that is wrong for a nullable field. | `invoices.service.ts:435-455` | **CLOSED `3556b25`** |
 
@@ -620,6 +620,108 @@ subscription drifts by however many days February is short. My first test assert
 `2026-03-01` and failed on `2026-03-04`; it now asserts the property, not a literal.
 
 core 285, api 699, web 466, mobile 28.
+
+---
+
+## My F7 "fix" was a regression, and my F16 mitigation was false
+
+The review of the corrections found both. Verified by simulating nine ledgers rather
+than taking the report on trust — which also showed one of its four claimed cases did
+not reproduce, so the extra complexity it implied was not added.
+
+**F7: I replaced one rule with another instead of taking both.** The date test and the
+vacated-period test answer different questions:
+
+| Ledger | date-only | vacated-only | conjunction |
+|---|---|---|---|
+| annual, lapsed, paid December | **1 month for a year's fee** | correct | correct |
+| monthly, paid 20 days late | **12 days for a month** | correct | correct |
+| void an old cheque, tenant currently paid up | correct | **renewsAt 5 months in the past** | correct |
+| void 1st of 2 consecutive | correct | correct | correct |
+
+The vacated-only version meant **voiding one stale bounced cheque knocked a currently
+paid-up tenant offline** — F7's own symptom, on the button that exists for correcting
+a mis-entered payment. The rule is now the conjunction, and all three versions are
+pinned by tests: both wrong rules fail.
+
+**F16: the register's mitigation was factually wrong.** I wrote that create-then-delete
+only yields a PDF "since `share` refuses DRAFT". `share` has **no status gate** — it
+mints a token for a draft; it is `findByShareToken` that refuses. And the quote email
+route has no DRAFT check either, so the PDF really does reach the client. The loop
+delivered real quotes.
+
+Fixed at the actual cause: **`remove` now soft-deletes**, which the schema has always
+declared (`deletedAt` — "soft-delete for offline sync") while the code hard-deleted. So
+a hard delete was also losing the tombstone an offline device needs to learn the quote
+is gone. The allowance counts **issuance, not stock** — no `deletedAt` filter, or the
+slot comes back.
+
+**Three more, all mine:**
+
+- **The gate and the counter disagreed.** `BillingService` counted every row while the
+  gate counted originals, so the Settings card could read "3 of 5" and then refuse.
+  One shared `quoteAllowanceWhere`.
+- **`startOfCurrentMonth` had the exact bug I had just called a correctness bug
+  elsewhere** — local accessors and a local-time constructor, described in its own
+  comment as "deliberately simple… harmless". On a UTC host the boundary is 7pm Jamaica
+  on the last evening of the month, so a contractor got a fresh allowance five hours
+  early, every month. The admin console had the correct version, privately; there is one
+  definition now.
+- **My guard broke a legitimate flow:** a revision of a clientless quote could never be
+  given a client, refused with a message about keeping a client that did not exist.
+
+**And the tests that "verified by reverting" were tautological on CI.** The month
+arithmetic bug only appears west of UTC, and there was no `TZ` pinning anywhere — under
+`TZ=UTC` the broken implementation returns the right answer for every assertion, so on
+a UTC CI host those eight tests could not fail. Both suites now pin
+`America/Jamaica`, and reverting the fix under it fails five tests.
+
+core 293, api 729, web 466, mobile 28.
+
+---
+
+## F28 — CLOSED: a rejected form now names the field
+
+Every rejection answered with the literal string **"Validation failed"**. The reason
+was computed and thrown into an `issues` array that **nothing under `apps/web`
+read** — and because `errorMessage()` prefers a non-empty server message over its
+own fallback (rightly: a server that says something is more specific than "is the
+API running?"), that generic string **beat every carefully-written message in the
+client**. A contractor typing `-10` into Discount got three words and no field.
+
+Fixed in the pipe rather than the client, so every form benefits at once — the
+client already renders `body.message`. `issues` stays on the response for a screen
+that wants to highlight a field later.
+
+What a contractor now reads, taken from the real DTOs:
+
+| Was | Is |
+|---|---|
+| Validation failed | `A first name is required.` |
+| Validation failed | `Email must be a valid email address.` |
+| Validation failed | `Discount percentage must be at least 0.` |
+| Validation failed | `Line items #1 description is required.` |
+| Validation failed | `Terms is too long (at most 5000 characters).` |
+| Validation failed | `Stage must be one of: ENQUIRY, QUOTED, WON, IN_PROGRESS, COMPLETE, CANCELLED.` |
+
+Details that came out of writing it against the real schemas rather than synthetic
+issues:
+
+- **`cents` is dropped and `pct` expanded.** "Unit price cents must be at least 0"
+  invites the question "cents?". A contractor thinks in dollars.
+- **Array positions count from 1** and attach to what they index — `lineItems.1.description` becomes "Line items #2 description".
+- **A `.refine()` message passes through untouched**, because it was authored for a
+  person. Prefixing a derived label produced "First name firstName (or legacy name)
+  is required" — which is how this was caught, and only because the test drove the
+  real `createClientSchema`.
+- **Two authored messages were developer-speak** and are fixed: "firstName (or
+  legacy name) is required" and "data is required for an upsert", the latter of
+  which reaches a contractor through mobile sync.
+- **Capped at three fields** plus a count, and enum options capped at six. Fourteen
+  parishes inline is a wall, and a wall reads as an error page rather than as
+  something to fix.
+
+core 293, api 721, web 466, mobile 28.
 
 ---
 

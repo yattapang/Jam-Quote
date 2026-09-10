@@ -267,10 +267,29 @@ export class SubscriptionPaymentsService {
     for (const p of all) {
       if (p.voidedAt !== null) continue; // voided money buys no period
 
-      // Chain from where cover ran out, unless that would reach back into a period
-      // nobody vacated — a lapse. Then the money buys cover from when it arrived.
-      const from = end.getTime() < p.paidAt.getTime() && !isVacated(end) ? p.paidAt : end;
-      const until = nextTermEnd(p.interval, from.toISOString(), from);
+      // Pull back only when BOTH hold: the period was vacated by a void, and the
+      // resulting term still reaches the payment date.
+      //
+      // The previous version replaced the date test with the vacated test instead of
+      // taking both, and that was a regression — a review caught it and a simulation
+      // of nine ledgers confirmed it. Vacated-only strands tenants PAST_DUE:
+      //
+      //   void Jan, lapse Feb-Jun, pay Jul  ->  renewsAt Feb 1, five months past
+      //
+      // which means **voiding one old bounced cheque knocked a currently paid-up
+      // tenant offline** — F7's symptom with a new trigger, on the button that exists
+      // precisely for correcting a mis-entered payment.
+      //
+      // Date-only was also wrong, in the other direction: it absorbed any gap shorter
+      // than one interval, so an annual tenant who lapsed and paid in December got one
+      // month for a year's fee. Each test catches what the other misses.
+      let from = end;
+      let until = nextTermEnd(p.interval, from.toISOString(), from);
+      const refillsVacated = isVacated(from);
+      if (from.getTime() < p.paidAt.getTime() && (!refillsVacated || until.getTime() < p.paidAt.getTime())) {
+        from = p.paidAt;
+        until = nextTermEnd(p.interval, from.toISOString(), from);
+      }
       // Only write when the allocation actually moved, so an ordinary payment
       // does not rewrite every earlier row it did not affect.
       if (p.coversFrom.getTime() !== from.getTime() || p.coversUntil.getTime() !== until.getTime()) {

@@ -1,12 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { UserRole, type Business } from "@prisma/client";
 import {
-  JAMAICA_UTC_OFFSET_MS,
   SubscriptionStanding,
   subscriptionStanding,
   supportedJurisdictions,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { startOfJamaicaMonth } from "../common/month.util.js";
 import { PricingService, type PricingSnapshot } from "../billing/pricing.service.js";
 import type { UpdatePricingInput } from "../billing/billing.dto.js";
 import type {
@@ -120,12 +120,9 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
  * time. A figure labelled "this month" that means two different months in two
  * places is the kind of thing nobody catches until the numbers are disputed.
  */
-function startOfJamaicaMonth(now: Date = new Date()): Date {
-  const shifted = new Date(now.getTime() + JAMAICA_UTC_OFFSET_MS);
-  return new Date(
-    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), 1) - JAMAICA_UTC_OFFSET_MS,
-  );
-}
+// startOfJamaicaMonth moved to common/month.util.ts — it was the only correct
+// copy, and `startOfCurrentMonth` next to it had the server-clock bug.
+
 
 /** One term from today. Uses setMonth/setFullYear rather than adding a fixed
  * number of days, so a renewal lands on the same calendar date and does not

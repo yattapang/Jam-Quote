@@ -450,6 +450,11 @@ describe("QuotesService.remove", () => {
     const prisma = {
       quote: {
         findFirst: vi.fn().mockResolvedValue({ id: "q1", status, lineItems: [], sections: [] }),
+        // `remove` soft-deletes now: the schema declares deletedAt for offline
+        // sync, and a hard delete also DECREMENTED the free-plan allowance, which
+        // made create-email-delete an unlimited issuance loop.
+        findMany: vi.fn().mockResolvedValue([]),
+        update: vi.fn().mockResolvedValue({}),
         delete: vi.fn(),
       },
       quoteLineItem: { deleteMany: vi.fn() },
@@ -459,16 +464,40 @@ describe("QuotesService.remove", () => {
     return { svc: new QuotesService(prisma as any, {} as any, {} as any), prisma };
   }
 
-  it("deletes a DRAFT quote", async () => {
+  it("SOFT-deletes a DRAFT quote, leaving a tombstone", async () => {
+    // Two things the hard delete broke. `deletedAt` is declared "soft-delete for
+    // offline sync", and a hard-deleted row means a device that was offline never
+    // learns the quote is gone. And the allowance counts rows, so deleting one
+    // gave the slot back: create a draft, email the PDF, delete, repeat.
     const { svc, prisma } = serviceForQuote(QuoteStatus.DRAFT);
     await svc.remove("b1", "q1");
-    expect(prisma.$transaction).toHaveBeenCalled();
+    expect(prisma.quote.update).toHaveBeenCalledWith({
+      where: { id: "q1" },
+      data: { deletedAt: expect.any(Date) },
+    });
+    expect(prisma.quote.delete).not.toHaveBeenCalled();
+  });
+
+  it("keeps the line items, so the tombstone records what was deleted", async () => {
+    const { svc, prisma } = serviceForQuote(QuoteStatus.DRAFT);
+    await svc.remove("b1", "q1");
+    expect(prisma.quoteLineItem.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.quoteSection.deleteMany).not.toHaveBeenCalled();
   });
 
   it("refuses to delete a non-DRAFT quote", async () => {
     const { svc, prisma } = serviceForQuote(QuoteStatus.SENT);
     await expect(svc.remove("b1", "q1")).rejects.toBeInstanceOf(BadRequestException);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.quote.update).not.toHaveBeenCalled();
+  });
+
+  it("hides a tombstoned quote from the tenant's list and detail reads", async () => {
+    // The other half: a soft delete is only a delete if nothing shows the row.
+    const { svc, prisma } = serviceForQuote(QuoteStatus.DRAFT);
+    await svc.findAll("b1");
+    expect(prisma.quote.findMany.mock.calls[0]![0].where.deletedAt).toBeNull();
+    await svc.findOne("b1", "q1");
+    expect(prisma.quote.findFirst.mock.calls[0]![0].where.deletedAt).toBeNull();
   });
 });
 
@@ -719,5 +748,76 @@ describe("a descendant quote cannot be retargeted at another client", () => {
     await expect(
       svc.update("b1", "q2", { clientId: "cl-1", discountPct: 5 } as never),
     ).resolves.toBeDefined();
+  });
+});
+
+
+/**
+ * The gate and the counter cannot drift apart.
+ *
+ * `assertCanCreateQuote` enforces the allowance; `BillingService` shows the
+ * contractor "quotes used this month". They had different clauses — billing counted
+ * every row, the gate counted originals — so the number on the Settings card was not
+ * the number being enforced. A contractor could read "3 of 5" and be refused.
+ */
+describe("the allowance clause is shared", () => {
+  it("the gate and the billing counter use the same where-clause", async () => {
+    const { quoteAllowanceWhere } = await import("../common/quote-allowance.js");
+    const where = quoteAllowanceWhere("b1");
+    // Issuance, not stock: no deletedAt filter, or a deleted draft would give the
+    // slot back and restore the create-email-delete loop.
+    expect("deletedAt" in where).toBe(false);
+    expect(where.parentQuoteId).toBeNull();
+    expect(where.variationOfQuoteId).toBeNull();
+    expect(where.businessId).toBe("b1");
+  });
+
+  it("the month boundary is Jamaica's, not the server's", async () => {
+    const { quoteAllowanceWhere } = await import("../common/quote-allowance.js");
+    // 1 January 02:00 UTC is still 31 December in Jamaica, so the allowance has NOT
+    // reset yet. The old server-clock boundary gave a fresh five quotes five hours
+    // early, every month.
+    const where = quoteAllowanceWhere("b1", new Date("2026-01-01T02:00:00.000Z"));
+    const gte = (where.createdAt as { gte: Date }).gte;
+    expect(gte.toISOString()).toBe("2025-12-01T05:00:00.000Z");
+  });
+});
+
+describe("a revision of a CLIENTLESS quote can still be given a client", () => {
+  it("allows setting a client where there was none", async () => {
+    // `create` permits a draft with no client, and `revise` has no status gate — so
+    // the retarget guard refused the one legitimate case it should allow, with a
+    // message about keeping a client that did not exist.
+    const prisma = {
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
+          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
+          quote: { update: vi.fn().mockResolvedValue({}) },
+        }),
+      ),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "q2",
+          businessId: "b1",
+          status: "DRAFT",
+          clientId: null,
+          projectId: null,
+          parentQuoteId: "q1",
+          variationOfQuoteId: null,
+          version: 2,
+          gctRate: 15,
+          discountPct: 0,
+          depositCents: 0,
+          detailLevel: "SUMMARY",
+          lineItems: [],
+          sections: [],
+        }),
+      },
+      client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "b1" }) },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
   });
 });

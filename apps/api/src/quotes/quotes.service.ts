@@ -23,10 +23,10 @@ import {
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
+import { quoteAllowanceWhere } from "../common/quote-allowance.js";
 import { assertPublicShape } from "../common/public-view.js";
 import { BusinessService } from "../business/business.service.js";
 import { PricingService } from "../billing/pricing.service.js";
-import { startOfCurrentMonth } from "../common/month.util.js";
 import type {
   CreateQuoteInput,
   QuoteLineItemInput,
@@ -321,18 +321,11 @@ export class QuotesService {
     if (plan === "pro") return;
 
     const { freeQuotesPerMonth } = await this.pricingService.get();
+    // One definition, shared with the counter the contractor reads on the Settings
+    // card. They had different clauses, so the number shown was not the number
+    // enforced — "3 of 5" and then a refusal.
     const quotesThisMonth = await this.prisma.quote.count({
-      where: {
-        businessId,
-        createdAt: { gte: startOfCurrentMonth() },
-        // Originals only, keyed on LINEAGE rather than version. `version: 1` was
-        // wrong: `revise` of a CLOSED quote (ACCEPTED or INVOICED) reserves a NEW
-        // number and starts again at version 1, so the ordinary "client agreed,
-        // then we corrected the sheet" path still ate an allowance. parentQuoteId
-        // catches all three kinds of descendant.
-        parentQuoteId: null,
-        variationOfQuoteId: null,
-      },
+      where: quoteAllowanceWhere(businessId),
     });
 
     if (quotesThisMonth >= freeQuotesPerMonth) {
@@ -425,6 +418,7 @@ export class QuotesService {
     return this.prisma.quote.findMany({
       where: {
         businessId,
+        deletedAt: null,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.clientId ? { clientId: filters.clientId } : {}),
         ...(filters.projectId ? { projectId: filters.projectId } : {}),
@@ -435,7 +429,7 @@ export class QuotesService {
 
   async findOne(businessId: string, id: string): Promise<QuoteWithLines> {
     const quote = await this.prisma.quote.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, deletedAt: null },
       include: QUOTE_DETAIL_INCLUDE,
     });
     if (!quote) throw new NotFoundException("Quote not found");
@@ -609,6 +603,12 @@ export class QuotesService {
     if (
       input.clientId !== undefined &&
       input.clientId !== existing.clientId &&
+      // Only when there IS a client to keep. `create` explicitly allows a draft
+      // with no client yet, and `revise` has no status gate — so a revision of a
+      // clientless quote could never be given a client, and the refusal said "a
+      // revision keeps the client of the quote it came from" when there was none.
+      // The only escape was to consume an allowance.
+      existing.clientId !== null &&
       (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null)
     ) {
       throw new BadRequestException(
@@ -1038,11 +1038,22 @@ export class QuotesService {
     if (quote.status !== QuoteStatus.DRAFT) {
       throw new BadRequestException("Only DRAFT quotes can be deleted");
     }
-    await this.prisma.$transaction([
-      this.prisma.quoteLineItem.deleteMany({ where: { quoteId: id } }),
-      this.prisma.quoteSection.deleteMany({ where: { quoteId: id } }),
-      this.prisma.quote.delete({ where: { id } }),
-    ]);
+    // Soft delete, for two reasons the hard delete broke.
+    //
+    // `Quote.deletedAt` has always been declared "soft-delete for offline sync",
+    // and hard-deleting a synced row means a device that was offline never learns
+    // the quote is gone — it keeps showing a document the contractor deleted.
+    //
+    // And the free-plan allowance counts rows, so a hard delete DECREMENTED it: a
+    // tenant at the cap could create a draft, email the PDF to the client, delete
+    // it, and repeat — an unlimited issuance loop that cost three requests. The
+    // register recorded that as mitigated because "share refuses DRAFT"; a review
+    // found that claim false — `share` mints a token for a draft and the email
+    // route has no status gate at all, so the PDF really does reach the client.
+    //
+    // The line items stay: a tombstone with no content is not a record of what was
+    // deleted, and nothing reads them once `deletedAt` is set.
+    await this.prisma.quote.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }
 

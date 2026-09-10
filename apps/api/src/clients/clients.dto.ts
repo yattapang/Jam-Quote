@@ -57,7 +57,10 @@ export const createClientSchema = z
     ...clientContactFields,
   })
   .refine((v) => !!v.firstName || !!v.name, {
-    message: "firstName (or legacy name) is required",
+    // Written for the person filling in the form, not for the developer reading
+    // the schema. `firstName` and the legacy `name` are both accepted; a
+    // contractor does not know either field exists.
+    message: "A first name is required",
     path: ["firstName"],
   });
 export type CreateClientInput = z.infer<typeof createClientSchema>;

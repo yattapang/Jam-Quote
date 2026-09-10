@@ -69,7 +69,9 @@ const changeSchema = <T extends z.ZodTypeAny>(data: T) =>
       data: data.optional(),
     })
     .refine((c) => c.op === "delete" || c.data !== undefined, {
-      message: "data is required for an upsert",
+      // Written for a person: this reaches a contractor through the mobile app's
+      // sync error, not only a developer reading a log.
+      message: "This change is missing its data",
     });
 
 export const pushSchema = z.object({
