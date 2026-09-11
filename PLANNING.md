@@ -1956,6 +1956,7 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F31, F32 | Numeric inputs accepted what the DTO refuses. `BOUNDS` in core is now the single definition the DTO and the form both spend |
 | F17, F18, F19, F20, F52 | The admin console reported facts the API never sent: an all-time quote count labelled "This month", a drawer pill reading a column only ever written "active", a "subscriptions" tile counting rows staff had touched, and an unconditional "Verified" badge under a banner saying nothing was verified. F52 replaces the honesty test's denylist of already-deleted strings with four assertions about classes of fabrication |
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
+| F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
 **Every one of the thirteen reviews found something.** Three in a row have now
 found a defect in the GUARD rather than only in the code, and the thirteenth defeated
@@ -1980,9 +1981,7 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** F21 (retiring a statutory contribution is one-way and inert for
-custom entries), F39 (the manual sweep is unaudited), F40 (currency) and F41 (a
-pricing save reporting success on a field it drops). Then F55–F59, opened by the F38
+**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F59, opened by the F38
 work: a real tenant search, filters behind the honest pills, and a true last-seen
 timestamp. Then the visual and UX polish phase.
 

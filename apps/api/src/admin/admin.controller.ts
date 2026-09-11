@@ -258,8 +258,37 @@ export class AdminController {
    */
   @Post("subscriptions/sweep")
   @RequireCapability(AdminCapability.MANAGE_TENANTS)
-  runSweep(): Promise<SweepResult> {
-    return this.sweep.run("manual");
+  async runSweep(@Req() req: Request): Promise<SweepResult> {
+    // Audited, like every other mutating admin route. This was the one exception,
+    // and it is the route with the widest blast radius: a run reverts lapsed
+    // tenants to free and sends them email. `subscription_sweep_run` already
+    // recorded THAT a manual run happened; it has no actor, so "who dropped this
+    // tenant to free on the 3rd?" was unanswerable.
+    //
+    // Recorded on the way out, so the entry carries the outcome — and recorded on
+    // failure too, because a sweep that threw half-way still sent some of those
+    // emails, and an attempt with no trail is the case this fixes.
+    const actorUserId = req.user!.sub;
+    try {
+      const result = await this.sweep.run("manual");
+      await this.auditService.record({
+        actorUserId,
+        action: "subscription.sweep.manual",
+        targetType: "Platform",
+        targetId: "subscriptions",
+        details: { ...result },
+      });
+      return result;
+    } catch (err) {
+      await this.auditService.record({
+        actorUserId,
+        action: "subscription.sweep.manual.failed",
+        targetType: "Platform",
+        targetId: "subscriptions",
+        details: { error: err instanceof Error ? err.message : String(err) },
+      });
+      throw err;
+    }
   }
 
   /** Recent sweeps — so "no reminders" can be told from "never ran". */

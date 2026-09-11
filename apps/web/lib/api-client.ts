@@ -1203,6 +1203,15 @@ export interface EffectiveRulePack {
   sourceUrl: string | null;
   sources: string[];
   rulePackVersion: string;
+  /**
+   * The override's own lists, so the console can seed its editor from them.
+   *
+   * Without these the retired list started empty on every load, a retired baseline
+   * entry was filtered out of `statutory` so the chip row could not show it, and
+   * nothing could bring it back — while the button promised exactly that.
+   */
+  statutoryRetired: string[];
+  statutoryCustom: NonNullable<UpdateRulePackInput["statutoryCustom"]>;
   overridden: boolean;
   updatedAt: string | null;
 }

@@ -171,6 +171,51 @@ describe("applyRulePackOverride — maintaining the pack without a release", () 
     expect(base.statutory.some((s) => s.code === victim)).toBe(true);
   });
 
+  it("retires a contribution an admin ADDED, not just a baseline one", () => {
+    // The defect: `retired` was applied to baseline entries only, and whatever was
+    // left in the custom map was appended unconditionally. So retiring a levy the
+    // admin had added themselves wrote the code into `statutoryRetired`, reported
+    // success, and left the levy in the payroll table for ever — the kind of entry a
+    // staffer is most likely to withdraw was the one kind that could not be.
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [
+        {
+          code: "PARISH_LEVY",
+          label: "Parish levy",
+          appliesTo: "BOTH",
+          employeePct: 1,
+          employerPct: 1,
+        },
+      ],
+      statutoryRetired: ["PARISH_LEVY"],
+    });
+    expect(merged.statutory.some((s) => s.code === "PARISH_LEVY")).toBe(false);
+  });
+
+  it("a retirement reverses when the code leaves the retired list", () => {
+    // What "reversible" actually means: the same override with the code removed
+    // brings the contribution back, with its real label rather than a stub. The
+    // existing test asserted that the BASELINE object was untouched, which is true
+    // of any pure function and says nothing about whether a staffer can undo this.
+    const victim = base.statutory[0]!;
+    const retired = applyRulePackOverride(base, { statutoryRetired: [victim.code] });
+    expect(retired.statutory.some((s) => s.code === victim.code)).toBe(false);
+
+    const restored = applyRulePackOverride(base, { statutoryRetired: [] });
+    const back = restored.statutory.find((s) => s.code === victim.code);
+    expect(back).toBeDefined();
+    expect(back?.label).toBe(victim.label);
+    // And the order is the baseline order, so un-retiring does not move the row.
+    expect(restored.statutory.map((s) => s.code)).toEqual(base.statutory.map((s) => s.code));
+  });
+
+  it("retiring a code that was never there changes nothing", () => {
+    // A stale code left in the list by an earlier release must not shorten the table
+    // or throw — the console seeds its editor from this list.
+    const merged = applyRulePackOverride(base, { statutoryRetired: ["NO_SUCH_LEVY"] });
+    expect(merged.statutory.map((s) => s.code)).toEqual(base.statutory.map((s) => s.code));
+  });
+
   it("retiring wins over a rate edit for the same code", () => {
     const victim = base.statutory[0]!.code;
     const merged = applyRulePackOverride(base, {

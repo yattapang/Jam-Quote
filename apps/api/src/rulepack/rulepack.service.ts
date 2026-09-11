@@ -26,6 +26,15 @@ export interface EffectiveStatutory {
  * admin console renders and the app consumes. Flattened/serialisable — no
  * functions — so it crosses the API boundary cleanly.
  */
+/** One levy an admin added or replaced, as stored on the override. */
+export interface StatutoryCustomEntry {
+  code: string;
+  label: string;
+  appliesTo: "EMPLOYEE" | "EMPLOYER" | "BOTH";
+  employeePct: number | null;
+  employerPct: number | null;
+}
+
 export interface EffectiveRulePack {
   countryCode: string;
   countryName: string;
@@ -42,6 +51,19 @@ export interface EffectiveRulePack {
   sourceUrl: string | null;
   sources: string[];
   rulePackVersion: string;
+  /**
+   * Codes an admin has retired, and levies an admin has added.
+   *
+   * Reported back because the console has to SEED its editor from them. Without
+   * these, its retired list started empty on every load: a retired baseline entry
+   * was filtered out of `statutory`, so the chip row could not show it, and nothing
+   * could bring it back — while the button's own tooltip promised "Bring this
+   * contribution back". Retiring was one-way in practice.
+   *
+   * Both are complete lists rather than patches, matching `UpdateRulePackInput`.
+   */
+  statutoryRetired: string[];
+  statutoryCustom: StatutoryCustomEntry[];
   /** True when a stored override is layered over the baseline. */
   overridden: boolean;
   updatedAt: string | null;
@@ -149,6 +171,10 @@ export class RulePackService {
       sourceUrl: row?.sourceUrl ?? profile.sources[0] ?? null,
       sources: [...profile.sources],
       rulePackVersion: profile.rulePackVersion,
+      statutoryRetired: [...(row?.statutoryRetired ?? [])],
+      statutoryCustom: ((row?.statutoryCustom as unknown as StatutoryCustomEntry[] | null) ?? []).map(
+        (c) => ({ ...c }),
+      ),
       overridden: row !== null,
       updatedAt: row ? row.updatedAt.toISOString() : null,
     };

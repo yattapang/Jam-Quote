@@ -395,6 +395,34 @@ describe("the console cannot claim a figure it does not have", () => {
     ).toEqual([]);
   });
 
+  it("no money is rendered in a currency the platform may not be using", () => {
+    // All seven money figures went through `formatJmd` while the platform currency
+    // was editable free text, so setting it to USD showed a JMD symbol beside the
+    // letters USD. `formatPlatformMoney` takes the configured code and degrades to
+    // the amount plus the raw code when it does not recognise one.
+    expect(src, "platform money must spend the configured currency").not.toMatch(
+      /formatJmd\(/,
+    );
+    expect(src).toContain("formatPlatformMoney");
+  });
+
+  it("no save reports success on a value it dropped", () => {
+    // `Number(x) || undefined` sent nothing for a cleared or mistyped field, the
+    // server read the absence as "leave unchanged", and the screen said "Saved".
+    // The coercion is the tell: `|| undefined` on a parsed number turns 0 and NaN
+    // into an omission, and an omission into a false success.
+    const offenders = [...src.matchAll(/\|\|\s*undefined/g)].map((m) =>
+      src.slice(Math.max(0, m.index! - 80), m.index! + 14).trim(),
+    );
+    expect(
+      offenders,
+      "refuse the value and name the field instead of omitting it",
+    ).toEqual([]);
+    // And the refusal says something: an error state with no sentence is the same
+    // defect one step later.
+    expect(src).toContain("pricingError");
+  });
+
   it("nothing that looks clickable lacks a handler", () => {
     // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past
     // due (3)" looked like a filter and did nothing.

@@ -294,8 +294,16 @@ function mergeStatutory(
       };
     });
 
-  // Whatever is left in `custom` is genuinely new to this jurisdiction.
-  return [...fromBaseline, ...[...custom.values()].map((c) => withAdminProvenance(c, override))];
+  // Whatever is left in `custom` is genuinely new to this jurisdiction — and is
+  // subject to `retired` exactly as a baseline entry is.
+  //
+  // The retired filter used to be applied to baseline entries ONLY, and the
+  // leftovers were appended unconditionally. So retiring a levy an admin had added
+  // themselves reported success, wrote the code into `statutoryRetired`, and left
+  // the levy in the payroll table for ever: the one kind of entry a staffer is most
+  // likely to retire was the one kind that could not be.
+  const newlyAdded = [...custom.values()].filter((c) => !retired.has(c.code));
+  return [...fromBaseline, ...newlyAdded.map((c) => withAdminProvenance(c, override))];
 }
 
 /** An admin-entered contribution is vouched-for by the person who entered it,

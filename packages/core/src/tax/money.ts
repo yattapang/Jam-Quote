@@ -31,6 +31,37 @@ export const CURRENCIES = {
 } as const satisfies Record<string, Currency>;
 export type CurrencyCode = keyof typeof CURRENCIES;
 
+/**
+ * The currency codes the platform will accept, as a runtime array.
+ *
+ * Exists so the pricing DTO can be `z.enum(CURRENCY_CODES)` instead of
+ * `z.string().max(8)`. The admin pricing form accepted any eight characters, and
+ * money on the staff console renders through a currency descriptor — so setting the
+ * platform currency to "USD" (or to "usd", or to "banana") left every figure
+ * carrying a JMD symbol beside the letters that said otherwise.
+ *
+ * Derived from CURRENCIES rather than typed out again, so a new currency is added in
+ * one place.
+ */
+export const CURRENCY_CODES = Object.keys(CURRENCIES) as [CurrencyCode, ...CurrencyCode[]];
+
+/**
+ * A currency descriptor for a code that may not be valid.
+ *
+ * `getCurrency` throws, which is right for code that has already validated. A screen
+ * rendering whatever the database holds needs to degrade instead: an unknown code
+ * shows the amount with the code beside it and no symbol, which is honest, rather
+ * than a confident symbol for the wrong currency.
+ */
+export function formatPlatformMoney(cents: Cents, code: string | null | undefined): string {
+  const currency = code ? (CURRENCIES as Record<string, Currency>)[code] : undefined;
+  if (!currency) {
+    const body = formatMoney(cents, CURRENCIES.JMD, false);
+    return code ? `${body} ${code}` : body;
+  }
+  return formatMoney(cents, currency);
+}
+
 /** Resolve a currency descriptor by ISO code; throws on an unknown code. */
 export function getCurrency(code: string): Currency {
   const c = (CURRENCIES as Record<string, Currency>)[code];

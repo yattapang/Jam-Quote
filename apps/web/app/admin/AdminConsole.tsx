@@ -4,13 +4,15 @@ import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } 
 import { useRouter } from "next/navigation";
 import {
   getJurisdiction,
-  formatJmd,
   subscriptionStanding,
   type SubscriptionStanding,
   rulePackVerification,
   ADMIN_CAPABILITIES,
   ADMIN_CAPABILITY_META,
   formatTrn,
+  CURRENCY_CODES,
+  formatPlatformMoney,
+  type CurrencyCode,
 } from "@jamquote/core";
 import {
   getAdminPricing,
@@ -47,6 +49,7 @@ import {
 import { logout } from "@/lib/auth-actions";
 import { startImpersonation } from "@/lib/impersonation-actions";
 import { relativeTime } from "@/lib/relative-time";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./console.module.css";
 import type { ApiEnvironment } from "@/lib/api-environment";
 
@@ -202,6 +205,19 @@ export default function AdminConsole({
   // --- Pricing editor (GET/PATCH /admin/pricing) ---
   const [pricing, setPricing] = useState<PricingConfig | null>(null);
   const [pricingLoadError, setPricingLoadError] = useState(false);
+  /**
+   * The currency every platform figure on this console is denominated in.
+   *
+   * `formatJmd` was used for all seven money renders here while the platform
+   * currency was editable free text — so setting it to USD showed a JMD symbol
+   * beside the letters USD on the Financials tile. The live pricing config wins
+   * (a staffer may have just changed it); the server's financials payload is the
+   * fallback; `formatPlatformMoney` degrades to the amount plus the raw code if
+   * neither is a currency it knows, rather than asserting a symbol.
+   */
+  const platformCurrency = pricing?.currency ?? data.financials?.currency ?? null;
+  const money = (cents: number) => formatPlatformMoney(cents, platformCurrency);
+
   const [pricingForm, setPricingForm] = useState({
     freeQuotesPerMonth: "",
     proMonthlyPriceDollars: "",
@@ -210,6 +226,8 @@ export default function AdminConsole({
   });
   const [pricingSaving, setPricingSaving] = useState(false);
   const [pricingStatus, setPricingStatus] = useState<"idle" | "saved" | "error">("idle");
+  /** The reason a save was refused, so "error" is never the whole message. */
+  const [pricingError, setPricingError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,15 +250,57 @@ export default function AdminConsole({
     };
   }, []);
 
+  /**
+   * What is wrong with the pricing form, in words, or null.
+   *
+   * Every field was sent as `Number(x) || undefined`, and the server reads an absent
+   * field as "leave unchanged". So clearing a price, or typing `0`, or typing
+   * anything unparseable, dropped that field and the screen said "Saved ✓". The
+   * value on the server was untouched and the form re-rendered from the response, so
+   * the number even appeared to revert on its own.
+   *
+   * The form is always fully populated from GET /admin/pricing, so there is no such
+   * thing as "not edited" here — every field is intended, and an unusable one is an
+   * error to report rather than an omission to infer. The bounds match
+   * `updatePricingSchema`, which is `.positive()` on all three numbers.
+   */
+  function pricingProblem(): string | null {
+    const freeQuotes = Number(pricingForm.freeQuotesPerMonth);
+    if (!Number.isInteger(freeQuotes) || freeQuotes <= 0)
+      return "Free quotes per month must be a whole number above zero.";
+    const monthly = dollarsStrToCents(pricingForm.proMonthlyPriceDollars);
+    if (!Number.isFinite(monthly) || monthly <= 0)
+      return "Pro price per month must be above zero.";
+    const annual = dollarsStrToCents(pricingForm.proAnnualPriceDollars);
+    if (!Number.isFinite(annual) || annual <= 0)
+      return "Pro price per year must be above zero.";
+    if (!CURRENCY_CODES.includes(pricingForm.currency.trim() as CurrencyCode))
+      return `Currency must be one of: ${CURRENCY_CODES.join(", ")}.`;
+    return null;
+  }
+
   async function savePricing() {
+    const problem = pricingProblem();
+    if (problem) {
+      // Refused, and named. Reporting "Saved ✓" over a dropped field is the defect.
+      setPricingError(problem);
+      setPricingStatus("error");
+      return;
+    }
+    const freeQuotes = Number(pricingForm.freeQuotesPerMonth);
+    const monthlyCents = dollarsStrToCents(pricingForm.proMonthlyPriceDollars);
+    const annualCents = dollarsStrToCents(pricingForm.proAnnualPriceDollars);
+    const currency = pricingForm.currency.trim() as CurrencyCode;
+
     setPricingSaving(true);
     setPricingStatus("idle");
+    setPricingError(null);
     try {
       const updated = await updateAdminPricing({
-        freeQuotesPerMonth: Number(pricingForm.freeQuotesPerMonth) || undefined,
-        proMonthlyPriceCents: dollarsStrToCents(pricingForm.proMonthlyPriceDollars) || undefined,
-        proAnnualPriceCents: dollarsStrToCents(pricingForm.proAnnualPriceDollars) || undefined,
-        currency: pricingForm.currency.trim() || undefined,
+        freeQuotesPerMonth: freeQuotes,
+        proMonthlyPriceCents: monthlyCents,
+        proAnnualPriceCents: annualCents,
+        currency,
       });
       setPricing(updated);
       setPricingForm({
@@ -250,7 +310,9 @@ export default function AdminConsole({
         currency: updated.currency,
       });
       setPricingStatus("saved");
-    } catch {
+    } catch (err) {
+      // The server's own sentence when it sent one — since F28 it names the field.
+      setPricingError(errorMessage(err, "Couldn't save. Try again."));
       setPricingStatus("error");
     } finally {
       setPricingSaving(false);
@@ -266,14 +328,48 @@ export default function AdminConsole({
   // Lists the admin edits as a whole and submits with the rest of the pack, so
   // a new levy, a withdrawn one, or a changed set of pages to check needs no
   // release. Declared here — above the save handler that closes over them.
-  const [rpCustom, setRpCustom] = useState<NonNullable<UpdateRulePackInput["statutoryCustom"]>>([]);
-  const [rpRetired, setRpRetired] = useState<string[]>([]);
+  // Seeded from the pack, not empty. These used to start `[]` on every load, so the
+  // screen could not show what was already retired — and now that the lists are
+  // always sent, an empty seed would CLEAR every existing retirement on the next
+  // unrelated save.
+  const [rpCustom, setRpCustom] = useState<NonNullable<UpdateRulePackInput["statutoryCustom"]>>(
+    () => (data.rulepack?.statutoryCustom ?? []).map((c) => ({ ...c })),
+  );
+  const [rpRetired, setRpRetired] = useState<string[]>(() => [
+    ...(data.rulepack?.statutoryRetired ?? []),
+  ]);
   const [rpSourcesDraft, setRpSourcesDraft] = useState(
     () => (data.rulepack?.sources ?? []).join("\n"),
   );
   // Only send `sources` when it has actually been edited, so an ordinary rate
   // save does not rewrite the pack's source list as a side effect.
   const [rpSourcesTouched, setRpSourcesTouched] = useState(false);
+  /**
+   * Every contribution a staffer can retire or bring back.
+   *
+   * The effective list, then any retired code that is no longer in it — from the
+   * baseline profile where possible so the chip keeps its real label, and as a
+   * code-only stub if it came from an override that has since gone.
+   */
+  const retirableContributions = (() => {
+    const effective = rulepack?.statutory ?? [];
+    const shown = new Set(effective.map((s) => s.code));
+    const hidden = rpRetired
+      .filter((code) => !shown.has(code))
+      .map((code) => {
+        const fromBaseline = jm.statutory.find((s) => s.code === code);
+        return {
+          code,
+          label: fromBaseline?.label ?? code,
+          appliesTo: fromBaseline?.appliesTo ?? ("BOTH" as const),
+          employeePct: fromBaseline?.employeePct ?? null,
+          employerPct: fromBaseline?.employerPct ?? null,
+          verified: false,
+          asOf: null as string | null,
+        };
+      });
+    return [...effective, ...hidden];
+  })();
   const rpToForm = (rp: EffectiveRulePack) => ({
     taxLabel: rp.taxLabel,
     defaultTaxRatePct: String(rp.defaultTaxRatePct),
@@ -292,6 +388,8 @@ export default function AdminConsole({
   const [rpForm, setRpForm] = useState(() => (data.rulepack ? rpToForm(data.rulepack) : null));
   const [rpSaving, setRpSaving] = useState(false);
   const [rpStatus, setRpStatus] = useState<"idle" | "saved" | "error">("idle");
+  /** Why a rule-pack save was refused, so "error" is never the whole message. */
+  const [rpError, setRpError] = useState<string | null>(null);
 
   function setRpStat(code: string, side: "employeePct" | "employerPct", value: string) {
     setRpForm((f) => (f ? { ...f, statutory: { ...f.statutory, [code]: { ...f.statutory[code]!, [side]: value } } } : f));
@@ -309,17 +407,32 @@ export default function AdminConsole({
           employerPct: v.employerPct.trim() === "" ? null : Number(v.employerPct),
         };
       }
+      // Refused, not omitted. `|| undefined` sent nothing for a cleared label and
+      // the server reads an absent field as "leave unchanged" — so clearing the tax
+      // label reported "Saved" and changed nothing. The same defect as the pricing
+      // form's, in the form beside it; a class guard found this twin.
+      const taxLabel = rpForm.taxLabel.trim();
+      if (taxLabel === "") {
+        setRpError("Tax label is required — it is what every quote and invoice calls the tax.");
+        setRpStatus("error");
+        return;
+      }
       const updated = await updateAdminRulePack({
-        taxLabel: rpForm.taxLabel.trim() || undefined,
+        taxLabel,
         defaultTaxRatePct: rpForm.defaultTaxRatePct.trim() === "" ? undefined : Number(rpForm.defaultTaxRatePct),
         verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
         sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
         statutoryRates,
-        // Complete lists, not patches — see UpdateRulePackInput. Sent only
-        // when the admin has actually touched them, so an ordinary rate edit
-        // does not rewrite the pack's structure as a side effect.
-        ...(rpCustom.length > 0 ? { statutoryCustom: rpCustom } : {}),
-        ...(rpRetired.length > 0 ? { statutoryRetired: rpRetired } : {}),
+        // Complete lists, not patches — see UpdateRulePackInput — and ALWAYS sent,
+        // including when empty.
+        //
+        // They used to be omitted when empty, and the server reads an absent field
+        // as "leave unchanged". So un-retiring the last retired contribution sent
+        // nothing, reported "Saved", and left it retired; the same for removing the
+        // last custom levy. Retirement was a one-way door. Safe to send now only
+        // because the state above is seeded from the pack rather than from [].
+        statutoryCustom: rpCustom,
+        statutoryRetired: rpRetired,
         ...(rpSourcesTouched
           ? {
               sources: rpSourcesDraft
@@ -331,8 +444,11 @@ export default function AdminConsole({
       });
       setRulepack(updated);
       setRpForm(rpToForm(updated));
+      setRpError(null);
       setRpStatus("saved");
-    } catch {
+    } catch (err) {
+      // The server's own sentence when it sent one — since F28 it names the field.
+      setRpError(errorMessage(err, "Couldn't save — check the values and try again."));
       setRpStatus("error");
     } finally {
       setRpSaving(false);
@@ -600,7 +716,7 @@ export default function AdminConsole({
     },
     {
       label: "MRR",
-      value: data.financials ? formatJmd(data.financials.mrrCents) : "—",
+      value: data.financials ? money(data.financials.mrrCents) : "—",
     },
     // NO "Suppliers added" tile. Suppliers became tenant-owned in #31 — there
     // is no platform directory — so a platform-level supplier count on the
@@ -962,7 +1078,7 @@ export default function AdminConsole({
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--muted)" }}>Monthly recurring revenue</div>
                       <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", marginTop: 3 }}>
-                        {data.financials ? formatJmd(data.financials.mrrCents) : "—"}
+                        {data.financials ? money(data.financials.mrrCents) : "—"}
                       </div>
                     </div>
                     {/* Net new and churn are NOT shown. Both need a history of
@@ -1410,7 +1526,13 @@ export default function AdminConsole({
 
                         {(rp?.statutory ?? []).length > 0 && (
                           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 12 }}>
-                            {(rp?.statutory ?? []).map((st) => {
+                            {/* Effective entries PLUS anything retired. A retired
+                                baseline contribution is filtered out of `statutory`
+                                by design, so listing only that array meant the chip
+                                for it vanished the moment it was retired and the
+                                "Bring this contribution back" tooltip described a
+                                control that could not exist. */}
+                            {retirableContributions.map((st) => {
                               const isRetired = rpRetired.includes(st.code);
                               return (
                                 <button
@@ -1489,7 +1611,7 @@ export default function AdminConsole({
                       </button>
                       {!canManageRulepack && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Read-only — needs the Manage rule-packs capability.</span>}
                       {rpStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
-                      {rpStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save — check the values and try again.</span>}
+                      {rpStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>{rpError ?? "Couldn't save — check the values and try again."}</span>}
                     </div>
                   </>
                 )}
@@ -1592,13 +1714,20 @@ export default function AdminConsole({
                   </label>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
                     Currency
-                    <input
-                      type="text"
+                    {/* A choice, not eight free characters. Money on this console
+                        renders through a currency descriptor, so an unrecognised
+                        code used to put a JMD symbol beside the letters "USD". The
+                        options come from core, so this list and the DTO's
+                        `z.enum(CURRENCY_CODES)` cannot drift apart. */}
+                    <select
                       value={pricingForm.currency}
-                      onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
-                      maxLength={3}
+                      onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value }))}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
-                    />
+                    >
+                      {CURRENCY_CODES.map((code) => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
                   </label>
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, fontWeight: 600, color: "var(--muted)" }}>
                     Pro price / month ({pricingForm.currency || "—"})
@@ -1634,7 +1763,7 @@ export default function AdminConsole({
                   </button>
                   {!canManagePricing && <span style={{ fontSize: 12.5, color: "var(--muted)" }}>Read-only — needs the Manage pricing capability.</span>}
                   {pricingStatus === "saved" && <span style={{ fontSize: 13, color: "var(--good)", fontWeight: 600 }}>Saved ✓</span>}
-                  {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>Couldn&apos;t save. Try again.</span>}
+                  {pricingStatus === "error" && <span style={{ fontSize: 13, color: "var(--critical)", fontWeight: 600 }}>{pricingError ?? "Couldn't save. Try again."}</span>}
                 </div>
               </div>
             </div>
@@ -1657,7 +1786,7 @@ export default function AdminConsole({
                 </div>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>MRR (contracted)</div>
-                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? formatJmd(financials.mrrCents) : "—"}</div>
+                  <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? money(financials.mrrCents) : "—"}</div>
                   {financials && (
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
                       What pro tenants owe per month · {financials.currency}
@@ -1672,7 +1801,7 @@ export default function AdminConsole({
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Collected this month</div>
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: "var(--good)" }}>
-                    {financials ? formatJmd(financials.collectedThisMonthCents) : "—"}
+                    {financials ? money(financials.collectedThisMonthCents) : "—"}
                   </div>
                   {financials && (
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
@@ -1875,6 +2004,7 @@ export default function AdminConsole({
       {/* TENANT DRAWER */}
       {selTenant && (
         <TenantDrawer
+          currency={platformCurrency}
           raw={selTenant}
           businessId={selBusinessId}
           suspended={selSuspended}
@@ -1978,6 +2108,7 @@ function TenantDrawer({
   onDelete,
   onBillingChanged,
   onClose,
+  currency,
 }: {
   raw: TenantRow;
   businessId: string | null;
@@ -1993,6 +2124,8 @@ function TenantDrawer({
    * the console behind the drawer has to re-read rather than show stale dates. */
   onBillingChanged: () => void;
   onClose: () => void;
+  /** The platform currency, so no figure in here asserts the wrong symbol. */
+  currency: string | null;
 }) {
   // The hole where `mrr` used to be destructured is deliberate. The drawer
   // shows the tenant's ACTUAL agreed price from the API below; the row's MRR
@@ -2047,7 +2180,7 @@ function TenantDrawer({
     ["Term", isPro(plan) ? (interval === "annual" ? "Annual" : "Monthly") : "—"],
     [
       "Agreed price",
-      tenant?.priceCents != null ? `${formatJmd(tenant.priceCents)} / ${interval === "annual" ? "year" : "month"}` : "Standard",
+      tenant?.priceCents != null ? `${formatPlatformMoney(tenant.priceCents, currency)} / ${interval === "annual" ? "year" : "month"}` : "Standard",
     ],
     ["Renews", tenant?.renewsAt ? tenant.renewsAt.slice(0, 10) : "—"],
     ["Created", tenant ? tenant.createdAt.slice(0, 10) : "—"],
@@ -2144,7 +2277,7 @@ function TenantDrawer({
               </div>
             </>
           )}
-          {businessId && canManage && <TenantBilling businessId={businessId} onChanged={onBillingChanged} />}
+          {businessId && canManage && <TenantBilling businessId={businessId} onChanged={onBillingChanged} currency={currency} />}
 
           <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", marginBottom: 11 }}>SUBSCRIPTION</div>
           <div style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 12, padding: "14px 16px" }}>
@@ -2288,10 +2421,14 @@ function RegulatoryEditor({
 function TenantBilling({
   businessId,
   onChanged,
+  currency,
 }: {
   businessId: string;
   onChanged: () => void;
+  /** The platform currency, so this table cannot render a JMD symbol on USD. */
+  currency: string | null;
 }) {
+  const money = (cents: number) => formatPlatformMoney(cents, currency);
   const [rows, setRows] = useState<AdminSubscriptionPayment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2414,7 +2551,7 @@ function TenantBilling({
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: r.voidedAt ? 0.5 : 1 }}>
             <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
               <div style={{ fontSize: 13, fontWeight: 600, textDecoration: r.voidedAt ? "line-through" : "none" }}>
-                {formatJmd(r.amountCents)}
+                {money(r.amountCents)}
                 <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.method.replace("_", " ").toLowerCase()}</span>
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
@@ -2434,7 +2571,7 @@ function TenantBilling({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  if (!window.confirm(`Void this ${formatJmd(r.amountCents)} payment? The term is rolled back if nothing has changed since.`)) return;
+                  if (!window.confirm(`Void this ${money(r.amountCents)} payment? The term is rolled back if nothing has changed since.`)) return;
                   void run(() => voidSubscriptionPayment(r.id));
                 }}
                 style={{ height: 26, padding: "0 9px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--critical)" }}
