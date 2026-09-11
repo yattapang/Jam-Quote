@@ -36,14 +36,26 @@ const SOURCE = stripComments(readFileSync(CONTROLLER, "utf8"));
 const ACTOR = /req\.user!?\.sub|req\.adminContext!?\.userId/;
 
 /**
- * A mutating route decorator, however its path is quoted — or with no path at all.
+ * A mutating route decorator, whatever its argument.
  *
- * The first version required double quotes, and a review slipped an actor-less
- * `@Post(\`tenants/:id/nuke\`)` straight past it. Same lesson as the console guards:
- * matching one spelling of a thing polices formatting, not behaviour. Defined once
- * here so the bypass tests below exercise this exact pattern rather than a copy.
+ * Two reviews have now walked past this. The first used a template literal, and I
+ * "fixed" it by accepting any QUOTING — but the lesson was never about quoting, it
+ * was about literal-ness: the second review used `@Post(NUKE_PATH)` with a const and
+ * passed again. A path can also be `@Post(P.nuke)` or `@Post({ path: "x" })`.
+ *
+ * So the argument is not inspected at all. The decorator is the thing that makes a
+ * route; whether its path is readable from source is irrelevant to whether the
+ * handler beneath it knows who is acting.
  */
-const ROUTE_DECORATOR = /@(Post|Patch|Delete|Put)\(\s*(?:["'`]([^"'`]*)["'`])?\s*\)/g;
+const ROUTE_DECORATOR = /@(Post|Patch|Delete|Put)\(([^)]*)\)/g;
+
+/** The path when it is a plain literal, else a note that it was not. */
+const readablePath = (raw: string | undefined): string => {
+  const trimmed = (raw ?? "").trim();
+  if (trimmed === "") return "(collection)";
+  const literal = /^["'`](.*)["'`]$/.exec(trimmed);
+  return literal ? literal[1]! : `(${trimmed})`;
+};
 
 /**
  * The body of a class member, brace-matched from its signature.
@@ -107,10 +119,8 @@ interface Route {
 
 /** Every `@Post`/`@Patch`/`@Delete`/`@Put` handler in the controller. */
 function mutatingRoutes(src: string): Route[] {
-  // Any quoting, and a bare collection route too. A review added an actor-less
-  // `@Post(`tenants/:id/nuke`)` and the guard saw nothing: it required double
-  // quotes. This is the same lesson as the console guards — matching one spelling of
-  // a thing polices formatting, not behaviour.
+  // See ROUTE_DECORATOR: the argument is not inspected, because two reviews got past
+  // versions of this that insisted on reading the path.
   const decorators = [...src.matchAll(ROUTE_DECORATOR)];
   return decorators.map((m, i) => {
     const end = i + 1 < decorators.length ? decorators[i + 1]!.index! : src.length;
@@ -123,7 +133,7 @@ function mutatingRoutes(src: string): Route[] {
       .find((n): n is string => !!n && n !== "constructor");
     return {
       verb: m[1]!,
-      path: m[2] ?? "(collection)",
+      path: readablePath(m[2]),
       handler: name ?? "(unnamed)",
       body: name ? (memberBody(src, name) ?? region) : region,
     };
@@ -176,7 +186,7 @@ describe("every mutating admin route knows who acted", () => {
     expect(ACTOR.test("return this.sweep.run('manual');")).toBe(false);
   });
 
-  it("finds a route however its path is quoted, and with no path", () => {
+  it("finds a route however its path is written", () => {
     // The bypass a review ran: a backtick path was invisible, so an actor-less
     // route added that way passed. These exercise ROUTE_DECORATOR itself, not a
     // second copy of it — a copy cannot fail when the real pattern is weakened.
@@ -188,6 +198,10 @@ describe("every mutating admin route knows who acted", () => {
       "@Patch( `x` )",
       "@Delete(`admins/:id`)",
       "@Put('x')",
+      // Not a literal at all — the bypass the second review used.
+      "@Post(NUKE_PATH)",
+      "@Post(P.nuke)",
+      "@Patch(ROUTES.plan)",
     ]) {
       expect(mutatingRoutes(`class C {\n  ${decorator}\n  h(): void {\n    return;\n  }\n}`), decorator)
         .toHaveLength(1);

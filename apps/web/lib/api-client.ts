@@ -1210,6 +1210,14 @@ export interface EffectiveRulePack {
    * entry was filtered out of `statutory` so the chip row could not show it, and
    * nothing could bring it back — while the button promised exactly that.
    */
+  /**
+   * True when the stored override could not be READ, as opposed to not existing.
+   *
+   * `overridden: false` and the empty lists below are then an absence of knowledge,
+   * not a fact — so the console refuses to save, rather than writing complete lists
+   * back over whatever is actually stored.
+   */
+  overrideReadFailed: boolean;
   statutoryRetired: string[];
   statutoryCustom: NonNullable<UpdateRulePackInput["statutoryCustom"]>;
   overridden: boolean;

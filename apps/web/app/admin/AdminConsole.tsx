@@ -399,13 +399,21 @@ export default function AdminConsole({
     const hidden = rpRetired
       .filter((code) => !shown.has(code))
       .map((code) => {
-        const fromBaseline = jm.statutory.find((s) => s.code === code);
+        // The baseline first, then the admin's own list. The comment here used to
+        // say "from the baseline profile where possible"; for a levy the admin added
+        // themselves it was possible from `rpCustom`, in the same scope, and was not
+        // done — so the chip fell back to a bare code with a fabricated `appliesTo`
+        // of BOTH and null rates. Only `code` is rendered today, which is why it
+        // read as cosmetic, but inventing the rest of the row is how a later reader
+        // ends up displaying it.
+        const known =
+          jm.statutory.find((st) => st.code === code) ?? rpCustom.find((c) => c.code === code);
         return {
           code,
-          label: fromBaseline?.label ?? code,
-          appliesTo: fromBaseline?.appliesTo ?? ("BOTH" as const),
-          employeePct: fromBaseline?.employeePct ?? null,
-          employerPct: fromBaseline?.employerPct ?? null,
+          label: known?.label ?? code,
+          appliesTo: known?.appliesTo ?? ("BOTH" as const),
+          employeePct: known?.employeePct ?? null,
+          employerPct: known?.employerPct ?? null,
           verified: false,
           asOf: null as string | null,
         };
@@ -437,6 +445,77 @@ export default function AdminConsole({
     setRpForm((f) => (f ? { ...f, statutory: { ...f.statutory, [code]: { ...f.statutory[code]!, [side]: value } } } : f));
   }
 
+  /**
+   * What is wrong with the rule-pack form, in words, or null.
+   *
+   * ## Why this exists as one function
+   *
+   * The first pass at this gave `taxLabel` an explicit refusal and left
+   * `defaultTaxRatePct: rpForm.defaultTaxRatePct.trim() === "" ? undefined : …`
+   * three lines below it. A review found it: a `type="number"` input yields `""`
+   * both when cleared and when the typed text is unparseable, so clearing the
+   * default tax rate omitted the field, the server left the column alone,
+   * `rpToForm(updated)` repainted the old rate, and the screen said "Saved ✓". The
+   * admin is told a tax-rate change landed that never happened, and the number
+   * appears to revert by itself.
+   *
+   * That is the same defect as the one I had just fixed one line up — so the answer
+   * is not another `if`, it is one place that checks every field this form sends.
+   * Bounds mirror `updateRulePackSchema`: `min(1).max(16)` on the label and
+   * `min(0).max(100)` on every rate.
+   */
+  function rulePackProblem(): string | null {
+    // First, because everything below it is a judgement about values this screen
+    // may not actually have. A failed read serves the baseline with empty override
+    // lists and `overridden: false` — indistinguishable from "no override exists"
+    // until the API says which. Saving on that view writes complete lists over
+    // whatever is stored; a review traced the click sequence that destroys every
+    // retirement and every added levy.
+    if (rulepack?.overrideReadFailed)
+      return "The stored rule-pack overrides could not be read, so this screen may be showing the baseline instead of your settings. Reload before saving — saving now would overwrite them.";
+    // Not reachable from the save button — `saveRulepack` returns early when the
+    // pack failed to load — but the compiler is right to ask, and "there is no
+    // form" is a real answer rather than a cast.
+    if (!rpForm) return "The rule-pack has not loaded — reload before saving.";
+    const taxLabel = rpForm.taxLabel.trim();
+    if (taxLabel === "")
+      return "Tax label is required — it is what every quote and invoice calls the tax.";
+    if (taxLabel.length > 16) return "Tax label must be 16 characters or fewer.";
+
+    const rate = Number(rpForm.defaultTaxRatePct);
+    if (rpForm.defaultTaxRatePct.trim() === "" || !Number.isFinite(rate) || rate < 0 || rate > 100)
+      return "Default tax rate must be a number between 0 and 100.";
+
+    // A statutory rate may be blank — that means "not sourced yet" and is sent as
+    // null. What it may not be is present and out of range.
+    for (const [code, v] of Object.entries(rpForm.statutory)) {
+      for (const [side, raw] of [
+        ["employee", v.employeePct],
+        ["employer", v.employerPct],
+      ] as const) {
+        if (raw.trim() === "") continue;
+        const pct = Number(raw);
+        if (!Number.isFinite(pct) || pct < 0 || pct > 100)
+          return `${code} ${side} rate must be a number between 0 and 100.`;
+      }
+    }
+
+    // A half-typed custom levy would be rejected by the server with a message about
+    // an array index; naming the row is more use than naming the path.
+    for (const [i, c] of rpCustom.entries()) {
+      if (c.code.trim() === "") return `Contribution #${i + 1} needs a code.`;
+      if (c.label.trim() === "") return `Contribution #${i + 1} needs a name.`;
+      for (const [side, pct] of [
+        ["employee", c.employeePct],
+        ["employer", c.employerPct],
+      ] as const) {
+        if (pct !== null && pct !== undefined && (!Number.isFinite(pct) || pct < 0 || pct > 100))
+          return `Contribution #${i + 1} ${side} rate must be between 0 and 100.`;
+      }
+    }
+    return null;
+  }
+
   async function saveRulepack() {
     if (!rpForm) return;
     setRpSaving(true);
@@ -449,19 +528,19 @@ export default function AdminConsole({
           employerPct: v.employerPct.trim() === "" ? null : Number(v.employerPct),
         };
       }
-      // Refused, not omitted. `|| undefined` sent nothing for a cleared label and
-      // the server reads an absent field as "leave unchanged" — so clearing the tax
-      // label reported "Saved" and changed nothing. The same defect as the pricing
-      // form's, in the form beside it; a class guard found this twin.
-      const taxLabel = rpForm.taxLabel.trim();
-      if (taxLabel === "") {
-        setRpError("Tax label is required — it is what every quote and invoice calls the tax.");
+      // Refused, not omitted — every field, not just the two I happened to check.
+      // The server reads an absent field as "leave unchanged", so any coercion to
+      // `undefined` here reports "Saved" over a value that never moved.
+      const problem = rulePackProblem();
+      if (problem) {
+        setRpError(problem);
         setRpStatus("error");
         return;
       }
+      const taxLabel = rpForm.taxLabel.trim();
       const updated = await updateAdminRulePack({
         taxLabel,
-        defaultTaxRatePct: rpForm.defaultTaxRatePct.trim() === "" ? undefined : Number(rpForm.defaultTaxRatePct),
+        defaultTaxRatePct: Number(rpForm.defaultTaxRatePct),
         verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
         sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
         statutoryRates,
@@ -1449,6 +1528,16 @@ export default function AdminConsole({
                   Overrides the static baseline for the consumption-tax rate, its provenance, and the statutory
                   payroll rates. The tax rate seeds every newly-registered business&apos;s default {taxLabelEff}.
                 </div>
+                {/* Said before anything is typed, not after a save is refused. The
+                    screen would otherwise read "Core baseline" with no override
+                    pill — a positive claim that there is nothing stored to lose. */}
+                {rulepack?.overrideReadFailed && (
+                  <div style={{ fontSize: 12.5, color: "var(--critical)", border: "1px solid var(--critical)", borderRadius: 10, padding: "10px 12px", marginBottom: 14 }}>
+                    <strong>Showing the baseline, not your settings.</strong> The stored overrides
+                    could not be read, so anything retired or added here is not reflected below.
+                    Saving is blocked until a reload succeeds — it would overwrite them.
+                  </div>
+                )}
                 {!rpForm ? (
                   <div style={{ fontSize: 13, color: "var(--critical)" }}>Couldn&apos;t load the rule-pack. Try reloading.</div>
                 ) : (

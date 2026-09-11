@@ -1958,7 +1958,19 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the fourteen reviews found something.** The fourteenth found that a
+**Every one of the fifteen reviews found something.** The fifteenth found a defect
+shipped IN the commit that fixed its own class — a ternary yielding `undefined` three
+lines from the explicit refusal I had just written for its neighbour — and walked
+past three of the four guards I had strengthened in response to the fourteenth.
+
+**The rule that has emerged, and it is now the standing rule for guards:** every
+guard written by matching the TEXT of a defect has been defeated by a rewrite of
+that text — eleven spellings of a dead anchor, a braced digit, a quoted string, a
+template-literal route path, a const route path, a call inside an argument, a
+ternary instead of `||`. The guards that have held are the ones that PARSE: the
+enclosing tag, the enclosing expression, a call's arguments, an object's top-level
+keys. **Match a shape, not a spelling.** And when a fix names one field, check its
+siblings in the same payload before calling it done. The fourteenth found that a
 fix of mine had created a way to DESTROY stored data that the defect it replaced did
 not have: I made two complete lists always-sent so that clearing one would work, and
 a swallowed read error then reported them empty in a 200, so one unrelated save wrote
@@ -1988,7 +2000,7 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F61, opened by the F38 and F21
+**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F59 and F61, opened by the F38 and F21
 work: a real tenant search, filters behind the honest pills, and a true last-seen
 timestamp. Then the visual and UX polish phase.
 

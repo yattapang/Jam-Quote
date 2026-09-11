@@ -964,6 +964,39 @@ still dishonest — F60. Rule-pack saves also have no optimistic concurrency, so
 staff editing contributions can still overwrite each other's complete lists, exactly
 as `sources` always could — F61.
 
+## The review of `f4bc06d` — a live defect, and three guards still defeatable
+
+Fifth consecutive review to find real defects. Two things stand out. One: a defect
+shipped in the commit — the same coercion class I had just fixed, three lines from
+the fix. Two: three of the four guards I had strengthened in response to the previous
+review were still walked past, each by a rewrite I had not thought of.
+
+| What it found | Status |
+|---|---|
+| **A LIVE defect in the shipped commit.** `defaultTaxRatePct: rpForm.defaultTaxRatePct.trim() === "" ? undefined : Number(...)` — a ternary yielding `undefined`, three lines below the `taxLabel` refusal I had just written. A `type="number"` input yields `""` both when cleared and when unparseable, so clearing the default tax rate omitted the field, the server left the column alone, `rpToForm(updated)` repainted the old rate, and the screen said "Saved ✓". The admin is told a tax-rate change landed that never did, and the number appears to revert by itself | FIXED — one `rulePackProblem()` checking every field this form sends (label length, rate range, each statutory split, each custom row), mirroring `pricingProblem()`. The answer to "I fixed one field and missed its neighbour" is not another `if` |
+| **The touched-flag guard passed with the unconditional send reinstated.** It asserted that the string `rpContributionsTouched` appeared somewhere — and it appears in its own `useState` line and in both setter wrappers. A review put the data-destroying code back and the suite stayed green: failure mode (b), on the assertion written to prevent failure mode (b) | FIXED — the payload is PARSED. `topLevelKeys` blanks nested braces, so a key inside `...(touched ? {…} : {})` is invisible and a flat key is not; the assertion also requires the field to still be sent somewhere, so it cannot pass by dropping it and restoring the one-way door |
+| **The currency guard was defeated again**, by a call inside the first argument: `formatPlatformMoney(Number(r.amountCents), "JMD")`. `[^)]*` cannot cross the `)` of `Number(...)`, so a hardcoded JMD on the bank-reconciled ledger passed. Second time I fixed the spelling I had tried rather than the class | FIXED — `callArguments()` splits a call's arguments paren-, brace- and quote-aware, and the second argument must not be a string literal |
+| **The audit guard still missed a non-literal route path** — `const NUKE_PATH = …; @Post(NUKE_PATH)` passed. I had "fixed" the template-literal bypass by accepting any QUOTING; the lesson was about literal-ness | FIXED — the decorator's argument is not inspected at all. Whether the path is readable from source has nothing to do with whether the handler knows who is acting |
+| **Touching a contribution after a swallowed read still destroyed everything**, and the screen asserted the opposite: "Core baseline", no override pill. My commit message's "closes both paths" was an overclaim — path 1 was closed only for saves that did not touch contributions | FIXED, and this closes **F60**. `resolveProfile` now returns `readFailed`, `EffectiveRulePack.overrideReadFailed` carries it, `toEffective` takes it with NO default so the compiler forces every call site, the console shows a red banner before anything is typed, and `rulePackProblem()` refuses to save. Three service tests assert the flag distinguishes a failed read from a genuine absence |
+| A retired CUSTOM levy fell back to a bare code with a fabricated `appliesTo: "BOTH"` and null rates, while `rpCustom` held the real label in the same scope — and the comment claimed the label came "from the baseline where possible" | FIXED — baseline first, then `rpCustom` |
+
+**Confirmed clean, and worth recording because it was the thing most likely to be
+wrong:** the setter-wrapper pattern. All eight edit sites go through the wrappers;
+`setRpCustomState`/`setRpRetiredState` appear only at their declarations and inside
+the wrappers; the functional-updater form survives because the wrapper forwards the
+value opaquely; `saveRulepack` is a plain render-body function so it reads the
+current render's flag with no stale closure; and there is no path where an edit and
+the save happen in one event. Also clean: un-retiring the last contribution end to
+end (Zod accepts `[]`, `update()` writes it, `toOverride` maps it back to "none"); a
+failed save leaves the flag true so a retry still sends; the chip gate; the "not
+supported" currency option cannot be saved; `Object.hasOwn` on every runtime here;
+and no false positives from the widened patterns.
+
+**The recurring lesson, now stated once:** every guard I have written by matching
+the text of a defect has been defeated by a rewrite of that text. The four that have
+held are the four that PARSE — the enclosing tag, the enclosing expression, a call's
+arguments, an object's top-level keys. Match a shape, not a spelling.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |
@@ -973,7 +1006,7 @@ as `sources` always could — F61.
 | F57 | **`lastActiveAt` measures quote activity only.** There is no `lastLoginAt` on the platform, so a tenant who logs in and browses without touching a quote reads as inactive. The column's tooltip says exactly what it measures, which is honest, but a real last-seen timestamp would be better and is a one-column migration |
 | F58 | **No index supports the last-activity sort.** `orderBy: { updatedAt: "desc" }` on the tenants include has no `@@index([businessId, updatedAt])` behind it, so it sorts every quote of every tenant on each admin page load. Fine at current scale, one migration to fix |
 | F59 | **Per-topic source URLs for the rule cards.** `jm.sources` is consumption-tax provenance only, so TAXPAYER ID, REGIONS and PAYMENT RAILS have no honest link and render as text. Each needs a URL recorded by someone who has checked it — inventing one is how the wrong-document defect happened |
-| F60 | **A failed rule-pack read looks like "no override".** `resolveProfile` swallows the error and returns `row: null`, so `GET /admin/rulepack` answers 200 with `overridden: false` and empty override lists. The screen shows a baseline pack as though it were the truth. It should say it could not read, and the editor should refuse to save on a view it knows is incomplete |
+| F60 | ~~A failed rule-pack read looks like "no override".~~ **CLOSED** by the review of `f4bc06d` — see above. |
 | F61 | **No optimistic concurrency on the rule pack.** `statutoryRetired`, `statutoryCustom` and `sources` are complete lists with no `expectedUpdatedAt`, so two staff editing contributions overwrite each other silently. Pre-existing for `sources`; now reachable for contributions too |
 
 ## Suggested order

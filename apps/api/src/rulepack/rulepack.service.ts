@@ -62,6 +62,15 @@ export interface EffectiveRulePack {
    *
    * Both are complete lists rather than patches, matching `UpdateRulePackInput`.
    */
+  /**
+   * True when the stored override could not be READ, as opposed to not existing.
+   *
+   * The baseline is still served so quoting keeps working, but `overridden: false`
+   * and the empty lists below are then an absence of knowledge, not a fact. The
+   * admin console refuses to save while this is true: seeding an editor from an
+   * unknown state and writing complete lists back destroys whatever was stored.
+   */
+  overrideReadFailed: boolean;
   statutoryRetired: string[];
   statutoryCustom: StatutoryCustomEntry[];
   /** True when a stored override is layered over the baseline. */
@@ -128,24 +137,38 @@ export class RulePackService {
   /** The effective (baseline + override) profile — resilient to a missing table. */
   private async resolveProfile(
     countryCode: string,
-  ): Promise<{ profile: JurisdictionProfile; row: RulePackConfig | null }> {
+  ): Promise<{ profile: JurisdictionProfile; row: RulePackConfig | null; readFailed: boolean }> {
     const base = getJurisdiction(countryCode); // throws for an unsupported country
     try {
       const row = await this.prisma.rulePackConfig.findUnique({
         where: { countryCode: base.countryCode },
       });
-      return { profile: applyRulePackOverride(base, this.toOverride(row)), row };
+      return { profile: applyRulePackOverride(base, this.toOverride(row)), row, readFailed: false };
     } catch (err) {
       this.logger.warn(
         `RulePackConfig read failed (table/row missing?) — using in-code baseline for ${base.countryCode}: ${String(err)}`,
       );
-      return { profile: base, row: null };
+      // `readFailed` rather than pretending there is no override.
+      //
+      // Serving the baseline keeps quoting alive when this table is unreachable,
+      // which is right. But the ADMIN console seeds its editor from what this
+      // reports, and a review found the consequence: the screen said "Core
+      // baseline" with no override pill — a positive claim that there was nothing
+      // to lose — and a staffer who then retired one contribution wrote a
+      // one-element list over every stored retirement and every added levy.
+      //
+      // The console refuses to save while this is true. It is a read failure, not
+      // an absence, and only the caller can tell the difference.
+      return { profile: base, row: null, readFailed: true };
     }
   }
 
   private toEffective(
     profile: JurisdictionProfile,
     row: RulePackConfig | null,
+    // No default: a call site that forgot this would quietly report a successful
+    // read, which is the exact lie this flag exists to prevent.
+    readFailed: boolean,
   ): EffectiveRulePack {
     return {
       countryCode: profile.countryCode,
@@ -171,6 +194,7 @@ export class RulePackService {
       sourceUrl: row?.sourceUrl ?? profile.sources[0] ?? null,
       sources: [...profile.sources],
       rulePackVersion: profile.rulePackVersion,
+      overrideReadFailed: readFailed,
       statutoryRetired: [...(row?.statutoryRetired ?? [])],
       statutoryCustom: ((row?.statutoryCustom as unknown as StatutoryCustomEntry[] | null) ?? []).map(
         (c) => ({ ...c }),
@@ -182,8 +206,8 @@ export class RulePackService {
 
   /** GET /admin/rulepack — the effective pack for a country (default JM). */
   async get(countryCode = "JM"): Promise<EffectiveRulePack> {
-    const { profile, row } = await this.resolveProfile(countryCode);
-    return this.toEffective(profile, row);
+    const { profile, row, readFailed } = await this.resolveProfile(countryCode);
+    return this.toEffective(profile, row, readFailed);
   }
 
   /**
@@ -258,6 +282,7 @@ export class RulePackService {
       details: { ...patch },
     });
 
-    return this.toEffective(applyRulePackOverride(base, this.toOverride(row)), row);
+    // Straight after a successful write, so the read behind it succeeded.
+    return this.toEffective(applyRulePackOverride(base, this.toOverride(row)), row, false);
   }
 }

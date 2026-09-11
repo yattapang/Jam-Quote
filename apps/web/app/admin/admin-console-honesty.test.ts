@@ -280,6 +280,122 @@ function textChildren(src: string): { text: string; index: number }[] {
   return out;
 }
 
+/**
+ * The argument list of every call to `name(`, split at top level.
+ *
+ * Written because a regex could not do it. The currency guard was
+ * `/formatPlatformMoney\([^)]*,\s*["'`]/` and a review defeated it by putting a call
+ * inside the first argument: `formatPlatformMoney(Number(r.amountCents), "JMD")`.
+ * `[^)]*` cannot cross the `)` of `Number(...)`, so the match never reached the
+ * second argument, and a hardcoded JMD on the bank-reconciled payment ledger — the
+ * precise defect the assertion exists for — passed again.
+ *
+ * That was the second time I fixed the spelling I had tried rather than the class.
+ * Paren-, brace- and quote-aware splitting has no such edge.
+ */
+function callArguments(src: string, name: string): string[][] {
+  const calls: string[][] = [];
+  for (let at = src.indexOf(`${name}(`); at >= 0; at = src.indexOf(`${name}(`, at + 1)) {
+    // Not a definition or a longer identifier ending in the same letters.
+    const before = src[at - 1] ?? " ";
+    if (/[A-Za-z0-9_$.]/.test(before) && before !== ".") continue;
+
+    const open = at + name.length;
+    let depth = 0;
+    let quote: string | null = null;
+    let current = "";
+    const args: string[] = [];
+    for (let i = open; i < src.length; i++) {
+      const ch = src[i]!;
+      if (quote) {
+        current += ch;
+        if (ch === quote && src[i - 1] !== "\\") quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        quote = ch;
+        current += ch;
+        continue;
+      }
+      if (ch === "(" || ch === "[" || ch === "{") {
+        depth++;
+        if (depth > 1) current += ch;
+        continue;
+      }
+      if (ch === ")" || ch === "]" || ch === "}") {
+        depth--;
+        if (depth === 0) {
+          args.push(current.trim());
+          break;
+        }
+        current += ch;
+        continue;
+      }
+      if (ch === "," && depth === 1) {
+        args.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += ch;
+    }
+    calls.push(args.filter((a) => a !== ""));
+  }
+  return calls;
+}
+
+/** Is this argument a string literal rather than an expression? */
+const isStringLiteral = (arg: string): boolean => /^["'`]/.test(arg.trim());
+
+/**
+ * The keys at the TOP level of an object literal, with nested objects ignored.
+ *
+ * `statutoryRetired` inside `...(touched ? { statutoryRetired } : {})` is nested and
+ * therefore conditional; the same key written flat is unconditional. The previous
+ * guard asserted only that the string `rpContributionsTouched` appeared SOMEWHERE in
+ * the file — and it appears in its own `useState` line and in both setter wrappers,
+ * so a review reinstated the unconditional send and the suite stayed green. Failure
+ * mode (b), on the assertion written to prevent failure mode (b).
+ */
+function topLevelKeys(objectLiteral: string): string[] {
+  const keys: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let line = "";
+  for (let i = 0; i < objectLiteral.length; i++) {
+    const ch = objectLiteral[i]!;
+    if (quote) {
+      if (ch === quote && objectLiteral[i - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "(" || ch === "[" || ch === "{") {
+      depth++;
+      continue;
+    }
+    if (ch === ")" || ch === "]" || ch === "}") {
+      depth--;
+      continue;
+    }
+    if (depth === 0) {
+      if (ch === ",") {
+        line = "";
+        continue;
+      }
+      if (ch === ":") {
+        const key = /([A-Za-z_$][\w$]*)\s*$/.exec(line)?.[1];
+        if (key) keys.push(key);
+        line = "";
+        continue;
+      }
+      line += ch;
+    }
+  }
+  return keys;
+}
+
 /** Words that make a label a claim about a QUERY, not just about a number. */
 const WINDOW_WORD =
   /\b(this month|last month|today|this week|this year|ytd|year to date|mtd|per month|monthly)\b/i;
@@ -402,60 +518,85 @@ describe("the console cannot claim a figure it does not have", () => {
     expect(src, "platform money must spend the configured currency").not.toMatch(
       /formatJmd\(/,
     );
-    // And the code passed to it must never be a literal. A review defeated the first
-    // version of this by writing `formatPlatformMoney(cents, "JMD")` — the exact
-    // defect the finding was about — because the assertion only checked that the
-    // identifier was present. Asserting the absence of the name was never the point;
-    // asserting that the CONFIGURED code reaches it is.
-    const hardcoded = [...src.matchAll(/formatPlatformMoney\([^)]*,\s*["'`]/g)].map(
-      (m) => m[0]!.trim(),
-    );
-    expect(
-      hardcoded,
-      "pass the configured currency, not a literal one",
-    ).toEqual([]);
-    expect(src).toContain("formatPlatformMoney");
+
+    // The code passed to it must never be a literal. Parsed, not matched: a review
+    // defeated the regex version twice, most recently with
+    // `formatPlatformMoney(Number(r.amountCents), "JMD")` — a call inside the first
+    // argument, which a `[^)]*` pattern cannot see past.
+    const calls = callArguments(src, "formatPlatformMoney");
+    expect(calls.length, "no formatPlatformMoney calls found — check the name").toBeGreaterThan(2);
+    const hardcoded = calls
+      .filter((args) => args.length > 1 && isStringLiteral(args[1]!))
+      .map((args) => args.join(", "));
+    expect(hardcoded, "pass the configured currency, not a literal one").toEqual([]);
   });
 
   it("no save reports success on a value it dropped", () => {
-    // `Number(x) || undefined` sent nothing for a cleared or mistyped field, the
-    // server read the absence as "leave unchanged", and the screen said "Saved".
+    // The server reads an absent field as "leave unchanged", so any coercion to
+    // `undefined` in a REQUEST PAYLOAD reports "Saved" over a value that never moved.
     //
-    // A review walked past the first version with `?? undefined` and `|| void 0`,
-    // which are the same defect spelled differently — so this matches the CLASS of
-    // coercion-to-absent rather than one operator.
-    const coercions = [
-      ...src.matchAll(/(?:\|\||\?\?)\s*(?:undefined|void\s+0)/g),
-    ].map((m) => src.slice(Math.max(0, m.index! - 70), m.index! + 18).trim());
+    // Three spellings have now shipped: `|| undefined`, then `?? undefined` and
+    // `|| void 0` after a review, then `x === "" ? undefined : Number(x)` — a
+    // ternary, which is how the default tax rate was silently dropped while the
+    // `taxLabel` three lines above it had an explicit refusal.
+    //
+    // Scoped to payloads, because the widened text pattern false-positived on four
+    // legitimate uses: `undefined` as a CSS value or a `title` prop is React for "do
+    // not set this attribute" and is correct. A guard that cries wolf on correct code
+    // gets weakened, which is how the defect comes back.
+    const mutators = [...src.matchAll(/^\s{2}(update|create|record|review|delete|promote|revoke|void|run|set)[A-Za-z]*,$/gm)]
+      .map((m) => m[0]!.trim().replace(",", ""));
+    expect(mutators.length, "no api-client mutators imported — check the import block").toBeGreaterThan(5);
+
+    const offenders: string[] = [];
+    for (const fn of mutators) {
+      for (const args of callArguments(src, fn)) {
+        for (const arg of args) {
+          if (!arg.startsWith("{")) continue;
+          if (/(?:\|\||\?\?|\?|:)\s*(?:undefined|void\s+0)\s*(?::|,|\}|$)/.test(arg)) {
+            offenders.push(`${fn}: ${arg.slice(0, 90)}`);
+          }
+        }
+      }
+    }
     expect(
-      coercions,
+      offenders,
       "refuse the value and name the field instead of turning it into an omission",
     ).toEqual([]);
-    // And the refusal says something: an error state with no sentence is the same
-    // defect one step later.
-    expect(src).toContain("pricingError");
-    expect(src).toContain("rpError");
+    // And the refusal says something. Both forms validate in one place, so a new
+    // field is checked or it is not sent.
+    expect(src).toContain("pricingProblem()");
+    expect(src).toContain("rulePackProblem()");
   });
 
   it("a complete list is sent only when the admin touched it", () => {
     // `statutoryRetired` and `statutoryCustom` are COMPLETE lists: an empty one
-    // clears, an absent one leaves alone. Both mistakes are real and both happened.
+    // clears, an absent one leaves alone. Both mistakes are real and both shipped.
     //
-    // Omitting when empty made retirement a one-way door — un-retiring the last
-    // entry sent nothing and reported "Saved". Sending unconditionally destroyed
-    // data: a swallowed rule-pack read error reports empty lists in a 200, and one
-    // unrelated rate save then wrote that emptiness over every stored retirement.
-    // So the send must be gated on TOUCHED, never on length.
-    expect(src, "a length test cannot tell 'cleared' from 'not edited'").not.toMatch(
-      /rpRetired.length\s*>\s*0|rpCustom.length\s*>\s*0/,
-    );
-    expect(src, "gate the send on whether the admin edited them").toContain(
+    // Omitting when empty made retirement a one-way door. Sending unconditionally
+    // destroyed data, because a swallowed read reports empty lists in a 200 and one
+    // save then wrote that emptiness over everything stored.
+    //
+    // Parsed, not grepped. The previous version asserted that the string
+    // `rpContributionsTouched` appeared somewhere in the file — and it appears in its
+    // own useState line and in both setter wrappers, so a review reinstated the
+    // unconditional send and this test stayed green.
+    const calls = callArguments(src, "updateAdminRulePack");
+    expect(calls.length, "no updateAdminRulePack call found").toBe(1);
+    const payload = calls[0]![0]!;
+    const flat = topLevelKeys(payload);
+    for (const key of ["statutoryRetired", "statutoryCustom"]) {
+      expect(
+        flat,
+        `${key} is sent unconditionally — an empty list CLEARS it, so gate the send`,
+      ).not.toContain(key);
+      // Still sent somewhere, so this cannot pass by dropping the field entirely,
+      // which would restore the one-way door.
+      expect(payload, `${key} is not sent at all`).toContain(key);
+    }
+    expect(payload, "gate the send on whether the admin edited them").toContain(
       "rpContributionsTouched",
     );
-    // And the chip row is gated on what it RENDERS. It was gated on the effective
-    // list while rendering a wider one, so retiring every contribution hid the only
-    // control that could bring them back.
-    expect(src).toContain("{retirableContributions.length > 0 && (");
   });
 
   it("nothing that looks clickable lacks a handler", () => {

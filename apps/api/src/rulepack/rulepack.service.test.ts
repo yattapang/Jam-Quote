@@ -64,6 +64,71 @@ describe("RulePackService.get", () => {
   });
 });
 
+describe("RulePackService.get — a failed read is not an absence", () => {
+  /**
+   * The distinction this asserts, and why it is worth a test.
+   *
+   * `resolveProfile` deliberately swallows a `rulePackConfig` read failure and serves
+   * the in-code baseline, so quoting keeps working when that table is unreachable.
+   * That is right for the app and was silently wrong for the staff console: the
+   * response said `overridden: false` with empty override lists, which is
+   * indistinguishable from "no override exists".
+   *
+   * A staffer then saw "Core baseline", no override pill — a positive claim that
+   * there was nothing stored to lose — retired one contribution, and saved. Both
+   * lists are complete lists, so that write replaced every stored retirement and
+   * every admin-added levy with a one-element array. `overrideReadFailed` is what
+   * lets the console refuse.
+   */
+  it("reports overrideReadFailed and still serves the baseline", async () => {
+    const { svc } = make({
+      findUnique: vi.fn().mockRejectedValue(new Error("relation does not exist")),
+    });
+    const pack = await svc.get("JM");
+
+    expect(pack.overrideReadFailed).toBe(true);
+    // Still usable: the app must keep quoting.
+    expect(pack.taxLabel).toBe("GCT");
+    expect(pack.defaultTaxRatePct).toBe(15);
+    // And the lists it reports are empty BECAUSE it does not know, which is exactly
+    // why the flag has to travel with them.
+    expect(pack.statutoryRetired).toEqual([]);
+    expect(pack.statutoryCustom).toEqual([]);
+  });
+
+  it("does not set the flag when there is genuinely no override", async () => {
+    // The case that must stay distinguishable: a successful read of nothing.
+    const { svc } = make();
+    const pack = await svc.get("JM");
+    expect(pack.overrideReadFailed).toBe(false);
+    expect(pack.overridden).toBe(false);
+  });
+
+  it("does not set the flag on a successful read of a real override", async () => {
+    const { svc } = make({
+      findUnique: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        taxLabel: "GCT",
+        defaultTaxRatePct: "15",
+        verifiedAsOf: null,
+        sourceUrl: null,
+        statutoryRates: {},
+        statutoryCustom: null,
+        statutoryRetired: ["NIS"],
+        sources: [],
+        updatedByUserId: "u1",
+        updatedAt: new Date("2026-07-31T10:00:00.000Z"),
+      }),
+    });
+    const pack = await svc.get("JM");
+    expect(pack.overrideReadFailed).toBe(false);
+    expect(pack.overridden).toBe(true);
+    // Reported back so the console can seed its editor — without this the editor
+    // starts empty and cannot show what is already retired.
+    expect(pack.statutoryRetired).toEqual(["NIS"]);
+  });
+});
+
 describe("RulePackService.defaultTaxRatePct", () => {
   it("returns the effective rate for seeding a new tenant", async () => {
     const { svc } = make({
