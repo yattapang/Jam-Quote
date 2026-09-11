@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { buildRulePackPatch, normaliseCode, type RulePackEdits } from "./rulepack-patch";
+import {
+  buildRulePackPatch,
+  gridContributionCodes,
+  normaliseCode,
+  rulePackProblem,
+  type RulePackEdits,
+} from "./rulepack-patch";
 
 /**
  * What the rule-pack save actually sends.
@@ -174,5 +180,155 @@ describe("normaliseCode", () => {
     expect(normaliseCode("a  b   c")).toBe("A_B_C");
     expect(normaliseCode("NIS")).toBe("NIS");
     expect(normaliseCode("nis")).toBe("NIS");
+  });
+});
+
+describe("rulePackProblem judges what will be sent", () => {
+  it("ignores a stale rate for a code the custom list has taken over", () => {
+    // The stuck state a review found. The grid stops rendering NIS the moment a
+    // custom entry claims the code, and the payload stops sending it — but the form
+    // still holds whatever was typed. Validating the FORM refused every later save
+    // with "NIS employee rate must be…", naming an input that had unmounted. The
+    // admin could not obey the message: the only escapes were deleting the custom
+    // row or reloading and losing every pending edit.
+    const edits: RulePackEdits = {
+      ...base,
+      form: { ...base.form, statutory: { NIS: { employeePct: "150", employerPct: "3" } } },
+      contributionsTouched: true,
+      custom: [{ code: "NIS", label: "NIS (revised)", appliesTo: "BOTH", employeePct: 7 }],
+    };
+    expect(rulePackProblem(edits, false)).toBeNull();
+    // And the value really is not sent, so nothing was let through either.
+    expect(buildRulePackPatch(edits).statutoryRates).not.toHaveProperty("NIS");
+  });
+
+  it("still refuses an out-of-range rate the patch WILL carry", () => {
+    const edits: RulePackEdits = {
+      ...base,
+      form: { ...base.form, statutory: { NIS: { employeePct: "150", employerPct: "3" } } },
+    };
+    expect(rulePackProblem(edits, false)).toMatch(/NIS employee/);
+  });
+
+  it("refuses to save at all when the stored override could not be read", () => {
+    // First, because everything else is a judgement about values this screen may not
+    // have: a failed read serves the baseline with empty override lists, which looks
+    // exactly like "no override exists".
+    expect(rulePackProblem(base, true)).toMatch(/could not be read/);
+  });
+
+  it("names the row for a half-typed contribution", () => {
+    const withRows = (rows: RulePackEdits["custom"]) =>
+      rulePackProblem({ ...base, contributionsTouched: true, custom: rows }, false);
+    expect(withRows([{ code: "", label: "x", appliesTo: "BOTH" }])).toMatch(/#1 needs a code/);
+    expect(withRows([{ code: "A", label: "", appliesTo: "BOTH" }])).toMatch(/#1 needs a name/);
+    expect(
+      withRows([{ code: "A", label: "x", appliesTo: "BOTH", employeePct: 150 }]),
+    ).toMatch(/#1 employee rate/);
+  });
+
+  it("checks custom lengths RAW, because the rows are sent as typed", () => {
+    // The server's `.max(40)` runs before its trim/uppercase transform, so a
+    // 40-character code with a trailing space passes a trimmed check here and 400s
+    // there by array path — the message this function exists to replace.
+    const code = "X".repeat(40) + " ";
+    expect(
+      rulePackProblem(
+        { ...base, contributionsTouched: true, custom: [{ code, label: "x", appliesTo: "BOTH" }] },
+        false,
+      ),
+    ).toMatch(/code is too long/);
+  });
+
+  it("checks taxLabel TRIMMED, because that is how it is sent", () => {
+    const padded = "  " + "G".repeat(16) + "  ";
+    expect(rulePackProblem({ ...base, form: { ...base.form, taxLabel: padded } }, false)).toBeNull();
+    expect(buildRulePackPatch({ ...base, form: { ...base.form, taxLabel: padded } }).taxLabel)
+      .toHaveLength(16);
+  });
+
+  it("refuses a source line that is not a web address, by position", () => {
+    expect(
+      rulePackProblem(
+        { ...base, sourcesTouched: true, sourcesDraft: "https://a.example/x\nnot a url" },
+        false,
+      ),
+    ).toMatch(/Source #2/);
+    // And accepts a cleared box, which is a legitimate edit.
+    expect(rulePackProblem({ ...base, sourcesTouched: true, sourcesDraft: "" }, false)).toBeNull();
+  });
+
+  it("does not check sources the save will not send", () => {
+    // Untouched means omitted, so a bad line left in the box from a previous load
+    // must not block an unrelated rate save.
+    expect(
+      rulePackProblem({ ...base, sourcesTouched: false, sourcesDraft: "not a url" }, false),
+    ).toBeNull();
+  });
+});
+
+describe("gridContributionCodes", () => {
+  const baseline = [{ code: "NIS" }, { code: "NHT" }, { code: "EDUCATION_TAX" }, { code: "HEART" }];
+
+  it("offers an input for each baseline contribution", () => {
+    expect(gridContributionCodes(baseline, baseline, [])).toEqual([
+      "NIS",
+      "NHT",
+      "EDUCATION_TAX",
+      "HEART",
+    ]);
+  });
+
+  it("does not offer one for a levy the admin added", () => {
+    // The first defect: a new levy is APPENDED to the effective list, so rendering
+    // the whole list gave it a grid input as well as its own row.
+    const effective = [...baseline, { code: "CESS" }];
+    expect(gridContributionCodes(effective, baseline, [
+      { code: "CESS", label: "Parish cess", appliesTo: "BOTH" },
+    ])).not.toContain("CESS");
+  });
+
+  it("does not offer one for a baseline code a custom entry REPLACED", () => {
+    // The second defect, and the one two fixes missed: `mergeStatutory` consumes a
+    // matching custom entry in place, so NIS is still a baseline code and still in
+    // the effective list. Filtering to baseline membership alone kept its input, and
+    // the grid's copy then beat the custom row.
+    const codes = gridContributionCodes(baseline, baseline, [
+      { code: "NIS", label: "NIS (revised)", appliesTo: "BOTH", employeePct: 7 },
+    ]);
+    expect(codes).not.toContain("NIS");
+    expect(codes).toContain("NHT");
+  });
+
+  it("matches the code however the admin typed it", () => {
+    for (const typed of ["nis", " NIS ", "  nis  "]) {
+      expect(gridContributionCodes(baseline, baseline, [
+        { code: typed, label: "NIS", appliesTo: "BOTH" },
+      ]), typed).not.toContain("NIS");
+    }
+  });
+
+  it("does not treat a spaced-out code as the same contribution", () => {
+    // `n i s` normalises to N_I_S, which is a DIFFERENT code — it defines a new levy
+    // rather than replacing NIS, so NIS keeps its grid input. I had this wrong in a
+    // reply to a review, and this test is what corrected me: the normalisation
+    // collapses whitespace to underscores, it does not delete it.
+    expect(normaliseCode("n i s")).toBe("N_I_S");
+    expect(
+      gridContributionCodes(baseline, baseline, [
+        { code: "n i s", label: "Something else", appliesTo: "BOTH" },
+      ]),
+    ).toContain("NIS");
+  });
+
+  it("drops a retired code, because the effective list already has", () => {
+    // Retirement is core's job; this only reflects what came back.
+    const effective = baseline.filter((b) => b.code !== "HEART");
+    expect(gridContributionCodes(effective, baseline, [])).not.toContain("HEART");
+  });
+
+  it("never invents a code the baseline does not define", () => {
+    // A stale override entry must not produce a grid row with no baseline meaning.
+    expect(gridContributionCodes([{ code: "GONE" }], baseline, [])).toEqual([]);
   });
 });

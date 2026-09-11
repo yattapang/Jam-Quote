@@ -1958,7 +1958,21 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the seventeen reviews found something.** The seventeenth changed
+**Every one of the eighteen reviews found something.** The eighteenth defeated both
+of the source guards that survived the previous round — one by leaving a dead call
+for the scanner to find while a hand-built object went to the mutator.
+
+**So the rule gets a third part: prefer the compiler.** `updateAdminRulePack` now
+accepts only a branded `RulePackPatch` that one function can produce, and an inline
+payload is a type error rather than a review finding. Where a fact can be a
+function, test the function; where it can be a type, let the compiler hold it; reach
+for a source scan only when neither is possible. Eight reviews defeated eight
+scanners and none of them defeated a type.
+
+**And validate what you will SEND, not what is on screen.** Splitting those two
+apart created a save that could be refused over a value the payload had already
+decided to skip, naming an input that had unmounted — unfixable without losing every
+pending edit. The seventeenth changed
 the approach rather than adding another fix, and both of its lessons are general:
 
 **1. Fix the model, not the screen.** Two stores could hold a statutory rate for one

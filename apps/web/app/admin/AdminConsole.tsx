@@ -50,7 +50,11 @@ import { logout } from "@/lib/auth-actions";
 import { startImpersonation } from "@/lib/impersonation-actions";
 import { relativeTime } from "@/lib/relative-time";
 import { errorMessage } from "@/lib/error-message";
-import { buildRulePackPatch, normaliseCode } from "@/lib/rulepack-patch";
+import {
+  buildRulePackPatch,
+  gridContributionCodes,
+  rulePackProblem,
+} from "@/lib/rulepack-patch";
 import styles from "./console.module.css";
 import type { ApiEnvironment } from "@/lib/api-environment";
 
@@ -395,17 +399,6 @@ export default function AdminConsole({
    * code-only stub if it came from an override that has since gone.
    */
   /**
-   * Codes the custom list owns, normalised the way the SERVER normalises them.
-   *
-   * `normaliseCode` is shared with the send path. The first attempt wrote
-   * `trim().toUpperCase()` inline and missed the DTO's space-to-underscore step, so a
-   * custom code typed "EDUCATION TAX" never matched the stored EDUCATION_TAX and the
-   * grid kept its duplicate input. Two copies of one normalisation rule, which is
-   * the same mistake one level down.
-   */
-  const customOwnedCodes = new Set(rpCustom.map((c) => normaliseCode(c.code)));
-
-  /**
    * Contributions shown in the statutory rate grid: baseline codes the custom list
    * has NOT taken over.
    *
@@ -418,9 +411,11 @@ export default function AdminConsole({
    * here as well meant two inputs for one number, and the grid's copy silently won —
    * see the `statutoryRates` note in `saveRulepack`.
    */
-  const gridContributions = (rulepack?.statutory ?? []).filter(
-    (s) => jm.statutory.some((b) => b.code === s.code) && !customOwnedCodes.has(s.code),
-  );
+  // The decision is `gridContributionCodes`, which is tested; this only looks the
+  // rows back up. Inline, this filter was wrong twice — once rendering every
+  // effective contribution, once missing the replacement case.
+  const gridCodes = new Set(gridContributionCodes(rulepack?.statutory ?? [], jm.statutory, rpCustom));
+  const gridContributions = (rulepack?.statutory ?? []).filter((s) => gridCodes.has(s.code));
 
   const retirableContributions = (() => {
     const effective = rulepack?.statutory ?? [];
@@ -495,138 +490,37 @@ export default function AdminConsole({
    * Bounds mirror `updateRulePackSchema`: `min(1).max(16)` on the label and
    * `min(0).max(100)` on every rate.
    */
-  /**
-   * A full http(s) address.
-   *
-   * Deliberately STRICTER than the DTO's `z.string().url()`, which accepts
-   * `ftp://`, `mailto:` and `javascript:` — so this never refuses something the
-   * server would take, and a "Source" link a staffer clicks is always a web page.
-   * An earlier version of this comment claimed the two matched, which a review
-   * checked and they do not.
-   */
-  function isHttpUrl(value: string): boolean {
-    try {
-      const u = new URL(value);
-      return u.protocol === "http:" || u.protocol === "https:";
-    } catch {
-      return false;
-    }
-  }
-
-  function rulePackProblem(): string | null {
-    // First, because everything below it is a judgement about values this screen
-    // may not actually have. A failed read serves the baseline with empty override
-    // lists and `overridden: false` — indistinguishable from "no override exists"
-    // until the API says which. Saving on that view writes complete lists over
-    // whatever is stored; a review traced the click sequence that destroys every
-    // retirement and every added levy.
-    if (rulepack?.overrideReadFailed)
-      return "The stored rule-pack overrides could not be read, so this screen may be showing the baseline instead of your settings. Reload before saving — saving now would overwrite them.";
-    // Not reachable from the save button — `saveRulepack` returns early when the
-    // pack failed to load — but the compiler is right to ask, and "there is no
-    // form" is a real answer rather than a cast.
-    if (!rpForm) return "The rule-pack has not loaded — reload before saving.";
-    const taxLabel = rpForm.taxLabel.trim();
-    if (taxLabel === "")
-      return "Tax label is required — it is what every quote and invoice calls the tax.";
-    // Trimmed, because `buildRulePackPatch` sends `taxLabel` trimmed — so the
-    // trimmed length is what the server's `.max(16)` sees. The custom rows below are
-    // sent as typed, so those lengths are checked raw. The distinction is the whole
-    // reason to read the send path rather than assume it.
-    if (taxLabel.length > 16) return "Tax label must be 16 characters or fewer.";
-
-    const rate = Number(rpForm.defaultTaxRatePct);
-    if (rpForm.defaultTaxRatePct.trim() === "" || !Number.isFinite(rate) || rate < 0 || rate > 100)
-      return "Default tax rate must be a number between 0 and 100.";
-
-    // A statutory rate may be blank — that means "not sourced yet" and is sent as
-    // null. What it may not be is present and out of range.
-    for (const [code, v] of Object.entries(rpForm.statutory)) {
-      for (const [side, raw] of [
-        ["employee", v.employeePct],
-        ["employer", v.employerPct],
-      ] as const) {
-        if (raw.trim() === "") continue;
-        const pct = Number(raw);
-        if (!Number.isFinite(pct) || pct < 0 || pct > 100)
-          return `${code} ${side} rate must be a number between 0 and 100.`;
-      }
-    }
-
-    if (rpForm.verifiedAsOf.trim() !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(rpForm.verifiedAsOf.trim()))
-      return "Verified date must be a date (YYYY-MM-DD).";
-    const sourceUrl = rpForm.sourceUrl.trim();
-    if (sourceUrl !== "" && !isHttpUrl(sourceUrl))
-      return "Source URL must be a full web address, starting http:// or https://.";
-
-    // `sources` is sent whenever the admin has edited the box, and was checked
-    // nowhere: one typo'd line, or a 21st URL, 400s the whole save with the server's
-    // array path. The list is what a verifier is told to check, so a bad line in it
-    // is worth naming.
-    if (rpSourcesTouched) {
-      const urls = rpSourcesDraft
-        .split("\n")
-        .map((u) => u.trim())
-        .filter(Boolean);
-      if (urls.length > 20) return "At most 20 source pages.";
-      const bad = urls.findIndex((u) => !isHttpUrl(u));
-      if (bad >= 0) return `Source #${bad + 1} is not a full web address: ${urls[bad]}`;
-    }
-
-    // A half-typed custom levy would be rejected by the server with a message about
-    // an array index; naming the row is more use than naming the path. Lengths
-    // included — a review pointed out this comment claimed to check "every field this
-    // form sends" while `code`, `label`, `sources`, `verifiedAsOf` and `sourceUrl`
-    // were all still the server's job to refuse, by array path.
-    for (const [i, c] of rpCustom.entries()) {
-      if (c.code.trim() === "") return `Contribution #${i + 1} needs a code.`;
-      // Raw length, not trimmed: the server's `.max(40)` runs before its transform,
-      // so a 40-character code with a trailing space passes a trimmed check here and
-      // 400s there by array path — which is the message this function exists to
-      // replace.
-      if (c.code.length > 40) return `Contribution #${i + 1} code is too long (40 max).`;
-      if (c.label.trim() === "") return `Contribution #${i + 1} needs a name.`;
-      if (c.label.length > 80) return `Contribution #${i + 1} name is too long (80 max).`;
-      for (const [side, pct] of [
-        ["employee", c.employeePct],
-        ["employer", c.employerPct],
-      ] as const) {
-        if (pct !== null && pct !== undefined && (!Number.isFinite(pct) || pct < 0 || pct > 100))
-          return `Contribution #${i + 1} ${side} rate must be between 0 and 100.`;
-      }
-    }
-    return null;
-  }
-
   async function saveRulepack() {
     if (!rpForm) return;
     setRpSaving(true);
     setRpStatus("idle");
     try {
-      // Refused, not omitted — every field, not just the ones I happened to check.
-      // The server reads an absent field as "leave unchanged", so any coercion to
-      // `undefined` reports "Saved" over a value that never moved.
-      const problem = rulePackProblem();
+      // ONE description of the edit, validated and then built from the same object.
+      //
+      // The validator used to read form state while the builder decided what to
+      // send, and a review found the gap: the grid stops rendering a rate once a
+      // custom entry takes it over and the payload stops sending it, but the form
+      // still held the value — so a stale out-of-range number refused every later
+      // save while naming an input that had unmounted. No way to obey the message.
+      const edits = {
+        form: rpForm,
+        custom: rpCustom,
+        retired: rpRetired,
+        contributionsTouched: rpContributionsTouched,
+        sourcesTouched: rpSourcesTouched,
+        sourcesDraft: rpSourcesDraft,
+      };
+      const problem = rulePackProblem(edits, rulepack?.overrideReadFailed ?? false);
       if (problem) {
         setRpError(problem);
         setRpStatus("error");
         return;
       }
-      // The payload is built by `buildRulePackPatch`, which is a pure function with
-      // its own tests. It was inline here through four reviews and three defects,
-      // all about which fields are sent and which are omitted — and the only way to
-      // assert anything about it was to scan this file's text, which I got wrong
-      // four times. See lib/rulepack-patch.ts.
-      const updated = await updateAdminRulePack(
-        buildRulePackPatch({
-          form: rpForm,
-          custom: rpCustom,
-          retired: rpRetired,
-          contributionsTouched: rpContributionsTouched,
-          sourcesTouched: rpSourcesTouched,
-          sourcesDraft: rpSourcesDraft,
-        }),
-      );
+      // `buildRulePackPatch` returns a branded `RulePackPatch`, and
+      // `updateAdminRulePack` accepts nothing else — so these rules cannot be
+      // re-implemented inline here, which is what they were through four reviews
+      // and three defects. See lib/rulepack-patch.ts.
+      const updated = await updateAdminRulePack(buildRulePackPatch(edits));
       setRulepack(updated);
       setRpForm(rpToForm(updated));
       // Re-seeded from the RESPONSE, and the touch flags cleared.

@@ -74,7 +74,63 @@ function rate(typed: string): number | null {
   return typed.trim() === "" ? null : Number(typed);
 }
 
-export function buildRulePackPatch(edits: RulePackEdits): UpdateRulePackInput {
+/**
+ * A patch built by `buildRulePackPatch`, and by nothing else.
+ *
+ * The brand is what stops these rules being re-implemented inline. They WERE inline
+ * through four reviews and three defects, and the source guard that policed the
+ * delegation was defeated by keeping a dead `buildRulePackPatch(...)` call for the
+ * scanner to find and passing a hand-built object to the mutator instead. A regex
+ * cannot tell those apart; the type system can — `updateAdminRulePack` accepts only
+ * this type, so an inline literal is a compile error rather than a review finding.
+ */
+export type RulePackPatch = UpdateRulePackInput & {
+  /** A type-level marker. There is no runtime property and nothing reads it. */
+  readonly __rulePackPatch: unique symbol;
+};
+
+/**
+ * Statutory codes whose rate the custom list has taken over.
+ *
+ * Exported because the payload, the validator and the rate grid all need the same
+ * answer. Three hand-written copies of this comparison have already produced two
+ * defects: one missed the DTO's space-to-underscore step, and one left the grid
+ * rendering an input for a rate nothing would send.
+ */
+export function customOwnedCodes(custom: StatutoryCustomRows): Set<string> {
+  return new Set(custom.map((c) => normaliseCode(c.code)));
+}
+
+/**
+ * Which contributions the statutory rate grid should offer an input for.
+ *
+ * A function rather than a filter expression inline in the JSX, for the same reason
+ * the payload is a function: it is a decision with a right answer, and the two
+ * attempts to make it inline were both wrong.
+ *
+ *   - the first rendered every effective contribution, so a levy the admin had added
+ *     got a grid input AND its own row — two inputs for one number, and the grid's
+ *     copy won the merge
+ *   - the second filtered to baseline codes, which fixed the new-levy case and
+ *     missed the REPLACEMENT case: `mergeStatutory` consumes a custom entry in place
+ *     when its code matches a baseline one, so `NIS` is still a baseline code
+ *
+ * A code belongs in the grid when the baseline defines it AND no custom entry has
+ * taken it over. The custom row is the editor for anything the custom list owns.
+ */
+export function gridContributionCodes(
+  effective: readonly { code: string }[],
+  baseline: readonly { code: string }[],
+  custom: StatutoryCustomRows,
+): string[] {
+  const isBaseline = new Set(baseline.map((b) => b.code));
+  const owned = customOwnedCodes(custom);
+  return effective
+    .map((s) => s.code)
+    .filter((code) => isBaseline.has(code) && !owned.has(normaliseCode(code)));
+}
+
+export function buildRulePackPatch(edits: RulePackEdits): RulePackPatch {
   const { form, custom, retired, contributionsTouched, sourcesTouched, sourcesDraft } = edits;
 
   /**
@@ -87,7 +143,7 @@ export function buildRulePackPatch(edits: RulePackEdits): UpdateRulePackInput {
    * prunes any that are already there, which is what makes omitting them safe:
    * omission alone would have left the stale stored rate in charge.
    */
-  const owned = new Set(custom.map((c) => normaliseCode(c.code)));
+  const owned = customOwnedCodes(custom);
   const statutoryRates: Record<string, { employeePct: number | null; employerPct: number | null }> =
     {};
   for (const [code, typed] of Object.entries(form.statutory)) {
@@ -116,5 +172,114 @@ export function buildRulePackPatch(edits: RulePackEdits): UpdateRulePackInput {
             .filter(Boolean),
         }
       : {}),
-  };
+    // The brand is a type-level marker only; there is no runtime property.
+  } as RulePackPatch;
+}
+
+/** A full http(s) address.
+ *
+ * Deliberately STRICTER than the DTO's `z.string().url()`, which accepts `ftp://`,
+ * `mailto:` and `javascript:` — so this never refuses something the server would
+ * take, and a "Source" link a staffer clicks is always a web page.
+ */
+function isHttpUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What is wrong with the rule-pack form, in words, or null.
+ *
+ * ## Why this lives beside the builder
+ *
+ * It used to be a closure inside the console, and it validated the FORM while
+ * `buildRulePackPatch` decided what to SEND. A review found the gap that opens
+ * between those two ideas: the rate grid stops rendering a code once a custom entry
+ * takes it over, and the payload stops sending it — but the form state keeps the
+ * value, so an out-of-range number left in an input that has since unmounted refused
+ * every later save, naming a field no longer on screen. There was no way to obey the
+ * message; the only escapes were deleting the custom row or reloading and losing
+ * every pending edit.
+ *
+ * So this validates the values the patch will actually carry, from the same `owned`
+ * set the builder uses. A value nothing sends cannot block a save.
+ *
+ * `overrideReadFailed` comes first: everything else is a judgement about values this
+ * screen may not have. A failed rule-pack read serves the baseline with empty
+ * override lists, which is indistinguishable from "no override exists", and saving on
+ * that view writes complete lists over whatever is stored.
+ */
+export function rulePackProblem(edits: RulePackEdits, overrideReadFailed: boolean): string | null {
+  if (overrideReadFailed)
+    return "The stored rule-pack overrides could not be read, so this screen may be showing the baseline instead of your settings. Reload before saving — saving now would overwrite them.";
+
+  const { form, custom, sourcesTouched, sourcesDraft } = edits;
+
+  const taxLabel = form.taxLabel.trim();
+  if (taxLabel === "")
+    return "Tax label is required — it is what every quote and invoice calls the tax.";
+  // Trimmed, because the patch sends `taxLabel` trimmed, so the trimmed length is
+  // what the server's `.max(16)` sees. The custom rows below are sent as typed, so
+  // those are checked raw.
+  if (taxLabel.length > 16) return "Tax label must be 16 characters or fewer.";
+
+  const rate = Number(form.defaultTaxRatePct);
+  if (form.defaultTaxRatePct.trim() === "" || !Number.isFinite(rate) || rate < 0 || rate > 100)
+    return "Default tax rate must be a number between 0 and 100.";
+
+  // Only the rates the patch will carry. A blank one means "not sourced yet" and is
+  // sent as null; what it may not be is present and out of range.
+  const owned = customOwnedCodes(custom);
+  for (const [code, typed] of Object.entries(form.statutory)) {
+    if (owned.has(normaliseCode(code))) continue;
+    for (const [side, raw] of [
+      ["employee", typed.employeePct],
+      ["employer", typed.employerPct],
+    ] as const) {
+      if (raw.trim() === "") continue;
+      const pct = Number(raw);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100)
+        return `${code} ${side} rate must be a number between 0 and 100.`;
+    }
+  }
+
+  if (form.verifiedAsOf.trim() !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(form.verifiedAsOf.trim()))
+    return "Verified date must be a date (YYYY-MM-DD).";
+  const sourceUrl = form.sourceUrl.trim();
+  if (sourceUrl !== "" && !isHttpUrl(sourceUrl))
+    return "Source URL must be a full web address, starting http:// or https://.";
+
+  // `sources` is sent whenever the admin has edited the box, and was checked nowhere:
+  // one typo'd line, or a 21st URL, 400s the whole save with the server's array path.
+  if (sourcesTouched) {
+    const urls = sourcesDraft
+      .split("\n")
+      .map((u) => u.trim())
+      .filter(Boolean);
+    if (urls.length > 20) return "At most 20 source pages.";
+    const bad = urls.findIndex((u) => !isHttpUrl(u));
+    if (bad >= 0) return `Source #${bad + 1} is not a full web address: ${urls[bad]}`;
+  }
+
+  // Naming the row is more use than the server's array path. Lengths are raw,
+  // because the rows are sent as typed and the server's `.max()` runs before its
+  // uppercase/underscore transform.
+  for (const [i, c] of custom.entries()) {
+    if (c.code.trim() === "") return `Contribution #${i + 1} needs a code.`;
+    if (c.code.length > 40) return `Contribution #${i + 1} code is too long (40 max).`;
+    if (c.label.trim() === "") return `Contribution #${i + 1} needs a name.`;
+    if (c.label.length > 80) return `Contribution #${i + 1} name is too long (80 max).`;
+    for (const [side, pct] of [
+      ["employee", c.employeePct],
+      ["employer", c.employerPct],
+    ] as const) {
+      if (pct !== null && pct !== undefined && (!Number.isFinite(pct) || pct < 0 || pct > 100))
+        return `Contribution #${i + 1} ${side} rate must be between 0 and 100.`;
+    }
+  }
+  return null;
 }

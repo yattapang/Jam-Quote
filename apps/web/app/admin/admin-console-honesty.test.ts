@@ -597,56 +597,28 @@ describe("the console cannot claim a figure it does not have", () => {
     expect(mutators, "the pricing and rule-pack mutators must be among them").toEqual(
       expect.arrayContaining(["updateAdminPricing", "updateAdminRulePack"]),
     );
+    // Both saves refuse rather than omit. `pricingProblem` is still a closure here;
+    // `rulePackProblem` moved beside the payload builder so it can judge what will
+    // actually be SENT — validating form state instead refused saves over a value
+    // the payload had already decided to skip, naming an input that had unmounted.
     expect(src).toContain("pricingProblem()");
-    expect(src).toContain("rulePackProblem()");
+    expect(src, "the rule-pack save must run its validator").toMatch(/rulePackProblem\(/);
   });
 
-  it("the payload is built by a tested function, not inline here", () => {
-    // Four generations of assertion lived here, each about the TEXT of an inline
-    // payload: a key must not be top-level, an identifier must appear, a coercion
-    // operator must be absent. A review walked past every one — a nested spread,
-    // `Object.assign`, a computed key, a constant condition, a coercion hoisted a
-    // line up — and one had been asserting nothing at all for three rewrites,
-    // because it parsed an object literal with its braces still on.
-    //
-    // The payload is `buildRulePackPatch` now, with tests that construct state and
-    // read the result (lib/rulepack-patch.test.ts). Those rules cannot be spelled
-    // around because nothing is matching a spelling. All this has left to assert is
-    // that the console still delegates — if it builds a payload inline again, the
-    // tests protecting those rules stop covering the code that runs.
-    const body = functionBody(src, "saveRulepack");
-    expect(body, "saveRulepack not found").not.toBeNull();
-    expect(body ?? "", "build the patch with buildRulePackPatch").toContain(
-      "buildRulePackPatch(",
-    );
-    const calls = callArguments(src, "updateAdminRulePack");
-    expect(calls.length).toBe(1);
-    expect(
-      calls[0]![0]!.trim().startsWith("{"),
-      "an inline object literal is a second copy of the send rules",
-    ).toBe(false);
-  });
-
-  it("the rate grid does not offer a second editor for one rate", () => {
-    // A custom entry coded like a baseline one is consumed IN PLACE by
-    // `mergeStatutory`, so the code stays in the effective list — and the grid then
-    // rendered a second input for a rate the custom row already owns. Two inputs for
-    // one number, and the grid's copy won.
-    //
-    // The first version of this grepped for the literals `customCodes.has` and
-    // `gridContributions.map`. A review kept both spellings, emptied their meaning
-    // (`new Set<string>()`, `.slice()` for `.filter`), and the defect returned green.
-    // Precedence and pruning are asserted behaviourally now — in
-    // `jurisdiction.test.ts`, `rulepack.service.test.ts` and
-    // `rulepack-patch.test.ts` — so this only checks that the grid reads the
-    // filtered list rather than the effective one.
-    for (const effective of ["(rp?.statutory ?? []).map", "(rulepack?.statutory ?? []).map"]) {
-      expect(src, `the grid must not render the whole effective list: ${effective}`).not.toContain(
-        effective,
-      );
-    }
-    expect(src).toContain("gridContributions.map");
-  });
+  // NOTE: two assertions were deleted here, and not replaced by better regexes.
+  //
+  // One required `saveRulepack` to call `buildRulePackPatch` and the rule-pack
+  // mutator not to receive an inline object literal. A review defeated it by leaving
+  // a dead `void buildRulePackPatch(...)` call for the scanner to find and passing a
+  // hand-built object to the mutator — a regex cannot tell a live call from a dead
+  // one. `updateAdminRulePack` now takes a branded `RulePackPatch` that only the
+  // builder can produce, so an inline literal is a COMPILE ERROR. The compiler is a
+  // better guard than this file could ever be.
+  //
+  // The other required the rate grid to read `gridContributions` rather than the
+  // effective list. The same review defeated it by copying the effective list into a
+  // differently-named local. It is replaced by a render test —
+  // `statutory-grid.test.tsx` — which counts the inputs a code actually gets.
 
   it("nothing that looks clickable lacks a handler", () => {
     // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past

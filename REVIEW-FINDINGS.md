@@ -1062,6 +1062,33 @@ correctly in both halves. `importedNames` has no bypass.
 **Pre-existing, now registered:** clearing the sources box and saving refills it
 with baseline URLs, because `updated.sources` is the EFFECTIVE list — F62.
 
+## The review of `1792e3f` — a stuck state of my own making, and the compiler as the guard
+
+Eighth consecutive review to find real defects. It also refuted the thing I was most
+worried about: the core precedence change has no blast radius. `withAdminProvenance`
+is module-private, `mergeStatutory` is its only caller, and the effective `statutory`
+array reaches nothing but the admin console — no payroll, PDF, report or mobile path.
+**No tenant-facing figure changed value.**
+
+| What it found | Status |
+|---|---|
+| **A stuck state I created.** `rpForm.statutory` is keyed by every effective code, but the grid stops rendering a code once a custom entry takes it over and `buildRulePackPatch` stops sending it — while `rulePackProblem` still range-checked the whole form. Type 150 into NIS, then add a custom row coded NIS: the input unmounts, the value stays, and every later save is refused with "NIS employee rate must be…" naming a field that is no longer on screen. The only escapes were deleting the custom row or reloading and losing every pending edit — and the value was never going to be sent anyway | FIXED — `rulePackProblem` moved beside the builder and validates what the patch WILL CARRY, from the same `owned` set. The console now builds one `edits` object and hands it to both, so the two cannot describe different things. Ten tests on the validator, including this exact case |
+| **Both surviving source guards defeated, simultaneously.** The delegation guard was satisfied by a dead `void buildRulePackPatch(...)` call left for the scanner while a hand-built object went to the mutator; the grid guard by copying the effective list into a differently-named local. 27/27 green with both original defects reinstated | **REPLACED BY THE COMPILER.** `updateAdminRulePack` now takes a branded `RulePackPatch` that only the builder can produce, so an inline literal is a COMPILE ERROR — verified by injecting the reviewer's exact bypass. The grid's decision is `gridContributionCodes`, a tested function; the two guards are deleted with a note saying why |
+| **Commit-message overclaim:** "every fix verified by reverting it and watching a test fail" was false for the grid filter, which had no test at all | FIXED — six tests on `gridContributionCodes`, and I reverted it to BOTH earlier wrong versions: the render-everything one fails four, the baseline-membership one fails two |
+
+**Also confirmed clean:** the prune's fallback cannot meet an un-normalised stored
+code (the DTO transform has been in place since `statutoryCustom` was introduced);
+`mergedStatutory` loses nothing on a contributions-only save; the prune applies to
+the create branch too; `buildRulePackPatch` reproduces the previous inline payload
+field for field, with the two intended changes; the tests assert rules rather than
+implementation (verified by mutating the implementation); no dead code from the
+deletion.
+
+**A correction to something I said in a review reply:** `n i s` does NOT normalise
+to `NIS`. It becomes `N_I_S` — the rule collapses whitespace to underscores, it does
+not delete it — so it defines a new levy rather than replacing NIS. My own test
+caught that, and it is now asserted both ways.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |

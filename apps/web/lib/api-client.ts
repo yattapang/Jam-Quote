@@ -12,6 +12,7 @@
  * Mappers and API shapes are declared here (framework-free) and reused by
  * api-server.ts.
  */
+import type { RulePackPatch } from "@/lib/rulepack-patch";
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
 import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceReminderWire, InvoiceWire, LabourEntryWire, LineJobComponentWire, MaterialFavouriteWire, PaymentWire, ProjectWire, PurchaseWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
@@ -1296,9 +1297,23 @@ export interface UpdateRulePackInput {
   sources?: string[];
 }
 
-/** PATCH /admin/rulepack — edit the jurisdiction pack's editable slice. */
+/**
+ * PATCH /admin/rulepack — edit the jurisdiction pack's editable slice.
+ *
+ * Takes a `RulePackPatch`, which only `buildRulePackPatch` can produce.
+ *
+ * This body decides whether a save changes data, leaves it alone, or destroys it:
+ * `PATCH` reads an absent field as "leave unchanged" and an empty list as "clear",
+ * and getting that wrong here has produced three defects — a one-way retirement, a
+ * wipe of every stored retirement, and a rate nobody could edit. Four generations of
+ * source-scanning guard tried to keep the rules in one place and each was walked
+ * past; the last was defeated by a dead `buildRulePackPatch(...)` call left for the
+ * scanner to find while a hand-built object went to this function.
+ *
+ * The brand ends that argument: an inline object literal does not typecheck.
+ */
 export async function updateAdminRulePack(
-  input: UpdateRulePackInput,
+  input: RulePackPatch,
   country = "JM",
 ): Promise<EffectiveRulePack> {
   return apiClient.patch<EffectiveRulePack>(`/admin/rulepack?country=${country}`, input);
