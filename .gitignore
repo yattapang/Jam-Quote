@@ -40,7 +40,15 @@ Thumbs.db
 
 # Claude Code local (personal) settings
 **/.claude/settings.local.json
-.claude/
+# Everything under .claude is local EXCEPT the review agent briefs, which are
+# project infrastructure: nine section reviewers plus commit-reviewer, carrying the
+# defect taxonomy and review method this codebase was hardened with. They were
+# ignored, so a fresh clone got none of them. Same idiom as .vscode above — a
+# directory-level ignore cannot be undone from inside, hence `/*` plus a negation.
+**/.claude/
+!/.claude/
+/.claude/*
+!/.claude/agents/
 
 # Design source (kept out of app build, retained locally)
 extracted/.thumbnail
