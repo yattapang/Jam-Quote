@@ -1967,6 +1967,11 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
+**First thing next session:** commit `127380f` is pushed but its independent review
+was stopped at the session limit before it reported. F17/F18/F19/F20/F52 are marked
+FIXED on my word alone. See "Review owed — START THE NEXT SESSION HERE" in
+REVIEW-FINDINGS.md for the five things that review was asked to attack.
+
 **Remaining order:** the rest of the admin console — F21 (retiring a statutory
 contribution is one-way and inert for custom entries), the remaining F38 dead
 controls (`href="#"` Source links, the fake search box, the hardcoded Regulatory

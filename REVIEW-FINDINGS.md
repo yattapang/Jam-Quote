@@ -847,6 +847,33 @@ Worth as much as the findings, and the reason the list above is credible.
 
 ---
 
+## Review owed — START THE NEXT SESSION HERE
+
+`127380f` (admin console: F17, F18, F19, F20, F52, part of F38) is committed and
+pushed but **NOT independently reviewed**. The review was launched and stopped at the
+session limit before it reported anything, so those rows are marked FIXED on my word
+alone — which the standing rule says is not enough, and which eleven reviews in a row
+have shown to be optimistic.
+
+What that review was asked to attack, so it need not be re-derived:
+
+1. Whether each fix reached every instance or only the one the finding named — any
+   other read of the always-"active" status column, any other unconditional Verified
+   badge, any other metric labelled with a window the API does not send.
+2. Whether the column grid is still coherent after F17 removed a slot: `TenantRow`
+   went 9 -> 8 elements, and a header with 9 labels over 8 cells mislabels every
+   column silently.
+3. Whether `financials.proCount` really means "paying tenants" — read its derivation
+   in `admin.service.ts`, where a `_count` is known to include soft-deleted
+   tombstones.
+4. Whether F52's four assertions are real: for each, construct the defect it claims
+   to catch and confirm it FAILS if the matching fix is reverted. In particular,
+   accepting `disabled=` as evidence of a handler may be a hole that lets a
+   genuinely dead disabled-looking element through.
+5. Any regression the change introduced — `subscriptionStanding` fed the wrong field,
+   the drawer showing another tenant's data, a pill colour key absent from
+   `STANDING_PILL`.
+
 ## Suggested order
 
 1. **F1** — the only tenant-boundary crossing. One helper, six call sites.
