@@ -847,6 +847,15 @@ Worth as much as the findings, and the reason the list above is credible.
 
 ---
 
+## From the review of `8bd0f2f` — partially addressed
+
+| Item | Status |
+|---|---|
+| No `month.util.test.ts` — the month boundary that gates the free allowance had no direct test | **FIXED.** Seven cases, all asserting on the INSTANT via `toISOString()` rather than on `getMonth()`/`getDate()`, because a test written with local accessors asserts the host's opinion and passes anywhere — which is the bug class itself. Covers 7pm-on-the-last-evening (the actual regression), the 05:00Z rollover to the millisecond, a year boundary, a leap February, and a 37-minute sweep across a year asserting the boundary is never in the future (a sign error in the offset would report zero quotes used and hand out an unlimited allowance). Verified non-vacuous: the old local-accessor implementation returns April and 2027 where the test demands March and 2026 |
+| `admin.service.ts` carries orphaned JSDoc for the moved `startOfJamaicaMonth` | OPEN |
+| `admin.service.ts:253` `_count` now includes tombstones | OPEN — also queued as a question for the `127380f` review, since the "Paying tenants" tile reads a figure from the same service |
+| `nextRenewal` duplicates term logic | OPEN |
+
 ## Review owed — START THE NEXT SESSION HERE
 
 `127380f` (admin console: F17, F18, F19, F20, F52, part of F38) is committed and
