@@ -393,6 +393,17 @@ export default function AdminConsole({
    * baseline profile where possible so the chip keeps its real label, and as a
    * code-only stub if it came from an override that has since gone.
    */
+  /**
+   * Contributions shown in the statutory rate grid: baseline codes only.
+   *
+   * A custom levy is edited in its own row under MAINTAIN CONTRIBUTIONS. Rendering it
+   * here as well meant two inputs for one number, and the grid's copy silently won —
+   * see the `statutoryRates` note in `saveRulepack`.
+   */
+  const gridContributions = (rulepack?.statutory ?? []).filter((s) =>
+    jm.statutory.some((b) => b.code === s.code),
+  );
+
   const retirableContributions = (() => {
     const effective = rulepack?.statutory ?? [];
     const shown = new Set(effective.map((s) => s.code));
@@ -460,10 +471,22 @@ export default function AdminConsole({
    * appears to revert by itself.
    *
    * That is the same defect as the one I had just fixed one line up — so the answer
-   * is not another `if`, it is one place that checks every field this form sends.
+   * is not another `if`, it is one place that checks every field this form sends —
+   * which a later review had to point out did not yet include the lengths,
+   * `sources`, `verifiedAsOf` or `sourceUrl`. It does now.
    * Bounds mirror `updateRulePackSchema`: `min(1).max(16)` on the label and
    * `min(0).max(100)` on every rate.
    */
+  /** A full http(s) address, matching the DTO's `z.string().url()`. */
+  function isHttpUrl(value: string): boolean {
+    try {
+      const u = new URL(value);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
   function rulePackProblem(): string | null {
     // First, because everything below it is a judgement about values this screen
     // may not actually have. A failed read serves the baseline with empty override
@@ -500,11 +523,36 @@ export default function AdminConsole({
       }
     }
 
+    if (rpForm.verifiedAsOf.trim() !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(rpForm.verifiedAsOf.trim()))
+      return "Verified date must be a date (YYYY-MM-DD).";
+    const sourceUrl = rpForm.sourceUrl.trim();
+    if (sourceUrl !== "" && !isHttpUrl(sourceUrl))
+      return "Source URL must be a full web address, starting http:// or https://.";
+
+    // `sources` is sent whenever the admin has edited the box, and was checked
+    // nowhere: one typo'd line, or a 21st URL, 400s the whole save with the server's
+    // array path. The list is what a verifier is told to check, so a bad line in it
+    // is worth naming.
+    if (rpSourcesTouched) {
+      const urls = rpSourcesDraft
+        .split("\n")
+        .map((u) => u.trim())
+        .filter(Boolean);
+      if (urls.length > 20) return "At most 20 source pages.";
+      const bad = urls.findIndex((u) => !isHttpUrl(u));
+      if (bad >= 0) return `Source #${bad + 1} is not a full web address: ${urls[bad]}`;
+    }
+
     // A half-typed custom levy would be rejected by the server with a message about
-    // an array index; naming the row is more use than naming the path.
+    // an array index; naming the row is more use than naming the path. Lengths
+    // included — a review pointed out this comment claimed to check "every field this
+    // form sends" while `code`, `label`, `sources`, `verifiedAsOf` and `sourceUrl`
+    // were all still the server's job to refuse, by array path.
     for (const [i, c] of rpCustom.entries()) {
       if (c.code.trim() === "") return `Contribution #${i + 1} needs a code.`;
+      if (c.code.trim().length > 40) return `Contribution #${i + 1} code is too long (40 max).`;
       if (c.label.trim() === "") return `Contribution #${i + 1} needs a name.`;
+      if (c.label.trim().length > 80) return `Contribution #${i + 1} name is too long (80 max).`;
       for (const [side, pct] of [
         ["employee", c.employeePct],
         ["employer", c.employerPct],
@@ -521,8 +569,22 @@ export default function AdminConsole({
     setRpSaving(true);
     setRpStatus("idle");
     try {
+      // `statutoryRates` covers BASELINE codes only.
+      //
+      // An admin-added levy is appended to the effective `statutory` list, so it used
+      // to get two rate editors: the statutory grid (mirrored in `rpForm.statutory`)
+      // and its own row under MAINTAIN CONTRIBUTIONS. Both were sent, and
+      // `withAdminProvenance` resolves `rate?.employeePct ?? input.employeePct` — so
+      // the grid's untouched copy won. Editing the levy's own row reported "Saved ✓",
+      // changed nothing, and left two different numbers for one levy on one screen.
+      //
+      // Two places held one fact. The grid no longer renders custom codes at all, and
+      // this refuses to send them even if a future edit puts them back — the levy's
+      // own row is the one editor for a levy the admin added.
+      const customCodes = new Set(rpCustom.map((c) => c.code.trim().toUpperCase()));
       const statutoryRates: Record<string, { employeePct: number | null; employerPct: number | null }> = {};
       for (const [code, v] of Object.entries(rpForm.statutory)) {
+        if (customCodes.has(code.toUpperCase())) continue;
         statutoryRates[code] = {
           employeePct: v.employeePct.trim() === "" ? null : Number(v.employeePct),
           employerPct: v.employerPct.trim() === "" ? null : Number(v.employerPct),
@@ -563,6 +625,20 @@ export default function AdminConsole({
       });
       setRulepack(updated);
       setRpForm(rpToForm(updated));
+      // Re-seeded from the RESPONSE, and the touch flags cleared.
+      //
+      // Without this the flag meant "touched at some point this session" rather than
+      // "touched since the last load", which reopened the concurrency path it exists
+      // to close: B edits a contribution and saves at 10:00, A retires HEART at
+      // 10:05, B then saves a tax rate — the flag is still true, B's stale list is
+      // resent, and HEART is silently un-retired. Re-seeding also means the local
+      // copy holds the server's normalised codes (it uppercases and underscores
+      // them) rather than what was typed.
+      setRpCustomState((updated.statutoryCustom ?? []).map((c) => ({ ...c })));
+      setRpRetiredState([...(updated.statutoryRetired ?? [])]);
+      setRpContributionsTouched(false);
+      setRpSourcesDraft((updated.sources ?? []).join("\n"));
+      setRpSourcesTouched(false);
       setRpError(null);
       setRpStatus("saved");
     } catch (err) {
@@ -1623,7 +1699,10 @@ export default function AdminConsole({
                       <div className={styles.statutorySpacer} />
                       <div className={styles.statutoryHead} style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>EMPLOYEE</div>
                       <div className={styles.statutoryHead} style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>EMPLOYER</div>
-                      {(rp?.statutory ?? []).map((s) => (
+                      {/* Baseline codes only. A levy the admin added is edited in its
+                          own row below; rendering it here too gave one fact two
+                          inputs, and the grid's copy won the merge. */}
+                      {gridContributions.map((s) => (
                         <div key={s.code} style={{ display: "contents" }}>
                           <div className={styles.statutoryLabel}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
                           <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}

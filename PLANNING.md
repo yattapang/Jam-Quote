@@ -1958,7 +1958,15 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the fifteen reviews found something.** The fifteenth found a defect
+**Every one of the sixteen reviews found something.** The sixteenth found a live
+defect — an admin-added levy with two rate editors, where the untouched copy won
+and the edit reported success — and found that one of my parsing guards had been
+asserting NOTHING for three rewrites: it read an object argument with its braces
+still on, so the key list came back empty and the assertion was trivially true.
+
+**The guard rule, final form:** parse a shape, not a spelling — AND prove the parse
+found something. A positive control on the parse is not optional; without it a
+parsing guard fails the same way a text-matching one does, only more quietly. The fifteenth found a defect
 shipped IN the commit that fixed its own class — a ternary yielding `undefined` three
 lines from the explicit refusal I had just written for its neighbour — and walked
 past three of the four guards I had strengthened in response to the fourteenth.

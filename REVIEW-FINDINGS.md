@@ -997,6 +997,38 @@ the text of a defect has been defeated by a rewrite of that text. The four that 
 held are the four that PARSE — the enclosing tag, the enclosing expression, a call's
 arguments, an object's top-level keys. Match a shape, not a spelling.
 
+## The review of `5d155db` — a live defect, and a guard vacuous in a new way
+
+Sixth consecutive review to find real defects. The most instructive finding is one
+the reviewer got half-right: their `...{ … }` spread bypass did defeat the
+touched-flag guard, but not for the reason given. `callArguments` returns an object
+argument WITH its braces, so the key parse returned an empty list and the assertion
+was trivially true for ANY payload — honest or not. Two reviews and three of my own
+rewrites had looked at that assertion without noticing it asserted nothing.
+
+| What it found | Status |
+|---|---|
+| **A LIVE defect: an admin-added levy had TWO rate editors.** It is appended to the effective `statutory` list, so it appeared in the statutory grid (mirrored in `rpForm.statutory`) AND in its own row under MAINTAIN CONTRIBUTIONS. Both were sent, and `withAdminProvenance` resolves `rate?.employeePct ?? input.employeePct` — so the grid's untouched copy won. Editing the levy's own rate reported "Saved ✓", changed nothing, and left two different numbers for one levy on one screen | FIXED — the grid renders BASELINE codes only, and `statutoryRates` refuses to carry a code the custom list owns even if a future edit puts it back. Two places holding one fact is this repo's oldest recurring defect and I reintroduced it |
+| **`rpContributionsTouched` was never cleared**, so it meant "touched at some point this session" rather than "since the last load" — which reopened the concurrency path its own doc comment claimed to close, after the first contribution edit | FIXED — the flag is cleared and `rpCustom`/`rpRetired`/`rpSourcesDraft` are re-seeded from the save RESPONSE, which also means the local copy holds the server's normalised codes rather than what was typed |
+| **The touched-flag guard was vacuous in a way NEITHER I nor the previous reviewer spotted.** `callArguments` returns an object argument WITH its braces, so `topLevelKeys` saw every key at depth 1 and returned `[]` — `not.toContain("statutoryRetired")` was trivially true whatever the payload did. The reviewer's `...{ … }` spread bypass passed for this reason, not the one they diagnosed | FIXED — the payload is unwrapped first, shorthand keys are recorded (`{ taxLabel }` has no colon and was invisible, which is also how the vacuity was finally caught), and `unconditionalKeys` treats a spread with no condition of its own as unconditional. A **positive control** now requires the parse to find `taxLabel` and `statutoryRates`: any guard whose pass depends on a parse must prove the parse worked. Three unconditional-send forms — conditional-spread removal, flat keys, and a plain-object spread with a decoy `...(flag ? {} : {})` — all now fail |
+| **The coercion guard was defeated twice more:** by hoisting the coercion one line above the call, and by reformatting the api-client import so the mutator list (a regex demanding two-space indent and a trailing comma) dropped the one name that mattered while the count floor still passed | FIXED — the whole `savePricing`/`saveRulepack` body is read rather than the payload literal (those functions contain no JSX, so the legitimate `undefined`-as-a-CSS-value uses cannot fire), and `importedNames` parses the import block whatever its formatting. Verified by combining the reformat WITH the ternary it was hiding |
+| **The currency guard was defeated by a const holding a literal** — `const JMD = "JMD"` passed as the second argument, on the bank-reconciled ledger. The commit had just recorded the literal-ness lesson for route decorators and not carried it to the guard beside it | FIXED — `stringConstants()` resolves identifiers bound to string literals and treats them as literals |
+| `rulePackProblem()`'s comment claimed it "checks every field this form sends". It did not: `sources` (a typo'd line or a 21st URL 400s the whole save), custom `code` max 40, `label` max 80, `verifiedAsOf` as a date, `sourceUrl` as a URL | FIXED — all of them, with the row or source numbered in the message; the comment now records what it had missed |
+
+**Confirmed clean:** `rpForm.statutory` can never hold a non-string, so the
+`.trim()` cannot throw; `NaN` cannot reach the payload from a custom row;
+`defaultTaxRatePct`'s unconditional `Number()` is safe because the refusal runs
+first and there is exactly one call site; F60 is threaded to both producers with no
+default and no fabricated `false` anywhere (`safe()` yields `null`, not a lying
+object); `callArguments`' preceding-character check has no false negatives;
+`ROUTE_DECORATOR` handles nested parens; the retired-custom-levy label fix is
+correct.
+
+**The rule, restated after six rounds:** a guard must parse a SHAPE, and it must
+prove its parse found something. Every text-matching version has been walked past,
+and the one parsing version that had no positive control turned out to be asserting
+nothing at all.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |
