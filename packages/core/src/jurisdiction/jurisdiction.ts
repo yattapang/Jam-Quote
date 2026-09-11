@@ -313,9 +313,24 @@ function withAdminProvenance(
   input: StatutoryContributionInput,
   override: RulePackOverride,
 ): StatutoryContributionDef {
-  const rate = override.statutoryRates?.[input.code];
-  const employeePct = rate?.employeePct ?? input.employeePct ?? null;
-  const employerPct = rate?.employerPct ?? input.employerPct ?? null;
+  // A custom entry is a COMPLETE definition, so it owns its own rates.
+  //
+  // This used to read `override.statutoryRates?.[input.code]?.employeePct ??
+  // input.employeePct`, which let a per-code rate override beat the entry that
+  // defines the contribution. Two stores held one fact and the wrong one won:
+  //
+  //   1. the admin sets NIS to 3% in the statutory rate grid  -> statutoryRates.NIS
+  //   2. the admin adds a custom entry coded NIS at 7%        -> statutoryCustom[0]
+  //   3. the effective rate is 3%, the custom row shows 7%, and editing EITHER
+  //      box saves successfully and changes nothing, for ever
+  //
+  // The console made that reachable and I tried to fix it there, twice. It is not a
+  // screen problem: whichever way the inputs are arranged, the model has to say
+  // which store wins. The full definition does — a `statutoryRates` entry is a rate
+  // for a contribution someone else defined, and `RulePackService.update` now prunes
+  // any that a custom entry has taken over.
+  const employeePct = input.employeePct ?? null;
+  const employerPct = input.employerPct ?? null;
   return {
     code: input.code,
     label: input.label,

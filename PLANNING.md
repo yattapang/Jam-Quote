@@ -1958,7 +1958,24 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the sixteen reviews found something.** The sixteenth found a live
+**Every one of the seventeen reviews found something.** The seventeenth changed
+the approach rather than adding another fix, and both of its lessons are general:
+
+**1. Fix the model, not the screen.** Two stores could hold a statutory rate for one
+code, and the stale one won. I tried twice to fix that by rearranging which inputs
+render and what the payload omits; the second attempt made it worse, turning a
+wrong-value bug into a stalemate where two contradictory numbers sat on screen and
+both editors reported success while doing nothing. When two places can hold one
+fact, the model has to say which wins — no arrangement of inputs substitutes.
+
+**2. A source-scanning guard is the wrong tool for anything that can be a
+function.** Four generations of scanner over one inline payload, each defeated by a
+rewrite that changed no behaviour, and one asserting nothing at all for three of
+them. Extracting `buildRulePackPatch` as a pure function replaced 150 lines of
+parser with 12 tests that construct state and read the result. Reach for a source
+guard only when there is no value to assert on — a class of render-time mistake, a
+missing audit call — and even then, give it a positive control that covers the part
+you actually care about. The sixteenth found a live
 defect — an admin-added levy with two rate editors, where the untouched copy won
 and the edit reported success — and found that one of my parsing guards had been
 asserting NOTHING for three rewrites: it read an object argument with its braces
@@ -2008,7 +2025,7 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F59 and F61, opened by the F38 and F21
+**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F59, F61 and F62, opened by the F38 and F21
 work: a real tenant search, filters behind the honest pills, and a true last-seen
 timestamp. Then the visual and UX polish phase.
 

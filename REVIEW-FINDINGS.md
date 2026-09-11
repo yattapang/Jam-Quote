@@ -1029,6 +1029,39 @@ prove its parse found something. Every text-matching version has been walked pas
 and the one parsing version that had no positive control turned out to be asserting
 nothing at all.
 
+## The review of `4f2d5c8` — the fix was wrong at the root, and the guards were the wrong tool
+
+Seventh consecutive review to find real defects, and the one that changed how I am
+working on this file. Two conclusions:
+
+1. **I had been fixing a data-model defect on the screen.** Two stores could hold a
+   rate for one code and the stale one won. Rearranging which inputs render and
+   what the payload omits could not fix that, and twice made it worse — the second
+   attempt turned a wrong-value bug into a permanent two-numbers-on-screen
+   stalemate where both editors reported success and did nothing.
+2. **Source-scanning guards were the wrong tool for a payload.** Four generations,
+   each walked past by a rewrite that changed no behaviour, and one that had been
+   asserting nothing for three of them. The payload needed to be a function with a
+   return value. It is one now, and the scanner is deleted.
+
+| What it found | Status |
+|---|---|
+| **My two-editors fix closed the append case and left the REPLACEMENT case fully alive.** `mergeStatutory` consumes a custom entry in place when its code matches a baseline one — the documented replacement case, four lines above the function I cited. So a custom entry coded `NIS` is still a baseline code, still rendered in the grid, and still had its own row | FIXED AT THE ROOT, not on the screen. `withAdminProvenance` no longer resolves `statutoryRates[code] ?? input` — a custom entry is a COMPLETE definition and owns its rates. Two stores held one fact and the wrong one won; whichever way the inputs are arranged, the model had to say which wins |
+| **Worse: my `statutoryRates` skip created a permanent disagreement.** `update()` MERGES `statutoryRates`, so omission means keep — the stale stored `NIS = 3` survived, beat the custom row's 7, and editing EITHER box then saved successfully and changed nothing, with 3 and 7 both on screen for ever | FIXED — `RulePackService.update` PRUNES any rate a custom entry has taken over, and writes `statutoryRates` whenever either side changed so the prune lands on a save that sent no rates. Three service tests, each failing when the fix is reverted |
+| A removed custom row left an orphaned `statutoryRates` entry that would silently override the levy if it were ever re-added | FIXED by the same prune, which runs against the effective custom list |
+| **`customCodes` used `trim().toUpperCase()` and missed the DTO's space-to-underscore step**, so a code typed "EDUCATION TAX" never matched the stored EDUCATION_TAX and the duplicate input survived the first save — a second hand-written copy of a normalisation rule, which is the same mistake one level down | FIXED — one exported `normaliseCode`, shared by the grid filter and the send path, with tests against every spelling |
+| **Four of five guards bypassable, and the new positive control did not cover the new code.** `unconditionalKeys` caught only the shape the last review used: a nested spread, `Object.assign`, computed keys and a constant condition all passed. Disabling the entire spread-analysis loop left the suite green, because the control only proved the trivial half of the parse ran. The "one fact has one editor" assertion greped for two literals — keep the spellings, empty the meaning, green. The coercion guard escaped via a helper outside the save function. `stringConstants` missed an object field and `String("JMD")` | **REPLACED, not patched a fifth time.** The payload is now `buildRulePackPatch` in `apps/web/lib/rulepack-patch.ts` — a pure function with 12 tests that construct state and read the result. 150 lines of parser I had failed to get right three times are deleted. Precedence and pruning are asserted behaviourally in core and the service. What is left in the source guard is a delegation check: the console must not build a payload inline again, because that is what put these rules beyond reach of a real test |
+| `isHttpUrl`'s comment claimed it matched `z.string().url()`; it is strictly stricter (rejects `ftp:`, `mailto:`, `javascript:`). The custom `code`/`label` length checks ran on the trimmed value while the server's `.max()` runs on the raw one | FIXED — the comment says stricter and why; the custom rows are checked raw because they are SENT raw, while `taxLabel` stays trimmed because it is sent trimmed. Reading the send path rather than assuming it is the whole point |
+
+**Refuted by the reviewer, and worth recording:** the touch-flag re-seed is NOT a
+data-loss path — `update()` returns the upserted row, so a save that omits the
+lists gets the stored ones back. The `verifiedAsOf` regex is weaker than
+`z.string().date()` but unreachable behind `type="date"`. Lowercase codes behave
+correctly in both halves. `importedNames` has no bypass.
+
+**Pre-existing, now registered:** clearing the sources box and saving refills it
+with baseline URLs, because `updated.sources` is the EFFECTIVE list — F62.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |
@@ -1040,6 +1073,7 @@ nothing at all.
 | F59 | **Per-topic source URLs for the rule cards.** `jm.sources` is consumption-tax provenance only, so TAXPAYER ID, REGIONS and PAYMENT RAILS have no honest link and render as text. Each needs a URL recorded by someone who has checked it — inventing one is how the wrong-document defect happened |
 | F60 | ~~A failed rule-pack read looks like "no override".~~ **CLOSED** by the review of `f4bc06d` — see above. |
 | F61 | **No optimistic concurrency on the rule pack.** `statutoryRetired`, `statutoryCustom` and `sources` are complete lists with no `expectedUpdatedAt`, so two staff editing contributions overwrite each other silently. Pre-existing for `sources`; now reachable for contributions too |
+| F62 | **Clearing the sources list refills it from the baseline.** `toEffective` reports the effective `sources` (override, then `sourceUrl`, then the baseline profile), so a save that deliberately empties the box answers with the baseline URLs and the box repopulates with what the admin just deleted. Pre-existing — the same fallback applies at load |
 
 ## Suggested order
 

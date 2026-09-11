@@ -347,156 +347,6 @@ function callArguments(src: string, name: string): string[][] {
 const isStringLiteral = (arg: string): boolean => /^["'`]/.test(arg.trim());
 
 /**
- * The keys at the TOP level of an object literal, with nested objects ignored.
- *
- * `statutoryRetired` inside `...(touched ? { statutoryRetired } : {})` is nested and
- * therefore conditional; the same key written flat is unconditional. The previous
- * guard asserted only that the string `rpContributionsTouched` appeared SOMEWHERE in
- * the file — and it appears in its own `useState` line and in both setter wrappers,
- * so a review reinstated the unconditional send and the suite stayed green. Failure
- * mode (b), on the assertion written to prevent failure mode (b).
- */
-function topLevelKeys(objectLiteral: string): string[] {
-  const keys: string[] = [];
-  let depth = 0;
-  let quote: string | null = null;
-  let line = "";
-  for (let i = 0; i < objectLiteral.length; i++) {
-    const ch = objectLiteral[i]!;
-    if (quote) {
-      if (ch === quote && objectLiteral[i - 1] !== "\\") quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "(" || ch === "[" || ch === "{") {
-      depth++;
-      continue;
-    }
-    if (ch === ")" || ch === "]" || ch === "}") {
-      depth--;
-      continue;
-    }
-    if (depth === 0) {
-      if (ch === ",") {
-        // Shorthand counts. `{ taxLabel, … }` is a key with no colon, and the first
-        // version of this recorded only `key:` forms — so the positive control it
-        // was given (find `taxLabel`) failed, which is how the gap was found. A
-        // shorthand `{ statutoryRetired }` was also on the reviewer's bypass list.
-        pushShorthand(line);
-        line = "";
-        continue;
-      }
-      if (ch === ":") {
-        const key = /([A-Za-z_$][\w$]*)\s*$/.exec(line)?.[1];
-        if (key) keys.push(key);
-        line = "";
-        continue;
-      }
-      line += ch;
-    }
-  }
-  pushShorthand(line); // the final element carries no trailing comma
-
-  function pushShorthand(segment: string): void {
-    const bare = /^\s*([A-Za-z_$][\w$]*)\s*$/.exec(segment)?.[1];
-    if (bare) keys.push(bare);
-  }
-  return keys;
-}
-
-/**
- * Keys an object literal sends UNCONDITIONALLY — top-level keys, plus the keys of
- * any top-level spread that carries no condition of its own.
- *
- * `topLevelKeys` alone was not enough. A review reinstated the data-destroying
- * unconditional send as `...{ statutoryCustom: rpCustom, statutoryRetired: rpRetired }`
- * — a spread of a plain object, which is nested (so the keys were blanked) and
- * unconditional (so the defect was fully present), and left a decoy
- * `...(rpContributionsTouched ? {} : {})` behind to satisfy the "must mention the
- * flag" assertion. All three assertions passed.
- *
- * What actually distinguishes the two shapes is whether the spread has a CONDITION,
- * not whether it is a spread. `...(x ? {k} : {})` does; `...{k}` does not.
- */
-function unconditionalKeys(objectLiteral: string): string[] {
-  // Unwrapped first. `callArguments` returns an object argument WITH its braces, so
-  // passing it straight to `topLevelKeys` put every key at depth 1 and returned an
-  // empty list — which made `expect(keys).not.toContain("statutoryRetired")`
-  // trivially true no matter what the payload did. That is why the previous review's
-  // bypass passed, and it would have passed with the honest code too. The
-  // "found its subjects" assertion below exists because of it.
-  const body = objectLiteral.trim().startsWith("{")
-    ? objectLiteral.trim().slice(1, -1)
-    : objectLiteral;
-  const keys = topLevelKeys(body);
-
-  // Each top-level `...` element, with its own nesting intact.
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = 0; i < body.length - 2; i++) {
-    const ch = body[i]!;
-    if (quote) {
-      if (ch === quote && body[i - 1] !== "\\") quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'" || ch === "`") {
-      quote = ch;
-      continue;
-    }
-    if (ch === "(" || ch === "[" || ch === "{") {
-      depth++;
-      continue;
-    }
-    if (ch === ")" || ch === "]" || ch === "}") {
-      depth--;
-      continue;
-    }
-    if (depth !== 0 || body.slice(i, i + 3) !== "...") continue;
-
-    // The spread's operand, brace/paren matched from the first bracket after `...`.
-    let j = i + 3;
-    while (j < body.length && /\s/.test(body[j]!)) j++;
-    const openCh = body[j];
-    if (openCh !== "{" && openCh !== "(") continue;
-    let d = 0;
-    let end = -1;
-    for (let k = j; k < body.length; k++) {
-      const c = body[k]!;
-      if (c === "{" || c === "(") d++;
-      else if (c === "}" || c === ")") {
-        d--;
-        if (d === 0) {
-          end = k;
-          break;
-        }
-      }
-    }
-    if (end < 0) continue;
-    const operand = body.slice(j, end + 1);
-    // A condition at the operand's own top level makes the spread conditional.
-    const flattened = topLevelText(operand.slice(1, -1));
-    if (/\?|&&|\|\|/.test(flattened)) continue;
-    keys.push(...topLevelKeys(operand.slice(1, -1)));
-  }
-  return keys;
-}
-
-/** The text of a region with every nested bracket group blanked out. */
-function topLevelText(region: string): string {
-  let out = "";
-  let depth = 0;
-  for (const ch of region) {
-    if (ch === "{" || ch === "(" || ch === "[") depth++;
-    out += depth === 0 ? ch : " ";
-    if (ch === "}" || ch === ")" || ch === "]") depth--;
-  }
-  return out;
-}
-
-/**
  * Every name imported from a module, however the import is formatted.
  *
  * Was a regex requiring two-space indentation and a trailing comma. A review emptied
@@ -751,67 +601,51 @@ describe("the console cannot claim a figure it does not have", () => {
     expect(src).toContain("rulePackProblem()");
   });
 
-  it("a complete list is sent only when the admin touched it", () => {
-    // `statutoryRetired` and `statutoryCustom` are COMPLETE lists: an empty one
-    // clears, an absent one leaves alone. Omitting when empty made retirement a
-    // one-way door; sending unconditionally destroyed data, because a swallowed read
-    // reports empty lists in a 200 and one save then wrote that emptiness over
-    // everything stored.
+  it("the payload is built by a tested function, not inline here", () => {
+    // Four generations of assertion lived here, each about the TEXT of an inline
+    // payload: a key must not be top-level, an identifier must appear, a coercion
+    // operator must be absent. A review walked past every one — a nested spread,
+    // `Object.assign`, a computed key, a constant condition, a coercion hoisted a
+    // line up — and one had been asserting nothing at all for three rewrites,
+    // because it parsed an object literal with its braces still on.
     //
-    // `unconditionalKeys` rather than `topLevelKeys`: a review reinstated the
-    // unconditional send as `...{ statutoryCustom, statutoryRetired }` — nested, so
-    // the keys were blanked, and unconditional, so the defect was fully present —
-    // with a decoy `...(flag ? {} : {})` to satisfy the flag check. What separates
-    // the shapes is whether the spread carries a CONDITION.
-    const calls = callArguments(src, "updateAdminRulePack");
-    expect(calls.length, "no updateAdminRulePack call found").toBe(1);
-    const payload = calls[0]![0]!;
-    const unconditional = unconditionalKeys(payload);
-    // Found its subjects. Without this the assertion below was trivially true: the
-    // parse returned an empty list for the whole payload and nobody noticed, through
-    // two reviews. Any guard whose pass depends on a parse must prove the parse
-    // worked.
-    expect(
-      unconditional,
-      "the payload parse found no keys at all — this guard would pass on anything",
-    ).toContain("taxLabel");
-    expect(unconditional).toContain("statutoryRates");
-    for (const key of ["statutoryRetired", "statutoryCustom"]) {
-      expect(
-        unconditional,
-        `${key} is sent unconditionally — an empty list CLEARS it, so gate the send`,
-      ).not.toContain(key);
-      // Still sent somewhere, so this cannot pass by dropping the field entirely,
-      // which would restore the one-way door.
-      expect(payload, `${key} is not sent at all`).toContain(key);
-    }
-    // And the flag is cleared after a save, or it means "touched at some point this
-    // session" and the concurrency path it closes reopens after the first edit.
-    expect(src, "clear the touch flag once the server has the lists").toContain(
-      "setRpContributionsTouched(false)",
-    );
-  });
-
-  it("one fact has one editor", () => {
-    // A levy the admin added is appended to the effective `statutory` list, so it
-    // used to get TWO rate inputs: the statutory grid (mirrored in
-    // `rpForm.statutory`) and its own row under MAINTAIN CONTRIBUTIONS. Both were
-    // sent, and `withAdminProvenance` resolves `rate?.employeePct ?? input.employeePct`
-    // — so the grid's untouched copy won. Editing the levy's own row reported
-    // "Saved ✓", changed nothing, and left two different numbers for one levy on one
-    // screen. This repo's oldest recurring defect: two places holding one fact.
+    // The payload is `buildRulePackPatch` now, with tests that construct state and
+    // read the result (lib/rulepack-patch.test.ts). Those rules cannot be spelled
+    // around because nothing is matching a spelling. All this has left to assert is
+    // that the console still delegates — if it builds a payload inline again, the
+    // tests protecting those rules stop covering the code that runs.
     const body = functionBody(src, "saveRulepack");
     expect(body, "saveRulepack not found").not.toBeNull();
-    expect(
-      body ?? "",
-      "statutoryRates must not carry a code the custom list owns",
-    ).toContain("customCodes.has");
-    // And the grid must not render them either, or the screen still shows one number
-    // twice even though only one of them is now sent.
-    expect(src, "the rate grid must render baseline codes only").toContain(
-      "gridContributions.map",
+    expect(body ?? "", "build the patch with buildRulePackPatch").toContain(
+      "buildRulePackPatch(",
     );
-    expect(src).toMatch(/gridContributions\s*=\s*\(rulepack\?\.statutory/);
+    const calls = callArguments(src, "updateAdminRulePack");
+    expect(calls.length).toBe(1);
+    expect(
+      calls[0]![0]!.trim().startsWith("{"),
+      "an inline object literal is a second copy of the send rules",
+    ).toBe(false);
+  });
+
+  it("the rate grid does not offer a second editor for one rate", () => {
+    // A custom entry coded like a baseline one is consumed IN PLACE by
+    // `mergeStatutory`, so the code stays in the effective list — and the grid then
+    // rendered a second input for a rate the custom row already owns. Two inputs for
+    // one number, and the grid's copy won.
+    //
+    // The first version of this grepped for the literals `customCodes.has` and
+    // `gridContributions.map`. A review kept both spellings, emptied their meaning
+    // (`new Set<string>()`, `.slice()` for `.filter`), and the defect returned green.
+    // Precedence and pruning are asserted behaviourally now — in
+    // `jurisdiction.test.ts`, `rulepack.service.test.ts` and
+    // `rulepack-patch.test.ts` — so this only checks that the grid reads the
+    // filtered list rather than the effective one.
+    for (const effective of ["(rp?.statutory ?? []).map", "(rulepack?.statutory ?? []).map"]) {
+      expect(src, `the grid must not render the whole effective list: ${effective}`).not.toContain(
+        effective,
+      );
+    }
+    expect(src).toContain("gridContributions.map");
   });
 
   it("nothing that looks clickable lacks a handler", () => {

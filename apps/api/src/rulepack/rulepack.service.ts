@@ -236,10 +236,32 @@ export class RulePackService {
     // Merge submitted statutory rates over any already stored, so a partial
     // edit of one contribution doesn't wipe the others.
     const existing = await this.prisma.rulePackConfig.findUnique({ where: { countryCode: cc } });
-    const mergedStatutory = {
+    const mergedStatutory: Record<string, unknown> = {
       ...((existing?.statutoryRates as Record<string, unknown>) ?? {}),
       ...(patch.statutoryRates ?? {}),
     };
+
+    // A rate a custom entry has taken over is PRUNED, not merged.
+    //
+    // `statutoryRates[code]` is a rate for a contribution the baseline defines;
+    // `statutoryCustom` with the same code is a full definition that replaces it, and
+    // core now lets the definition win. Left in place, the stale rate is invisible
+    // junk that reappears the moment the custom entry is removed — and while it is
+    // there, "merge" means a client that stops sending it cannot clear it. Removing a
+    // custom levy and re-adding it later would inherit a rate nobody could see.
+    //
+    // Uses the same normalisation the DTO applies to `code`, which is why it reads
+    // the patch's already-validated values rather than re-deriving them: the console
+    // tried this client-side with `trim().toUpperCase()` and missed the
+    // space-to-underscore step, so "EDUCATION TAX" never matched EDUCATION_TAX.
+    const owned = new Set(
+      (patch.statutoryCustom ?? (existing?.statutoryCustom as { code: string }[] | null) ?? []).map(
+        (c) => c.code,
+      ),
+    );
+    for (const code of owned) delete mergedStatutory[code];
+    const statutoryRatesChanged =
+      patch.statutoryRates !== undefined || patch.statutoryCustom !== undefined;
 
     const data = {
       ...(patch.taxLabel !== undefined ? { taxLabel: patch.taxLabel } : {}),
@@ -252,7 +274,9 @@ export class RulePackService {
       ...(patch.sourceUrl !== undefined
         ? { sourceUrl: patch.sourceUrl ? patch.sourceUrl : null }
         : {}),
-      ...(patch.statutoryRates !== undefined
+      // Written when either side changed: a new custom entry has to be able to
+      // prune the rate it takes over, even on a save that sent no rates at all.
+      ...(statutoryRatesChanged
         ? { statutoryRates: mergedStatutory as Prisma.InputJsonValue }
         : {}),
       // These three REPLACE rather than merge: each is a list the admin edits

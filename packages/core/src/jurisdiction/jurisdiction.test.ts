@@ -171,6 +171,75 @@ describe("applyRulePackOverride — maintaining the pack without a release", () 
     expect(base.statutory.some((s) => s.code === victim)).toBe(true);
   });
 
+  it("a custom entry owns its rates, even for a baseline code", () => {
+    /**
+     * The defect this is the real fix for, after two failed attempts in the console.
+     *
+     * `mergeStatutory` consumes a custom entry IN PLACE when its code matches a
+     * baseline one — that is the documented "replacement" case. But
+     * `withAdminProvenance` resolved `statutoryRates[code] ?? input`, so a rate
+     * entered in the statutory grid beat the entry that defines the contribution.
+     *
+     * On screen: the grid showed 3, the custom row showed 7, the effective rate was
+     * 3, and editing either box saved successfully and changed nothing. I tried to
+     * fix that by rearranging which inputs render and what the payload omits; a
+     * review demonstrated both attempts still broken. It is not a screen problem —
+     * two stores held one fact and the model had to say which wins.
+     */
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [
+        {
+          code: base.statutory[0]!.code,
+          label: "NIS (revised)",
+          appliesTo: "BOTH",
+          employeePct: 7,
+          employerPct: 7,
+        },
+      ],
+      statutoryRates: { [base.statutory[0]!.code]: { employeePct: 3, employerPct: 3 } },
+    });
+
+    const entry = merged.statutory.find((s) => s.code === base.statutory[0]!.code);
+    expect(entry?.employeePct, "the full definition wins, not the rate override").toBe(7);
+    expect(entry?.employerPct).toBe(7);
+    expect(entry?.label).toBe("NIS (revised)");
+    // And it is still ONE row — the replacement is consumed in place.
+    expect(merged.statutory.filter((s) => s.code === base.statutory[0]!.code)).toHaveLength(1);
+  });
+
+  it("a custom entry with no rates reads as unsourced, not as the old rate", () => {
+    // The same precedence, in the direction that matters for honesty: blanking a
+    // custom entry's rates must not silently fall back to a stale `statutoryRates`
+    // value, or the screen shows a figure nobody entered.
+    const merged = applyRulePackOverride(base, {
+      statutoryCustom: [
+        {
+          code: base.statutory[0]!.code,
+          label: "NIS (revised)",
+          appliesTo: "BOTH",
+          employeePct: null,
+          employerPct: null,
+        },
+      ],
+      statutoryRates: { [base.statutory[0]!.code]: { employeePct: 3, employerPct: 3 } },
+    });
+    const entry = merged.statutory.find((s) => s.code === base.statutory[0]!.code);
+    expect(entry?.employeePct).toBeNull();
+    expect(entry?.verified, "nothing was sourced, so nothing is vouched for").toBe(false);
+  });
+
+  it("a statutoryRates entry still applies to a baseline code nobody replaced", () => {
+    // The case the change must NOT break: the grid is still the editor for the four
+    // baseline contributions.
+    const merged = applyRulePackOverride(base, {
+      statutoryRates: { [base.statutory[0]!.code]: { employeePct: 3, employerPct: 2.5 } },
+    });
+    const entry = merged.statutory.find((s) => s.code === base.statutory[0]!.code);
+    expect(entry?.employeePct).toBe(3);
+    expect(entry?.employerPct).toBe(2.5);
+    expect(entry?.verified).toBe(true);
+  });
+
   it("retires a contribution an admin ADDED, not just a baseline one", () => {
     // The defect: `retired` was applied to baseline entries only, and whatever was
     // left in the custom map was appended unconditionally. So retiring a levy the

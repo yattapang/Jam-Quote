@@ -50,6 +50,7 @@ import { logout } from "@/lib/auth-actions";
 import { startImpersonation } from "@/lib/impersonation-actions";
 import { relativeTime } from "@/lib/relative-time";
 import { errorMessage } from "@/lib/error-message";
+import { buildRulePackPatch, normaliseCode } from "@/lib/rulepack-patch";
 import styles from "./console.module.css";
 import type { ApiEnvironment } from "@/lib/api-environment";
 
@@ -394,14 +395,31 @@ export default function AdminConsole({
    * code-only stub if it came from an override that has since gone.
    */
   /**
-   * Contributions shown in the statutory rate grid: baseline codes only.
+   * Codes the custom list owns, normalised the way the SERVER normalises them.
+   *
+   * `normaliseCode` is shared with the send path. The first attempt wrote
+   * `trim().toUpperCase()` inline and missed the DTO's space-to-underscore step, so a
+   * custom code typed "EDUCATION TAX" never matched the stored EDUCATION_TAX and the
+   * grid kept its duplicate input. Two copies of one normalisation rule, which is
+   * the same mistake one level down.
+   */
+  const customOwnedCodes = new Set(rpCustom.map((c) => normaliseCode(c.code)));
+
+  /**
+   * Contributions shown in the statutory rate grid: baseline codes the custom list
+   * has NOT taken over.
+   *
+   * A baseline code CAN be taken over — `mergeStatutory` consumes a matching custom
+   * entry in place, which is the documented replacement case and the one my first fix
+   * here missed. When that happens the custom row is the only editor, and core now
+   * agrees: a full definition owns its rates.
    *
    * A custom levy is edited in its own row under MAINTAIN CONTRIBUTIONS. Rendering it
    * here as well meant two inputs for one number, and the grid's copy silently won —
    * see the `statutoryRates` note in `saveRulepack`.
    */
-  const gridContributions = (rulepack?.statutory ?? []).filter((s) =>
-    jm.statutory.some((b) => b.code === s.code),
+  const gridContributions = (rulepack?.statutory ?? []).filter(
+    (s) => jm.statutory.some((b) => b.code === s.code) && !customOwnedCodes.has(s.code),
   );
 
   const retirableContributions = (() => {
@@ -477,7 +495,15 @@ export default function AdminConsole({
    * Bounds mirror `updateRulePackSchema`: `min(1).max(16)` on the label and
    * `min(0).max(100)` on every rate.
    */
-  /** A full http(s) address, matching the DTO's `z.string().url()`. */
+  /**
+   * A full http(s) address.
+   *
+   * Deliberately STRICTER than the DTO's `z.string().url()`, which accepts
+   * `ftp://`, `mailto:` and `javascript:` — so this never refuses something the
+   * server would take, and a "Source" link a staffer clicks is always a web page.
+   * An earlier version of this comment claimed the two matched, which a review
+   * checked and they do not.
+   */
   function isHttpUrl(value: string): boolean {
     try {
       const u = new URL(value);
@@ -503,6 +529,10 @@ export default function AdminConsole({
     const taxLabel = rpForm.taxLabel.trim();
     if (taxLabel === "")
       return "Tax label is required — it is what every quote and invoice calls the tax.";
+    // Trimmed, because `buildRulePackPatch` sends `taxLabel` trimmed — so the
+    // trimmed length is what the server's `.max(16)` sees. The custom rows below are
+    // sent as typed, so those lengths are checked raw. The distinction is the whole
+    // reason to read the send path rather than assume it.
     if (taxLabel.length > 16) return "Tax label must be 16 characters or fewer.";
 
     const rate = Number(rpForm.defaultTaxRatePct);
@@ -550,9 +580,13 @@ export default function AdminConsole({
     // were all still the server's job to refuse, by array path.
     for (const [i, c] of rpCustom.entries()) {
       if (c.code.trim() === "") return `Contribution #${i + 1} needs a code.`;
-      if (c.code.trim().length > 40) return `Contribution #${i + 1} code is too long (40 max).`;
+      // Raw length, not trimmed: the server's `.max(40)` runs before its transform,
+      // so a 40-character code with a trailing space passes a trimmed check here and
+      // 400s there by array path — which is the message this function exists to
+      // replace.
+      if (c.code.length > 40) return `Contribution #${i + 1} code is too long (40 max).`;
       if (c.label.trim() === "") return `Contribution #${i + 1} needs a name.`;
-      if (c.label.trim().length > 80) return `Contribution #${i + 1} name is too long (80 max).`;
+      if (c.label.length > 80) return `Contribution #${i + 1} name is too long (80 max).`;
       for (const [side, pct] of [
         ["employee", c.employeePct],
         ["employer", c.employerPct],
@@ -569,60 +603,30 @@ export default function AdminConsole({
     setRpSaving(true);
     setRpStatus("idle");
     try {
-      // `statutoryRates` covers BASELINE codes only.
-      //
-      // An admin-added levy is appended to the effective `statutory` list, so it used
-      // to get two rate editors: the statutory grid (mirrored in `rpForm.statutory`)
-      // and its own row under MAINTAIN CONTRIBUTIONS. Both were sent, and
-      // `withAdminProvenance` resolves `rate?.employeePct ?? input.employeePct` — so
-      // the grid's untouched copy won. Editing the levy's own row reported "Saved ✓",
-      // changed nothing, and left two different numbers for one levy on one screen.
-      //
-      // Two places held one fact. The grid no longer renders custom codes at all, and
-      // this refuses to send them even if a future edit puts them back — the levy's
-      // own row is the one editor for a levy the admin added.
-      const customCodes = new Set(rpCustom.map((c) => c.code.trim().toUpperCase()));
-      const statutoryRates: Record<string, { employeePct: number | null; employerPct: number | null }> = {};
-      for (const [code, v] of Object.entries(rpForm.statutory)) {
-        if (customCodes.has(code.toUpperCase())) continue;
-        statutoryRates[code] = {
-          employeePct: v.employeePct.trim() === "" ? null : Number(v.employeePct),
-          employerPct: v.employerPct.trim() === "" ? null : Number(v.employerPct),
-        };
-      }
-      // Refused, not omitted — every field, not just the two I happened to check.
+      // Refused, not omitted — every field, not just the ones I happened to check.
       // The server reads an absent field as "leave unchanged", so any coercion to
-      // `undefined` here reports "Saved" over a value that never moved.
+      // `undefined` reports "Saved" over a value that never moved.
       const problem = rulePackProblem();
       if (problem) {
         setRpError(problem);
         setRpStatus("error");
         return;
       }
-      const taxLabel = rpForm.taxLabel.trim();
-      const updated = await updateAdminRulePack({
-        taxLabel,
-        defaultTaxRatePct: Number(rpForm.defaultTaxRatePct),
-        verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
-        sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
-        statutoryRates,
-        // Complete lists, not patches — see UpdateRulePackInput. Sent, INCLUDING
-        // when empty, only once the admin has touched them: an empty list clears,
-        // and an absent one leaves alone, so the flag is what separates "the admin
-        // removed the last one" from "this save is about a tax rate". See
-        // `rpContributionsTouched` for the two data-loss paths that forced this.
-        ...(rpContributionsTouched
-          ? { statutoryCustom: rpCustom, statutoryRetired: rpRetired }
-          : {}),
-        ...(rpSourcesTouched
-          ? {
-              sources: rpSourcesDraft
-                .split("\n")
-                .map((u) => u.trim())
-                .filter(Boolean),
-            }
-          : {}),
-      });
+      // The payload is built by `buildRulePackPatch`, which is a pure function with
+      // its own tests. It was inline here through four reviews and three defects,
+      // all about which fields are sent and which are omitted — and the only way to
+      // assert anything about it was to scan this file's text, which I got wrong
+      // four times. See lib/rulepack-patch.ts.
+      const updated = await updateAdminRulePack(
+        buildRulePackPatch({
+          form: rpForm,
+          custom: rpCustom,
+          retired: rpRetired,
+          contributionsTouched: rpContributionsTouched,
+          sourcesTouched: rpSourcesTouched,
+          sourcesDraft: rpSourcesDraft,
+        }),
+      );
       setRulepack(updated);
       setRpForm(rpToForm(updated));
       // Re-seeded from the RESPONSE, and the touch flags cleared.

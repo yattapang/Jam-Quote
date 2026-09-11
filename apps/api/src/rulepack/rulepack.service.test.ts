@@ -64,6 +64,125 @@ describe("RulePackService.get", () => {
   });
 });
 
+describe("RulePackService.update — a custom entry takes over its rate", () => {
+  /**
+   * Two stores could hold a rate for one code, and the stale one used to win.
+   *
+   * `statutoryRates[code]` is a rate for a contribution the baseline defines;
+   * `statutoryCustom` with the same code is a full definition. Core now lets the
+   * definition win, and this prunes the store it displaced — otherwise the rate is
+   * invisible junk that reappears when the custom entry is removed, and "merge"
+   * means a client that stops sending it can never clear it.
+   */
+  function upsertData(prisma: { rulePackConfig: { upsert: ReturnType<typeof vi.fn> } }) {
+    return prisma.rulePackConfig.upsert.mock.calls[0]![0]!.update as Record<string, unknown>;
+  }
+
+  it("prunes a stored rate when a custom entry claims the code", async () => {
+    const { svc, prisma } = make({
+      findUnique: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        statutoryRates: { NIS: { employeePct: 3, employerPct: 3 }, NHT: { employeePct: 2 } },
+        statutoryCustom: null,
+        statutoryRetired: [],
+        sources: [],
+      }),
+      upsert: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        taxLabel: null,
+        defaultTaxRatePct: null,
+        verifiedAsOf: null,
+        sourceUrl: null,
+        statutoryRates: {},
+        statutoryCustom: [],
+        statutoryRetired: [],
+        sources: [],
+        updatedByUserId: "u1",
+        updatedAt: new Date("2026-09-11T00:00:00.000Z"),
+      }),
+    });
+
+    await svc.update(
+      "JM",
+      {
+        statutoryCustom: [
+          { code: "NIS", label: "NIS (revised)", appliesTo: "BOTH", employeePct: 7, employerPct: 7 },
+        ],
+      },
+      "u1",
+    );
+
+    const rates = upsertData(prisma).statutoryRates as Record<string, unknown>;
+    expect(rates, "the displaced rate is gone").not.toHaveProperty("NIS");
+    // And the contribution nobody replaced keeps its rate.
+    expect(rates).toHaveProperty("NHT");
+  });
+
+  it("writes statutoryRates even when the save carried none, so the prune lands", async () => {
+    // The subtle half: a save that only adds a custom entry sends no rates at all.
+    // Gating the write on `patch.statutoryRates !== undefined` would skip the prune
+    // and leave the stale rate in charge — which is exactly how the console fix
+    // failed before this.
+    const { svc, prisma } = make({
+      findUnique: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        statutoryRates: { NIS: { employeePct: 3 } },
+        statutoryCustom: null,
+        statutoryRetired: [],
+        sources: [],
+      }),
+      upsert: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        taxLabel: null,
+        defaultTaxRatePct: null,
+        verifiedAsOf: null,
+        sourceUrl: null,
+        statutoryRates: {},
+        statutoryCustom: [],
+        statutoryRetired: [],
+        sources: [],
+        updatedByUserId: "u1",
+        updatedAt: new Date("2026-09-11T00:00:00.000Z"),
+      }),
+    });
+
+    await svc.update(
+      "JM",
+      { statutoryCustom: [{ code: "NIS", label: "NIS", appliesTo: "BOTH" }] },
+      "u1",
+    );
+    expect(upsertData(prisma)).toHaveProperty("statutoryRates");
+  });
+
+  it("leaves rates alone when neither side changed", async () => {
+    const { svc, prisma } = make({
+      findUnique: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        statutoryRates: { NIS: { employeePct: 3 } },
+        statutoryCustom: null,
+        statutoryRetired: [],
+        sources: [],
+      }),
+      upsert: vi.fn().mockResolvedValue({
+        countryCode: "JM",
+        taxLabel: "GCT",
+        defaultTaxRatePct: null,
+        verifiedAsOf: null,
+        sourceUrl: null,
+        statutoryRates: { NIS: { employeePct: 3 } },
+        statutoryCustom: null,
+        statutoryRetired: [],
+        sources: [],
+        updatedByUserId: "u1",
+        updatedAt: new Date("2026-09-11T00:00:00.000Z"),
+      }),
+    });
+
+    await svc.update("JM", { taxLabel: "GCT" }, "u1");
+    expect(upsertData(prisma)).not.toHaveProperty("statutoryRates");
+  });
+});
+
 describe("RulePackService.get — a failed read is not an absence", () => {
   /**
    * The distinction this asserts, and why it is worth a test.
