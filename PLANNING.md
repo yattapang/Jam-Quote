@@ -1956,7 +1956,12 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F31, F32 | Numeric inputs accepted what the DTO refuses. `BOUNDS` in core is now the single definition the DTO and the form both spend |
 | F17, F18, F19, F20, F52 | The admin console reported facts the API never sent: an all-time quote count labelled "This month", a drawer pill reading a column only ever written "active", a "subscriptions" tile counting rows staff had touched, and an unconditional "Verified" badge under a banner saying nothing was verified. F52 replaces the honesty test's denylist of already-deleted strings with four assertions about classes of fabrication |
 
-**Every one of the eleven reviews found something.** Three times a regression the
+**Every one of the twelve reviews found something.** The twelfth found that a fix I
+had reported as done was not done at all, and that three of the four assertions I had
+written to prevent its class were defeatable — which it proved by writing the defects
+and watching the suite go green. The lesson is narrower than "review everything": a
+guard that asks whether evidence exists NEARBY reports on the file's average density,
+not on the element in front of it. Parse the thing you are judging. Three times a regression the
 fix itself introduced; twice a fix applied to the surface the finding named and not
 its twin; twice a guard that passed on nothing. Treat "done" as provisional until a
 reviewer that did not write it has attacked it.
@@ -1966,11 +1971,6 @@ import line rather than a call; a compile-time check I deleted while adding a
 runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
-
-**First thing next session:** commit `127380f` is pushed but its independent review
-was stopped at the session limit before it reported. F17/F18/F19/F20/F52 are marked
-FIXED on my word alone. See "Review owed — START THE NEXT SESSION HERE" in
-REVIEW-FINDINGS.md for the five things that review was asked to attack.
 
 **Remaining order:** the rest of the admin console — F21 (retiring a statutory
 contribution is one-way and inert for custom entries), the remaining F38 dead

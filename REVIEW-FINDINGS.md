@@ -428,8 +428,8 @@ core 285, api 681, web 462, mobile 28.
 | F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | **CLOSED** |
 | F17 `[reviewed]` | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | FIXED — the duplicated slot is gone (`TenantRow` is 8 elements), and the drawer shows one metric, "Quotes created (all time)", matching what the API sends. |
 | F18 `[reviewed]` | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | FIXED — the drawer derives its pill from `subscriptionStanding({plan, interval, renewsAt})` through `STANDING_PILL`, now lifted to module scope so the table and the drawer cannot disagree. |
-| F19 `[reviewed]` | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | FIXED — the tile is "Paying tenants" from `financials.proCount`. |
-| F20 `[reviewed]` | **Every rule card says "Verified" unconditionally**, beneath a red banner saying no one has confirmed the figures against a source, and above its own footer saying "Unverified · core baseline". A staffer scanning badges concludes the tax rate is sourced. The payroll table's badge *is* real. | `AdminConsole.tsx:1393` | FIXED — the badge is conditional on `c.provenance.startsWith("Code-owned")`, reading "Code-owned" or "Needs review". |
+| F19 `[reviewed]` | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | FIXED — the tile reads `financials.proCount`, labelled **"Pro tenants"**. "Paying" was the label on the first attempt and a review called it an overstatement: `proCount` applies no payment or standing test, so it includes past-due tenants and pro rows with `renewsAt: null`. The Financials screen already used "Pro", so the two screens now agree. |
+| F20 `[reviewed]` | **Every rule card says "Verified" unconditionally**, beneath a red banner saying no one has confirmed the figures against a source, and above its own footer saying "Unverified · core baseline". A staffer scanning badges concludes the tax rate is sourced. The payroll table's badge *is* real. | `AdminConsole.tsx:1393` | FIXED (**second attempt** — the first was wrong, see below). Each card now carries a `badge: { text, tone }` built beside the value it describes: the editable tax card from `rulePackVerification(verifiedEff)`, the code-owned cards from a named constant in the neutral `info` tone rather than the accent pill that used to say "Verified ✓". |
 | F21 `[reviewed]` | **Retiring a statutory contribution is one-way, and retiring a *custom* one silently does nothing.** (a) The client omits the empty list, so a retirement can never be cleared, and the chip row cannot offer it back — while the comment promises "the decision reverses". (b) `mergeStatutory` applies the retired filter to baseline entries only; custom ones are appended unconditionally, so it reports success and the levy is still in the payroll table. | `AdminConsole.tsx:284-285,233`, `jurisdiction.ts:271,295` | OPEN |
 | F22 | **`labourLabel` drops `unitLabel`.** Its sibling `equipmentLabel`, four lines up, gets it right. The dropdown reads "$300.00/**unit**" while picking it correctly stamps "sq ft" on the row — label and value disagree. This is the regression `437c235` was committed to fix. | `JobForm.tsx:137` | OPEN |
 | F23 | **`normalizeUnitLabel` is called from one write path out of four.** A material unit typed `m2` becomes `m²`; a *labour rate* typed `m2` stays `m2` and prints "30 m2" on the client's quote. The field's placeholder asks for a character the contractor cannot type, on the path that does not normalise it. | `material-schema.service.ts:234` only; `catalogs.dto.ts:12,39,105` | OPEN |
@@ -856,32 +856,34 @@ Worth as much as the findings, and the reason the list above is credible.
 | `admin.service.ts:253` `_count` now includes tombstones | OPEN — also queued as a question for the `127380f` review, since the "Paying tenants" tile reads a figure from the same service |
 | `nextRenewal` duplicates term logic | OPEN |
 
-## Review owed — START THE NEXT SESSION HERE
+## The review of `127380f` — five confirmed defects, three of them in my own guard
 
-`127380f` (admin console: F17, F18, F19, F20, F52, part of F38) is committed and
-pushed but **NOT independently reviewed**. The review was launched and stopped at the
-session limit before it reported anything, so those rows are marked FIXED on my word
-alone — which the standing rule says is not enough, and which eleven reviews in a row
-have shown to be optimistic.
+The review ran and **found something in every category it was asked about**, including
+that F20 was not fixed at all. The pattern is the one this register keeps recording: I
+wrote a check that asked whether evidence existed NEARBY instead of whether the thing
+in front of it was correct.
 
-What that review was asked to attack, so it need not be re-derived:
+| What it found | Status |
+|---|---|
+| **F20 was not fixed.** The badge branched on `provenance.startsWith("Code-owned")` — a proxy for "is this provenance string a hardcoded literal". Three cards hold that literal; the fourth holds `taxProv`, which begins "Verified" or "Unverified" and so could never match. The one card with a real verification state read "Needs review" fifteen lines above its own footer reading "Verified 2026-07-10", for ever, including immediately after a staffer clicked "Mark verified today" | FIXED properly. The badge is built beside the value it describes, from `rulePackVerification`. Code-owned cards get `info`, not the accent pill |
+| **A live F17-class survivor the new guard could not see:** `label: "Applied (YTD)"` over `regulatoryUpdate.findMany` with no date predicate and `regStatusOf` with no year filter. An entry reviewed in 2024 counts toward "YTD" | FIXED — the label is "Applied", and the guard now scans for a CLASS of window words instead of four hand-listed strings |
+| **The pointer-cursor assertion was defeated by `disabled=`** — demonstrated, not theorised. The reviewer re-added the exact F38 defect, dropped a handler-less `<input disabled={true} />` above it, and the suite went green. The evidence did not even have to be on the same element | FIXED — it parses the enclosing open tag and requires the handler ON that tag. `disabled=` is no longer evidence of anything |
+| **The Verified-badge assertion was satisfied by any `?` in the preceding 200 chars.** Wrapping an unconditional badge in `<span style={{ marginLeft: c.label ? 4 : 0 }}>` restored F20 verbatim, green | FIXED — nested brace groups are blanked, so only a ternary at the top level of the badge's own expression counts |
+| **The status assertion was a name denylist, and the column was still plumbed.** `t.status` was still loaded into `TenantRow[4]` and discarded with `void status`; any new pill under a different identifier would reproduce F18 and pass | FIXED — the slot is DELETED (`TenantRow` is 7 elements) and the assertion is on the field, not on its consumers' names |
+| "Paying tenants" overstated by the past-due population | FIXED — "Pro tenants" |
+| The drawer's metrics grid was a fixed `1fr 1fr` with one card, rendering half-width | FIXED — the columns follow the metric count |
+| The new block read `process.cwd()` while the original used `__dirname` | FIXED — one `SOURCE` for the whole file |
+| The drawer's "Quotes created (all time)" counts soft-deleted quotes (`admin.service.ts:253`) | OPEN — pre-existing, and "created" is arguably literal, but it is the tombstone issue in the metric this commit re-labelled as authoritative |
 
-1. Whether each fix reached every instance or only the one the finding named — any
-   other read of the always-"active" status column, any other unconditional Verified
-   badge, any other metric labelled with a window the API does not send.
-2. Whether the column grid is still coherent after F17 removed a slot: `TenantRow`
-   went 9 -> 8 elements, and a header with 9 labels over 8 cells mislabels every
-   column silently.
-3. Whether `financials.proCount` really means "paying tenants" — read its derivation
-   in `admin.service.ts`, where a `_count` is known to include soft-deleted
-   tombstones.
-4. Whether F52's four assertions are real: for each, construct the defect it claims
-   to catch and confirm it FAILS if the matching fix is reverted. In particular,
-   accepting `disabled=` as evidence of a handler may be a hole that lets a
-   genuinely dead disabled-looking element through.
-5. Any regression the change introduced — `subscriptionStanding` fed the wrong field,
-   the drawer showing another tenant's data, a pill colour key absent from
-   `STANDING_PILL`.
+**Confirmed clean:** the column grid after F17 (7 `<th>`, 7 `<td>`, all read by explicit
+index, nothing else consuming a 9-tuple); F18 twins (one remaining read of
+`AdminTenant.status`, now deleted); other unconditional Verified badges (the payroll
+table's two are genuinely conditional); drawer regressions (the `find` by id is
+equivalent to the table's index lookup because `tenantIds` is the same array).
+
+**The guards now carry the defeats as tests.** A second `describe` block holds the
+three bypasses the reviewer demonstrated, as assertions that they no longer work —
+because the useful thing a defeated guard leaves behind is the defeat.
 
 ## Suggested order
 

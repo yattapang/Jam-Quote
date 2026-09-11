@@ -117,7 +117,17 @@ function detailsPreview(details: unknown): string {
   }
 }
 
-type TenantRow = [string, string, string, string, string, string, number | string, number];
+/**
+ * One row of the tenants table.
+ *
+ * `Subscription.status` is deliberately NOT here. It is written the literal "active"
+ * by both places that write it and never updated again — the sweep's revert sets
+ * `plan` and leaves `status` alone — so every consumer of it was asserting a healthy
+ * account. It used to be carried in this tuple and discarded with `void status`,
+ * which kept a dead field one edit away from being read again; standing is derived
+ * from the term instead, by `subscriptionStanding`.
+ */
+type TenantRow = [string, string, string, string, string, number | string, number];
 
 /**
  * One mapping from standing to pill, at module scope so the table and the drawer
@@ -565,7 +575,14 @@ export default function AdminConsole({
       // It also ignores Business.deletedAt while the tile beside it filters it. So
       // it meant "tenants a staff member has clicked the plan control on".
       // `financials.proCount` is the honest figure and was two clicks away.
-      label: "Paying tenants",
+      //
+      // "Pro tenants", not "Paying tenants": `proCount` is businesses on the pro
+      // plan with no payment or standing test, so it includes the past-due ones and
+      // the ones with `renewsAt: null` that the table itself flags as "no term set".
+      // A review caught the overstatement — the overview would read 10 while the
+      // Financials screen read "Past due: 3" for the same instant. It is also the
+      // name the Financials screen already uses, so the two screens now agree.
+      label: "Pro tenants",
       value: data.financials ? String(data.financials.proCount) : "—",
     },
     {
@@ -594,7 +611,6 @@ export default function AdminConsole({
     t.parish ?? "—",
     t.plan,
     formatTrn(t.trn) || "—",
-    t.status,
     relativeTime(t.createdAt),
     "—",
     t.quoteCount,
@@ -650,16 +666,31 @@ export default function AdminConsole({
   const regStats = [
     { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
     { value: String(regChanges.filter((r) => r[4] === "monitoring").length), label: "Monitoring", tone: "info" },
-    { value: String(regChanges.filter((r) => r[4] === "applied").length), label: "Applied (YTD)", tone: "good" },
+    // "Applied", not "Applied (YTD)". `GET /admin/regulatory` has no date
+    // predicate and `regStatusOf` keys off `reviewedAt` with no year filter, so an
+    // entry reviewed in 2024 counts here. This is the F17 class: a window in the
+    // label that the query does not apply.
+    { value: String(regChanges.filter((r) => r[4] === "applied").length), label: "Applied", tone: "good" },
   ];
 
   // rule-pack — the editable consumption-tax + provenance + statutory rates come
   // from the effective pack (GET /admin/rulepack; live `rulepack` state); the
   // code-owned values (taxpayer id, regions, payment rails) stay from core `jm`.
+  /**
+   * What a rule card's badge says, and in what tone.
+   *
+   * The badge is computed HERE, beside the fact it describes, because the first
+   * attempt at this fix branched on `provenance.startsWith("Code-owned")` at the
+   * render site — a proxy for "is this provenance string a hardcoded literal". Three
+   * cards hold that literal; the fourth holds `taxProv`, which begins "Verified" or
+   * "Unverified" and so could never match. The result was a badge reading "Needs
+   * review" fifteen lines above a footer reading "Verified 2026-07-10", on the one
+   * card that has a real verification state, for ever — including right after a
+   * staffer clicked "Mark verified today".
+   */
+  type RuleBadge = { text: string; tone: "good" | "warn" | "critical" | "info" };
+  /** The payroll table's badge, which has always been conditional on `p.verified`. */
   const verified = pill("accent", { padding: "3px 10px" });
-  // A card whose figure is editable has not been verified by anyone until a staffer
-  // says so, and the badge must not claim otherwise. See the conditional below.
-  const unverified = pill("warn", { padding: "3px 10px" });
   const rp = rulepack; // effective pack, or null when the API was unreachable
   const taxLabelEff = rp?.taxLabel ?? jm.taxLabel;
   const taxRateEff = rp?.defaultTaxRatePct ?? jm.defaultTaxRatePct;
@@ -677,11 +708,20 @@ export default function AdminConsole({
         : "good";
   // The pack's own source first, then the jurisdiction baseline's, de-duped.
   const rpSources = [...new Set([sourceEff, ...jm.sources].filter((u): u is string => !!u))];
+  /**
+   * A code-owned value is not "verified" — nobody checked it against a source — it
+   * is simply not editable here. It gets the neutral `info` tone rather than the
+   * accent pill that used to say "Verified ✓", because the misread F20 described was
+   * of the COLOUR as much as of the word.
+   */
+  const codeOwnedBadge: RuleBadge = { text: "Code-owned", tone: "info" };
+  /** The editable card's badge, from the same verification state as its footer. */
+  const taxBadge: RuleBadge = { text: rpVerify.label, tone: rpVerifyTone };
   const ruleCards = [
-    { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, sourceLink: sourceEff ? "Source" : "TAJ", chips: [] as string[] },
-    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", sourceLink: "TAJ", chips: [] as string[] },
-    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", sourceLink: "Gov.jm", chips: [...jm.regions] },
-    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", sourceLink: "BOJ", chips: [] as string[] },
+    { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, badge: taxBadge, sourceLink: sourceEff ? "Source" : "TAJ", chips: [] as string[] },
+    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "TAJ", chips: [] as string[] },
+    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "Gov.jm", chips: [...jm.regions] },
+    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "BOJ", chips: [] as string[] },
   ];
   // Payroll statutory rates now come from the effective pack (admin-editable);
   // fall back to the core item list (rates unset) when the API was unreachable.
@@ -1029,7 +1069,7 @@ export default function AdminConsole({
                               {suspended && <span style={pill("critical")}>Suspended</span>}
                             </div>
                           </td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[5]}</td>
+                          <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[4]}</td>
                           <td style={{ ...td, textAlign: "right" }} className={styles.actionsCell} onClick={(e) => e.stopPropagation()}>
                             {id && canManageTenants ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -1415,15 +1455,11 @@ export default function AdminConsole({
                   <div key={c.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                       <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)" }}>{c.label}</div>
-                      {/* Conditional. This said "Verified ✓" on every card,
-                          unconditionally — beneath a red banner warning that nobody
-                          had confirmed the figures, and above a footer that could read
-                          "Unverified · core baseline". A staffer scanning badges
-                          concluded the tax rate was sourced. The payroll table below
-                          has always got this right (`p.verified ? ... : ...`). */}
-                      <span style={c.provenance.startsWith("Code-owned") ? verified : unverified}>
-                        {c.provenance.startsWith("Code-owned") ? "Code-owned" : "Needs review"}
-                      </span>
+                      {/* `c.badge` is built beside the value it describes, so this
+                          cannot disagree with the footer below it. This said
+                          "Verified ✓" on every card, unconditionally — beneath a red
+                          banner warning that nobody had confirmed the figures. */}
+                      <span style={pill(c.badge.tone, { padding: "3px 10px" })}>{c.badge.text}</span>
                     </div>
                     <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", lineHeight: 1.05 }}>{c.value}</div>
                     <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>{c.detail}</div>
@@ -1563,7 +1599,7 @@ export default function AdminConsole({
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em" }}>{financials ? financials.freeCount.toLocaleString() : "—"}</div>
                 </div>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Pro businesses</div>
+                  <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginBottom: 9 }}>Pro tenants</div>
                   <div style={{ ...archivo, fontWeight: 700, fontSize: 26, letterSpacing: "-.02em", color: "var(--good)" }}>{financials ? financials.proCount.toLocaleString() : "—"}</div>
                 </div>
                 <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)" }}>
@@ -1910,7 +1946,7 @@ function TenantDrawer({
   // came from the hardcoded per-plan table that was removed for inventing
   // figures, and reinstating it here would put two different numbers for the
   // same tenant on one screen.
-  const [name, parish, plan, trn, status, , , q] = raw;
+  const [name, parish, plan, trn, , , q] = raw;
   // Derived from the renewal date, exactly as the tenants table does it. This used
   // to read `Subscription.status`, which is written the literal "active" in both
   // places that write it and never updated again — the sweep's revert sets `plan`
@@ -1925,7 +1961,6 @@ function TenantDrawer({
       renewsAt: tenant?.renewsAt ?? null,
     })
   ];
-  void status;
   const init = name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   // Real tenants arrive as lowercase "free"/"pro" while the mock rows are
   // already capitalized, so every lookup below is keyed off the normalized
@@ -2003,7 +2038,10 @@ function TenantDrawer({
           <button className={styles.iconBtn} onClick={onClose} style={{ width: 30, height: 30, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
         <div style={{ padding: "18px 22px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+          {/* Columns follow the number of metrics. It was a fixed 1fr 1fr, which
+              left the single surviving card rendering half-width with a gap beside
+              it where the deleted fabrication used to be. */}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(metrics.length, 2)}, 1fr)`, gap: 10, marginBottom: 18 }}>
             {metrics.map((m) => (
               <div key={m.label} style={{ background: "var(--surface-alt)", border: "1px solid var(--border)", borderRadius: 11, padding: "12px 13px" }}>
                 <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{m.label}</div>
