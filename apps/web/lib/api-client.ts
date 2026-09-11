@@ -88,7 +88,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export const apiClient = {
+/**
+ * NOT exported. Every request goes through a named function in this file.
+ *
+ * `patch` takes `body?: unknown`, so while this was exported any caller could send a
+ * hand-built object to any endpoint with no type friction — including
+ * `PATCH /admin/rulepack`, whose payload rules have caused three data defects. The
+ * branded `RulePackPatch` guarded `updateAdminRulePack` and a review pointed out it
+ * guarded only that one door. This closes the other.
+ */
+const apiClient = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
@@ -1310,13 +1319,22 @@ export interface UpdateRulePackInput {
  * past; the last was defeated by a dead `buildRulePackPatch(...)` call left for the
  * scanner to find while a hand-built object went to this function.
  *
- * The brand ends that argument: an inline object literal does not typecheck.
+ * `RulePackPatch` is a CLASS with a private member, which is what makes the check
+ * nominal. The first version was an intersection with a phantom property, and a
+ * review got past it two ways: spreading a real patch and overriding a field, and
+ * `Object.assign` onto one. Both kept the phantom property while replacing the field
+ * that matters — `statutoryRetired: []` is a REPLACE, so it wipes every stored
+ * retirement. A class cannot be spread into existence, and the body sits behind a
+ * getter, so mutating the wrapper does not reach what is sent.
+ *
+ * The other door is closed too: `apiClient` is no longer exported, so nothing can
+ * reach this endpoint with a hand-built body.
  */
 export async function updateAdminRulePack(
   input: RulePackPatch,
   country = "JM",
 ): Promise<EffectiveRulePack> {
-  return apiClient.patch<EffectiveRulePack>(`/admin/rulepack?country=${country}`, input);
+  return apiClient.patch<EffectiveRulePack>(`/admin/rulepack?country=${country}`, input.body);
 }
 
 /**

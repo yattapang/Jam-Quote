@@ -1603,10 +1603,10 @@ export default function AdminConsole({
                       {gridContributions.map((s) => (
                         <div key={s.code} style={{ display: "contents" }}>
                           <div className={styles.statutoryLabel}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
-                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${s.code} employee rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employeePct", e.target.value)}
                             style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
-                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${s.code} employer rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employerPct", e.target.value)}
                             style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
                         </div>

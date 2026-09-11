@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildRulePackPatch,
+  RulePackPatch,
   gridContributionCodes,
   normaliseCode,
   rulePackProblem,
@@ -46,7 +47,7 @@ describe("the complete lists are sent only when edited", () => {
     // The data-loss path: a failed rule-pack read reports empty override lists in a
     // 200, so a tax-rate-only save must not carry them. An absent list leaves the
     // stored one alone.
-    const patch = buildRulePackPatch(base);
+    const patch = buildRulePackPatch(base).body;
     expect(patch).not.toHaveProperty("statutoryCustom");
     expect(patch).not.toHaveProperty("statutoryRetired");
   });
@@ -54,7 +55,7 @@ describe("the complete lists are sent only when edited", () => {
   it("sends them EMPTY once touched, so the last entry can be removed", () => {
     // The opposite defect: omitting an empty list made retirement a one-way door —
     // un-retiring the last contribution sent nothing and reported "Saved".
-    const patch = buildRulePackPatch({ ...base, contributionsTouched: true });
+    const patch = buildRulePackPatch({ ...base, contributionsTouched: true }).body;
     expect(patch.statutoryRetired).toEqual([]);
     expect(patch.statutoryCustom).toEqual([]);
   });
@@ -65,21 +66,21 @@ describe("the complete lists are sent only when edited", () => {
       contributionsTouched: true,
       retired: ["HEART"],
       custom: [{ code: "CESS", label: "Parish cess", appliesTo: "BOTH", employeePct: 1 }],
-    });
+    }).body;
     expect(patch.statutoryRetired).toEqual(["HEART"]);
     expect(patch.statutoryCustom).toHaveLength(1);
   });
 
   it("treats sources the same way, by its own flag", () => {
-    expect(buildRulePackPatch(base)).not.toHaveProperty("sources");
+    expect(buildRulePackPatch(base).body).not.toHaveProperty("sources");
     const touched = buildRulePackPatch({
       ...base,
       sourcesTouched: true,
       sourcesDraft: " https://a.example/x \n\n https://b.example/y ",
     });
-    expect(touched.sources).toEqual(["https://a.example/x", "https://b.example/y"]);
+    expect(touched.body.sources).toEqual(["https://a.example/x", "https://b.example/y"]);
     // Cleared deliberately is not the same as untouched.
-    expect(buildRulePackPatch({ ...base, sourcesTouched: true, sourcesDraft: "" }).sources).toEqual(
+    expect(buildRulePackPatch({ ...base, sourcesTouched: true, sourcesDraft: "" }).body.sources).toEqual(
       [],
     );
   });
@@ -96,7 +97,7 @@ describe("a custom entry owns its code's rate", () => {
       custom: [
         { code: "NIS", label: "NIS (revised)", appliesTo: "BOTH", employeePct: 7, employerPct: 7 },
       ],
-    });
+    }).body;
     expect(patch.statutoryRates).not.toHaveProperty("NIS");
     // The contribution nobody replaced keeps its rate.
     expect(patch.statutoryRates).toHaveProperty("NHT");
@@ -115,13 +116,13 @@ describe("a custom entry owns its code's rate", () => {
         },
         contributionsTouched: true,
         custom: [{ code: typed, label: "Education Tax", appliesTo: "BOTH" }],
-      });
+      }).body;
       expect(patch.statutoryRates, typed).not.toHaveProperty("EDUCATION_TAX");
     }
   });
 
   it("keeps the rate when no custom entry claims it", () => {
-    const patch = buildRulePackPatch({ ...base, contributionsTouched: true });
+    const patch = buildRulePackPatch({ ...base, contributionsTouched: true }).body;
     expect(patch.statutoryRates).toEqual({
       NIS: { employeePct: 3, employerPct: 3 },
       NHT: { employeePct: 2, employerPct: 3 },
@@ -136,7 +137,7 @@ describe("no field is coerced into an omission", () => {
     // absent field as "leave unchanged", so the screen said "Saved" over a value
     // that never moved — and the form then repainted the old value, which looks like
     // the number reverting by itself. The caller refuses instead; this always sends.
-    const patch = buildRulePackPatch(base);
+    const patch = buildRulePackPatch(base).body;
     for (const key of ["taxLabel", "defaultTaxRatePct", "verifiedAsOf", "sourceUrl"] as const) {
       expect(patch, key).toHaveProperty(key);
       expect(patch[key], key).not.toBeUndefined();
@@ -149,7 +150,7 @@ describe("no field is coerced into an omission", () => {
     const patch = buildRulePackPatch({
       ...base,
       form: { ...base.form, verifiedAsOf: "  ", sourceUrl: "" },
-    });
+    }).body;
     expect(patch.verifiedAsOf).toBeNull();
     expect(patch.sourceUrl).toBeNull();
   });
@@ -158,7 +159,7 @@ describe("no field is coerced into an omission", () => {
     const patch = buildRulePackPatch({
       ...base,
       form: { ...base.form, statutory: { NIS: { employeePct: "", employerPct: "3" } } },
-    });
+    }).body;
     expect(patch.statutoryRates?.NIS).toEqual({ employeePct: null, employerPct: 3 });
   });
 
@@ -166,7 +167,7 @@ describe("no field is coerced into an omission", () => {
     const patch = buildRulePackPatch({
       ...base,
       form: { ...base.form, taxLabel: "  GCT  ", sourceUrl: "  https://x.example/y  " },
-    });
+    }).body;
     expect(patch.taxLabel).toBe("GCT");
     expect(patch.sourceUrl).toBe("https://x.example/y");
   });
@@ -199,7 +200,7 @@ describe("rulePackProblem judges what will be sent", () => {
     };
     expect(rulePackProblem(edits, false)).toBeNull();
     // And the value really is not sent, so nothing was let through either.
-    expect(buildRulePackPatch(edits).statutoryRates).not.toHaveProperty("NIS");
+    expect(buildRulePackPatch(edits).body.statutoryRates).not.toHaveProperty("NIS");
   });
 
   it("still refuses an out-of-range rate the patch WILL carry", () => {
@@ -243,7 +244,7 @@ describe("rulePackProblem judges what will be sent", () => {
   it("checks taxLabel TRIMMED, because that is how it is sent", () => {
     const padded = "  " + "G".repeat(16) + "  ";
     expect(rulePackProblem({ ...base, form: { ...base.form, taxLabel: padded } }, false)).toBeNull();
-    expect(buildRulePackPatch({ ...base, form: { ...base.form, taxLabel: padded } }).taxLabel)
+    expect(buildRulePackPatch({ ...base, form: { ...base.form, taxLabel: padded } }).body.taxLabel)
       .toHaveLength(16);
   });
 
@@ -330,5 +331,75 @@ describe("gridContributionCodes", () => {
   it("never invents a code the baseline does not define", () => {
     // A stale override entry must not produce a grid row with no baseline meaning.
     expect(gridContributionCodes([{ code: "GONE" }], baseline, [])).toEqual([]);
+  });
+});
+
+describe("the wrapper is the guard", () => {
+  it("mutating the wrapper does not change what is sent", () => {
+    // `Object.assign(patch, { statutoryRetired: [] })` still TYPECHECKS — it returns
+    // the same instance — but the body is behind a getter, so the override lands on
+    // the wrapper and never reaches the wire. That matters because
+    // `statutoryRetired: []` is a REPLACE on the server: it wipes every stored
+    // retirement. A review used exactly this against the previous phantom-property
+    // brand, where it did reach the payload.
+    const patch = buildRulePackPatch(base);
+    Object.assign(patch, { statutoryRetired: [], statutoryCustom: [] });
+    expect(patch.body).not.toHaveProperty("statutoryRetired");
+    expect(patch.body).not.toHaveProperty("statutoryCustom");
+  });
+
+  it("a spread of a patch is not a patch", () => {
+    // The other bypass, and this one is a compile error rather than a runtime fact —
+    // a plain object cannot satisfy a class with a private member. Asserted here as
+    // a runtime shape too, so the reason survives a refactor of the type.
+    const spread = { ...buildRulePackPatch(base) };
+    expect(spread instanceof RulePackPatch).toBe(false);
+  });
+
+  it("every scalar survives the round trip through the wrapper", () => {
+    // The getter must hand back what was built, not a copy that drops fields.
+    const patch = buildRulePackPatch({ ...base, contributionsTouched: true });
+    expect(patch.body.taxLabel).toBe("GCT");
+    expect(patch.body.statutoryRetired).toEqual([]);
+  });
+});
+
+describe("no scalar can be coerced into an omission, whatever the form holds", () => {
+  it("sends all four scalars even when every input is blank", () => {
+    // The coverage gap a review found after the payload moved out of the console:
+    // the source guard reads `savePricing`/`saveRulepack` in AdminConsole.tsx, and
+    // the payload is no longer there — so `taxLabel: x.trim() === "" ? undefined : x`
+    // inside the builder was policed by nothing. Stated as behaviour instead: a
+    // blank form still SENDS every field, because the server reads an absent field
+    // as "leave unchanged" and the screen would say "Saved" over a value that never
+    // moved. Blank means null or NaN here; the validator refuses before this runs.
+    const blank = buildRulePackPatch({
+      ...base,
+      form: {
+        taxLabel: "",
+        defaultTaxRatePct: "",
+        verifiedAsOf: "",
+        sourceUrl: "",
+        statutory: { NIS: { employeePct: "", employerPct: "" } },
+      },
+    }).body;
+    for (const key of ["taxLabel", "defaultTaxRatePct", "verifiedAsOf", "sourceUrl"] as const) {
+      expect(Object.hasOwn(blank, key), `${key} must be sent, not omitted`).toBe(true);
+      expect(blank[key], `${key} must not be undefined`).not.toBeUndefined();
+    }
+    // `statutoryRates` too: a blank rate is null, and the key is always present.
+    expect(Object.hasOwn(blank, "statutoryRates")).toBe(true);
+    expect(blank.statutoryRates?.NIS).toEqual({ employeePct: null, employerPct: null });
+  });
+
+  it("sends all four when they hold whitespace, not just when empty", () => {
+    const padded = buildRulePackPatch({
+      ...base,
+      form: { ...base.form, taxLabel: "   ", defaultTaxRatePct: "  ", verifiedAsOf: " ", sourceUrl: " " },
+    }).body;
+    for (const key of ["taxLabel", "defaultTaxRatePct", "verifiedAsOf", "sourceUrl"] as const) {
+      expect(Object.hasOwn(padded, key), key).toBe(true);
+      expect(padded[key], key).not.toBeUndefined();
+    }
   });
 });

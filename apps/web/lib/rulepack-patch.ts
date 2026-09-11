@@ -84,10 +84,30 @@ function rate(typed: string): number | null {
  * cannot tell those apart; the type system can — `updateAdminRulePack` accepts only
  * this type, so an inline literal is a compile error rather than a review finding.
  */
-export type RulePackPatch = UpdateRulePackInput & {
-  /** A type-level marker. There is no runtime property and nothing reads it. */
-  readonly __rulePackPatch: unique symbol;
-};
+export class RulePackPatch {
+  /**
+   * Private, which is what makes this nominal rather than structural.
+   *
+   * The first version was an intersection with a phantom `unique symbol` property. A
+   * review defeated it twice: `{ ...buildRulePackPatch(e), statutoryRetired: [] }`
+   * spreads the phantom property into the result, so the brand survived arbitrary
+   * field replacement — and `statutoryRetired: []` is the REPLACE that wipes every
+   * stored retirement. `Object.assign` did the same.
+   *
+   * The brand was constraining the provenance of the OBJECT while the defect class is
+   * about the provenance of its FIELDS. A class with a private member cannot be
+   * spread into existence, and the body is behind a getter, so mutating the wrapper
+   * does not reach the payload.
+   */
+  private readonly nominal = true;
+
+  constructor(private readonly patch: UpdateRulePackInput) {}
+
+  /** The body to send. Read only by `updateAdminRulePack`. */
+  get body(): UpdateRulePackInput {
+    return this.patch;
+  }
+}
 
 /**
  * Statutory codes whose rate the custom list has taken over.
@@ -154,7 +174,7 @@ export function buildRulePackPatch(edits: RulePackEdits): RulePackPatch {
     };
   }
 
-  return {
+  const patch: UpdateRulePackInput = {
     // Every scalar is sent unconditionally. The caller refuses the save when one is
     // unusable rather than coercing it to `undefined`, which the server would read
     // as "leave unchanged" while the screen said "Saved".
@@ -172,8 +192,8 @@ export function buildRulePackPatch(edits: RulePackEdits): RulePackPatch {
             .filter(Boolean),
         }
       : {}),
-    // The brand is a type-level marker only; there is no runtime property.
-  } as RulePackPatch;
+  };
+  return new RulePackPatch(patch);
 }
 
 /** A full http(s) address.

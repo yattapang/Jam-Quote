@@ -1958,7 +1958,22 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the eighteen reviews found something.** The eighteenth defeated both
+**Every one of the nineteen reviews found something.** The nineteenth found that I
+had deleted a guard and written that a named test file replaced it — a file I never
+wrote, because I had changed approach mid-task and left the sentence behind.
+
+**That is the one failure no tool catches.** Typecheck, lint and 1612 tests were all
+green over a comment asserting coverage that did not exist. The rule: when a commit
+removes a check and names its replacement, the replacement gets written first, and
+the claim gets verified by running it — `ls` the file, then revert the fix and watch
+it fail. A claim about coverage is a claim about a file that either exists or does
+not.
+
+Also learned: a brand on an object does not constrain its fields. The structural
+version was carried by a spread that then replaced the one field that destroys data.
+A class with a private member is nominal and cannot be spread into existence — and
+the honest limit is worth stating: a deliberate `as` cast defeats any brand. This
+stops the accidental and the convenient, not the determined. The eighteenth defeated both
 of the source guards that survived the previous round — one by leaving a dead call
 for the scanner to find while a hand-built object went to the mutator.
 

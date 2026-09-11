@@ -1089,6 +1089,28 @@ to `NIS`. It becomes `N_I_S` — the rule collapses whitespace to underscores, i
 not delete it — so it defines a new levy rather than replacing NIS. My own test
 caught that, and it is now asserted both ways.
 
+## The review of `b6b2549` — a fabricated test reference, and a brand that carried
+
+Ninth consecutive review to find real defects. The one that matters most is not a
+bug: **I wrote a comment citing a test file that did not exist**, while deleting the
+assertion it claimed to replace. Nothing about that was caught by a tool, and
+nothing would have been.
+
+| What it found | Status |
+|---|---|
+| **A comment claimed coverage that did not exist.** Deleting the grid assertion, I wrote that it was "replaced by a render test — `statutory-grid.test.tsx`". That file had never been written: I had pivoted to unit-testing the decision instead and left the sentence behind. The grid's use of that decision was covered by nothing | FIXED — `statutory-grid.test.tsx` exists now. It renders the console, navigates to the rule-pack screen and COUNTS the rate inputs a code is offered, verified against both earlier wrong versions of the filter (render-everything fails two, baseline-only fails one). The grid inputs gained `aria-label`s, which they had never had — screen readers got nothing from them before |
+| **The brand guarded one door of two.** `apiClient` was exported with `patch(path, body?: unknown)`, so anything could reach `PATCH /admin/rulepack` with a hand-built body and no type friction | FIXED — `apiClient` is no longer exported. It had no callers outside its own module, so every request goes through a named function |
+| **The brand was structural, so a spread carried it.** `{ ...buildRulePackPatch(e), statutoryRetired: [] }` typechecked, and `statutoryRetired: []` is a REPLACE on the server — the wipe that destroys every stored retirement. `Object.assign` did the same. The brand constrained the provenance of the OBJECT while the defect class is about the provenance of its FIELDS | FIXED — `RulePackPatch` is a CLASS with a private member, so it is nominal: a plain object cannot satisfy it and a spread is a compile error. The body sits behind a getter, so `Object.assign` onto the wrapper still compiles but is INERT — asserted as a test rather than assumed |
+| **A coverage hole I created by moving the code.** The coercion guard reads the `savePricing`/`saveRulepack` bodies in `AdminConsole.tsx`, and the payload moved to another file — so `taxLabel: x.trim() === "" ? undefined : x` inside the builder was policed by nothing. Two of the three scalars the builder's own comment calls "sent unconditionally" had no guard, no test and no type behind them | FIXED — two tests assert that a form with every field blank, and one with every field whitespace, still SEND all four scalars. Both of the reviewer's exact injections now fail |
+| **Overclaim:** "an inline literal is a compile error" was true only of a naked literal to that one wrapper; `as RulePackPatch`, `as unknown as`, `any` and `JSON.parse` all compiled. "None has defeated a type" was false when written | The claim is now narrower and accurate in the code comment. A deliberate cast still defeats any brand — that is what a cast is for — and the honest statement is that this stops the accidental and the convenient, not the determined |
+
+**Confirmed clean:** the circular `import type` between `api-client` and
+`rulepack-patch` (both edges elide, `next build` succeeds, no cycle warning); the
+validator move clause by clause including message text, with `isHttpUrl`
+character-identical and the `!rpForm` branch correctly dropped rather than lost;
+`gridContributionCodes` against duplicate and differently-cased codes; grid ordering
+unchanged; every rendered row still resolving its form entry; no orphaned helpers.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |

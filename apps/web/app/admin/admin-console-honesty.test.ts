@@ -611,14 +611,20 @@ describe("the console cannot claim a figure it does not have", () => {
   // mutator not to receive an inline object literal. A review defeated it by leaving
   // a dead `void buildRulePackPatch(...)` call for the scanner to find and passing a
   // hand-built object to the mutator — a regex cannot tell a live call from a dead
-  // one. `updateAdminRulePack` now takes a branded `RulePackPatch` that only the
-  // builder can produce, so an inline literal is a COMPILE ERROR. The compiler is a
-  // better guard than this file could ever be.
+  // one. `updateAdminRulePack` now takes a `RulePackPatch`, a CLASS with a private
+  // member that only the builder constructs, so a literal (and a spread of a real
+  // patch) is a compile error. `apiClient` is also no longer exported, closing the
+  // direct-`patch` door. The compiler holds this better than this file could.
   //
-  // The other required the rate grid to read `gridContributions` rather than the
-  // effective list. The same review defeated it by copying the effective list into a
-  // differently-named local. It is replaced by a render test —
-  // `statutory-grid.test.tsx` — which counts the inputs a code actually gets.
+  // The other required the rate grid to read the filtered list rather than the
+  // effective one. The same review defeated it by copying the effective list into a
+  // differently-named local. It is held by `statutory-grid.test.tsx`, which renders
+  // the console, navigates to the rule-pack screen and COUNTS the rate inputs a code
+  // is offered — verified against both earlier wrong versions of the filter.
+  //
+  // That file is named here because it exists. An earlier version of this comment
+  // cited it before it was written: a claim of coverage that was simply false, and
+  // the worst thing in the commit a review found it in.
 
   it("nothing that looks clickable lacks a handler", () => {
     // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past
