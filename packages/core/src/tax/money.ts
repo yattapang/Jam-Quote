@@ -54,7 +54,13 @@ export const CURRENCY_CODES = Object.keys(CURRENCIES) as [CurrencyCode, ...Curre
  * than a confident symbol for the wrong currency.
  */
 export function formatPlatformMoney(cents: Cents, code: string | null | undefined): string {
-  const currency = code ? (CURRENCIES as Record<string, Currency>)[code] : undefined;
+  // `Object.hasOwn` before the read: a legacy free-text value of "valueOf" or
+  // "toString" is a truthy inherited Function, and would have been formatted as
+  // though it were a currency descriptor. Both fit the old eight-character limit.
+  const currency =
+    code && Object.hasOwn(CURRENCIES, code)
+      ? (CURRENCIES as Record<string, Currency>)[code]
+      : undefined;
   if (!currency) {
     const body = formatMoney(cents, CURRENCIES.JMD, false);
     return code ? `${body} ${code}` : body;

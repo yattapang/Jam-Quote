@@ -36,6 +36,16 @@ const SOURCE = stripComments(readFileSync(CONTROLLER, "utf8"));
 const ACTOR = /req\.user!?\.sub|req\.adminContext!?\.userId/;
 
 /**
+ * A mutating route decorator, however its path is quoted — or with no path at all.
+ *
+ * The first version required double quotes, and a review slipped an actor-less
+ * `@Post(\`tenants/:id/nuke\`)` straight past it. Same lesson as the console guards:
+ * matching one spelling of a thing polices formatting, not behaviour. Defined once
+ * here so the bypass tests below exercise this exact pattern rather than a copy.
+ */
+const ROUTE_DECORATOR = /@(Post|Patch|Delete|Put)\(\s*(?:["'`]([^"'`]*)["'`])?\s*\)/g;
+
+/**
  * The body of a class member, brace-matched from its signature.
  *
  * `select-scan`'s `methodBody` only finds `async name` and asserts on absence; most
@@ -97,7 +107,11 @@ interface Route {
 
 /** Every `@Post`/`@Patch`/`@Delete`/`@Put` handler in the controller. */
 function mutatingRoutes(src: string): Route[] {
-  const decorators = [...src.matchAll(/@(Post|Patch|Delete|Put)\(\s*"([^"]*)"\s*\)/g)];
+  // Any quoting, and a bare collection route too. A review added an actor-less
+  // `@Post(`tenants/:id/nuke`)` and the guard saw nothing: it required double
+  // quotes. This is the same lesson as the console guards — matching one spelling of
+  // a thing polices formatting, not behaviour.
+  const decorators = [...src.matchAll(ROUTE_DECORATOR)];
   return decorators.map((m, i) => {
     const end = i + 1 < decorators.length ? decorators[i + 1]!.index! : src.length;
     const region = src.slice(m.index!, end);
@@ -109,7 +123,7 @@ function mutatingRoutes(src: string): Route[] {
       .find((n): n is string => !!n && n !== "constructor");
     return {
       verb: m[1]!,
-      path: m[2]!,
+      path: m[2] ?? "(collection)",
       handler: name ?? "(unnamed)",
       body: name ? (memberBody(src, name) ?? region) : region,
     };
@@ -160,5 +174,25 @@ describe("every mutating admin route knows who acted", () => {
     expect(ACTOR.test("this.admin.suspendTenant(id, req.user!.sub)")).toBe(true);
     expect(ACTOR.test("userId: req.adminContext!.userId,")).toBe(true);
     expect(ACTOR.test("return this.sweep.run('manual');")).toBe(false);
+  });
+
+  it("finds a route however its path is quoted, and with no path", () => {
+    // The bypass a review ran: a backtick path was invisible, so an actor-less
+    // route added that way passed. These exercise ROUTE_DECORATOR itself, not a
+    // second copy of it — a copy cannot fail when the real pattern is weakened.
+    for (const decorator of [
+      '@Post("tenants/:id/nuke")',
+      "@Post('tenants/:id/nuke')",
+      "@Post(`tenants/:id/nuke`)",
+      "@Post()",
+      "@Patch( `x` )",
+      "@Delete(`admins/:id`)",
+      "@Put('x')",
+    ]) {
+      expect(mutatingRoutes(`class C {\n  ${decorator}\n  h(): void {\n    return;\n  }\n}`), decorator)
+        .toHaveLength(1);
+    }
+    // And it does not fire on a read.
+    expect(mutatingRoutes('@Get("tenants")\n  t(): void {\n    return;\n  }')).toHaveLength(0);
   });
 });

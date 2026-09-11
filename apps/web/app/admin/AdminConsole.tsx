@@ -87,14 +87,23 @@ function dollarsStrToCents(v: string): number {
   return Math.round(Number(v) * 100);
 }
 
-// NOTE: there is deliberately no local `money()` helper any more.
+// NOTE on money in this file. There is ONE way to render it, and this is the note
+// explaining why, because getting it wrong here has already happened twice.
 //
-// It formatted a number as currency WITHOUT converting from cents, and sat one
-// character away from formatJmd, which does convert. Every money value in this
-// console is cents, so the two were interchangeable to read and produced a
-// 100x error to run: the Platform overview showed MRR as $400,000 while
-// Financials showed the same figure as $4,000. formatJmd (from core, used by
-// every other screen in the app) is now the only way money is rendered here.
+// (1) An early local `money()` formatted a number as currency WITHOUT converting
+//     from cents, and sat one character away from `formatJmd`, which does convert.
+//     Every money value here is cents, so the two read identically and differed by
+//     100x: the Platform overview showed MRR as $400,000 while Financials showed the
+//     same figure as $4,000.
+// (2) The replacement was `formatJmd` everywhere — correct about cents, wrong about
+//     currency, because the platform currency is configurable. Setting it to USD put
+//     a JMD symbol beside the letters USD on every figure.
+//
+// So: `formatPlatformMoney(cents, code)` from core, and nothing else. The local
+// `money()` below is a one-line binding of the CONFIGURED code to that function, and
+// exists only so no call site has to remember to pass it. A row that carries its own
+// currency — a recorded payment — passes that instead, because a receipt taken in
+// JMD must not re-render as US$ when the platform is switched afterwards.
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
 const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", borderRadius: 999,
@@ -332,12 +341,45 @@ export default function AdminConsole({
   // screen could not show what was already retired — and now that the lists are
   // always sent, an empty seed would CLEAR every existing retirement on the next
   // unrelated save.
-  const [rpCustom, setRpCustom] = useState<NonNullable<UpdateRulePackInput["statutoryCustom"]>>(
+  const [rpCustom, setRpCustomState] = useState<NonNullable<UpdateRulePackInput["statutoryCustom"]>>(
     () => (data.rulepack?.statutoryCustom ?? []).map((c) => ({ ...c })),
   );
-  const [rpRetired, setRpRetired] = useState<string[]>(() => [
+  const [rpRetiredState_, setRpRetiredState] = useState<string[]>(() => [
     ...(data.rulepack?.statutoryRetired ?? []),
   ]);
+  const rpRetired = rpRetiredState_;
+  /**
+   * Whether the admin has touched contributions in this session.
+   *
+   * ## Why a flag and not just "always send"
+   *
+   * These are COMPLETE lists, and the first fix sent them unconditionally so that
+   * un-retiring the last entry would work — omitting an empty list means "leave
+   * unchanged", which made retirement a one-way door. But a review found that
+   * unconditional send destroys data on two paths:
+   *
+   * 1. `resolveProfile` swallows a failed `rulePackConfig.findUnique` and reports
+   *    `statutoryRetired: []` in a 200 while the override row exists. The editor
+   *    seeded from that, and one unrelated rate save then wrote the emptiness over
+   *    every stored retirement and every admin-added levy.
+   * 2. Two staff editing at once: B loads, A retires HEART and saves, B saves a tax
+   *    rate — B's stale list silently un-retires HEART.
+   *
+   * Omitted-when-untouched fixes both and still fixes the original defect, because
+   * the distinction that matters is "untouched" versus "empty", not "empty" versus
+   * "non-empty". It is also the pattern this form already used for `sources`.
+   */
+  const [rpContributionsTouched, setRpContributionsTouched] = useState(false);
+  // Wrapped rather than calling `setRpContributionsTouched(true)` at each of the
+  // eight edit sites: one site that forgot would be a silent, untestable gap.
+  const setRpCustom: typeof setRpCustomState = (value) => {
+    setRpContributionsTouched(true);
+    setRpCustomState(value);
+  };
+  const setRpRetired: typeof setRpRetiredState = (value) => {
+    setRpContributionsTouched(true);
+    setRpRetiredState(value);
+  };
   const [rpSourcesDraft, setRpSourcesDraft] = useState(
     () => (data.rulepack?.sources ?? []).join("\n"),
   );
@@ -423,16 +465,14 @@ export default function AdminConsole({
         verifiedAsOf: rpForm.verifiedAsOf.trim() === "" ? null : rpForm.verifiedAsOf,
         sourceUrl: rpForm.sourceUrl.trim() === "" ? null : rpForm.sourceUrl.trim(),
         statutoryRates,
-        // Complete lists, not patches — see UpdateRulePackInput — and ALWAYS sent,
-        // including when empty.
-        //
-        // They used to be omitted when empty, and the server reads an absent field
-        // as "leave unchanged". So un-retiring the last retired contribution sent
-        // nothing, reported "Saved", and left it retired; the same for removing the
-        // last custom levy. Retirement was a one-way door. Safe to send now only
-        // because the state above is seeded from the pack rather than from [].
-        statutoryCustom: rpCustom,
-        statutoryRetired: rpRetired,
+        // Complete lists, not patches — see UpdateRulePackInput. Sent, INCLUDING
+        // when empty, only once the admin has touched them: an empty list clears,
+        // and an absent one leaves alone, so the flag is what separates "the admin
+        // removed the last one" from "this save is about a tax rate". See
+        // `rpContributionsTouched` for the two data-loss paths that forced this.
+        ...(rpContributionsTouched
+          ? { statutoryCustom: rpCustom, statutoryRetired: rpRetired }
+          : {}),
         ...(rpSourcesTouched
           ? {
               sources: rpSourcesDraft
@@ -1524,7 +1564,14 @@ export default function AdminConsole({
                           Add a levy this jurisdiction has introduced, or retire one that has been withdrawn. No release needed.
                         </div>
 
-                        {(rp?.statutory ?? []).length > 0 && (
+                        {/* Gated on what is RENDERED, not on the effective list. The
+                            map was changed to `retirableContributions` and this
+                            condition was left on `rp.statutory` — so retiring every
+                            contribution emptied `statutory`, the whole row vanished,
+                            and the four retired stubs it had correctly computed were
+                            discarded. There is no other way to un-retire, so four
+                            clicks made the decision unrecoverable from the console. */}
+                        {retirableContributions.length > 0 && (
                           <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 12 }}>
                             {/* Effective entries PLUS anything retired. A retired
                                 baseline contribution is filtered out of `statutory`
@@ -1724,6 +1771,19 @@ export default function AdminConsole({
                       onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value }))}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
                     >
+                      {/* The stored value first when it is not a code we know. A
+                          row written before `z.enum` was added can hold "usd", and a
+                          <select> whose value matches no option displays the FIRST
+                          option — so the screen said JMD, the save was refused with
+                          "must be one of…", and re-picking the shown option fires no
+                          change event. The admin was stuck. Showing it, marked,
+                          makes the refusal agree with the screen. */}
+                      {!CURRENCY_CODES.includes(pricingForm.currency as CurrencyCode) &&
+                        pricingForm.currency !== "" && (
+                          <option value={pricingForm.currency}>
+                            {pricingForm.currency} — not supported, pick one below
+                          </option>
+                        )}
                       {CURRENCY_CODES.map((code) => (
                         <option key={code} value={code}>{code}</option>
                       ))}
@@ -2428,7 +2488,6 @@ function TenantBilling({
   /** The platform currency, so this table cannot render a JMD symbol on USD. */
   currency: string | null;
 }) {
-  const money = (cents: number) => formatPlatformMoney(cents, currency);
   const [rows, setRows] = useState<AdminSubscriptionPayment[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -2551,7 +2610,11 @@ function TenantBilling({
           <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 0", borderBottom: "1px solid var(--border)", opacity: r.voidedAt ? 0.5 : 1 }}>
             <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
               <div style={{ fontSize: 13, fontWeight: 600, textDecoration: r.voidedAt ? "line-through" : "none" }}>
-                {money(r.amountCents)}
+                {/* The payment's OWN currency, not the platform's current one. A
+                    receipt taken in JMD must not re-render as US$ because the
+                    platform was switched afterwards — this ledger is reconciled
+                    against a bank statement. */}
+                {formatPlatformMoney(r.amountCents, r.currency ?? currency)}
                 <span style={{ fontWeight: 400, color: "var(--muted)" }}> · {r.method.replace("_", " ").toLowerCase()}</span>
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
@@ -2571,7 +2634,7 @@ function TenantBilling({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  if (!window.confirm(`Void this ${money(r.amountCents)} payment? The term is rolled back if nothing has changed since.`)) return;
+                  if (!window.confirm(`Void this ${formatPlatformMoney(r.amountCents, r.currency ?? currency)} payment? The term is rolled back if nothing has changed since.`)) return;
                   void run(() => voidSubscriptionPayment(r.id));
                 }}
                 style={{ height: 26, padding: "0 9px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--critical)" }}

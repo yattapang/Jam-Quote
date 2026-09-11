@@ -398,29 +398,64 @@ describe("the console cannot claim a figure it does not have", () => {
   it("no money is rendered in a currency the platform may not be using", () => {
     // All seven money figures went through `formatJmd` while the platform currency
     // was editable free text, so setting it to USD showed a JMD symbol beside the
-    // letters USD. `formatPlatformMoney` takes the configured code and degrades to
-    // the amount plus the raw code when it does not recognise one.
+    // letters USD.
     expect(src, "platform money must spend the configured currency").not.toMatch(
       /formatJmd\(/,
     );
+    // And the code passed to it must never be a literal. A review defeated the first
+    // version of this by writing `formatPlatformMoney(cents, "JMD")` — the exact
+    // defect the finding was about — because the assertion only checked that the
+    // identifier was present. Asserting the absence of the name was never the point;
+    // asserting that the CONFIGURED code reaches it is.
+    const hardcoded = [...src.matchAll(/formatPlatformMoney\([^)]*,\s*["'`]/g)].map(
+      (m) => m[0]!.trim(),
+    );
+    expect(
+      hardcoded,
+      "pass the configured currency, not a literal one",
+    ).toEqual([]);
     expect(src).toContain("formatPlatformMoney");
   });
 
   it("no save reports success on a value it dropped", () => {
     // `Number(x) || undefined` sent nothing for a cleared or mistyped field, the
     // server read the absence as "leave unchanged", and the screen said "Saved".
-    // The coercion is the tell: `|| undefined` on a parsed number turns 0 and NaN
-    // into an omission, and an omission into a false success.
-    const offenders = [...src.matchAll(/\|\|\s*undefined/g)].map((m) =>
-      src.slice(Math.max(0, m.index! - 80), m.index! + 14).trim(),
-    );
+    //
+    // A review walked past the first version with `?? undefined` and `|| void 0`,
+    // which are the same defect spelled differently — so this matches the CLASS of
+    // coercion-to-absent rather than one operator.
+    const coercions = [
+      ...src.matchAll(/(?:\|\||\?\?)\s*(?:undefined|void\s+0)/g),
+    ].map((m) => src.slice(Math.max(0, m.index! - 70), m.index! + 18).trim());
     expect(
-      offenders,
-      "refuse the value and name the field instead of omitting it",
+      coercions,
+      "refuse the value and name the field instead of turning it into an omission",
     ).toEqual([]);
     // And the refusal says something: an error state with no sentence is the same
     // defect one step later.
     expect(src).toContain("pricingError");
+    expect(src).toContain("rpError");
+  });
+
+  it("a complete list is sent only when the admin touched it", () => {
+    // `statutoryRetired` and `statutoryCustom` are COMPLETE lists: an empty one
+    // clears, an absent one leaves alone. Both mistakes are real and both happened.
+    //
+    // Omitting when empty made retirement a one-way door — un-retiring the last
+    // entry sent nothing and reported "Saved". Sending unconditionally destroyed
+    // data: a swallowed rule-pack read error reports empty lists in a 200, and one
+    // unrelated rate save then wrote that emptiness over every stored retirement.
+    // So the send must be gated on TOUCHED, never on length.
+    expect(src, "a length test cannot tell 'cleared' from 'not edited'").not.toMatch(
+      /rpRetired.length\s*>\s*0|rpCustom.length\s*>\s*0/,
+    );
+    expect(src, "gate the send on whether the admin edited them").toContain(
+      "rpContributionsTouched",
+    );
+    // And the chip row is gated on what it RENDERS. It was gated on the effective
+    // list while rendering a wider one, so retiring every contribution hid the only
+    // control that could bring them back.
+    expect(src).toContain("{retirableContributions.length > 0 && (");
   });
 
   it("nothing that looks clickable lacks a handler", () => {

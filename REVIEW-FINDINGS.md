@@ -933,6 +933,37 @@ While being written, the new guard caught something real: the orphaned local cop
 `apiEnvironment`, left in the console because an earlier edit script asserted and
 exited before writing.
 
+## The review of `84f21a4` — two data-loss paths, and both new guards defeated
+
+Fourth consecutive review to find real defects. The F21 finding is the serious one:
+my own "always send" fix created a way to destroy stored data that the previous
+behaviour did not have.
+
+| What it found | Status |
+|---|---|
+| **F21: two data-loss paths, one of them a regression the fix introduced.** (1a) The chip row's `.map` was changed to `retirableContributions` but the wrapping gate was left on `rp.statutory.length > 0` — and retired codes are filtered OUT of `statutory`. Retiring all four JM contributions emptied it, the whole row vanished, and the four correctly-computed stubs were discarded. Four clicks made the decision unrecoverable from the console. (1b) `resolveProfile` swallows a failed `rulePackConfig.findUnique` and reports `statutoryRetired: []` in a **200** while the override row exists; with "always send", one unrelated rate save then wrote that emptiness over every stored retirement and every admin-added levy. (1c) Two staff editing at once: B's stale list silently un-retires what A just retired | FIXED. The gate follows what is RENDERED. And the lists are sent only once `rpContributionsTouched` — which is the distinction that actually matters: "untouched" versus "empty", not "empty" versus "non-empty". That closes 1b and 1c as well, and it is the pattern this same form already used for `sources`, which I should have followed the first time. The setters are wrapped rather than flagging at each of eight edit sites, because one site that forgot would be a silent gap |
+| **The payment ledger rendered receipts in the PLATFORM's current currency**, not each payment's own, though `AdminSubscriptionPayment.currency` was right there. A receipt taken in JMD re-rendered as US$ after a switch — in a ledger reconciled against a bank statement | FIXED — each row passes `r.currency ?? currency`. The local binding in that table is gone, so no figure there can silently inherit the platform's |
+| **A legacy currency value trapped the admin.** A `<select>` whose value matches no option displays the FIRST option, so a pre-`z.enum` row holding `"usd"` showed **JMD** while state said otherwise; the save was refused with "must be one of…", contradicting the screen, and re-picking the shown option fires no change event | FIXED — an unrecognised stored value is rendered as its own option, marked "not supported, pick one below", so the refusal agrees with what is on screen |
+| `formatPlatformMoney` looked its code up on `CURRENCIES` with no own-property check, so a legacy value of `"valueOf"` or `"toString"` (both within the old 8-char limit) resolved to a truthy inherited `Function` | FIXED — `Object.hasOwn` first |
+| **The audit guard was blind to a template-literal route path** — a review added an actor-less `@Post(\`tenants/:id/nuke\`)` and the suite stayed green | FIXED — one `ROUTE_DECORATOR` accepting any quoting and a bare collection route, defined once and exercised by its own bypass tests. Verified by re-running the reviewer's injection |
+| **Both new console guards were defeated.** `?? undefined` and `|| void 0` walked past the coercion check; `formatPlatformMoney(cents, "JMD")` — the exact defect F40 was about — walked past the currency check, which only asserted the identifier was present | FIXED — the coercion check matches the CLASS of coercion-to-absent, and the currency check refuses a literal second argument. Both verified by re-running the reviewer's bypasses; the currency one needed a second attempt, caught because I ran it rather than assuming |
+| The comment block claiming "formatJmd … is now the only way money is rendered here" was made false by the previous commit, and said there was deliberately no local `money()` helper while one had just been added | FIXED — rewritten to record both mistakes and what the single rule now is |
+
+**Confirmed clean:** the `statutoryCustom` round-trip field by field (the API's
+narrower `StatutoryCustomEntry` is a type-only inaccuracy — `{...c}` copies
+everything, and `withAdminProvenance` never touches the stored override, so no
+`verified`/`asOf` is sent back as input); `data.rulepack === null`, where the editor
+refuses to save; `pricingProblem()` against `updatePricingSchema` field by field;
+`dollarsStrToCents` on garbage (NaN, never throws); no other falsy-coercion save in
+the console or the client; `memberBody`'s brace heuristic across all 17 routes.
+
+**Still open, and not introduced here:** a failed rule-pack read reports
+`overridden: false` in a 200, so the screen says "no override" when the row exists
+and cannot be read. The data loss that made that dangerous is fixed, but the 200 is
+still dishonest — F60. Rule-pack saves also have no optimistic concurrency, so two
+staff editing contributions can still overwrite each other's complete lists, exactly
+as `sources` always could — F61.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |
@@ -942,6 +973,8 @@ exited before writing.
 | F57 | **`lastActiveAt` measures quote activity only.** There is no `lastLoginAt` on the platform, so a tenant who logs in and browses without touching a quote reads as inactive. The column's tooltip says exactly what it measures, which is honest, but a real last-seen timestamp would be better and is a one-column migration |
 | F58 | **No index supports the last-activity sort.** `orderBy: { updatedAt: "desc" }` on the tenants include has no `@@index([businessId, updatedAt])` behind it, so it sorts every quote of every tenant on each admin page load. Fine at current scale, one migration to fix |
 | F59 | **Per-topic source URLs for the rule cards.** `jm.sources` is consumption-tax provenance only, so TAXPAYER ID, REGIONS and PAYMENT RAILS have no honest link and render as text. Each needs a URL recorded by someone who has checked it — inventing one is how the wrong-document defect happened |
+| F60 | **A failed rule-pack read looks like "no override".** `resolveProfile` swallows the error and returns `row: null`, so `GET /admin/rulepack` answers 200 with `overridden: false` and empty override lists. The screen shows a baseline pack as though it were the truth. It should say it could not read, and the editor should refuse to save on a view it knows is incomplete |
+| F61 | **No optimistic concurrency on the rule pack.** `statutoryRetired`, `statutoryCustom` and `sources` are complete lists with no `expectedUpdatedAt`, so two staff editing contributions overwrite each other silently. Pre-existing for `sources`; now reachable for contributions too |
 
 ## Suggested order
 

@@ -1958,7 +1958,14 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the thirteen reviews found something.** Three in a row have now
+**Every one of the fourteen reviews found something.** The fourteenth found that a
+fix of mine had created a way to DESTROY stored data that the defect it replaced did
+not have: I made two complete lists always-sent so that clearing one would work, and
+a swallowed read error then reported them empty in a 200, so one unrelated save wrote
+that emptiness over every stored retirement. The distinction I needed was
+"untouched" versus "empty", not "empty" versus "non-empty" — and the same form was
+already doing it correctly for another field two lines away. **Before changing what a
+payload omits, look for the pattern already in the file.** Three in a row have now
 found a defect in the GUARD rather than only in the code, and the thirteenth defeated
 three new assertions at once on the real file with the suite green — by deleting the
 spaces around an arrow, wrapping a digit in braces, and quoting a string. The rule
@@ -1981,7 +1988,7 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F59, opened by the F38
+**Remaining order:** the Tier 3 console register is now CLOSED. Next is F55–F61, opened by the F38 and F21
 work: a real tenant search, filters behind the honest pills, and a true last-seen
 timestamp. Then the visual and UX polish phase.
 
