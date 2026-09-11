@@ -122,7 +122,11 @@ function enclosingOpenTag(src: string, index: number): string | null {
     }
   }
   if (open < 0) return null;
+  return tagAt(src, open);
+}
 
+/** The whole open tag beginning at `open`, brace- and quote-aware. */
+function tagAt(src: string, open: number): string | null {
   let depth = 0;
   let quote: string | null = null;
   for (let i = open; i < src.length; i++) {
@@ -187,6 +191,95 @@ function enclosingExpression(src: string, index: number): string | null {
   return flattened;
 }
 
+/** The value of one JSX attribute on an open tag: `{...}` contents, or a quoted string. */
+function attribute(tag: string, name: string): string | null {
+  const at = tag.search(new RegExp(`\\s${name}\\s*=`));
+  if (at < 0) return null;
+  const eq = tag.indexOf("=", at);
+  let i = eq + 1;
+  while (i < tag.length && /\s/.test(tag[i]!)) i++;
+  if (tag[i] === '"' || tag[i] === "'") {
+    const quote = tag[i]!;
+    const end = tag.indexOf(quote, i + 1);
+    return end < 0 ? null : tag.slice(i + 1, end);
+  }
+  if (tag[i] !== "{") return null;
+  let depth = 0;
+  for (let j = i; j < tag.length; j++) {
+    if (tag[j] === "{") depth++;
+    else if (tag[j] === "}") {
+      depth--;
+      if (depth === 0) return tag.slice(i + 1, j);
+    }
+  }
+  return null;
+}
+
+/**
+ * Is this `<a>` tag a link that goes nowhere and does nothing?
+ *
+ * ## Why this parses the handler instead of matching it
+ *
+ * The first version was one regex —
+ * `/href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/` — and a review broke
+ * it eight ways without changing the defect at all: deleting the spaces around the
+ * arrow, dropping the parens on the parameter, typing the parameter, putting the
+ * body in braces (the exact form the comment claimed to target), swapping the
+ * attribute order, writing `href={"#"}`, writing `href=""`, or leaving `href` off
+ * entirely. A guard that only recognises one spelling of a defect polices
+ * formatting, not behaviour.
+ *
+ * So: an anchor is dead when it leads nowhere AND its click handler, with every
+ * `preventDefault()` / `stopPropagation()` / `void 0` removed, has nothing left.
+ */
+function deadAnchor(tag: string): boolean {
+  if (!/^<a[\s>]/.test(tag)) return false;
+
+  const href = attribute(tag, "href");
+  const leadsNowhere =
+    href === null || ["#", "", '"#"', "'#'", "javascript:void(0)"].includes(href.trim());
+  if (!leadsNowhere) return false;
+
+  const onClick = attribute(tag, "onClick");
+  if (onClick === null) return true; // nowhere to go and nothing to do
+
+  const body = onClick
+    .replace(/^\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*/, "") // strip the arrow head
+    .replace(/^\s*\{|\}\s*$/g, "") // and a braced body
+    .replace(/\b(?:e|ev|evt|event)\s*\.\s*(?:preventDefault|stopPropagation)\s*\(\s*\)/g, "")
+    .replace(/\bvoid\s+0\b/g, "")
+    .replace(/[\s;]/g, "");
+  return body === "";
+}
+
+/**
+ * Is this JSX text child a figure nobody counted?
+ *
+ * The Regulatory nav badge was a hardcoded `3`, one line from the real count. The
+ * first guard was `/>[ ]*\d{1,6}[ ]*</`, which a review walked straight past with
+ * `>{3}<`, with a newline before the digit, and with `>{"3"}<`. Normalising first
+ * means the shape of the whitespace and the quoting stop mattering.
+ */
+function literalCount(text: string): boolean {
+  const bare = text
+    .trim()
+    .replace(/^\{|\}$/g, "")
+    .trim()
+    .replace(/^["'`]|["'`]$/g, "")
+    .trim();
+  return /^\d{1,6}$/.test(bare);
+}
+
+/** Every JSX text child in the source: the runs between `>` and the next `<`. */
+function textChildren(src: string): { text: string; index: number }[] {
+  const out: { text: string; index: number }[] = [];
+  for (const m of src.matchAll(/>([^<>]*)</g)) {
+    const text = m[1]!;
+    if (text.trim() !== "") out.push({ text, index: m.index! + 1 });
+  }
+  return out;
+}
+
 /** Words that make a label a claim about a QUERY, not just about a number. */
 const WINDOW_WORD =
   /\b(this month|last month|today|this week|this year|ytd|year to date|mtd|per month|monthly)\b/i;
@@ -199,11 +292,26 @@ describe("the console cannot claim a figure it does not have", () => {
     .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
     .replace(/^\s*\/\/[^\n]*$/gm, "");
 
+  /** Every open tag in the file, parsed once. */
+  const tags: string[] = [];
+  for (const m of src.matchAll(/<[A-Za-z]/g)) {
+    const tag = tagAt(src, m.index!);
+    if (tag) tags.push(tag);
+  }
+
   /** Labels allowed a window, each because the query behind it really applies one. */
   const WINDOWED_OK: Record<string, string> = {
     "Quotes created (all time)":
       "names its own window, and the window it names is the one the query uses",
   };
+
+  it("found its subjects, so nothing below can pass on an empty file", () => {
+    // Every assertion in this block scans `src` or `tags`. A rename, a move or a
+    // failed read would otherwise empty all of them at once, silently.
+    expect(tags.length, "no JSX tags parsed").toBeGreaterThan(200);
+    expect(tags.filter((t) => t.startsWith("<a")).length, "no anchors").toBeGreaterThan(0);
+    expect(textChildren(src).length, "no text children").toBeGreaterThan(50);
+  });
 
   it("no metric is labelled with a time window the query does not apply", () => {
     // A class, not a denylist. The first version listed four exact strings
@@ -212,8 +320,6 @@ describe("the console cannot claim a figure it does not have", () => {
     // predicate at all. Hand-listing the cases is the defect this register keeps
     // finding, and a guard written that way finds only what its author remembered.
     const labels = [...src.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1]!);
-    // Positive control: a guard that found no labels proves nothing, and a rename of
-    // the `label:` key would otherwise empty this silently.
     expect(labels.length, "found no metric labels — has the shape changed?").toBeGreaterThan(8);
 
     const offenders = labels.filter((l) => WINDOW_WORD.test(l) && !(l in WINDOWED_OK));
@@ -254,42 +360,37 @@ describe("the console cannot claim a figure it does not have", () => {
   });
 
   it("no link is an anchor to nowhere", () => {
-    // Four rule-card "Source ↗" links were `href="#"` with `preventDefault` and an
-    // empty body, while the real URL sat in scope and working links were 150 lines
+    // Four rule-card "Source ↗" links were `href="#"` with a `preventDefault`-only
+    // handler, while the real URL sat in scope and working links were 150 lines
     // above. A staffer clicking "TAJ ↗" to check a tax rate got nothing.
-    //
-    // `href="#"` is legitimate for an in-page SPA jump whose onClick actually
-    // navigates. What is not legitimate is a handler whose ENTIRE body is
-    // `e.preventDefault()` — that is a link that exists to look like a link.
-    const dead = [...src.matchAll(/href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/g)];
+    const dead = tags.filter(deadAnchor);
     expect(
-      dead.map((m) => m[0]!),
-      "an anchor whose only behaviour is preventDefault is a dead control: give it the URL or make it text",
+      dead.map((t) => t.slice(0, 120)),
+      "an anchor that leads nowhere and does nothing is a dead control: give it the URL or make it text",
     ).toEqual([]);
-    // Positive control: in-page anchors still exist, so this did not pass by
-    // deleting every link in the file.
-    expect(src).toContain('href="#"');
   });
 
   it("the deployment badge is derived, not asserted", () => {
-    // A green "PRODUCTION" pill with no check behind it, on every build, including
-    // a laptop pointed at localhost. On a console whose buttons suspend tenants,
-    // that is the one badge that must not be decorative.
-    expect(src, "PRODUCTION must come from a check, not from a literal in the markup").not.toMatch(
-      />[^<>{]*PRODUCTION/,
+    // A green "PRODUCTION" pill with no check behind it, on every build, including a
+    // laptop pointed at localhost. On a console whose buttons suspend tenants, that
+    // is the one badge that must not be decorative.
+    //
+    // The word itself must not appear in this file in any form — the first version
+    // allowed it outside a `{`, and `>{"PRODUCTION"}` walked past. The label is a
+    // prop now, resolved on the server from the same constant every fetch uses.
+    expect(src, "PRODUCTION must come from apiEnv, not from a literal here").not.toContain(
+      "PRODUCTION",
     );
-    expect(src, "the environment badge must read the API it actually talks to").toContain(
-      "NEXT_PUBLIC_API_BASE_URL",
-    );
+    expect(src, "the badge must render the resolved environment").toContain("apiEnv.label");
   });
 
   it("no count is a literal in the markup", () => {
     // The Regulatory nav badge was a hardcoded `3`, one line from `regChanges`: it
     // said "3 waiting" on an empty queue and stayed 3 after a staffer cleared it.
-    // Any bare number rendered as element text is a count nobody counted.
-    const literals = [...src.matchAll(/>[ ]*(\d{1,6})[ ]*</g)];
+    // Any bare number rendered as element text is a figure nobody counted.
+    const offenders = textChildren(src).filter((c) => literalCount(c.text));
     expect(
-      literals.map((m) => m[0]!),
+      offenders.map((c) => c.text.trim()),
       "render a figure from data, or do not render it",
     ).toEqual([]);
   });
@@ -317,7 +418,6 @@ describe("the console cannot claim a figure it does not have", () => {
         const body = close < 0 ? "" : src.slice(m.index!, close);
         if (/<(input|select|textarea)\b/.test(body)) continue;
       }
-      if (tag === null) continue;
       expect(tag, `this element promises a click it cannot honour: ${tag.slice(0, 90)}…`).toMatch(
         /onClick|href=|<(a|button|Link|select|input|textarea)\b/,
       );
@@ -325,63 +425,84 @@ describe("the console cannot claim a figure it does not have", () => {
   });
 });
 
-describe("the guards above are not satisfied by evidence elsewhere", () => {
-  // The defeats a review demonstrated against the proximity versions, kept as
-  // tests. Each of these passed the old check, and each is the real defect.
+describe("the guards above cannot be walked past", () => {
+  // Every bypass a review demonstrated against the earlier versions, kept as a
+  // test. These exercise the SAME predicates the block above uses — the previous
+  // attempt gave each control test its own private copy of the regex, so editing a
+  // guard could not fail its own control.
+
+  it("a dead anchor is caught however it is spelled", () => {
+    // Each of these passed the single-regex version unchanged.
+    for (const tag of [
+      '<a href="#" onClick={(e) => e.preventDefault()}>TAJ</a>',
+      '<a href="#" onClick={(e)=>e.preventDefault()}>TAJ</a>',
+      '<a href="#" onClick={e => e.preventDefault()}>TAJ</a>',
+      '<a href="#" onClick={(e: React.MouseEvent) => e.preventDefault()}>TAJ</a>',
+      '<a href="#" onClick={(e) => { e.preventDefault(); }}>TAJ</a>',
+      '<a href="#" onClick={() => void 0}>TAJ</a>',
+      '<a onClick={(e) => e.preventDefault()} href="#">TAJ</a>',
+      '<a href={"#"} onClick={(e) => e.preventDefault()}>TAJ</a>',
+      '<a href="" onClick={(e) => e.preventDefault()}>TAJ</a>',
+      '<a href="javascript:void(0)">TAJ</a>',
+      "<a>TAJ</a>",
+    ]) {
+      expect(deadAnchor(tagAt(tag, 0)!), tag).toBe(true);
+    }
+  });
+
+  it("a working anchor is not caught", () => {
+    for (const tag of [
+      // A real in-page navigation keeps its anchor and its preventDefault.
+      '<a href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }}>View all</a>',
+      '<a href={c.sourceUrl} target="_blank" rel="noopener noreferrer">Source ↗</a>',
+      '<a href="https://www.jamaicatax.gov.jm/gct">TAJ ↗</a>',
+    ]) {
+      expect(deadAnchor(tagAt(tag, 0)!), tag).toBe(false);
+    }
+    // And a non-anchor is none of this guard's business.
+    expect(deadAnchor('<button onClick={go}>Go</button>')).toBe(false);
+  });
+
+  it("a literal count is caught however it is written", () => {
+    for (const text of ["3", " 3 ", "{3}", '{"3"}', "{`3`}", "\n  3\n", "\t3\t", "1234567890"]) {
+      // The last one is longer than six digits, so it is NOT a count — a phone
+      // number or an id. Everything else is.
+      expect(literalCount(text), JSON.stringify(text)).toBe(text !== "1234567890");
+    }
+  });
+
+  it("a rendered expression is not a literal count", () => {
+    for (const text of ["{needsReviewCount}", "{regChanges.length}", "3 waiting", "{String(q)}"]) {
+      expect(literalCount(text), text).toBe(false);
+    }
+  });
 
   it("a pointer cursor is not excused by a disabled element nearby", () => {
-    const src = [
+    const snippet = [
       '<input disabled={true} value="" readOnly />',
       '<div style={{ padding: 7, cursor: "pointer" }}>Past due (3)</div>',
     ].join("\n");
-    const tag = enclosingOpenTag(src, src.indexOf('cursor: "pointer"'));
+    const tag = enclosingOpenTag(snippet, snippet.indexOf('cursor: "pointer"'));
     expect(tag).toContain("<div");
     expect(tag).not.toMatch(/onClick|href=|<(a|button|Link|select|input|textarea)\b/);
   });
 
-  it("an empty label is not excused, a label around a checkbox is", () => {
-    const CONTROL = /<(input|select|textarea)\b/;
-    expect(CONTROL.test('<label style={{ cursor: "pointer" }}>Past due</label>')).toBe(false);
-    expect(
-      CONTROL.test(
-        '<label style={{ cursor: "pointer" }}><input type="checkbox" onChange={t} />Cap</label>',
-      ),
-    ).toBe(true);
-  });
-
   it("a pointer cursor IS excused by a handler on its own tag", () => {
-    const src = '<button style={{ cursor: "pointer" }} onClick={go}>Go</button>';
-    expect(enclosingOpenTag(src, src.indexOf('cursor: "pointer"'))).toMatch(/onClick/);
+    const snippet = '<button style={{ cursor: "pointer" }} onClick={go}>Go</button>';
+    expect(enclosingOpenTag(snippet, snippet.indexOf('cursor: "pointer"'))).toMatch(/onClick/);
   });
 
   it("a badge is not made conditional by a ternary in its style", () => {
-    const src =
+    const snippet =
       '<span style={{ marginLeft: c.label ? 4 : 0 }}><span style={v}>Verified ✓</span></span>';
     // The nested style ternary is blanked, so the region holds no condition.
-    expect(enclosingExpression(src, src.search(/>\s*Verified/)) ?? "").not.toMatch(/\?|&&/);
+    expect(enclosingExpression(snippet, snippet.search(/>\s*Verified/)) ?? "").not.toMatch(/\?|&&/);
   });
 
   it("a badge IS conditional when the ternary is its own", () => {
-    const src =
+    const snippet =
       "<td>{p.verified ? <span style={v}>Verified ✓</span> : <span>Unverified</span>}</td>";
-    expect(enclosingExpression(src, src.search(/>\s*Verified/)) ?? "").toMatch(/\?/);
-  });
-
-  it("a dead anchor is caught and a working one is not", () => {
-    const DEAD = /href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/;
-    expect(DEAD.test('<a href="#" onClick={(e) => e.preventDefault()}>TAJ</a>')).toBe(true);
-    // A real in-page navigation keeps its anchor.
-    expect(
-      DEAD.test('<a href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }}>View all</a>'),
-    ).toBe(false);
-    // And a real external link has no preventDefault at all.
-    expect(DEAD.test('<a href={c.sourceUrl} target="_blank">Source</a>')).toBe(false);
-  });
-
-  it("a literal count is caught, and a rendered expression is not", () => {
-    const LITERAL = />[ ]*(\d{1,6})[ ]*</;
-    expect(LITERAL.test("<span>3</span>")).toBe(true);
-    expect(LITERAL.test("<span>{needsReviewCount}</span>")).toBe(false);
+    expect(enclosingExpression(snippet, snippet.search(/>\s*Verified/)) ?? "").toMatch(/\?/);
   });
 
   it("a window word is caught however it is spelled", () => {

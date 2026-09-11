@@ -48,6 +48,7 @@ import { logout } from "@/lib/auth-actions";
 import { startImpersonation } from "@/lib/impersonation-actions";
 import { relativeTime } from "@/lib/relative-time";
 import styles from "./console.module.css";
+import type { ApiEnvironment } from "@/lib/api-environment";
 
 type Screen =
   | "overview"
@@ -92,39 +93,6 @@ function dollarsStrToCents(v: string): number {
 // Financials showed the same figure as $4,000. formatJmd (from core, used by
 // every other screen in the app) is now the only way money is rendered here.
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
-/**
- * Which deployment this console is driving, from the API it reads.
- *
- * The header carried a green "PRODUCTION" pill with no check behind it, so a laptop
- * pointed at localhost showed PRODUCTION too. On a console whose buttons suspend
- * tenants and set platform pricing, that badge is the last thing that should be
- * decorative.
- *
- * `NODE_ENV` would not do: a staging deploy is also a production BUILD, so it would
- * say PRODUCTION on staging, which is the same lie with more steps. The API base URL
- * is the honest signal — it is where the data on the screen actually came from.
- */
-function apiEnvironment(baseUrl: string | undefined): {
-  label: string;
-  tone: "good" | "warn" | "muted";
-  detail: string;
-} {
-  if (!baseUrl) return { label: "API NOT SET", tone: "warn", detail: "NEXT_PUBLIC_API_BASE_URL is unset" };
-  let host: string;
-  try {
-    host = new URL(baseUrl).host;
-  } catch {
-    return { label: "API UNREADABLE", tone: "warn", detail: baseUrl };
-  }
-  if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host))
-    return { label: "LOCAL", tone: "muted", detail: host };
-  if (/(^|[.-])(staging|stage|dev|test|preview)([.-]|$)/.test(host))
-    return { label: "STAGING", tone: "warn", detail: host };
-  return { label: "PRODUCTION", tone: "good", detail: host };
-}
-
-const env = apiEnvironment(process.env.NEXT_PUBLIC_API_BASE_URL);
-
 const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", borderRadius: 999,
   fontSize: 12, fontWeight: 600, lineHeight: 1.4, whiteSpace: "nowrap",
@@ -182,9 +150,21 @@ const jm = getJurisdiction("JM");
 export default function AdminConsole({
   data,
   admin,
+  apiEnv,
 }: {
   data: AdminData;
   admin: { name: string; email: string };
+  /**
+   * Which deployment this console is driving — resolved on the SERVER from the same
+   * `API_BASE_URL` every fetch uses, and passed in rather than recomputed.
+   *
+   * A review found the first version reading `NEXT_PUBLIC_API_BASE_URL` in the
+   * client bundle, which inverts the precedence `api-client` applies: `API_BASE_URL`
+   * wins and is not visible to the browser at all. A deploy setting only that would
+   * have shown "API NOT SET" on production, or worse, amber STAGING from a stale
+   * public variable while the console suspended real tenants.
+   */
+  apiEnv: ApiEnvironment;
 }) {
   const ov = data.overview;
   // The viewing admin's own authorization (from GET /admin/me). A super-admin
@@ -756,11 +736,26 @@ export default function AdminConsole({
   const codeOwnedBadge: RuleBadge = { text: "Code-owned", tone: "info" };
   /** The editable card's badge, from the same verification state as its footer. */
   const taxBadge: RuleBadge = { text: rpVerify.label, tone: rpVerifyTone };
+  /**
+   * `sourceUrl` is null on the three code-owned cards, ON PURPOSE.
+   *
+   * `jm.sources` is the CONSUMPTION-TAX provenance — its own `verifiedAsOf` comment
+   * says so — and it holds exactly two URLs, both about GCT. The first attempt at
+   * this fix reached into it per card: `sources[0]` for TAXPAYER ID and
+   * `find(u => u.includes("gov.jm"))` for REGIONS. Both resolved to the GCT rate
+   * page, because `jamaicatax.gov.jm` is under `gov.jm`. A review caught it: a
+   * staffer clicking "Gov.jm ↗" beside "14 parishes" landed on a tax-rate page.
+   *
+   * A confidently-labelled link to the WRONG document is worse than no link — it
+   * looks like the value was sourced, and the reader who follows it has to work out
+   * that it was not. So these render as plain dimmed text until someone records a
+   * real per-topic source. F59 on the register covers sourcing them.
+   */
   const ruleCards = [
     { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, badge: taxBadge, sourceLink: sourceEff ? "Source" : "TAJ", sourceUrl: sourceEff, chips: [] as string[] },
-    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "TAJ", sourceUrl: jm.sources[0] ?? null, chips: [] as string[] },
-    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "Gov.jm", sourceUrl: jm.sources.find((u) => u.includes("gov.jm")) ?? null, chips: [...jm.regions] },
-    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "BOJ", sourceUrl: jm.sources.find((u) => u.includes("boj")) ?? null, chips: [] as string[] },
+    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "TAJ", sourceUrl: null, chips: [] as string[] },
+    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "Gov.jm", sourceUrl: null, chips: [...jm.regions] },
+    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "BOJ", sourceUrl: null, chips: [] as string[] },
   ];
   // Payroll statutory rates now come from the effective pack (admin-editable);
   // fall back to the core item list (rates unset) when the API was unreachable.
@@ -913,8 +908,8 @@ export default function AdminConsole({
                 buttons suspend tenants and change platform pricing, that is the
                 one badge that must not be decorative. It now names the API the
                 page is actually reading, which is the thing staff need to know. */}
-            <div title={`API: ${env.detail}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 11px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: ".04em", color: `var(--${env.tone})`, background: `color-mix(in srgb,var(--${env.tone}) 13%,transparent)`, border: `1px solid color-mix(in srgb,var(--${env.tone}) 30%,transparent)` }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: `var(--${env.tone})` }} />{env.label}
+            <div title={`API: ${apiEnv.detail}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 11px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: ".04em", color: `var(--${apiEnv.tone})`, background: `color-mix(in srgb,var(--${apiEnv.tone}) 13%,transparent)`, border: `1px solid color-mix(in srgb,var(--${apiEnv.tone}) 30%,transparent)` }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: `var(--${apiEnv.tone})` }} />{apiEnv.label}
             </div>
             <button className={styles.iconBtn} onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="Toggle theme" style={{ width: 34, height: 34, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {theme === "dark" ? (

@@ -263,9 +263,16 @@ export class AdminService {
       include: {
         subscription: true,
         _count: { select: { quotes: true } },
-        // The newest quote touch, as the tenant's last activity. `take: 1` on an
-        // ordered relation, so this is one extra index read per tenant rather than
-        // a second pass over every quote.
+        // The newest quote touch, as the tenant's last activity.
+        //
+        // Prisma resolves a `take`-limited include as ONE extra windowed query, not
+        // one per tenant — so this is not N+1. It is NOT index-assisted, though:
+        // `Quote` has no index on `updatedAt` (only `[businessId, number, version]`,
+        // `[businessId, status]` and `[clientId]`), so the sort is over every quote
+        // of every tenant on each admin page load. An earlier version of this
+        // comment claimed an index that does not exist; a review caught it. F58
+        // covers adding `@@index([businessId, updatedAt])` when this screen starts
+        // to feel it.
         quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
       },
       orderBy: { createdAt: "desc" },

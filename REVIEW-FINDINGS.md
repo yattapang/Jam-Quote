@@ -885,6 +885,54 @@ equivalent to the table's index lookup because `tenantIds` is the same array).
 three bypasses the reviewer demonstrated, as assertions that they no longer work —
 because the useful thing a defeated guard leaves behind is the defeat.
 
+## The review of `69f8caa` (F38) — and the guard lesson, learned properly
+
+Third review, third set of real findings. The important one is not any single
+defect, it is that **all three new guards were defeated simultaneously, on the real
+file, with the suite green** — by rewrites that did not change the defect at all.
+
+| What it found | Status |
+|---|---|
+| **Two source links pointed at the WRONG document.** `jm.sources` holds exactly two URLs, both about GCT — its own `verifiedAsOf` comment says it is the consumption-tax provenance. `sources[0]` for TAXPAYER ID and `find(u => u.includes("gov.jm"))` for REGIONS both resolved to the GCT rate page, because `jamaicatax.gov.jm` is under `gov.jm`. A staffer clicking "Gov.jm" beside "14 parishes" landed on a tax-rate page | FIXED — the three code-owned cards carry `sourceUrl: null` and render as dimmed text. A confidently-labelled link to the wrong page is worse than none: it looks sourced, and the reader has to discover that it is not. F59 covers sourcing them properly |
+| **The environment badge read the second-precedence variable.** Every fetch resolves `API_BASE_URL ?? NEXT_PUBLIC_API_BASE_URL ?? localhost`; the badge read only the public one, which the client bundle can see but which loses. A deploy setting `API_BASE_URL` to production with a stale public value would have suspended real tenants behind an amber STAGING pill | FIXED — `apiEnvironment` moved to `lib/api-environment.ts`, takes the ALREADY-RESOLVED url, and the server page passes `apiEnvironment(API_BASE_URL)` as a prop. One resolution, one precedence |
+| **The STAGING pattern fired on production hosts.** `jamquote-api.fly.dev`, `api.jamquote.dev` and `jamquote.dev` all read STAGING — `.dev` is an ordinary TLD and Fly.io an ordinary host | FIXED — the TLD label is excluded and `dev`/`test`/`preview` are dropped from the word list. A badge that cries staging on production teaches staff to ignore the badge |
+| `apiEnvironment` had no unit test; the only guard was a string grep | FIXED — `api-environment.test.ts`, six cases including every host the review found misclassified, and one asserting every tone it can return is a real CSS variable |
+| **A false claim in a comment:** "one extra indexed read per tenant". `Quote` has no index on `updatedAt`, so the ordered `take: 1` sorts every quote of every tenant per page load | FIXED — the comment states the truth. F58 covers the index |
+| **All three new guards were defeated** (see below) | FIXED — each now parses instead of matching, and every demonstrated bypass is kept as a test |
+
+**Confirmed clean:** `lastActiveAt` semantics (`@updatedAt` does bump on create,
+edit, status change and soft-delete; the include is tenant-scoped by construction and
+is not N+1); the `Subscription.status` removal (no surviving consumer anywhere in the
+monorepo); the `TenantRow` 7-to-8 widening (every index read and the drawer
+destructure check out, header and body still 7 columns); the search-box deletion.
+
+### Why the guards kept failing, and what changed
+
+The bypasses were: deleting the two spaces around an arrow, dropping the parens on
+the parameter, typing the parameter, putting the body in braces — *the exact form the
+comment claimed to target* — swapping attribute order, a braced or empty `href`, no
+`href` at all; a braced digit and a newline before a digit; a quoted PRODUCTION.
+Each is the same defect with different whitespace.
+
+Two changes, and they are the general lesson:
+
+1. **Parse the thing, do not match its spelling.** `deadAnchor(tag)` extracts the
+   `href` and `onClick` attributes, strips the arrow head and any braced body,
+   removes every `preventDefault()` / `stopPropagation()` / `void 0`, and asks
+   whether anything is left. All eleven spellings collapse to one answer. Likewise
+   `literalCount` normalises braces, quotes and whitespace before testing digits.
+2. **The control tests must exercise the guard, not a copy of it.** Each bypass test
+   previously declared its OWN regex, so editing a guard could not fail its own
+   control. The predicates are defined once and both blocks call them.
+
+There is also a `found its subjects` assertion over the whole block — tag count,
+anchor count, text-child count — because every assertion in it scans one parse, and a
+rename would otherwise empty all of them at once.
+
+While being written, the new guard caught something real: the orphaned local copy of
+`apiEnvironment`, left in the console because an earlier edit script asserted and
+exited before writing.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |
@@ -892,6 +940,8 @@ because the useful thing a defeated guard leaves behind is the defeat.
 | F55 | **A real tenant search.** The fake header box was deleted rather than wired, because a dead control is worse than its absence — but staff genuinely need to find a tenant by name or TRN, and the tenants table has no filter at all now that the pills are honest about not being one. This is the feature the mock was standing in for |
 | F56 | **The filter pills still do not filter.** They are honest counts now, which is not the same as useful. Wiring them is a small change once a search/filter state exists (see F55) |
 | F57 | **`lastActiveAt` measures quote activity only.** There is no `lastLoginAt` on the platform, so a tenant who logs in and browses without touching a quote reads as inactive. The column's tooltip says exactly what it measures, which is honest, but a real last-seen timestamp would be better and is a one-column migration |
+| F58 | **No index supports the last-activity sort.** `orderBy: { updatedAt: "desc" }` on the tenants include has no `@@index([businessId, updatedAt])` behind it, so it sorts every quote of every tenant on each admin page load. Fine at current scale, one migration to fix |
+| F59 | **Per-topic source URLs for the rule cards.** `jm.sources` is consumption-tax provenance only, so TAXPAYER ID, REGIONS and PAYMENT RAILS have no honest link and render as text. Each needs a URL recorded by someone who has checked it — inventing one is how the wrong-document defect happened |
 
 ## Suggested order
 

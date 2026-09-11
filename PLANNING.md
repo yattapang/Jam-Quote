@@ -1957,7 +1957,14 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F17, F18, F19, F20, F52 | The admin console reported facts the API never sent: an all-time quote count labelled "This month", a drawer pill reading a column only ever written "active", a "subscriptions" tile counting rows staff had touched, and an unconditional "Verified" badge under a banner saying nothing was verified. F52 replaces the honesty test's denylist of already-deleted strings with four assertions about classes of fabrication |
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 
-**Every one of the twelve reviews found something.** The twelfth found that a fix I
+**Every one of the thirteen reviews found something.** Three in a row have now
+found a defect in the GUARD rather than only in the code, and the thirteenth defeated
+three new assertions at once on the real file with the suite green — by deleting the
+spaces around an arrow, wrapping a digit in braces, and quoting a string. The rule
+that came out of it: **a guard must parse what it judges, and its control tests must
+call the same predicate the guard calls.** Every earlier version matched one spelling
+of a defect, which polices formatting rather than behaviour, and gave each control
+test a private copy of the pattern, so editing a guard could not fail its own control. The twelfth found that a fix I
 had reported as done was not done at all, and that three of the four assertions I had
 written to prevent its class were defeatable — which it proved by writing the defects
 and watching the suite go green. The lesson is narrower than "review everything": a
@@ -1975,7 +1982,7 @@ a write; and a guard whose own grep drove the worse code at the call site.
 
 **Remaining order:** F21 (retiring a statutory contribution is one-way and inert for
 custom entries), F39 (the manual sweep is unaudited), F40 (currency) and F41 (a
-pricing save reporting success on a field it drops). Then F55–F57, opened by the F38
+pricing save reporting success on a field it drops). Then F55–F59, opened by the F38
 work: a real tenant search, filters behind the honest pills, and a true last-seen
 timestamp. Then the visual and UX polish phase.
 
