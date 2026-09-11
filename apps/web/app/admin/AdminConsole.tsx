@@ -92,6 +92,39 @@ function dollarsStrToCents(v: string): number {
 // Financials showed the same figure as $4,000. formatJmd (from core, used by
 // every other screen in the app) is now the only way money is rendered here.
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
+/**
+ * Which deployment this console is driving, from the API it reads.
+ *
+ * The header carried a green "PRODUCTION" pill with no check behind it, so a laptop
+ * pointed at localhost showed PRODUCTION too. On a console whose buttons suspend
+ * tenants and set platform pricing, that badge is the last thing that should be
+ * decorative.
+ *
+ * `NODE_ENV` would not do: a staging deploy is also a production BUILD, so it would
+ * say PRODUCTION on staging, which is the same lie with more steps. The API base URL
+ * is the honest signal — it is where the data on the screen actually came from.
+ */
+function apiEnvironment(baseUrl: string | undefined): {
+  label: string;
+  tone: "good" | "warn" | "muted";
+  detail: string;
+} {
+  if (!baseUrl) return { label: "API NOT SET", tone: "warn", detail: "NEXT_PUBLIC_API_BASE_URL is unset" };
+  let host: string;
+  try {
+    host = new URL(baseUrl).host;
+  } catch {
+    return { label: "API UNREADABLE", tone: "warn", detail: baseUrl };
+  }
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:|$)/.test(host))
+    return { label: "LOCAL", tone: "muted", detail: host };
+  if (/(^|[.-])(staging|stage|dev|test|preview)([.-]|$)/.test(host))
+    return { label: "STAGING", tone: "warn", detail: host };
+  return { label: "PRODUCTION", tone: "good", detail: host };
+}
+
+const env = apiEnvironment(process.env.NEXT_PUBLIC_API_BASE_URL);
+
 const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", borderRadius: 999,
   fontSize: 12, fontWeight: 600, lineHeight: 1.4, whiteSpace: "nowrap",
@@ -127,7 +160,7 @@ function detailsPreview(details: unknown): string {
  * which kept a dead field one edit away from being read again; standing is derived
  * from the term instead, by `subscriptionStanding`.
  */
-type TenantRow = [string, string, string, string, string, number | string, number];
+type TenantRow = [string, string, string, string, string, string, number | string, number];
 
 /**
  * One mapping from standing to pill, at module scope so the table and the drawer
@@ -611,6 +644,10 @@ export default function AdminConsole({
     t.parish ?? "—",
     t.plan,
     formatTrn(t.trn) || "—",
+    // Last activity, then signup. The table shows the first; the drawer shows both,
+    // because "joined in 2024 and has not touched a quote since March" is the whole
+    // question on a screen used to decide who to suspend.
+    t.lastActiveAt ? relativeTime(t.lastActiveAt) : "never",
     relativeTime(t.createdAt),
     "—",
     t.quoteCount,
@@ -663,8 +700,10 @@ export default function AdminConsole({
     r.actionNeeded ? "action needed" : "—",
     regStatusOf(r),
   ]);
+  /** Entries actually awaiting a human, for the nav badge and the tile below. */
+  const needsReviewCount = regChanges.filter((r) => r[4] === "needs").length;
   const regStats = [
-    { value: String(regChanges.filter((r) => r[4] === "needs").length), label: "Needs review", tone: "warn" },
+    { value: String(needsReviewCount), label: "Needs review", tone: "warn" },
     { value: String(regChanges.filter((r) => r[4] === "monitoring").length), label: "Monitoring", tone: "info" },
     // "Applied", not "Applied (YTD)". `GET /admin/regulatory` has no date
     // predicate and `regStatusOf` keys off `reviewedAt` with no year filter, so an
@@ -718,10 +757,10 @@ export default function AdminConsole({
   /** The editable card's badge, from the same verification state as its footer. */
   const taxBadge: RuleBadge = { text: rpVerify.label, tone: rpVerifyTone };
   const ruleCards = [
-    { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, badge: taxBadge, sourceLink: sourceEff ? "Source" : "TAJ", chips: [] as string[] },
-    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "TAJ", chips: [] as string[] },
-    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "Gov.jm", chips: [...jm.regions] },
-    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "BOJ", chips: [] as string[] },
+    { label: "CONSUMPTION TAX", value: `${taxLabelEff} ${taxRateEff}%`, detail: `${jm.taxLongName} · single standard rate`, provenance: taxProv, badge: taxBadge, sourceLink: sourceEff ? "Source" : "TAJ", sourceUrl: sourceEff, chips: [] as string[] },
+    { label: "TAXPAYER ID", value: jm.taxpayerId.label, detail: "Format NNN-NNN-NNN · 9 digits · checksum validated", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "TAJ", sourceUrl: jm.sources[0] ?? null, chips: [] as string[] },
+    { label: `REGIONS — ${jm.regions.length} ${jm.regionLabel.toUpperCase()}ES`, value: `${jm.regions.length} parishes`, detail: "Used for parish-level tax & delivery logic", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "Gov.jm", sourceUrl: jm.sources.find((u) => u.includes("gov.jm")) ?? null, chips: [...jm.regions] },
+    { label: "PAYMENT RAILS", value: jm.paymentProviders.map((p) => p.label).join(" · "), detail: "Digital wallets available for client invoicing", provenance: "Code-owned · not editable", badge: codeOwnedBadge, sourceLink: "BOJ", sourceUrl: jm.sources.find((u) => u.includes("boj")) ?? null, chips: [] as string[] },
   ];
   // Payroll statutory rates now come from the effective pack (admin-editable);
   // fall back to the core item list (rates unset) when the API was unreachable.
@@ -809,7 +848,12 @@ export default function AdminConsole({
           <button className={styles.navBtn} onClick={() => go("regulatory")} style={navBtn("regulatory")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M9 12l2 2 4-4" /></svg>
             <span>Regulatory queue</span>
-            <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--warn)", background: "color-mix(in srgb,var(--warn) 16%,transparent)", borderRadius: 6, padding: "1px 7px" }}>3</span>
+            {/* The real count, and nothing when it is zero. This was a hardcoded 3,
+                one line from `regChanges`, so the badge said "3 waiting" on an empty
+                queue and stayed 3 after a staffer had reviewed everything. */}
+            {needsReviewCount > 0 && (
+              <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "var(--warn)", background: "color-mix(in srgb,var(--warn) 16%,transparent)", borderRadius: 6, padding: "1px 7px" }}>{needsReviewCount}</span>
+            )}
           </button>
           <button className={styles.navBtn} onClick={() => go("rulepack")} style={navBtn("rulepack")}>
             <svg width="17" height="17" viewBox="0 0 24 24" {...iconStroke}><path d="M4 4h11l5 5v11H4z" /><path d="M15 4v5h5" /><path d="M8 13h6M8 17h4" /></svg>
@@ -858,13 +902,19 @@ export default function AdminConsole({
             <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.2 }}>{screenDesc}</div>
           </div>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-            <div className={styles.headerSearch} style={{ border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--muted)", fontSize: 13 }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" {...iconStroke}><circle cx="11" cy="11" r="7" /><path d="m20 20-3-3" /></svg>
-              <span>Search tenants, TRN, rules…</span>
-              <span style={{ marginLeft: "auto", fontSize: 11, border: "1px solid var(--border)", borderRadius: 4, padding: "1px 5px" }}>⌘K</span>
-            </div>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 11px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: ".04em", color: "var(--good)", background: "color-mix(in srgb,var(--good) 13%,transparent)", border: "1px solid color-mix(in srgb,var(--good) 30%,transparent)" }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--good)" }} />PRODUCTION
+            {/* NO search box. There was one here — a div of spans with a ⌘K hint,
+                no input, no handler and no command palette behind it. A keyboard
+                hint is a promise about a shortcut that did not exist, and staff
+                looking for a tenant by TRN would have tried it first. Wiring a real
+                tenant search is on the register; a control that does nothing is
+                worse than its absence, because it stops the search. */}
+            {/* This said PRODUCTION unconditionally, in green, on every build —
+                including a laptop pointed at a local API. On a console whose
+                buttons suspend tenants and change platform pricing, that is the
+                one badge that must not be decorative. It now names the API the
+                page is actually reading, which is the thing staff need to know. */}
+            <div title={`API: ${env.detail}`} style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 34, padding: "0 11px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, letterSpacing: ".04em", color: `var(--${env.tone})`, background: `color-mix(in srgb,var(--${env.tone}) 13%,transparent)`, border: `1px solid color-mix(in srgb,var(--${env.tone}) 30%,transparent)` }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: `var(--${env.tone})` }} />{env.label}
             </div>
             <button className={styles.iconBtn} onClick={() => setTheme(theme === "dark" ? "light" : "dark")} title="Toggle theme" style={{ width: 34, height: 34, flex: "none", border: "1px solid var(--border)", borderRadius: 8, background: "var(--surface)", color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {theme === "dark" ? (
@@ -1006,7 +1056,7 @@ export default function AdminConsole({
                     "Suspended" pill in the status column carries that anyway. */}
                 <table className={`${styles.dataTable} ${styles.dataTableWide}`}>
                   <thead><tr style={{ background: "var(--surface-alt)" }}>
-                    <th style={th} className={styles.stickyCol}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }} className={styles.actionsCell}>ACTIONS</th>
+                    <th style={th} className={styles.stickyCol}>BUSINESS</th><th style={th}>PARISH</th><th style={th}>PLAN</th><th style={th}>TRN</th><th style={th}>STATUS</th><th title="Most recent quote created, edited or deleted — the only activity timestamp the platform records" style={{ ...th, textAlign: "right" }}>LAST ACTIVE</th><th style={{ ...th, textAlign: "right" }} className={styles.actionsCell}>ACTIONS</th>
                   </tr></thead>
                   <tbody>
                     {tenantsRaw.map((t, i) => {
@@ -1069,7 +1119,7 @@ export default function AdminConsole({
                               {suspended && <span style={pill("critical")}>Suspended</span>}
                             </div>
                           </td>
-                          <td style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[4]}</td>
+                          <td title={`Signed up ${t[5]}`} style={{ ...td, textAlign: "right", color: "var(--muted)" }}>{t[4]}</td>
                           <td style={{ ...td, textAlign: "right" }} className={styles.actionsCell} onClick={(e) => e.stopPropagation()}>
                             {id && canManageTenants ? (
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
@@ -1473,7 +1523,15 @@ export default function AdminConsole({
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)", fontSize: 11.5, color: "var(--muted)" }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" {...iconStroke}><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></svg>
                       <span>{c.provenance}</span>
-                      <a className={styles.link} href="#" onClick={(e) => e.preventDefault()} style={{ marginLeft: "auto", fontWeight: 600 }}>{c.sourceLink} ↗</a>
+                      {/* A real link, or plain text. These were all `href="#"` with
+                          `preventDefault`, while `sourceEff` held the actual URL and
+                          working links sat 150 lines above. A staffer clicking
+                          "TAJ ↗" to check a tax rate got nothing at all. */}
+                      {c.sourceUrl ? (
+                        <a className={styles.link} href={c.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", fontWeight: 600 }}>{c.sourceLink} ↗</a>
+                      ) : (
+                        <span title="No source URL recorded for this value" style={{ marginLeft: "auto", fontWeight: 600, opacity: 0.65 }}>{c.sourceLink}</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1946,7 +2004,7 @@ function TenantDrawer({
   // came from the hardcoded per-plan table that was removed for inventing
   // figures, and reinstating it here would put two different numbers for the
   // same tenant on one screen.
-  const [name, parish, plan, trn, , , q] = raw;
+  const [name, parish, plan, trn, lastActive, signedUp, , q] = raw;
   // Derived from the renewal date, exactly as the tenants table does it. This used
   // to read `Subscription.status`, which is written the literal "active" in both
   // places that write it and never updated again — the sweep's revert sets `plan`
@@ -1984,7 +2042,10 @@ function TenantDrawer({
   //
   // Deleted rather than invented: a second figure would need a second query, and a
   // fabricated one on this screen is the most expensive kind of wrong.
-  const metrics = [{ label: "Quotes created (all time)", value: String(q) }];
+  const metrics = [
+    { label: "Quotes created (all time)", value: String(q) },
+    { label: "Last activity", value: lastActive },
+  ];
   const interval = tenant?.interval ?? "monthly";
   const sub: [string, string][] = [
     ["Plan", shown],
@@ -2005,7 +2066,7 @@ function TenantDrawer({
           <div style={{ width: 42, height: 42, flex: "none", borderRadius: 11, background: "var(--surface-alt)", display: "flex", alignItems: "center", justifyContent: "center", ...archivo, fontWeight: 700, fontSize: 14, color: "var(--muted)" }}>{init}</div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ ...archivo, fontWeight: 700, fontSize: 17, lineHeight: 1.15 }}>{name}</div>
-            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{parish} · TRN {trn}</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 3 }}>{parish} · TRN {trn} · joined {signedUp}</div>
             <div style={{ display: "flex", gap: 7, marginTop: 9 }}><span style={pill(planTone[shown] ?? "muted")}>{shown}</span><span style={pill(st)}>{sl}</span></div>
             {businessId && (
               <form action={startImpersonation.bind(null, businessId)} style={{ marginTop: 12 }}>

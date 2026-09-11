@@ -1955,6 +1955,7 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F28 | Every rejected form answered "Validation failed", and because `errorMessage()` prefers a non-empty server message, that string beat every written fallback in the client |
 | F31, F32 | Numeric inputs accepted what the DTO refuses. `BOUNDS` in core is now the single definition the DTO and the form both spend |
 | F17, F18, F19, F20, F52 | The admin console reported facts the API never sent: an all-time quote count labelled "This month", a drawer pill reading a column only ever written "active", a "subscriptions" tile counting rows staff had touched, and an unconditional "Verified" badge under a banner saying nothing was verified. F52 replaces the honesty test's denylist of already-deleted strings with four assertions about classes of fabrication |
+| F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 
 **Every one of the twelve reviews found something.** The twelfth found that a fix I
 had reported as done was not done at all, and that three of the four assertions I had
@@ -1972,12 +1973,11 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** the rest of the admin console — F21 (retiring a statutory
-contribution is one-way and inert for custom entries), the remaining F38 dead
-controls (`href="#"` Source links, the fake search box, the hardcoded Regulatory
-badge `3`, the PRODUCTION pill, LAST ACTIVE rendering the signup date), F39 (the
-manual sweep is unaudited), F40 (currency) and F41 (a pricing save reporting
-success on a field it drops). Then the visual and UX polish phase.
+**Remaining order:** F21 (retiring a statutory contribution is one-way and inert for
+custom entries), F39 (the manual sweep is unaudited), F40 (currency) and F41 (a
+pricing save reporting success on a field it drops). Then F55–F57, opened by the F38
+work: a real tenant search, filters behind the honest pills, and a true last-seen
+timestamp. Then the visual and UX polish phase.
 
 **Owner questions raised by the work, none guessed at:**
 

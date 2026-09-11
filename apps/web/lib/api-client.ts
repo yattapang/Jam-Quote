@@ -1068,8 +1068,14 @@ export interface AdminTenant {
   priceCents: number | null;
   renewsAt: string | null;
   trn: string | null;
-  status: string;
   createdAt: string;
+  /**
+   * When this tenant last did anything — the most recent quote touch — or null if
+   * they never have. There is no `lastLoginAt` on the platform, so this is the only
+   * activity signal; `Subscription.status` is gone, because it was written the
+   * literal "active" once and never updated.
+   */
+  lastActiveAt: string | null;
   quoteCount: number;
   /** Set when read via GET /admin/tenants?includeSuspended=true (see getAdminData). */
   suspended: boolean;

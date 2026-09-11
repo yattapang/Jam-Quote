@@ -253,6 +253,47 @@ describe("the console cannot claim a figure it does not have", () => {
     expect(src).toContain("subscriptionStanding(");
   });
 
+  it("no link is an anchor to nowhere", () => {
+    // Four rule-card "Source ↗" links were `href="#"` with `preventDefault` and an
+    // empty body, while the real URL sat in scope and working links were 150 lines
+    // above. A staffer clicking "TAJ ↗" to check a tax rate got nothing.
+    //
+    // `href="#"` is legitimate for an in-page SPA jump whose onClick actually
+    // navigates. What is not legitimate is a handler whose ENTIRE body is
+    // `e.preventDefault()` — that is a link that exists to look like a link.
+    const dead = [...src.matchAll(/href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/g)];
+    expect(
+      dead.map((m) => m[0]!),
+      "an anchor whose only behaviour is preventDefault is a dead control: give it the URL or make it text",
+    ).toEqual([]);
+    // Positive control: in-page anchors still exist, so this did not pass by
+    // deleting every link in the file.
+    expect(src).toContain('href="#"');
+  });
+
+  it("the deployment badge is derived, not asserted", () => {
+    // A green "PRODUCTION" pill with no check behind it, on every build, including
+    // a laptop pointed at localhost. On a console whose buttons suspend tenants,
+    // that is the one badge that must not be decorative.
+    expect(src, "PRODUCTION must come from a check, not from a literal in the markup").not.toMatch(
+      />[^<>{]*PRODUCTION/,
+    );
+    expect(src, "the environment badge must read the API it actually talks to").toContain(
+      "NEXT_PUBLIC_API_BASE_URL",
+    );
+  });
+
+  it("no count is a literal in the markup", () => {
+    // The Regulatory nav badge was a hardcoded `3`, one line from `regChanges`: it
+    // said "3 waiting" on an empty queue and stayed 3 after a staffer cleared it.
+    // Any bare number rendered as element text is a count nobody counted.
+    const literals = [...src.matchAll(/>[ ]*(\d{1,6})[ ]*</g)];
+    expect(
+      literals.map((m) => m[0]!),
+      "render a figure from data, or do not render it",
+    ).toEqual([]);
+  });
+
   it("nothing that looks clickable lacks a handler", () => {
     // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past
     // due (3)" looked like a filter and did nothing.
@@ -324,6 +365,23 @@ describe("the guards above are not satisfied by evidence elsewhere", () => {
     const src =
       "<td>{p.verified ? <span style={v}>Verified ✓</span> : <span>Unverified</span>}</td>";
     expect(enclosingExpression(src, src.search(/>\s*Verified/)) ?? "").toMatch(/\?/);
+  });
+
+  it("a dead anchor is caught and a working one is not", () => {
+    const DEAD = /href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/;
+    expect(DEAD.test('<a href="#" onClick={(e) => e.preventDefault()}>TAJ</a>')).toBe(true);
+    // A real in-page navigation keeps its anchor.
+    expect(
+      DEAD.test('<a href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }}>View all</a>'),
+    ).toBe(false);
+    // And a real external link has no preventDefault at all.
+    expect(DEAD.test('<a href={c.sourceUrl} target="_blank">Source</a>')).toBe(false);
+  });
+
+  it("a literal count is caught, and a rendered expression is not", () => {
+    const LITERAL = />[ ]*(\d{1,6})[ ]*</;
+    expect(LITERAL.test("<span>3</span>")).toBe(true);
+    expect(LITERAL.test("<span>{needsReviewCount}</span>")).toBe(false);
   });
 
   it("a window word is caught however it is spelled", () => {

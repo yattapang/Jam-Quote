@@ -56,8 +56,20 @@ export interface AdminTenant {
   priceCents: number | null;
   renewsAt: Date | null;
   trn: string | null;
-  status: string;
   createdAt: Date;
+  /**
+   * When this tenant last did anything, or null if they never have.
+   *
+   * The most recent `Quote.updatedAt`, which is the only activity timestamp the
+   * platform records — there is no `lastLoginAt`. A soft-delete counts, because
+   * deleting a quote is activity and `@updatedAt` bumps on it.
+   *
+   * The console's LAST ACTIVE column used to render `createdAt` — the signup date —
+   * which on a screen used to decide who to suspend is the most misleading possible
+   * substitute: a dormant tenant who signed up yesterday looked active, and a busy
+   * one from 2024 looked abandoned.
+   */
+  lastActiveAt: Date | null;
   quoteCount: number;
   suspended: boolean;
 }
@@ -251,6 +263,10 @@ export class AdminService {
       include: {
         subscription: true,
         _count: { select: { quotes: true } },
+        // The newest quote touch, as the tenant's last activity. `take: 1` on an
+        // ordered relation, so this is one extra index read per tenant rather than
+        // a second pass over every quote.
+        quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
       },
       orderBy: { createdAt: "desc" },
     });
@@ -264,8 +280,8 @@ export class AdminService {
       priceCents: b.subscription?.priceCents ?? null,
       renewsAt: b.subscription?.renewsAt ?? null,
       trn: b.trn,
-      status: b.subscription?.status ?? "active",
       createdAt: b.createdAt,
+      lastActiveAt: b.quotes[0]?.updatedAt ?? null,
       quoteCount: b._count.quotes,
       suspended: b.deletedAt !== null,
     }));

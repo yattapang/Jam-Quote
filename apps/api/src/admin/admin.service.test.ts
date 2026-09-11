@@ -40,6 +40,8 @@ describe("AdminService.tenants", () => {
             deletedAt: null,
             subscription: { plan: "Pro", status: "active" },
             _count: { quotes: 4 },
+            // Newest-first, `take: 1` — the tenant's last activity.
+            quotes: [{ updatedAt: new Date("2026-02-14T09:30:00.000Z") }],
           },
           {
             id: "biz-2",
@@ -50,6 +52,8 @@ describe("AdminService.tenants", () => {
             deletedAt: null,
             subscription: null,
             _count: { quotes: 0 },
+            // Never created a quote, so there is no activity to report.
+            quotes: [],
           },
         ]),
       },
@@ -71,8 +75,13 @@ describe("AdminService.tenants", () => {
         priceCents: null,
         renewsAt: null,
         trn: "102458963",
-        status: "active",
         createdAt: now,
+        // Last activity, NOT the signup date. The console's LAST ACTIVE column
+        // rendered `createdAt`, so a dormant tenant who signed up yesterday looked
+        // active and a busy one from 2024 looked abandoned — on the screen used to
+        // decide who to suspend. `Subscription.status` is gone from this row: it was
+        // written the literal "active" once and never updated again.
+        lastActiveAt: new Date("2026-02-14T09:30:00.000Z"),
         quoteCount: 4,
         suspended: false,
       },
@@ -85,8 +94,8 @@ describe("AdminService.tenants", () => {
         priceCents: null,
         renewsAt: null,
         trn: null,
-        status: "active",
         createdAt: now,
+        lastActiveAt: null,
         quoteCount: 0,
         suspended: false,
       },
@@ -94,7 +103,11 @@ describe("AdminService.tenants", () => {
     expect(prisma.business.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { deletedAt: null },
-        include: { subscription: true, _count: { select: { quotes: true } } },
+        include: {
+          subscription: true,
+          _count: { select: { quotes: true } },
+          quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
+        },
       }),
     );
   });
@@ -113,6 +126,7 @@ describe("AdminService.tenants", () => {
             deletedAt: now,
             subscription: null,
             _count: { quotes: 0 },
+            quotes: [],
           },
         ]),
       },
