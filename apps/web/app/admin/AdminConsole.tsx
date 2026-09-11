@@ -117,7 +117,21 @@ function detailsPreview(details: unknown): string {
   }
 }
 
-type TenantRow = [string, string, string, string, string, string, number | string, number, number];
+type TenantRow = [string, string, string, string, string, string, number | string, number];
+
+/**
+ * One mapping from standing to pill, at module scope so the table and the drawer
+ * cannot label the same tenant differently.
+ *
+ * They did: the drawer read `Subscription.status` — written the literal "active" and
+ * never updated — so it said "Active" beside a table row saying "Past due".
+ */
+const STANDING_PILL: Record<SubscriptionStanding, [string, string]> = {
+  CURRENT: ["Current", "good"],
+  DUE_SOON: ["Due soon", "info"],
+  PAST_DUE: ["Past due", "warn"],
+  FREE: ["Free", "muted"],
+};
 type RegRow = [string, string, string, string, string];
 
 const jm = getJurisdiction("JM");
@@ -544,7 +558,16 @@ export default function AdminConsole({
   // answer are gone rather than guessed.
   const stats = [
     { label: "Total businesses", value: ov ? ov.businesses.toLocaleString() : "—" },
-    { label: "Active subscriptions", value: ov ? String(ov.activeSubscriptions) : "—" },
+    {
+      // `activeSubscriptions` counts subscription ROWS, and every row is written
+      // status "active" — including free-plan rows created the moment a staffer
+      // touches the plan dropdown, and tenants the sweep reverted for non-payment.
+      // It also ignores Business.deletedAt while the tile beside it filters it. So
+      // it meant "tenants a staff member has clicked the plan control on".
+      // `financials.proCount` is the honest figure and was two clicks away.
+      label: "Paying tenants",
+      value: data.financials ? String(data.financials.proCount) : "—",
+    },
     {
       label: "MRR",
       value: data.financials ? formatJmd(data.financials.mrrCents) : "—",
@@ -575,7 +598,6 @@ export default function AdminConsole({
     relativeTime(t.createdAt),
     "—",
     t.quoteCount,
-    t.quoteCount,
   ]);
   // Real business ids, index-aligned with tenantsRaw. Every row now has one,
   // so every row gets its plan/suspend/delete controls — previously the mock
@@ -599,12 +621,6 @@ export default function AdminConsole({
       interval: data.tenants[i]?.interval ?? "monthly",
       renewsAt: data.tenants[i]?.renewsAt ?? null,
     });
-  const STANDING_PILL: Record<SubscriptionStanding, [string, string]> = {
-    CURRENT: ["Current", "good"],
-    DUE_SOON: ["Due soon", "info"],
-    PAST_DUE: ["Past due", "warn"],
-    FREE: ["Free", "muted"],
-  };
   const initOf = (name: string) => name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   const cnt = (want: SubscriptionStanding) =>
     tenantsRaw.filter((_, i) => standingOf(i) === want).length;
@@ -641,6 +657,9 @@ export default function AdminConsole({
   // from the effective pack (GET /admin/rulepack; live `rulepack` state); the
   // code-owned values (taxpayer id, regions, payment rails) stay from core `jm`.
   const verified = pill("accent", { padding: "3px 10px" });
+  // A card whose figure is editable has not been verified by anyone until a staffer
+  // says so, and the badge must not claim otherwise. See the conditional below.
+  const unverified = pill("warn", { padding: "3px 10px" });
   const rp = rulepack; // effective pack, or null when the API was unreachable
   const taxLabelEff = rp?.taxLabel ?? jm.taxLabel;
   const taxRateEff = rp?.defaultTaxRatePct ?? jm.defaultTaxRatePct;
@@ -927,7 +946,13 @@ export default function AdminConsole({
             <div className={`${styles.fadein} ${styles.screen}`}>
               <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
                 {tenantFilters.map((f, i) => (
-                  <div key={String(f[0])} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)", background: i === 0 ? "var(--surface-alt)" : "var(--surface)", color: "var(--text)" }}>
+                  /* No pointer cursor: these are COUNTS, and they do not filter.
+                     They carried `cursor: "pointer"` with no handler, so "Past due
+                     (3)" looked like a filter, did nothing, and left the first pill
+                     highlighted for ever — reading as "filter applied, showing all".
+                     The counts are real and worth having; the affordance was the lie.
+                     Wiring an actual filter is on the register. */
+                  <div key={String(f[0])} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 13px", borderRadius: 9, fontSize: 13, fontWeight: 600, border: "1px solid var(--border)", background: i === 0 ? "var(--surface-alt)" : "var(--surface)", color: "var(--text)" }}>
                     {f[0]}<span style={{ color: "var(--muted)", fontWeight: 600, marginLeft: 2 }}>{String(f[1])}</span>
                   </div>
                 ))}
@@ -1390,7 +1415,15 @@ export default function AdminConsole({
                   <div key={c.label} style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", boxShadow: "var(--shadow)" }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                       <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)" }}>{c.label}</div>
-                      <span style={verified}>Verified ✓</span>
+                      {/* Conditional. This said "Verified ✓" on every card,
+                          unconditionally — beneath a red banner warning that nobody
+                          had confirmed the figures, and above a footer that could read
+                          "Unverified · core baseline". A staffer scanning badges
+                          concluded the tax rate was sourced. The payroll table below
+                          has always got this right (`p.verified ? ... : ...`). */}
+                      <span style={c.provenance.startsWith("Code-owned") ? verified : unverified}>
+                        {c.provenance.startsWith("Code-owned") ? "Code-owned" : "Needs review"}
+                      </span>
                     </div>
                     <div style={{ ...archivo, fontWeight: 700, fontSize: 24, letterSpacing: "-.02em", lineHeight: 1.05 }}>{c.value}</div>
                     <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6 }}>{c.detail}</div>
@@ -1857,7 +1890,7 @@ function TenantDrawer({
   onBillingChanged,
   onClose,
 }: {
-  raw: [string, string, string, string, string, string, number | string, number, number];
+  raw: TenantRow;
   businessId: string | null;
   suspended: boolean;
   /** The real row, so the drawer stops inventing subscription facts. */
@@ -1877,9 +1910,22 @@ function TenantDrawer({
   // came from the hardcoded per-plan table that was removed for inventing
   // figures, and reinstating it here would put two different numbers for the
   // same tenant on one screen.
-  const [name, parish, plan, trn, status, , , q, qm] = raw;
-  const statusMap: Record<string, [string, string]> = { active: ["Active", "good"], trial: ["Trial", "info"], past_due: ["Past due", "warn"], churned: ["Churned", "muted"] };
-  const [sl, st] = statusMap[status] ?? ["Active", "good"];
+  const [name, parish, plan, trn, status, , , q] = raw;
+  // Derived from the renewal date, exactly as the tenants table does it. This used
+  // to read `Subscription.status`, which is written the literal "active" in both
+  // places that write it and never updated again — the sweep's revert sets `plan`
+  // and deliberately leaves `status` alone. So three of the four branches were
+  // unreachable, and the `?? ["Active", "good"]` fallback asserted a healthy green
+  // account for anything unrecognised, INCLUDING a tenant with no subscription row.
+  // The table beside it showed "Past due" while this drawer said "Active".
+  const [sl, st] = STANDING_PILL[
+    subscriptionStanding({
+      plan: tenant?.plan ?? "free",
+      interval: tenant?.interval ?? "monthly",
+      renewsAt: tenant?.renewsAt ?? null,
+    })
+  ];
+  void status;
   const init = name.split(" ").slice(0, 2).map((w) => w[0]).join("");
   // Real tenants arrive as lowercase "free"/"pro" while the mock rows are
   // already capitalized, so every lookup below is keyed off the normalized
@@ -1895,10 +1941,15 @@ function TenantDrawer({
   // "Started 2024-08-19 / Renews 2025-05-19 / Payment rail Lynk". None of it
   // came from anywhere. This drawer is where staff decide whether to suspend
   // or bill a business, so invented figures here are the most expensive kind.
-  const metrics = [
-    { label: "Quotes created", value: String(q) },
-    { label: "This month", value: String(qm) },
-  ];
+  // ONE figure, because the API sends one. This rendered `t.quoteCount` twice —
+  // passed into two slots and labelled "Quotes created" and "This month" — and the
+  // API has no monthly count at all (`_count: { select: { quotes: true } }`, no
+  // createdAt predicate). A tenant with 240 lifetime quotes read "This month: 240"
+  // on the screen where staff decide whether to bill or suspend them.
+  //
+  // Deleted rather than invented: a second figure would need a second query, and a
+  // fabricated one on this screen is the most expensive kind of wrong.
+  const metrics = [{ label: "Quotes created (all time)", value: String(q) }];
   const interval = tenant?.interval ?? "monthly";
   const sub: [string, string][] = [
     ["Plan", shown],

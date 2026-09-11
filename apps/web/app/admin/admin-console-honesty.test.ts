@@ -80,3 +80,73 @@ describe("the staff console shows no invented data", () => {
     expect(CODE).toContain("data.failed");
   });
 });
+
+/**
+ * The classes of dishonesty, not the historical strings.
+ *
+ * A review showed the assertions above are five denylists of figures already deleted
+ * plus a naming-convention check — they can only re-detect the exact past defect. They
+ * passed green alongside a lifetime quote count labelled "This month", a status pill
+ * that could only ever say "Active", an unconditional "Verified ✓", and a fake search
+ * box. Every original fabrication was written as a literal inlined at its render site,
+ * which matches no pattern here and declares no `const`.
+ *
+ * So these assert the SHAPE of each defect. Each one fails on the version of this file
+ * from before the fix, which is the only test of a guard worth having.
+ */
+describe("the console cannot claim a figure it does not have", () => {
+  // Comments stripped first. The badge assertion matched its own explanatory
+  // comment — the text it was written to police appears in the note describing the
+  // defect, which is a false positive a guard should not have.
+  const src = readFileSync(join(process.cwd(), "app", "admin", "AdminConsole.tsx"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
+    .replace(/^\s*\/\/[^\n]*$/gm, "");
+
+  it("no metric is labelled with a time window the API does not send", () => {
+    // "This month" was rendered from a lifetime count, because there is no monthly
+    // figure in the payload. A window in a label is a claim about the query behind it.
+    for (const label of ["This month", "this month", "Today", "This week"]) {
+      expect(src, `"${label}" implies a windowed query — say (all time) or add the query`).not.toContain(
+        `label: "${label}"`,
+      );
+    }
+  });
+
+  it("every Verified badge sits inside a condition", () => {
+    // It read `<span style={verified}>Verified ✓</span>` unconditionally, beneath a
+    // banner saying nobody had confirmed the figures.
+    const badges = [...src.matchAll(/Verified ✓/g)];
+    for (const m of badges) {
+      const before = src.slice(Math.max(0, m.index! - 200), m.index!);
+      expect(before, "a Verified badge must be conditional").toMatch(/\?|&&/);
+    }
+  });
+
+  it("does not read Subscription.status, which is only ever written 'active'", () => {
+    // Three of the four branches of the old statusMap were unreachable, and its
+    // fallback asserted a healthy green account for anything it did not recognise.
+    expect(src).not.toMatch(/statusMap\s*[:=]/);
+    expect(src).not.toContain('past_due: [');
+  });
+
+  it("nothing that looks clickable lacks a handler", () => {
+    // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past
+    // due (3)" looked like a filter and did nothing.
+    const pointers = [...src.matchAll(/cursor:\s*"pointer"/g)];
+    for (const m of pointers) {
+      const before = src.slice(Math.max(0, m.index! - 400), m.index!);
+      // A style FACTORY (`(id): CSSProperties => ({ ... })`) is applied at call
+      // sites far away, so no window can see their handlers. Those are fine — the
+      // defect was a pointer cursor in an INLINE style on an element with none.
+      if (before.includes("CSSProperties")) continue;
+      // A generous window and `disabled=` as evidence: these inline styles run to
+      // several hundred characters, so a handler on the same element can be a long
+      // way from the cursor declaration.
+      const around = src.slice(Math.max(0, m.index! - 1400), m.index! + 1400);
+      expect(around, "a pointer cursor promises a click").toMatch(
+        /onClick|disabled=|<a |<button|<Link/,
+      );
+    }
+  });
+});

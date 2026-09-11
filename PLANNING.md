@@ -1952,8 +1952,11 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F8, F9, F10, F11 | The quote-edit and share cluster: an ACCEPTED quote could be rewritten, re-saving a quote lowered its total, and the public page's line amounts could not add up to the subtotal beneath them |
 | F53, F54 | The card ledger triple-counted (callback unscoped by providerRef), and voidPayment would decrement paidCents for a row that never incremented it |
 | F7, F16 | Billing: paying after a lapse reverted the tenant the same day, and the free allowance both over- and under-charged |
+| F28 | Every rejected form answered "Validation failed", and because `errorMessage()` prefers a non-empty server message, that string beat every written fallback in the client |
+| F31, F32 | Numeric inputs accepted what the DTO refuses. `BOUNDS` in core is now the single definition the DTO and the form both spend |
+| F17, F18, F19, F20, F52 | The admin console reported facts the API never sent: an all-time quote count labelled "This month", a drawer pill reading a column only ever written "active", a "subscriptions" tile counting rows staff had touched, and an unconditional "Verified" badge under a banner saying nothing was verified. F52 replaces the honesty test's denylist of already-deleted strings with four assertions about classes of fabrication |
 
-**Every one of the eight reviews found something.** Three times a regression the
+**Every one of the eleven reviews found something.** Three times a regression the
 fix itself introduced; twice a fix applied to the surface the finding named and not
 its twin; twice a guard that passed on nothing. Treat "done" as provisional until a
 reviewer that did not write it has attacked it.
@@ -1964,9 +1967,12 @@ runtime one; optional fields that hid two callers from the compiler and left the
 original defect live on the dashboard; a concurrency race introduced by narrowing
 a write; and a guard whose own grep drove the worse code at the call site.
 
-**Remaining order:** F28 — the generic "Validation failed" message — because it is
-what makes F31 unreadable to a contractor, then F31 itself (forms accepting what
-the API refuses), then the Tier 3 admin-console items.
+**Remaining order:** the rest of the admin console — F21 (retiring a statutory
+contribution is one-way and inert for custom entries), the remaining F38 dead
+controls (`href="#"` Source links, the fake search box, the hardcoded Regulatory
+badge `3`, the PRODUCTION pill, LAST ACTIVE rendering the signup date), F39 (the
+manual sweep is unaudited), F40 (currency) and F41 (a pricing save reporting
+success on a field it drops). Then the visual and UX polish phase.
 
 **Owner questions raised by the work, none guessed at:**
 
