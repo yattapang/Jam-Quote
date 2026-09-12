@@ -115,6 +115,9 @@ function dollarsStrToCents(v: string): number {
  * The grid shows "Education Tax" and the code is EDUCATION_TAX, so an `aria-label`
  * built from the raw code made a screen reader say "EDUCATION_TAX employee rate"
  * while the visible row said something else. Same mapping the visible label uses.
+ *
+ * Used in three places: the visible grid label, the aria-label on the rate inputs,
+ * and the payroll summary table. Do not create a fourth copy.
  */
 const statLabel = (code: string): string => (code === "EDUCATION_TAX" ? "Education Tax" : code);
 
@@ -978,7 +981,7 @@ export default function AdminConsole({
   // Payroll statutory rates now come from the effective pack (admin-editable);
   // fall back to the core item list (rates unset) when the API was unreachable.
   const payroll = (rp?.statutory ?? jm.statutory.map((s) => ({ code: s.code, label: s.label, employeePct: null as number | null, employerPct: null as number | null, verified: false, asOf: null as string | null }))).map((s) => ({
-    name: s.code === "EDUCATION_TAX" ? "Education Tax" : s.code,
+    name: statLabel(s.code),
     full: s.label,
     employee: s.employeePct != null ? `${s.employeePct}%` : "—",
     employer: s.employerPct != null ? `${s.employerPct}%` : "—",
@@ -1611,7 +1614,7 @@ export default function AdminConsole({
                           inputs, and the grid's copy won the merge. */}
                       {gridContributions.map((s) => (
                         <div key={s.code} style={{ display: "contents" }}>
-                          <div className={styles.statutoryLabel}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
+                          <div className={styles.statutoryLabel}>{statLabel(s.code)}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
                           <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${statLabel(s.code)} employee rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employeePct", e.target.value)}
                             style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />

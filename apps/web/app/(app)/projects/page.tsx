@@ -19,7 +19,13 @@ export default async function ProjectsPage() {
         <div className={shared.headings}>
           <span className={shared.eyebrow}>Work</span>
           <h1 className={shared.title}>Projects</h1>
-          <span className={shared.subtitle}>{projects.length} active projects</span>
+          {/* Not "active projects": findAll has no stage filter, and the list
+              below deliberately shows every stage — COMPLETE and CANCELLED
+              included, each with its own stage pill. "Active" claimed a
+              predicate the query never applied. */}
+          <span className={shared.subtitle}>
+            {projects.length} {projects.length === 1 ? "project" : "projects"}
+          </span>
         </div>
         <div className={shared.headerActions}>
           <AddProjectButton clients={clients.map((c) => ({ id: c.id, name: c.name }))} />

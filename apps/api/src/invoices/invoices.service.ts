@@ -21,6 +21,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
 import { assertClientOwned } from "../common/assert-owned.js";
 import { assertPublicShape } from "../common/public-view.js";
+import { resolveWebBase } from "../common/web-base.util.js";
 import type {
   CreateInvoiceInput,
   InvoiceLineItemInput,
@@ -752,6 +753,21 @@ export class InvoicesService {
         })
       : null;
 
+    // Best-effort: minting the link must never block the reminder itself.
+    // reuses the same token-minting path as the manual "Share" action
+    // (`share()` below) rather than writing a second copy of that rule — an
+    // idempotent mint that also refuses on a DRAFT, which cannot happen here
+    // since recordReminder already refused DRAFT above. A failure here (DB
+    // hiccup, whatever) leaves `link` unset and the reminder still sends,
+    // matching the test comment in invoice-reminder-link.test.ts.
+    let link: string | null = null;
+    try {
+      const { shareToken } = await this.share(businessId, id);
+      link = `${resolveWebBase()}/i/${shareToken}`;
+    } catch {
+      link = null;
+    }
+
     const message = reminderMessage({
       businessName: business?.name ?? "",
       // First name only. "Hi Marcia" is how a contractor here would open the
@@ -760,6 +776,7 @@ export class InvoicesService {
       invoiceNumber: invoice.number,
       outstandingCents: settlement.outstandingCents,
       dueDate: invoice.dueDate,
+      link,
     });
 
     // Stored AS SENT, so editing the client record later cannot rewrite who
@@ -804,7 +821,15 @@ export class InvoicesService {
    */
   private async sendReminderEmail(to: string, subject: string, body: string): Promise<void> {
     const apiKey = process.env.RESEND_API_KEY;
-    const from = process.env.EMAIL_FROM;
+    // QUOTE_FROM_EMAIL, not EMAIL_FROM: this is CLIENT-facing mail, the same
+    // category as the quote/invoice email routes in apps/web, and it has to
+    // read the exact variable those routes read. EMAIL_FROM is the fallback
+    // sender for platform mail to tenants (password reset, subscription
+    // notices) — a different audience with its own sender — so reading it
+    // here would let this gate say "configured" while the web gate still says
+    // "unconfigured" (or the reverse), which is exactly the disagreement the
+    // shared `clientMailStatus` helper exists to rule out.
+    const from = process.env.QUOTE_FROM_EMAIL;
 
     // The SAME rule the web app applies to quote and invoice email, shared
     // from core rather than restated here. Client mail leaves by two different
@@ -980,7 +1005,7 @@ export interface PublicInvoiceView {
   };
 }
 
-// `resolveWebBase()` used to sit here, unused. It existed so a reminder could
-// carry a link to the invoice — see F14 in REVIEW-FINDINGS.md, where the link is
-// promised in the UI and never sent. The live copy is in auth.service.ts; when
-// F14 is fixed, extract THAT one to common/ rather than reinstating a second.
+// F14 (REVIEW-FINDINGS.md) is fixed: recordReminder below mints the link via
+// `share()` and builds it with the shared `resolveWebBase()` in common/ —
+// the same helper auth.service.ts uses for its reset link, so there is only
+// one place that knows the web app's origin.

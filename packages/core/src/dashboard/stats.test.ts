@@ -64,6 +64,21 @@ describe("computeDashboardStats", () => {
     expect(stats.winRatePct90d).toBe(50);
   });
 
+  it("winRatePct90d counts INVOICED as won, agreeing with Reports' win rate", () => {
+    // Same scenario the reviewer ran: 2 INVOICED, 1 DECLINED -> Reports says
+    // 67%, so the dashboard must too.
+    const stats = computeDashboardStats(
+      [
+        quote({ status: QuoteStatus.INVOICED, createdAt: "2026-07-01T00:00:00.000Z" }),
+        quote({ status: QuoteStatus.INVOICED, createdAt: "2026-06-01T00:00:00.000Z" }),
+        quote({ status: QuoteStatus.DECLINED, createdAt: "2026-06-15T00:00:00.000Z" }),
+      ],
+      [],
+      NOW,
+    );
+    expect(stats.winRatePct90d).toBe(67);
+  });
+
   it("winRatePct90d excludes terminal quotes older than the 90-day cutoff", () => {
     const stats = computeDashboardStats(
       [
@@ -90,18 +105,37 @@ describe("computeDashboardStats", () => {
     expect(stats.winRatePct90d).toBe(0);
   });
 
-  it("quotesThisMonth counts quotes created on/after the 1st of now's month", () => {
+  it("quotesThisMonth counts quotes created on/after the 1st of now's month (Jamaica time)", () => {
     const stats = computeDashboardStats(
       [
-        quote({ createdAt: "2026-07-01T00:00:00.000Z" }), // exactly month start -> included
+        quote({ createdAt: "2026-07-01T05:00:00.000Z" }), // exactly Jamaica month start -> included
         quote({ createdAt: "2026-07-12T11:59:00.000Z" }), // same day as now -> included
-        quote({ createdAt: "2026-06-30T23:59:59.999Z" }), // last day of prior month -> excluded
+        quote({ createdAt: "2026-07-01T04:59:59.999Z" }), // still June in Jamaica -> excluded
         quote({ createdAt: "2026-05-15T00:00:00.000Z" }), // well before -> excluded
       ],
       [],
       NOW,
     );
     expect(stats.quotesThisMonth).toBe(2);
+  });
+
+  it("quotesThisMonth uses the Jamaica month boundary, not the UTC one", () => {
+    // Jamaica is UTC-5, so local midnight on the 1st is 05:00Z. Pin `now` to
+    // just after that boundary (2026-08-01T06:00Z = 01:00 Jamaica on the 1st)
+    // so August has begun locally.
+    const now = new Date("2026-08-01T06:00:00.000Z");
+    const stats = computeDashboardStats(
+      [
+        // 04:59:59.999Z on 1 Aug is still 31 July in Jamaica (23:59:59.999) ->
+        // excluded. A UTC boundary would wrongly include this.
+        quote({ createdAt: "2026-08-01T04:59:59.999Z" }),
+        // 05:00:00.000Z on 1 Aug is exactly midnight Jamaica -> included.
+        quote({ createdAt: "2026-08-01T05:00:00.000Z" }),
+      ],
+      [],
+      now,
+    );
+    expect(stats.quotesThisMonth).toBe(1);
   });
 
   describe("overdueInvoicesCents", () => {

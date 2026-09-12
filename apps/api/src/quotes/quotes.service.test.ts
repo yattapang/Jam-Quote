@@ -807,19 +807,23 @@ describe("the allowance clause is shared", () => {
   });
 });
 
-describe("a revision of a CLIENTLESS quote can still be given a client", () => {
-  it("allows setting a client where there was none", async () => {
-    // `create` permits a draft with no client, and `revise` has no status gate — so
-    // the retarget guard refused the one legitimate case it should allow, with a
-    // message about keeping a client that did not exist.
+describe("a revision of a CLIENTLESS quote can still be given a client, but it now costs a slot", () => {
+  // `create` permits a draft with no client, and `revise` has no status gate — so a
+  // blanket refusal of "give this descendant a client" would also refuse that
+  // legitimate case. But letting it through for free is exactly the hole this file
+  // is about: see `acquiringFirstClient` in quotes.service.ts. It is gated like
+  // `create`, and — on success — its lineage is cleared so it counts from now on.
+
+  function harness(opts: { plan: "free" | "pro"; count: number; limit: number }) {
+    const quoteUpdate = vi.fn().mockResolvedValue({});
     const prisma = {
-      // The allowance gate runs before revise now; a pro plan short-circuits it.
-      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: opts.plan }) },
+      pricingService: undefined,
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
         cb({
           quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
           quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
-          quote: { update: vi.fn().mockResolvedValue({}) },
+          quote: { update: quoteUpdate },
         }),
       ),
       quote: {
@@ -839,12 +843,201 @@ describe("a revision of a CLIENTLESS quote can still be given a client", () => {
           lineItems: [],
           sections: [],
         }),
+        count: vi.fn().mockResolvedValue(opts.count),
       },
       client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "b1" }) },
     };
+    const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: opts.limit }) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    const svc = new QuotesService(prisma as any, {} as any, pricingService as any);
+    return { svc, prisma, quoteUpdate };
+  }
+
+  it("allows setting a client where there was none, BELOW the cap", async () => {
+    const { svc } = harness({ plan: "free", count: 0, limit: 3 });
     await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
+  });
+
+  it("clears lineage on success, so the same trick can't be replayed for free", async () => {
+    const { svc, quoteUpdate } = harness({ plan: "free", count: 0, limit: 3 });
+    await svc.update("b1", "q2", { clientId: "cl-1" } as never);
+    expect(quoteUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ parentQuoteId: null, variationOfQuoteId: null }),
+      }),
+    );
+  });
+
+  it("REFUSES setting a client where there was none, AT the cap", async () => {
+    const { svc } = harness({ plan: "free", count: 3, limit: 3 });
+    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).rejects.toMatchObject({
+      response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
+    });
+  });
+
+  it("pro plans are never gated", async () => {
+    const { svc } = harness({ plan: "pro", count: 999, limit: 3 });
+    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
+  });
+});
+
+/**
+ * The below-cap path, end to end.
+ *
+ * Every prior test of this allowance hardcoded the count to the cap
+ * (`harnessAtCap` below fixes it at 5 of 5) — so every one of them exercised the
+ * REFUSAL path, and none exercised the path where the count starts under the cap
+ * and a determined tenant tries to make it grow past the cap anyway. That is
+ * exactly where the clientless-original trick lived: `quotesThisMonth` never
+ * moved, so it stayed under the cap forever no matter how many times the trick
+ * ran.
+ *
+ * This harness is a tiny in-memory Prisma so `quote.count` reflects real writes
+ * — the only way to prove the loop is actually bounded rather than merely
+ * refused once when already at the cap.
+ */
+describe("the below-cap path: a clientless original cannot mint unlimited sendable quotes", () => {
+  function fakeDb(limit: number) {
+    const rows = new Map<string, Record<string, unknown>>();
+    let seq = 0;
+
+    function countsTowardAllowance(row: Record<string, unknown>): boolean {
+      return row.parentQuoteId == null && row.variationOfQuoteId == null;
+    }
+
+    const quote = {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const id = `q${++seq}`;
+        const row = { id, lineItems: [], sections: [], ...data };
+        rows.set(id, row);
+        return row;
+      }),
+      findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        const row = where.id ? rows.get(where.id as string) : undefined;
+        return row ?? null;
+      }),
+      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+        const row = rows.get(where.id);
+        if (!row) throw new Error("no such row");
+        Object.assign(row, data);
+        return row;
+      }),
+      count: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        let n = 0;
+        for (const row of rows.values()) {
+          if (row.businessId !== where.businessId) continue;
+          if (!countsTowardAllowance(row)) continue;
+          n++;
+        }
+        return n;
+      }),
+      aggregate: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        let max = 0;
+        for (const row of rows.values()) {
+          if (row.businessId === where.businessId && row.number === where.number) {
+            max = Math.max(max, row.version as number);
+          }
+        }
+        return { _max: { version: max || null } };
+      }),
+    };
+
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "free" }) },
+      client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-real", businessId: "b1" }) },
+      quote,
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quote,
+          quoteSection: { create: vi.fn(), deleteMany: vi.fn() },
+          quoteLineItem: { create: vi.fn(), deleteMany: vi.fn() },
+        }),
+      ),
+    };
+    const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: limit }) };
+    const businessService = { reserveQuoteNumber: vi.fn().mockResolvedValue("Q-9999") };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    return { svc, rows };
+  }
+
+  it("bounds the revise-then-retarget loop to the allowance, not to infinity", async () => {
+    const limit = 3;
+    const { svc, rows } = fakeDb(limit);
+
+    // Seed one CLIENTLESS original — the whole exploit starts from a draft with
+    // no client, which `create` has always permitted.
+    rows.set("orig", {
+      id: "orig",
+      businessId: "b1",
+      status: "SENT",
+      clientId: null,
+      projectId: null,
+      parentQuoteId: null,
+      variationOfQuoteId: null,
+      number: "Q-0001",
+      version: 1,
+      gctRate: 15,
+      discountPct: 0,
+      depositCents: 0,
+      detailLevel: "SUMMARY",
+      lineItems: [],
+      sections: [],
+    });
+
+    let sendable = 0;
+    let refused = 0;
+    for (let i = 0; i < 25; i++) {
+      try {
+        const revised = await svc.revise("b1", "orig");
+        await svc.update("b1", revised.id, { clientId: "cl-real" } as never);
+        sendable++;
+      } catch (err) {
+        refused++;
+        expect(err).toMatchObject({
+          response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
+        });
+      }
+    }
+
+    // The whole point: 25 attempts against a limit of 3 must not yield 25 (or any
+    // number greater than the limit) of sendable, client-addressed quotes.
+    expect(sendable).toBeLessThanOrEqual(limit);
+    expect(refused).toBe(25 - sendable);
+  });
+
+  it("an ordinary revise-and-resend for the SAME client does not touch the gate again", async () => {
+    // Below cap, and the point is that `update` here takes neither branch of the
+    // retarget guard: the client isn't changing, so it isn't a retarget, and it
+    // isn't "acquiring a first client" either — it already had one. The legitimate
+    // "correct my own quote" path must stay exactly as free as it always was.
+    const { svc, rows } = fakeDb(3);
+    rows.set("orig", {
+      id: "orig",
+      businessId: "b1",
+      status: "SENT",
+      clientId: "cl-real",
+      projectId: null,
+      parentQuoteId: null,
+      variationOfQuoteId: null,
+      number: "Q-0001",
+      version: 1,
+      gctRate: 15,
+      discountPct: 0,
+      depositCents: 0,
+      detailLevel: "SUMMARY",
+      lineItems: [],
+      sections: [],
+    });
+
+    const revised = await svc.revise("b1", "orig");
+    await expect(
+      svc.update("b1", revised.id, { clientId: "cl-real", discountPct: 5 } as never),
+    ).resolves.toBeDefined();
+
+    // And the count is unaffected by that update — still just the one original.
+    const countAfter = await svc["prisma"].quote.count({ where: { businessId: "b1" } });
+    expect(countAfter).toBe(1);
   });
 });
 

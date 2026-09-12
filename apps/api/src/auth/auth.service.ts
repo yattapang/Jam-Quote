@@ -14,6 +14,7 @@ import { EntityType, UserRole, type Business, type User } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { RulePackService } from "../rulepack/rulepack.service.js";
 import { isEmailConfigured } from "../common/email-config.util.js";
+import { resolveWebBase } from "../common/web-base.util.js";
 import type {
   ChangePasswordInput,
   ForgotPasswordInput,
@@ -35,12 +36,6 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h
 
 function hashResetToken(rawToken: string): string {
   return createHash("sha256").update(rawToken).digest("hex");
-}
-
-function resolveWebBase(): string {
-  const origins = process.env.WEB_ORIGIN;
-  const first = origins?.split(",")[0]?.trim();
-  return first || "http://localhost:3000";
 }
 
 /** JWT payload shape signed by issueToken and read back by JwtAuthGuard / auth-context.middleware. */

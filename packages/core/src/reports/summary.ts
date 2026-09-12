@@ -158,6 +158,19 @@ const TOP_CLIENTS_BY_JOBS_LIMIT = 10;
  */
 export const JAMAICA_UTC_OFFSET_MS = -5 * 60 * 60 * 1000;
 
+/**
+ * Midnight in Jamaica for the instant `ms`, as a UTC timestamp.
+ *
+ * Jamaica is UTC-5 with no DST. Shift into local terms, drop the time, shift back.
+ * Exported so nothing writes a fifth copy of this arithmetic — four sites already
+ * had to be corrected one at a time.
+ */
+export function startOfJamaicaDayMs(ms: number): number {
+  const shifted = ms + JAMAICA_UTC_OFFSET_MS;
+  const dayStart = Math.floor(shifted / 86_400_000) * 86_400_000;
+  return dayStart - JAMAICA_UTC_OFFSET_MS;
+}
+
 /** Compute every headline number the Reports page shows, from raw rows. */
 export function computeReportsSummary(
   input: {
@@ -302,6 +315,10 @@ function clientGroupLabel(
  */
 export function computeReceivables(invoices: ReportInvoice[], now: Date): ReceivablesSummary {
   const nowMs = now.getTime();
+  // Midnight in Jamaica, as a UTC instant: the start of the calendar day a
+  // contractor is living in. `dueDate` is a calendar date, so lateness is a
+  // question about days, not about instants.
+  const jamaicaTodayStartMs = startOfJamaicaDayMs(nowMs);
   const byClient = new Map<string, ClientOutstandingSummary>();
 
   for (const inv of invoices) {
@@ -344,9 +361,18 @@ export function computeReceivables(invoices: ReportInvoice[], now: Date): Receiv
 
     // A null dueDate means "no due date was ever set" — that can never be
     // overdue, since there's no date it's late relative to.
+    //
+    // Compared against TODAY IN JAMAICA, not against the instant `now`. `dueDate` is
+    // UTC midnight standing for a calendar date, so `dueMs < nowMs` made an invoice
+    // overdue from 7pm Jamaica the day BEFORE it was due, and kept it red all through
+    // the due date itself. The sweep, the invoice builder and `daysLate` were each
+    // given the Jamaica helper; this fourth site never got it — so the dashboard and
+    // Reports showed a critical-red figure that `InvoiceOverdueService` refused to
+    // stamp, which is exactly the disagreement the "exported so the dashboard shows
+    // the same figure" note above claims to prevent. Due today is not late.
     if (inv.dueDate != null) {
       const dueMs = new Date(inv.dueDate).getTime();
-      if (!Number.isNaN(dueMs) && dueMs < nowMs) {
+      if (!Number.isNaN(dueMs) && dueMs < jamaicaTodayStartMs) {
         entry.overdueCents += chaseableCents;
       }
     }

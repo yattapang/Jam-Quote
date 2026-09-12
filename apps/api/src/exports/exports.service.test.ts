@@ -4,9 +4,14 @@ import { ExportsService } from "./exports.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+// These are what the controller actually hands the service: Jamaica calendar
+// midnights, expressed as UTC instants (Jamaica is UTC-5, no DST, so Jamaica
+// midnight is 05:00 UTC) — not UTC midnights. Using UTC midnight here would
+// let this whole suite pass against a boundary five hours off from what the
+// Reports page (and the controller) actually mean by "2026-08-01".
 const RANGE = {
-  from: new Date("2026-08-01T00:00:00.000Z"),
-  to: new Date("2026-08-31T00:00:00.000Z"),
+  from: new Date("2026-08-01T05:00:00.000Z"),
+  to: new Date("2026-08-31T05:00:00.000Z"),
 };
 
 /**
@@ -179,9 +184,12 @@ describe("ExportsService — what the files promise", () => {
     expect(where.businessId).toBe("b1");
   });
 
-  it("includes the whole of the final day", async () => {
-    // "to 31 August" means through the END of the 31st. Comparing against
-    // midnight silently drops a day of revenue with nothing to show for it.
+  it("includes the whole of the final day, in Jamaica terms", async () => {
+    // "to 31 August" means through the END of the 31st IN JAMAICA, not in UTC.
+    // This used to assert "2026-08-31T23:59:59.999Z" — that pinned the bug: it
+    // is midnight UTC plus 86,399,999ms, five hours short of the real Jamaica
+    // end of day. RANGE.to is now a Jamaica midnight (05:00 UTC), so the whole
+    // of the 31st in Jamaica runs through 2026-09-01T04:59:59.999Z UTC.
     const { svc, prisma } = harness();
     await svc.invoicesIssued("b1", RANGE);
     // Not `calls[0]?.[0]`: if the call never happened, `?.` yields undefined and
@@ -190,7 +198,7 @@ describe("ExportsService — what the files promise", () => {
     const call = prisma.invoice.findMany.mock.calls[0];
     expect(call).toBeDefined();
     const { lte } = call![0].where.issueDate;
-    expect(lte.toISOString()).toBe("2026-08-31T23:59:59.999Z");
+    expect(lte.toISOString()).toBe("2026-09-01T04:59:59.999Z");
   });
 
   it("dates invoices by issueDate, not by when the row was written", async () => {
@@ -412,6 +420,30 @@ describe("payments-received carries only cash that actually arrived", () => {
     expect(prisma.payment.findMany.mock.calls[0]![0].where.status.in).toEqual(
       COLLECTED_PAYMENT_STATUSES,
     );
+  });
+
+  it("the paidAt window covers a whole Jamaica day at each edge, not a UTC one", () => {
+    // RANGE is the August window as the controller now builds it: Jamaica
+    // midnights (05:00 UTC), covering "2026-08-01" through "2026-08-31" in
+    // Jamaica terms. A payment at 20:00 Jamaica on 31 August is
+    // 2026-09-01T01:00:00.000Z — it must be IN this window. A payment at 20:00
+    // Jamaica on 31 July (the day before the range starts) is
+    // 2026-08-01T01:00:00.000Z — it must be OUT. Both used to land on the
+    // wrong side: the old UTC-midnight parse excluded the first and included
+    // the second.
+    const { svc, prisma } = harness();
+    void svc.paymentsReceived("b1", RANGE);
+    const { gte, lte } = prisma.payment.findMany.mock.calls[0]![0].where.paidAt;
+
+    const lastDay8pmJamaica = new Date("2026-09-01T01:00:00.000Z");
+    const dayBefore8pmJamaica = new Date("2026-08-01T01:00:00.000Z");
+
+    expect(lastDay8pmJamaica.getTime()).toBeGreaterThanOrEqual(gte.getTime());
+    expect(lastDay8pmJamaica.getTime()).toBeLessThanOrEqual(lte.getTime());
+
+    expect(
+      dayBefore8pmJamaica.getTime() >= gte.getTime() && dayBefore8pmJamaica.getTime() <= lte.getTime(),
+    ).toBe(false);
   });
 
   it("still lists a payment that did arrive, so the filter is not simply off", async () => {

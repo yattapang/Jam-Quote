@@ -74,15 +74,53 @@ describe("ProjectsService tenant scoping", () => {
     });
   });
 
-  it("scopes every read to the businessId", async () => {
+  it("scopes every read to the businessId and excludes tombstoned projects", async () => {
     const { svc, prisma } = withPrisma();
     await svc.findAll("biz-1");
     expect(prisma.project.findMany).toHaveBeenCalledWith({
-      where: { businessId: "biz-1" },
+      where: { businessId: "biz-1", deletedAt: null },
       orderBy: { createdAt: "desc" },
     });
     await svc.findOne("biz-1", "job-1");
-    expect(prisma.project.findFirst).toHaveBeenCalledWith({ where: { id: "job-1", businessId: "biz-1" } });
+    expect(prisma.project.findFirst).toHaveBeenCalledWith({
+      where: { id: "job-1", businessId: "biz-1", deletedAt: null },
+    });
+  });
+
+  it("findAll never returns a soft-deleted project", async () => {
+    // A fake that actually honours `deletedAt: null`, unlike the plain
+    // `mockResolvedValue([])` default — this is the assertion that fails if
+    // the tombstone filter is ever dropped from the where clause.
+    const rows = [
+      { id: "job-1", businessId: "biz-1", deletedAt: null },
+      { id: "job-2", businessId: "biz-1", deletedAt: new Date() },
+    ];
+    const { svc } = withPrisma({
+      findMany: vi.fn(({ where }: { where: { deletedAt?: null } }) =>
+        Promise.resolve(where.deletedAt === null ? rows.filter((r) => r.deletedAt === null) : rows),
+      ),
+    });
+    const result = await svc.findAll("biz-1");
+    expect(result.map((r) => r.id)).toEqual(["job-1"]);
+  });
+
+  it("findOne 404s on a soft-deleted project rather than returning it", async () => {
+    const { svc } = withPrisma({
+      findFirst: vi.fn(({ where }: { where: { deletedAt?: null } }) =>
+        Promise.resolve(where.deletedAt === null ? null : { id: "job-1", businessId: "biz-1" }),
+      ),
+    });
+    await expect(svc.findOne("biz-1", "job-1")).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("remove soft-deletes: the row survives with deletedAt set, and is not hard-deleted", async () => {
+    const { svc, prisma } = withPrisma();
+    await svc.remove("biz-1", "job-1");
+    expect(prisma.project.delete).not.toHaveBeenCalled();
+    expect(prisma.project.update).toHaveBeenCalledWith({
+      where: { id: "job-1" },
+      data: { deletedAt: expect.any(Date) },
+    });
   });
 
   it("refuses to stage-change another tenant's job", async () => {

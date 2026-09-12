@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Query, Res, UseGuards, BadRequestException } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
+import { JAMAICA_UTC_OFFSET_MS } from "@jamquote/core";
 import { TenantAuthGuard } from "../auth/tenant-auth.guard.js";
 import { BusinessId } from "../common/business-id.decorator.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
@@ -43,12 +44,23 @@ export class ExportsController {
       throw new BadRequestException(`Unknown export "${file}".`);
     }
 
-    // Parsed as UTC midnight so the range means calendar DATES, matching how
-    // issueDate and dueDate are stored. See PLANNING.md §6 — the Jamaica
-    // offset has produced a date-boundary bug three times in this codebase.
+    // These are Jamaica calendar dates, not UTC ones: the Reports page derives
+    // this same `from`/`to` from the Jamaica-local window it is showing (see
+    // apps/web/app/(app)/reports/page.tsx), so "2026-08-31" here must mean
+    // through the end of 31 August in Jamaica, not in UTC.
+    //
+    // Parsing as UTC midnight was wrong for the case that actually matters:
+    // it matches how a human-entered `issueDate` is stored (InvoiceBuilder.tsx
+    // sends `T12:00:00.000Z`, deliberately clear of both midnights) but NOT
+    // the default path, where `issueDate` is `now()`, and it never covered
+    // `paidAt` at all — `paidAt` is a real instant, and that mismatch is what
+    // let a late-evening Jamaica payment on the last day of a month vanish
+    // from the cash file while still showing in the same month's dashboard
+    // tile. Jamaica is UTC-5 with no DST, so a Jamaica calendar midnight is
+    // UTC midnight minus the (negative) offset, i.e. 5 hours later in UTC.
     const range = {
-      from: new Date(`${query.from}T00:00:00.000Z`),
-      to: new Date(`${query.to}T00:00:00.000Z`),
+      from: new Date(Date.parse(`${query.from}T00:00:00.000Z`) - JAMAICA_UTC_OFFSET_MS),
+      to: new Date(Date.parse(`${query.to}T00:00:00.000Z`) - JAMAICA_UTC_OFFSET_MS),
     };
 
     const built: Record<FileSlug, () => Promise<ExportFile>> = {

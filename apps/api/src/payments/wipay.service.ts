@@ -60,7 +60,7 @@ export class WiPayService {
     customerName?: string;
     customerEmail?: string;
     customerPhone?: string;
-  }): Promise<{ paymentUrl: string; providerRef?: string }> {
+  }): Promise<{ paymentUrl: string; providerRef: string }> {
     const e = this.env;
     const total = (params.amountCents / 100).toFixed(2);
 
@@ -103,6 +103,25 @@ export class WiPayService {
     if (!data.url) {
       this.logger.error(`WiPay response missing url: ${JSON.stringify(data)}`);
       throw new Error("Payment provider did not return a checkout link.");
+    }
+    // `transaction_id` held to the same standard as `url`, and REQUIRED in the return
+    // type so the compiler carries it.
+    //
+    // It was optional. The callback matches a pending row by `providerRef` — scoped
+    // that way after the unscoped version was found triple-counting — so a row stored
+    // with a null ref can never match: `count === 0`, a warning in the log, and a
+    // client who has paid looking at an invoice that says nothing is paid. The
+    // triple-count fix turned a presentation defect into a total-loss one, and no
+    // test caught it because every card test supplies a ref.
+    //
+    // Failing here refuses a checkout we could not reconcile, which is the same
+    // posture as refusing to boot without an API key. Taking money we cannot credit
+    // is the worse outcome.
+    if (!data.transaction_id) {
+      this.logger.error(
+        `WiPay response missing transaction_id: ${JSON.stringify(data)} — refusing the checkout, because a payment with no provider reference can never be reconciled`,
+      );
+      throw new Error("Payment provider did not return a transaction reference.");
     }
     return { paymentUrl: data.url, providerRef: data.transaction_id };
   }

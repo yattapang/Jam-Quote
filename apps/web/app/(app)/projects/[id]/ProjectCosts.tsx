@@ -164,30 +164,35 @@ export default function ProjectCosts({
             field is FOR — without a breakdown it is data entry with no
             payoff, and a contractor would rightly stop filling it in. */}
         {purchases.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 8,
-              marginBottom: 14,
-              paddingBottom: 12,
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            {groupByCategory(purchases).map((g) => (
-              <span
-                key={g.category}
-                style={{
-                  fontSize: 12,
-                  padding: "5px 10px",
-                  borderRadius: 999,
-                  background: "var(--surface-alt)",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {g.category} <strong>{formatJmd(g.totalCents)}</strong>
-              </span>
-            ))}
+          <div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+              Spend by category (incl. GCT)
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                marginBottom: 14,
+                paddingBottom: 12,
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              {groupByCategory(purchases).map((g) => (
+                <span
+                  key={g.category}
+                  style={{
+                    fontSize: 12,
+                    padding: "5px 10px",
+                    borderRadius: 999,
+                    background: "var(--surface-alt)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  {g.category} <strong>{formatJmd(g.totalCents)}</strong>
+                </span>
+              ))}
+            </div>
           </div>
         )}
 

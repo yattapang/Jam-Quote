@@ -44,10 +44,16 @@ export interface InvoiceSettlement {
 export function invoiceSettlement(params: {
   totalCents: Cents;
   paidCents: Cents;
-  retentionCents: Cents;
+  /** Held back under the contract. A missing column is treated as none held. */
+  retentionCents: Cents | null | undefined;
   retentionReleased: boolean;
 }): InvoiceSettlement {
-  const held = params.retentionReleased ? 0 : Math.max(0, params.retentionCents);
+  // `?? 0` guards a missing column, which `Math.max` would otherwise turn into NaN
+  // and carry silently into every figure downstream. Tightening the released check to
+  // `!= null` exposed this: a caller whose select omitted `retentionCents` went from
+  // "treated as released" to "held = NaN", so a fully-paid invoice read PARTIAL. No
+  // retention recorded means none held; NaN means nothing at all.
+  const held = params.retentionReleased ? 0 : Math.max(0, params.retentionCents ?? 0);
   const dueNowCents = Math.max(0, params.totalCents - held);
   return {
     dueNowCents,
@@ -108,7 +114,12 @@ export function settlementOf(invoice: RetainableInvoice): InvoiceSettlement {
     totalCents: invoice.totalCents,
     paidCents: invoice.paidCents,
     retentionCents: invoice.retentionCents,
-    retentionReleased: invoice.retentionReleasedAt !== null,
+    // `!= null`, not `!== null`: an `undefined` — a partial select, or a JSON body
+    // with the key absent — used to read as RELEASED, which zeroes `heldCents` and
+    // pushes retained money into due-now. Every production caller supplies the field,
+    // so this was latent; it failed in the one direction this helper exists to
+    // prevent, which is under-reporting what is held.
+    retentionReleased: invoice.retentionReleasedAt != null,
   });
 }
 

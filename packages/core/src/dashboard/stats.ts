@@ -6,7 +6,11 @@
 
 import { QuoteStatus } from "../types/enums.js";
 import type { Cents } from "../tax/money.js";
-import { computeReceivables, type ReportInvoice } from "../reports/summary.js";
+import {
+  computeReceivables,
+  JAMAICA_UTC_OFFSET_MS,
+  type ReportInvoice,
+} from "../reports/summary.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const WIN_RATE_WINDOW_DAYS = 90;
@@ -59,15 +63,26 @@ function pipelineValueCents(quotes: DashboardStatInput[]): Cents {
 }
 
 /**
- * Of quotes that reached a terminal outcome (ACCEPTED, DECLINED, or EXPIRED)
- * within the last 90 days, the percentage that were ACCEPTED. An integer
- * 0-100; returns 0 rather than dividing by zero when there's no such quote.
+ * Of quotes that reached a terminal outcome within the last 90 days, the
+ * percentage that were won. An integer 0-100; returns 0 rather than dividing
+ * by zero when there's no such quote.
+ *
+ * "Won" must agree with `computeQuoteFunnel` in reports/summary.ts: ACCEPTED
+ * *or* INVOICED, because accepting a quote here converts it straight to an
+ * invoice, leaving ACCEPTED behind entirely. Counting only ACCEPTED would
+ * drop every converted quote from the numerator (INVOICED isn't ACCEPTED)
+ * while it stays out of the denominator too (INVOICED isn't terminal by the
+ * old list), so the dashboard and Reports would disagree on the same
+ * business's win rate depending on how far along its won quotes were —
+ * and worse, it would actively punish the contractor for succeeding, since
+ * finishing the job (invoicing) makes their own win rate look worse.
  */
 function winRatePct90d(quotes: DashboardStatInput[], now: Date): number {
   const cutoff = now.getTime() - WIN_RATE_WINDOW_DAYS * MS_PER_DAY;
   const terminalRecent = quotes.filter((q) => {
     if (
       q.status !== QuoteStatus.ACCEPTED &&
+      q.status !== QuoteStatus.INVOICED &&
       q.status !== QuoteStatus.DECLINED &&
       q.status !== QuoteStatus.EXPIRED
     ) {
@@ -77,17 +92,24 @@ function winRatePct90d(quotes: DashboardStatInput[], now: Date): number {
     return !Number.isNaN(created) && created >= cutoff;
   });
   if (terminalRecent.length === 0) return 0;
-  const won = terminalRecent.filter((q) => q.status === QuoteStatus.ACCEPTED).length;
+  const won = terminalRecent.filter(
+    (q) => q.status === QuoteStatus.ACCEPTED || q.status === QuoteStatus.INVOICED,
+  ).length;
   return Math.round((won / terminalRecent.length) * 100);
 }
 
 /**
- * Count of quotes created on/after the first of `now`'s month. Uses UTC to
- * compute the boundary, since `createdAt` is always a UTC ISO timestamp and
- * this must give the same answer regardless of the server's local timezone.
+ * Count of quotes created on/after the first of `now`'s month, in Jamaica
+ * local time. JamQuote's contractors are in Jamaica (UTC-5, no DST), so the
+ * "1st" they mean is midnight Jamaica, not midnight UTC — a plain UTC
+ * boundary would roll the counter over 5 hours early every month (e.g. at
+ * 7pm on the 31st Jamaica time), still crediting new quotes to the month
+ * that hasn't ended for the contractor yet.
  */
 function quotesThisMonth(quotes: DashboardStatInput[], now: Date): number {
-  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const jamaicaNow = new Date(now.getTime() + JAMAICA_UTC_OFFSET_MS);
+  const monthStart =
+    Date.UTC(jamaicaNow.getUTCFullYear(), jamaicaNow.getUTCMonth(), 1) - JAMAICA_UTC_OFFSET_MS;
   return quotes.filter((q) => {
     const created = new Date(q.createdAt).getTime();
     return !Number.isNaN(created) && created >= monthStart;

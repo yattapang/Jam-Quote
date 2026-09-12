@@ -32,7 +32,16 @@ function harness(invoice: Record<string, unknown> = {}) {
   };
   const created: any[] = [];
   const prisma = {
-    invoice: { findFirst: vi.fn(() => Promise.resolve(stored)) },
+    invoice: {
+      findFirst: vi.fn(() => Promise.resolve(stored)),
+      // Backs `share()`, which recordReminder now calls to mint the link.
+      // Mutates `stored` so a second mint in the same test sees the token
+      // already set, mirroring share()'s own idempotency.
+      update: vi.fn((args: any) => {
+        Object.assign(stored, args.data);
+        return Promise.resolve(stored);
+      }),
+    },
     business: { findUnique: vi.fn(() => Promise.resolve({ name: "Blackwood Construction" })) },
     client: {
       // findFirst, not findUnique: the reminder read is now scoped by businessId
@@ -62,7 +71,7 @@ function harness(invoice: Record<string, unknown> = {}) {
 const original = { ...process.env };
 beforeEach(() => {
   delete process.env.RESEND_API_KEY;
-  delete process.env.EMAIL_FROM;
+  delete process.env.QUOTE_FROM_EMAIL;
 });
 afterEach(() => {
   process.env = { ...original };
@@ -85,11 +94,30 @@ describe("InvoicesService.recordReminder — the email gate", () => {
     // delivering only to the account owner. A key check alone would let it
     // through, which is what this endpoint used to do.
     process.env.RESEND_API_KEY = "re_test";
-    process.env.EMAIL_FROM = "JamQuote <onboarding@resend.dev>";
+    process.env.QUOTE_FROM_EMAIL = "JamQuote <onboarding@resend.dev>";
     const { svc, created } = harness();
     await expect(svc.recordReminder("b1", "inv1", "EMAIL")).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    expect(created).toEqual([]);
+  });
+
+  it("refuses EMAIL when only EMAIL_FROM (not QUOTE_FROM_EMAIL) is set", async () => {
+    // EMAIL_FROM is the platform-mail fallback (password reset, subscription
+    // notices) — a different sender for a different audience. The client-mail
+    // gate here must read the SAME variable the web app's email routes read,
+    // or the two sides can disagree about whether mail can go.
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.EMAIL_FROM = "JamQuote <billing@jamquote.com>";
+    const { svc, created } = harness();
+    // Asserting on the GATE's own message, not just "some BadRequestException" —
+    // reading EMAIL_FROM by mistake means `from` is defined after all, the gate
+    // opens, and the code goes on to actually call Resend, which then fails for
+    // an unrelated reason (invalid key) and would also throw BadRequestException.
+    // Only the gate's reason text proves the refusal happened for the right cause.
+    await expect(svc.recordReminder("b1", "inv1", "EMAIL")).rejects.toMatchObject({
+      message: expect.stringMatching(/verified sending domain/i),
+    });
     expect(created).toEqual([]);
   });
 
@@ -115,5 +143,32 @@ describe("InvoicesService.recordReminder — the email gate", () => {
     await expect(svc.recordReminder("b1", "inv1", "WHATSAPP")).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+});
+
+describe("InvoicesService.recordReminder — the promised link", () => {
+  it("mints a share link and includes it in the WhatsApp message", async () => {
+    // RemindButton.tsx tells the contractor the reminder "includes a link to
+    // the invoice" — without this, that promise on screen is false.
+    const { svc } = harness();
+    const out = await svc.recordReminder("b1", "inv1", "WHATSAPP");
+    expect(out.body).toMatch(/https?:\/\/\S+\/i\/\S+/);
+  });
+
+  it("reuses an existing share token rather than minting a second one", async () => {
+    const { svc, prisma } = harness({ shareToken: "existing-token" });
+    const out = await svc.recordReminder("b1", "inv1", "WHATSAPP");
+    expect(out.body).toContain("existing-token");
+    expect(prisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("still sends the reminder, without a link, if minting fails", async () => {
+    // Best-effort: a DB hiccup while minting the link must not stop the
+    // reminder from going out at all.
+    const { svc, prisma, created } = harness();
+    prisma.invoice.update.mockRejectedValueOnce(new Error("db is down"));
+    const out = await svc.recordReminder("b1", "inv1", "WHATSAPP");
+    expect(out.body).not.toContain("view it here");
+    expect(created).toHaveLength(1);
   });
 });

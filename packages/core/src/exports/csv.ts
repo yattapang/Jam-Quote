@@ -16,6 +16,8 @@
  *   03/04/2026.
  */
 
+import { JAMAICA_UTC_OFFSET_MS } from "../reports/summary.js";
+
 /** Excel needs this to read the file as UTF-8. */
 const BOM = "﻿";
 
@@ -76,12 +78,22 @@ export function csvMoney(cents: number): string {
   return negative ? `-${body}` : body;
 }
 
-/** A calendar date as YYYY-MM-DD. Null dates are blank, not "null". */
+/**
+ * A calendar date as YYYY-MM-DD, in Jamaica-local terms. Null dates are blank,
+ * not "null".
+ *
+ * Every date this prints is a real instant (`paidAt` always; `issueDate` and
+ * `dueDate` too, once they carry a default of `now()` rather than a
+ * human-entered noon-UTC value) — so formatting in UTC prints the wrong
+ * calendar day for anything after 7pm Jamaica time. Jamaica is UTC-5 with no
+ * DST, so shifting by the (negative) offset before slicing gives the date the
+ * accountant's clock would show.
+ */
 export function csvDate(value: Date | string | null | undefined): string {
   if (!value) return "";
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toISOString().slice(0, 10);
+  return new Date(d.getTime() + JAMAICA_UTC_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 /**

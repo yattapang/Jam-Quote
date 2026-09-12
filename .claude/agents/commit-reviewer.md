@@ -117,11 +117,14 @@ admin-screen bug the change was fixing. Say explicitly whether any did.
     `JSON.parse`, a spread of a real value with one field replaced, and
     `Object.assign`. Then go further, because each of these has worked here: a
     direct `new` (a `private` constructor PARAMETER marks the field, not the
-    constructor), a subclass, `Object.create(X.prototype)`, and a write THROUGH
-    an accessor that returns by reference (`patch.body.field = []`). A structural
-    brand is carried by a spread; an exported class value can simply be
-    constructed; a getter that returns a reference protects nothing. Report which
-    of these compile, precisely, and check what actually goes over the wire.
+    constructor), a subclass, `Object.create(X.prototype)` (requires an EXPORTED
+    class), bypassing through a real instance (`Object.getPrototypeOf(realInstance).constructor`,
+    `Reflect.construct(real.constructor, [evil])`, or `Object.assign(Object.create(Object.getPrototypeOf(real)), {...})`
+    which do not require the class to be exported), and a write THROUGH an accessor
+    that returns by reference (`patch.body.field = []`). A structural brand is carried
+    by a spread; an exported class value can simply be constructed; a getter that
+    returns a reference protects nothing. Report which of these compile, precisely,
+    and check what actually goes over the wire.
 5. **Every claim in the commit message and in the comments the commit adds.**
     Overclaims are findings. "An inline literal is a compile error" was true of
     one call site and false of four constructs. Quote the claim and state what

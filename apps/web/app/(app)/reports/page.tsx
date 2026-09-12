@@ -281,7 +281,7 @@ export default async function ReportsPage({
         <h2 className={shared.sectionTitle}>Projects</h2>
         <div className={shared.grid2}>
           <Card>
-            <div className={shared.statLabel}>Jobs created</div>
+            <div className={shared.statLabel}>Projects created</div>
             <span className="jq-numeral" style={{ fontSize: 24, fontWeight: 800 }}>
               {reports.projects.projectsCreated}
             </span>
@@ -299,16 +299,16 @@ export default async function ReportsPage({
           </Card>
 
           <Card>
-            <div className={shared.statLabel}>Top clients by jobs</div>
+            <div className={shared.statLabel}>Top clients by projects</div>
             <div className={shared.list} style={{ marginTop: 14 }}>
               {reports.projects.topClientsByProjects.length === 0 ? (
-                <div className={shared.empty}>No jobs created in this period.</div>
+                <div className={shared.empty}>No projects created in this period.</div>
               ) : (
                 reports.projects.topClientsByProjects.map((c) => (
                   <div key={c.clientId ?? "no-client"} className={shared.row}>
                     <span className={shared.rowTitle}>{c.clientName}</span>
                     <span className={shared.rowSub}>
-                      {c.projectCount} job{c.projectCount === 1 ? "" : "s"}
+                      {c.projectCount} project{c.projectCount === 1 ? "" : "s"}
                     </span>
                   </div>
                 ))

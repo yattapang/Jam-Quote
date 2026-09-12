@@ -92,7 +92,7 @@ export default async function DashboardPage() {
           <span className="jq-numeral" style={{ fontSize: 24, fontWeight: 800 }}>
             {stats.winRatePct90d}%
           </span>
-          <div className={shared.statHint}>Accepted vs. sent quotes</div>
+          <div className={shared.statHint}>Won vs. declined/expired quotes</div>
         </Card>
         <Card>
           <div className={shared.statLabel}>Overdue invoices</div>

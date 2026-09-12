@@ -116,7 +116,19 @@ export class PaymentsService {
     }
 
     const succeeded = this.wipay.isSuccessful(payload);
+    // What the provider says it collected, which is the money that actually moved.
     const amountCents = Math.round(parseFloat(payload.total ?? "0") * 100);
+
+    // A hash-valid callback can still carry a total of "0.00" or garbage. Unchecked,
+    // `parseFloat("x")` is NaN and NaN was written straight to an Int column; a
+    // "0.00" credited nothing while flipping the row to completed, so the invoice
+    // kept a balance with a green payment against it.
+    if (succeeded && (!Number.isFinite(amountCents) || amountCents <= 0)) {
+      this.logger.error(
+        `WiPay callback for invoice ${orderId} reported success with an unusable total ${JSON.stringify(payload.total)} — not crediting`,
+      );
+      return;
+    }
 
     await this.prisma.$transaction(async (tx) => {
       // Only a still-"pending" CARD payment gets transitioned. On a replayed
@@ -142,6 +154,18 @@ export class PaymentsService {
         data: {
           status: succeeded ? "completed" : "failed",
           providerRaw: payload,
+          // The row carries what was COLLECTED, not the balance quoted at checkout.
+          //
+          // They were two different numbers: the row kept the balance computed when
+          // the checkout opened, while `paidCents` was incremented by the provider's
+          // figure. `fee_structure: "customer_pay"` means a processing fee is
+          // plausibly inside `total`, so the ledger and the invoice disagreed — and
+          // `voidPayment` decrements the ROW's amount, so voiding such a payment left
+          // `paidCents` wrong by the difference and could drive it negative. "Paid
+          // −$X" on the invoice and on the PDF.
+          //
+          // One figure now: what the provider collected, which is what a void returns.
+          ...(succeeded ? { amountCents } : {}),
         },
       });
 
@@ -155,15 +179,33 @@ export class PaymentsService {
       }
 
       if (succeeded) {
-        const paidCents = invoice.paidCents + amountCents;
+        // Atomic increment, then re-read INSIDE the transaction — the same shape as
+        // `recordManualPayment` below.
+        //
+        // This computed `invoice.paidCents + amountCents` from a row read BEFORE the
+        // transaction opened. The manual path's comment explaining why that is wrong
+        // names this exact scenario — "a WiPay callback landing mid-entry" — and the
+        // fix reached the manual twin and not the card one. A manual payment
+        // committed between that read and this write was erased.
+        const updated = await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { paidCents: { increment: amountCents } },
+          select: {
+            paidCents: true,
+            totalCents: true,
+            retentionCents: true,
+            retentionReleasedAt: true,
+          },
+        });
         // Same question as statusForPaid, and it had the same bug: measured
         // against the total, a retention invoice could never reach PAID.
-        const status = settlementOf({ ...invoice, paidCents }).settledForNow
-          ? InvoiceStatus.PAID
-          : InvoiceStatus.PARTIAL;
         await tx.invoice.update({
           where: { id: invoice.id },
-          data: { paidCents, status },
+          data: {
+            status: settlementOf(updated).settledForNow
+              ? InvoiceStatus.PAID
+              : InvoiceStatus.PARTIAL,
+          },
         });
       }
     });

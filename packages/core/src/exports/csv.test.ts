@@ -61,7 +61,17 @@ describe("csvMoney", () => {
 
 describe("csvDate", () => {
   it("writes ISO-8601, unambiguous between readings of 03/04", () => {
-    expect(csvDate(new Date("2026-04-03T00:00:00.000Z"))).toBe("2026-04-03");
+    // Noon UTC is 7am Jamaica — the deliberately-safe instant InvoiceBuilder.tsx
+    // sends for a human-entered date — so both readings agree on the day.
+    expect(csvDate(new Date("2026-04-03T12:00:00.000Z"))).toBe("2026-04-03");
+  });
+
+  it("prints the JAMAICA calendar date, not the UTC one", () => {
+    // Jamaica is UTC-5 with no DST. A payment made at 8pm Jamaica on 31 August
+    // is 2026-09-01T01:00:00.000Z — the next day in UTC. Formatting in UTC
+    // stamped every such payment with tomorrow's date; an accountant reconciling
+    // against a bank statement dated in Jamaica time would never find the match.
+    expect(csvDate(new Date("2026-09-01T01:00:00.000Z"))).toBe("2026-08-31");
   });
 
   it("writes a missing date as blank", () => {

@@ -1,5 +1,91 @@
 # Review findings — nine independent reviewers, 2026-09-08
 
+## OUTSTANDING — start the next session here
+
+Two HIGH revenue defects from the billing sweep are **found, understood, and NOT
+fixed.** The agent assigned to them died at the session limit having completed its
+simulation and written nothing, so the tree is clean and the work is entirely to do.
+
+**B1 — voiding any non-final payment in a ledger of three or more grants a free term.**
+`apps/api/src/admin/subscription-payments.service.ts`, `reallocateTerms` ~276-307.
+`vacated` is computed once from the ORIGINAL windows of voided rows. The first
+survivor refills that window; every payment after it then chains into a period that
+was never in `vacated`, so `termFitsVacated` returns false, the date test fires, and
+that payment is pushed to its own `paidAt` — reopening the gap. The cascade cannot
+propagate past the first refill. Observed, monthly payments on each 1st:
+
+| ledger | void | renewsAt after | correct |
+|---|---|---|---|
+| Jan, Feb | p1 | Feb 1 correct | Feb 1 |
+| Jan, Feb, Mar | p1 | **Apr 1 wrong** | Mar 1 |
+| Jan, Feb, Mar, Apr | p1 | **May 1 wrong** | Apr 1 |
+| Jan, Feb, Mar, Apr | p2 (middle) | **May 1 wrong** | Apr 1 |
+| Jan, Feb, Mar, Apr | p4 (latest) | Apr 1 correct | Apr 1 |
+| 3 x ANNUAL from Jan 2026 | a1 | **Jan 1 2029 wrong** | Jan 1 2028 |
+
+The annual row is a free year, roughly JMD 20,000. Two things break at once: the void
+takes away nothing (`renewsAt` identical before and after — the original symptom of
+the finding this rule was written for), and the ledger stops reconciling (middle-void:
+`Mar1..Apr1` is covered by no surviving payment while `renewsAt` claims May 1).
+
+**This rule has now been wrong three times, so do not patch it again without
+simulating first.** Both previous wrong fixes were caught by simulation before
+implementation; the third was not simulated. The agent that died reported one useful
+result before it went: *"Simulation confirms PAID_RUN is the only rule that reproduces
+every reviewer row."* Start by rebuilding that simulation.
+
+Also unresolved and load-bearing: the rule has no stated principle, and two tests
+assert opposite answers. Line ~184 says voiding the FIRST of two consecutive months
+shortens the term (survivor pulled back); line ~487 says it must not strand a tenant
+when TWO consecutive are voided (survivor NOT pulled back, asserted via
+`not.toContain("2026-02-01")`). What the code keys on is whether the pulled-back term
+still reaches `paidAt` — an artifact, not a policy. One of those tests encodes the
+wrong policy and the fix must say which. PLANNING.md records the adopted policy as
+"money buys the earliest unpaid month"; state whether the new rule is that or a
+departure.
+
+**B2 — one typo'd digit in `paidAt` grants a century of Pro.**
+`apps/api/src/admin/admin.dto.ts:111` — `paidAt: z.string().datetime().optional()`, no
+range bound, and `reallocateTerms` uses it as `from`. Observed:
+`record("biz-1", { method: "CASH", paidAt: "2126-01-15T00:00:00.000Z" })` gives
+`renewsAt = 2126-02-15` in ONE request, because `record()` reallocates after inserting
+and the bad row sorts last. PLANNING.md lists this as an owner question; it is worse
+than recorded, since no second payment is needed. Bound it to roughly
+`[business.createdAt, now]` and name the field in the refusal.
+
+**Also outstanding, lower severity, from the same sweep:** `nextTermEnd` overflows
+month-end (31 Jan gives 3 Mar, a 61-day month) while three comments assert it keeps
+the day-of-month, and `subscription.test.ts:64-69` asserts only
+`.getUTCMonth()).not.toBe(0)`, which passes on the overflow its own name denies.
+Clamping to the month's last day is the standard billing choice and needs an owner
+decision. Plus: `pricing.service.ts:21` defaults `freeQuotesPerMonth: 5` while
+PLANNING records the owner decision as 3 and marks it DONE; and neither
+`assertCanCreateQuote` nor `BillingService.status` consults `subscriptionStanding`, so
+a PAST_DUE tenant keeps unlimited quotes until a sweep runs.
+
+## A second provenance failure, of a different kind
+
+The section below records findings filed in the name of agents that never ran. This
+one is worse in a quieter way: **a row in this register said CLOSED when the defect
+was open.**
+
+F16, the free-quote allowance bypass, was marked CLOSED and described as "verified by
+ungating each in turn". The verification was real but it only ever ran AT the cap —
+the test harness hardcodes the count to the limit — so every test exercised the
+refusal path and none exercised the path below the cap, where a revision never
+increments the count and the supply is therefore unbounded. A reviewer produced 25
+sendable, client-addressed quotes on an allowance of 3.
+
+So the rule that came out of the first provenance failure needs a companion:
+
+> **A closure claim names the case it tested.** "Verified by ungating each in turn"
+> reads as complete and was not. If the check ran at one boundary, the row says which
+> boundary, so the next reader knows what is still unexamined.
+
+Nine of the thirteen findings in the three money sweeps below are invisible to a
+green suite of 1600+ tests. A passing suite is evidence about the cases someone
+thought to write.
+
 ## Provenance — read this first, it was wrong once
 
 **Seven of the nine reviewers reported. Two did not** — the wiring-contract and
@@ -425,7 +511,7 @@ core 285, api 681, web 462, mobile 28.
 | F13 **CLOSED `3556b25`** | **A settled-for-now invoice is marked OVERDUE and chased.** `statusForPaid` compares against the total, so a retention invoice stays PARTIAL, the sweep flips it OVERDUE in critical red, and the nightly digest emails the contractor to go chase it. | `payments.service.ts:13-17`, `invoice-overdue.service.ts:73,116,150` | **CLOSED `3556b25`** |
 | F14 | **Every reminder promises a link it does not send.** `reminderMessage` is called with no link, so the empty branch always wins, while the modal says "It includes a link to the invoice". `resolveWebBase()` is dead in that file and `shareInvoice()` has no callers — so no invoice ever gets a share token, which makes the public invoice page and `firstViewedAt` unreachable in the shipped product. All four ends built, nothing joining them. The reminder's *amount* is correct. | `invoices.service.ts:624-632,843`, `api-client.ts:1520`, `RemindButton.tsx:94` | OPEN |
 | F15 | **`invoices-issued` has no Discount column**, so Subtotal plus GCT does not equal Total for any discounted invoice. The demo fixtures already carry a 5% discount. | `exports.service.ts:83-96` | **CLOSED** |
-| F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | **CLOSED** |
+| F16 | **The free-quote gate is bypassable and over-charges.** Called only from `create`, but it counts *every* `Quote` row — so `revise` and `createVariation` mint usable quotes without limit, while a contractor's own revisions eat their allowance of five. | `quotes.service.ts:216-235,739,791` | **REOPENED — see the sweep section below.** The gate was verified only AT the cap, so the below-cap path was never exercised and the supply is infinite there: one clientless draft, revised and retargeted, yields unlimited sendable quotes. |
 | F17 `[reviewed]` | **The admin drawer shows the all-time quote count as "This month".** `t.quoteCount` is passed twice, into slots 7 and 8, and rendered as two different facts. The API has no monthly figure at all. 240 lifetime quotes reads "This month: 240" — on the screen used to decide whether to bill or suspend. | `AdminConsole.tsx:577-578,1899-1900` | FIXED — the duplicated slot is gone (`TenantRow` is 8 elements), and the drawer shows one metric, "Quotes created (all time)", matching what the API sends. |
 | F18 `[reviewed]` | **The drawer's status pill reads over a column only ever written "active".** Three of four branches are unreachable, and the fallback means a suspended, past-due tenant opens as "Active". The tenants table was fixed for exactly this; the drawer was not. | `AdminConsole.tsx:1881-1882` | FIXED — the drawer derives its pill from `subscriptionStanding({plan, interval, renewsAt})` through `STANDING_PILL`, now lifted to module scope so the table and the drawer cannot disagree. |
 | F19 `[reviewed]` | **"Active subscriptions" counts neither active ones nor subscriptions.** The status is always active, there is no `deletedAt` filter, and rows exist only for tenants staff have touched — so the tile beside "Total businesses" actually means "tenants a staff member has clicked the plan dropdown on". `financials.proCount` is the honest figure, two clicks away. | `admin.service.ts:230`, `AdminConsole.tsx:547` | FIXED — the tile reads `financials.proCount`, labelled **"Pro tenants"**. "Paying" was the label on the first attempt and a review called it an overstatement: `proCount` applies no payment or standing test, so it includes past-due tenants and pro rows with `renewsAt: null`. The Financials screen already used "Pro", so the two screens now agree. |

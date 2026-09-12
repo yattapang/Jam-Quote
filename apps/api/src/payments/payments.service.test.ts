@@ -82,7 +82,17 @@ describe("PaymentsService.handleWiPayCallback", () => {
     const invoice = { id: INVOICE_ID, number: "INV-0007", totalCents: 100_000, paidCents: 0 };
     const tx = {
       payment: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-      invoice: { update: vi.fn().mockResolvedValue({}) },
+      // Returns the POST-increment row: status is derived from what the database
+      // holds after the atomic increment, not predicted from a figure read before the
+      // transaction opened.
+      invoice: {
+        update: vi.fn().mockResolvedValue({
+          paidCents: 100_000,
+          totalCents: 100_000,
+          retentionCents: 0,
+          retentionReleasedAt: null,
+        }),
+      },
     };
     const prisma = {
       invoice: { findUnique: vi.fn().mockResolvedValue(invoice) },
@@ -92,11 +102,26 @@ describe("PaymentsService.handleWiPayCallback", () => {
 
     await svc.handleWiPayCallback(successPayload);
 
-    expect(tx.invoice.update).toHaveBeenCalledTimes(1);
-    expect(tx.invoice.update).toHaveBeenCalledWith(
+    // TWO writes, matching `recordManualPayment`: an atomic increment, then the
+    // status derived from the post-increment truth. This asserted ONE, which pinned
+    // the read-modify-write shape — `invoice.paidCents + amountCents` computed from a
+    // row read before the transaction opened. The manual path's own comment names
+    // "a WiPay callback landing mid-entry" as the race it fixed; the card path still
+    // had it, so a manual payment committed mid-callback was erased.
+    expect(tx.invoice.update).toHaveBeenCalledTimes(2);
+    expect(tx.invoice.update).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
-        // 1000.00 * 100 = 100,000 cents → fully paid
-        data: expect.objectContaining({ paidCents: 100_000, status: "PAID" }),
+        where: { id: INVOICE_ID },
+        data: expect.objectContaining({ paidCents: { increment: 100_000 } }),
+      }),
+    );
+    // The second write carries only the status, derived from the post-increment row.
+    expect(tx.invoice.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: INVOICE_ID },
+        data: expect.objectContaining({ status: "PAID" }),
       }),
     );
   });
@@ -121,13 +146,25 @@ describe("PaymentsService.handleWiPayCallback", () => {
 describe("PaymentsService.recordManualPayment", () => {
   /** tx mock whose invoice.update returns the post-increment figures, the way
    * a real atomic increment does. */
-  function paymentHarness(opts: { totalCents: number; paidAfter: number }) {
+  function paymentHarness(opts: {
+    totalCents: number;
+    paidAfter: number;
+    retentionCents?: number;
+    retentionReleasedAt?: Date | null;
+  }) {
     const tx = {
       payment: { create: vi.fn().mockResolvedValue({}) },
       invoice: {
-        update: vi
-          .fn()
-          .mockResolvedValue({ paidCents: opts.paidAfter, totalCents: opts.totalCents }),
+        // The retention columns are part of what the service selects, so the fake has
+        // to carry them. Omitting them made `retentionReleasedAt` undefined, which
+        // the old `!== null` check read as RELEASED — the test passed for the wrong
+        // reason, and tightening the check to `!= null` is what surfaced it.
+        update: vi.fn().mockResolvedValue({
+          paidCents: opts.paidAfter,
+          totalCents: opts.totalCents,
+          retentionCents: opts.retentionCents ?? 0,
+          retentionReleasedAt: opts.retentionReleasedAt ?? null,
+        }),
       },
     };
     const prisma = {

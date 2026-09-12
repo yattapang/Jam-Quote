@@ -119,12 +119,24 @@ function renderConsole(pack: EffectiveRulePack | null) {
   );
 }
 
+/**
+ * Map statutory codes to display labels, matching AdminConsole.statLabel.
+ * This is re-declared here to avoid coupling to AdminConsole's internal implementation;
+ * if the mapping changes, both must be updated.
+ */
+function displayLabel(code: string): string {
+  return code === "EDUCATION_TAX" ? "Education Tax" : code;
+}
+
 /** Rate inputs the grid offers for one code, found by their accessible label. */
 function gridInputsFor(code: string): HTMLElement[] {
-  // The grid's rows are labelled by code; each row has an employee and an employer
-  // input. Counting by `aria-label` rather than by position, so a reordering of the
-  // grid does not quietly change what this measures.
-  return screen.queryAllByLabelText(new RegExp(`^${code} (employee|employer)`, "i"));
+  // The grid's rows are labelled by the DISPLAY label (e.g. "Education Tax" not
+  // "EDUCATION_TAX"), so resolve the code to its display form before searching.
+  // Each row has an employee and an employer input. Counting by `aria-label` rather
+  // than by position, so a reordering of the grid does not quietly change what this
+  // measures.
+  const displayName = displayLabel(code);
+  return screen.queryAllByLabelText(new RegExp(`^${displayName} (employee|employer)`, "i"));
 }
 
 describe("the statutory rate grid", () => {
@@ -132,6 +144,8 @@ describe("the statutory rate grid", () => {
     await openRulePack(rulepack());
     // Employee and employer. The grid is the editor for a baseline contribution.
     expect(gridInputsFor("NIS")).toHaveLength(2);
+    // gridInputsFor must handle codes that map to display labels (EDUCATION_TAX → "Education Tax").
+    expect(gridInputsFor("EDUCATION_TAX")).toHaveLength(2);
   });
 
   it("offers NONE for a levy a custom entry has taken over", async () => {

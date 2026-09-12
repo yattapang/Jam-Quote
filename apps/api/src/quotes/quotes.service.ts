@@ -309,11 +309,16 @@ export class QuotesService {
    * the count excludes them and the two lineage paths stay ungated — the original
    * they descend from has already been paid for, in allowance terms.
    *
-   * **The residual, stated rather than pretended away:** a revision produces a
-   * DRAFT whose client can then be changed, so a determined tenant can still get
-   * an extra document out of it. The allowance is a nudge toward Pro, not DRM, and
-   * closing that would mean refusing a contractor the ability to correct a quote.
-   * Recorded in REVIEW-FINDINGS rather than left as an unstated hole.
+   * **The residual this used to stop at, and no longer does:** a revision produces
+   * a DRAFT whose client can then be changed. For a descendant that already had a
+   * client, `update`'s retarget guard refuses that outright — a different client is
+   * a different job. But a descendant of a CLIENTLESS original had no client to
+   * keep, so the guard exempted it, and that exemption was the hole: revise, give
+   * it any client, send, repeat against the same clientless original — unlimited,
+   * below the cap, because none of those descendants were ever counted. `update`
+   * now gates and counts the moment such a descendant ACQUIRES its first client —
+   * see `acquiringFirstClient` there — which is the moment it becomes a job
+   * addressable to someone, the same event `create` charges for on a fresh quote.
    */
   private async assertCanCreateQuote(businessId: string): Promise<void> {
     const subscription = await this.prisma.subscription.findUnique({ where: { businessId } });
@@ -603,17 +608,62 @@ export class QuotesService {
     if (
       input.clientId !== undefined &&
       input.clientId !== existing.clientId &&
-      // Only when there IS a client to keep. `create` explicitly allows a draft
-      // with no client yet, and `revise` has no status gate — so a revision of a
-      // clientless quote could never be given a client, and the refusal said "a
-      // revision keeps the client of the quote it came from" when there was none.
-      // The only escape was to consume an allowance.
+      // Only when there IS a client to keep — see `acquiringFirstClient` below for
+      // the other branch, where there was none.
       existing.clientId !== null &&
       (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null)
     ) {
       throw new BadRequestException(
         "A revision keeps the client of the quote it came from. Create a new quote for a different client.",
       );
+    }
+
+    /**
+     * The hole the guard above did not close: a CLIENTLESS original.
+     *
+     * `revise`/`createVariation` copy `clientId` from the quote they descend from,
+     * so a descendant is clientless only when the whole chain is — there is no
+     * "real" client anywhere upstream that this could be said to be correcting.
+     * The guard above exempted exactly this case (`existing.clientId !== null`),
+     * because refusing it outright would also refuse the legitimate "I created a
+     * draft before picking a client, now let me pick one" case. But the exemption
+     * did not distinguish that from a revision of a CLIENTLESS original — and gave
+     * both the same unlimited pass: revise, give it any client, send, repeat
+     * against the same original forever. 25 sendable quotes were produced this way
+     * against an allowance of 3.
+     *
+     * **The principle:** a quote that can be SENT to a client consumes one unit of
+     * the allowance. An original consumes it at `create`. A descendant that already
+     * had a client consumes nothing more, because the client — and so the job — was
+     * already paid for. A descendant that is ACQUIRING a client it did not have is
+     * neither: it is the moment this job first becomes addressable to anyone, which
+     * is exactly the moment `create` charges for on a fresh quote. So it is gated
+     * the same way `create` is, and it stops counting as a free descendant from
+     * here on: its lineage links are cleared so `quoteAllowanceWhere` — which was
+     * already the single shared definition of "counts" — picks it up as an
+     * original on every future check, the same way a real `create` would. Nothing
+     * about lineage bookkeeping changes: the ORIGINAL quote (if any) is untouched.
+     *
+     * Rejected: refusing the retarget outright. That would also refuse the
+     * legitimate "no client yet" case another test relies on
+     * (`update`'s only caller-supplied clientId is optional by design), and it
+     * does not follow the "jobs quoted" principle — a clientless draft that
+     * becomes addressable to a real client for the first time IS a new job, not a
+     * forbidden edit of an old one, so it should cost a slot rather than be banned.
+     *
+     * Rejected: counting `clientId` distinct-ness up front (e.g. one slot per
+     * distinct client ever seen). That needs a new column or a scan of every
+     * descendant on every check, and duplicates work `quoteAllowanceWhere` already
+     * does correctly for the ordinary case. Reusing the existing "does this row
+     * count" clause by making the row match it is the smaller, more auditable
+     * change.
+     */
+    const acquiringFirstClient =
+      input.clientId != null &&
+      existing.clientId === null &&
+      (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null);
+    if (acquiringFirstClient) {
+      await this.assertCanCreateQuote(businessId);
     }
 
     await assertClientOwned(this.prisma, businessId, input.clientId);
@@ -656,6 +706,12 @@ export class QuotesService {
         data: {
           clientId: input.clientId ?? existing.clientId,
           projectId: input.projectId ?? existing.projectId,
+          // See `acquiringFirstClient` above: from the moment this descendant gets
+          // a client it did not have, it must count against the allowance like any
+          // other addressable quote — clearing its lineage is what makes
+          // `quoteAllowanceWhere` (the one shared definition of "counts") start
+          // counting it, exactly as it would a fresh `create`.
+          ...(acquiringFirstClient ? { parentQuoteId: null, variationOfQuoteId: null } : {}),
           detailLevel,
           gctRate: gctRatePct,
           discountPct,
