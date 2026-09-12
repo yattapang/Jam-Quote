@@ -7,6 +7,7 @@ import {
   jsxAttributes,
   parseSource,
   renderedExpressions,
+  renderedText,
 } from "./source-ast";
 
 /**
@@ -184,6 +185,21 @@ describe("jsxAttributes and attributeValue", () => {
 
   it("returns null for a bare boolean attribute", () => {
     expect(attributeValue(jsxAttributes(sf, "disabled")[0]!)).toBeNull();
+  });
+});
+
+describe("renderedText", () => {
+  it("sees bare text content, which renderedExpressions cannot", () => {
+    // `<span>3</span>` was the first-generation hardcoded-count defect, and it is a
+    // JsxText node, not a JsxExpression. This file first shipped only the latter.
+    const sf = parseSource("text.tsx", "const x = <div>\n  <span>3</span>\n  <b>{n}</b>\n</div>;");
+    expect(renderedText(sf).map((t) => t.text)).toEqual(["3"]);
+    expect(renderedExpressions(sf)).toHaveLength(1);
+  });
+
+  it("drops whitespace-only runs between elements", () => {
+    const sf = parseSource("ws.tsx", "const x = <div>\n  \n  <span />\n</div>;");
+    expect(renderedText(sf)).toEqual([]);
   });
 });
 

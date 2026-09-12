@@ -108,6 +108,22 @@ export function renderedExpressions(root: ts.Node): ts.Expression[] {
     .map((node) => node.expression!);
 }
 
+/**
+ * Bare text rendered as element content — the `3` in `<span>3</span>` — trimmed, with
+ * whitespace-only runs dropped.
+ *
+ * Separate from `renderedExpressions` because the parser treats braced and bare content
+ * as different node kinds, and the first version of this file exposed only the braced
+ * kind. That left the ORIGINAL first-generation defect — a hardcoded count written as
+ * plain text, `<span>3</span>` — invisible to any guard built here. A guard about
+ * rendered content should read both.
+ */
+export function renderedText(root: ts.Node): { text: string; node: ts.JsxText }[] {
+  return collect(root, ts.isJsxText)
+    .map((node) => ({ text: node.text.trim(), node }))
+    .filter((t) => t.text !== "");
+}
+
 // ───────────────────────────────────────────────────────────────── static analysis
 
 export interface StaticResult {
