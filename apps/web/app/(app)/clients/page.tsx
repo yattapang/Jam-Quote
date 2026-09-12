@@ -64,7 +64,7 @@ export default async function ClientsPage() {
                   <DeleteRowButton
                     kind="client"
                     id={c.id}
-                    confirmMessage={`Delete ${c.name}? This can't be undone.`}
+                    confirmMessage={`Remove ${c.name}? They'll disappear from your client list, but their existing quotes and invoices are untouched.`}
                   />
                 </div>
               </div>

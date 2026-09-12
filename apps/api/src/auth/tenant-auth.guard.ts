@@ -15,8 +15,9 @@ import type { AuthTokenPayload } from "./auth.service.js";
  * live up to 30 days, so any of the following must take effect immediately,
  * not only once the caller's token happens to expire:
  *  - the user's account being deleted
- *  - the user being converted to/created as an admin (businessId: null —
- *    see auth.service.ts issueToken, where admins are issued no businessId)
+ *  - the user's businessId changing (issueToken, auth.service.ts, copies
+ *    User.businessId verbatim into the token, so a stale claim in an old
+ *    token must never be trusted — see below)
  *  - the user's business being suspended (soft-deleted; see
  *    AdminService tenant suspension and AuthService.login, which blocks new
  *    logins the same way but can't retroactively invalidate a live token)
@@ -26,10 +27,22 @@ import type { AuthTokenPayload } from "./auth.service.js";
  * old token can't grant access to a different business than the one the
  * user is presently assigned to.
  *
+ * NOT an invariant this guard can rely on: "an admin has businessId: null."
+ * AdminService.promoteAdmin sets role: ADMIN without clearing businessId, and
+ * that console route is the only way admins are made — so every admin
+ * promoted through it keeps whatever businessId they had before (typically
+ * their own, if they were a tenant owner). issueToken then copies that
+ * businessId into their token verbatim. The result: a promoted admin is a
+ * user for whom AdminGuard grants the platform API AND this guard grants
+ * their own tenant, on the same token — dual-role staff, not the
+ * businessId-is-null admin this docblock used to describe. Whether that
+ * dual-role case is intended is a product question; this comment states what
+ * the code does, not what it should do.
+ *
  * Use @UseGuards(TenantAuthGuard) at the controller class level for every
- * tenant-scoped route (anything using @BusinessId()). Admins are expected
- * to get a clear 403 here, not a confusing 401 — they authenticate fine,
- * they just aren't a tenant.
+ * tenant-scoped route (anything using @BusinessId()). A user with no
+ * business at all (businessId: null) is expected to get a clear 403 here,
+ * not a confusing 401 — they authenticate fine, they just aren't a tenant.
  */
 @Injectable()
 export class TenantAuthGuard implements CanActivate {

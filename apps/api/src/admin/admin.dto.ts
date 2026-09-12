@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ADMIN_CAPABILITIES } from "@jamquote/core";
+import { ADMIN_CAPABILITIES, isHttpUrl } from "@jamquote/core";
 
 // zod's z.enum needs a non-empty string tuple; ADMIN_CAPABILITIES is the
 // single source of truth for valid capability values (from core).
@@ -73,7 +73,13 @@ export const createRegulatoryUpdateSchema = z.object({
   summary: z.string().max(2000).min(1),
   effectiveDate: z.coerce.date().nullable().optional(),
   actionNeeded: z.string().max(2000).nullable().optional(),
-  sourceUrl: z.string().url().nullable().optional(),
+  // See rulepack.dto.ts: `z.string().url()` accepts `javascript:`, and this value is
+  // rendered as an `href` on the contractor dashboard's regulatory feed.
+  sourceUrl: z
+    .string()
+    .refine(isHttpUrl, { message: "Must be a full web address starting http:// or https://" })
+    .nullable()
+    .optional(),
   publishedAt: z.coerce.date().optional(),
 });
 export type CreateRegulatoryUpdateInput = z.infer<typeof createRegulatoryUpdateSchema>;

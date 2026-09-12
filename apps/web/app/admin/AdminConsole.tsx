@@ -13,6 +13,7 @@ import {
   CURRENCY_CODES,
   formatPlatformMoney,
   type CurrencyCode,
+  safeHref,
 } from "@jamquote/core";
 import {
   getAdminPricing,
@@ -1769,8 +1770,8 @@ export default function AdminConsole({
                           `preventDefault`, while `sourceEff` held the actual URL and
                           working links sat 150 lines above. A staffer clicking
                           "TAJ ↗" to check a tax rate got nothing at all. */}
-                      {c.sourceUrl ? (
-                        <a className={styles.link} href={c.sourceUrl} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", fontWeight: 600 }}>{c.sourceLink} ↗</a>
+                      {safeHref(c.sourceUrl) ? (
+                        <a className={styles.link} href={safeHref(c.sourceUrl)!} target="_blank" rel="noopener noreferrer" style={{ marginLeft: "auto", fontWeight: 600 }}>{c.sourceLink} ↗</a>
                       ) : (
                         <span title="No source URL recorded for this value" style={{ marginLeft: "auto", fontWeight: 600, opacity: 0.65 }}>{c.sourceLink}</span>
                       )}

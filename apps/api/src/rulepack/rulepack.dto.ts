@@ -1,4 +1,18 @@
 import { z } from "zod";
+import { isHttpUrl } from "@jamquote/core";
+
+/**
+ * A web address we are willing to put in an `href`.
+ *
+ * `z.string().url()` accepts `javascript:`, `mailto:` and `ftp:`, and both of the
+ * screens that render `sourceUrl` render it as a link — one of them the contractor
+ * dashboard, which is tenant-facing. `isHttpUrl` lives in core so the DTO, the client
+ * validator and the render guard spend one definition; it was previously a private
+ * function in one web module, applied to one form and neither of the other two places.
+ */
+const httpUrl = z.string().refine(isHttpUrl, {
+  message: "Must be a full web address starting http:// or https://",
+});
 
 const ratePct = z.number().min(0).max(100);
 
@@ -24,7 +38,7 @@ export const updateRulePackSchema = z
     /** ISO date (YYYY-MM-DD); null clears the verified date. */
     verifiedAsOf: z.string().date().nullable().optional(),
     /** Primary provenance link; null or "" clears it. */
-    sourceUrl: z.union([z.string().url(), z.literal("")]).nullable().optional(),
+    sourceUrl: z.union([httpUrl, z.literal("")]).nullable().optional(),
     /** Keyed by statutory code (NIS / NHT / EDUCATION_TAX / HEART). */
     statutoryRates: z.record(z.string(), statutoryRateSchema).optional(),
     /**
@@ -54,7 +68,7 @@ export const updateRulePackSchema = z
     /** Baseline codes to stop showing — a withdrawn contribution. */
     statutoryRetired: z.array(z.string().min(1)).optional(),
     /** Pages to check when verifying. Replaces the list wholesale. */
-    sources: z.array(z.string().url()).max(20).optional(),
+    sources: z.array(httpUrl).max(20).optional(),
   })
   .refine((v) => Object.keys(v).length > 0, {
     message: "At least one field must be provided",

@@ -70,9 +70,29 @@ export class AdminController {
     return this.admin.overview();
   }
 
+  /**
+   * Ungated (any admin) because the suspend/restore/change-plan screen (a
+   * MANAGE_TENANTS job) needs to list tenants at all, and that screen must
+   * still work for an admin who holds MANAGE_TENANTS but not VIEW_FINANCIALS.
+   * The rows themselves are reduced for a caller without financial access:
+   * `priceCents` — the negotiated subscription price — is the field that
+   * let VIEW_FINANCIALS's own screen (MRR, renewals) be reconstructed by
+   * summing this list, so AdminService.tenants omits it unless the caller
+   * holds VIEW_FINANCIALS, MANAGE_TENANTS (who can already see/set it via
+   * setTenantPlan) or is a super-admin.
+   */
   @Get("tenants")
-  tenants(@Query("includeSuspended") includeSuspended?: string): Promise<AdminTenant[]> {
-    return this.admin.tenants(includeSuspended === "true");
+  tenants(
+    @Query("includeSuspended") includeSuspended?: string,
+    @Req() req?: Request,
+  ): Promise<AdminTenant[]> {
+    const ctx = req?.adminContext;
+    const canSeePrice =
+      !!ctx &&
+      (ctx.isSuperAdmin ||
+        ctx.capabilities.includes(AdminCapability.VIEW_FINANCIALS) ||
+        ctx.capabilities.includes(AdminCapability.MANAGE_TENANTS));
+    return this.admin.tenants(includeSuspended === "true", canSeePrice);
   }
 
   /** Reversible soft-delete — sets Business.deletedAt. */
@@ -219,11 +239,13 @@ export class AdminController {
 
   /** Subscription & revenue overview — GET /admin/financials. */
   // --- Subscription billing: what tenants have paid JamQuote ---------------
-  // Gated on MANAGE_TENANTS, the same capability as changing a plan: recording
-  // a payment IS a plan change, it just carries the money with it.
+  // Reading the ledger (below) is gated on VIEW_FINANCIALS — it's the same
+  // money-visibility question as /admin/financials. Recording and voiding a
+  // payment (further below) stay on MANAGE_TENANTS: that IS a plan change,
+  // it just carries the money with it.
 
   @Get("tenants/:id/subscription-payments")
-  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  @RequireCapability(AdminCapability.VIEW_FINANCIALS)
   listSubscriptionPayments(@Param("id") id: string): Promise<SubscriptionPayment[]> {
     return this.subscriptionPayments.findAll(id);
   }

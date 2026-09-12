@@ -41,14 +41,14 @@ export class ClientsService {
 
   async findAll(businessId: string): Promise<ClientWithName[]> {
     const clients = await this.prisma.client.findMany({
-      where: { businessId },
+      where: { businessId, deletedAt: null },
       orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     });
     return clients.map(withName);
   }
 
   async findOne(businessId: string, id: string): Promise<ClientWithName> {
-    const client = await this.prisma.client.findFirst({ where: { id, businessId } });
+    const client = await this.prisma.client.findFirst({ where: { id, businessId, deletedAt: null } });
     if (!client) throw new NotFoundException("Client not found");
     return withName(client);
   }
@@ -76,9 +76,18 @@ export class ClientsService {
     return withName(client);
   }
 
+  /**
+   * Soft delete, for the same reason `ProjectsService.remove` and
+   * `QuotesService.remove` were moved off a hard delete: `Client.deletedAt`
+   * has always been declared "soft-delete for offline sync", but this used
+   * `prisma.client.delete`. The FKs on `Job`/`Quote`/`Invoice` are `ON DELETE
+   * SET NULL`, so a hard delete rewrote every document already in a
+   * customer's hands to `clientName: null` and left no tombstone for a phone
+   * to later recreate the client from a stale `op: "upsert"`.
+   */
   async remove(businessId: string, id: string): Promise<void> {
     await this.findOne(businessId, id);
-    await this.prisma.client.delete({ where: { id } });
+    await this.prisma.client.update({ where: { id }, data: { deletedAt: new Date() } });
   }
 }
 

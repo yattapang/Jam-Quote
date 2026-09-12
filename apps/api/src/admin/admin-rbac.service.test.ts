@@ -30,6 +30,27 @@ describe("AdminService.promoteAdmin", () => {
     expect(prisma.user.findFirst).not.toHaveBeenCalled();
   });
 
+  it("forbids a non-super-admin from reaching an existing super-admin's row via promote", async () => {
+    // The target is ALREADY a super-admin; the actor's request doesn't set
+    // isSuperAdmin at all (just tries to clear their capabilities). The old
+    // code only checked `input.isSuperAdmin && !actor.isSuperAdmin`, which is
+    // false here, so it fell through to prisma.user.update and wiped the
+    // super-admin's capabilities. updateAdmin/revokeAdmin both refuse this;
+    // promoteAdmin must too.
+    const prisma = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({ id: "super-victim", isSuperAdmin: true }),
+        update: vi.fn(),
+      },
+    };
+    const { svc } = make(prisma);
+
+    await expect(
+      svc.promoteAdmin({ email: "victim@jamquote.com", capabilities: [] }, REGULAR),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it("promotes an existing user, sets capabilities, and audits", async () => {
     const prisma = {
       user: {

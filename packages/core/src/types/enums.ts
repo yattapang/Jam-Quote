@@ -169,7 +169,15 @@ export function projectStageTracksProgress(stage: ProjectStage): boolean {
 // guarded a platform supplier directory that no longer exists, and leaving it
 // listed would offer admins a permission that grants nothing.
 export const AdminCapability = {
-  /** Suspend / restore / hard-delete tenants and change their plan. */
+  /**
+   * Suspend / restore / hard-delete tenants, change their plan, record and
+   * void subscription payments, and impersonate a tenant (a 30-minute
+   * read-only session over their entire book — see
+   * AdminController.impersonateTenant, which itself calls this "the most
+   * sensitive capability in the console"). All of that rides on this one
+   * capability today; splitting impersonation into its own capability is a
+   * product decision that has not been made, not an oversight.
+   */
   MANAGE_TENANTS: "MANAGE_TENANTS",
   /** Edit platform subscription pricing. */
   MANAGE_PRICING: "MANAGE_PRICING",
@@ -188,7 +196,11 @@ export const ADMIN_CAPABILITIES: AdminCapability[] = Object.values(AdminCapabili
 
 /** Human-readable label + description for each capability, for admin UIs. */
 export const ADMIN_CAPABILITY_META: Record<AdminCapability, { label: string; description: string }> = {
-  MANAGE_TENANTS: { label: "Manage tenants", description: "Suspend, restore, delete businesses and change their plan" },
+  MANAGE_TENANTS: {
+    label: "Manage tenants",
+    description:
+      "Suspend, restore, delete businesses, change their plan, record/void subscription payments, and impersonate a tenant (view their account read-only for 30 minutes)",
+  },
   MANAGE_PRICING: { label: "Manage pricing", description: "Edit subscription plan pricing" },
   VIEW_FINANCIALS: { label: "View financials", description: "See subscription revenue and renewals" },
   MANAGE_RULEPACK: { label: "Manage rule-packs", description: "Edit jurisdiction tax/regulatory rules" },

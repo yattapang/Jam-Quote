@@ -52,6 +52,73 @@ because money that has not arrived cannot buy a term. Five tests in a new
 `admin.dto.test.ts`, including next month as well as the absurd century — a
 fat-fingered month grants a month just as quietly.
 
+## The three remaining sweeps — 28 findings, and my newest fix is one of them
+
+`tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape
+brief. Ordered by severity.
+
+### P0 — data corruption, security, revenue
+
+| # | Finding |
+|---|---|
+| S1 | **`DELETE /clients/:id` hard-deletes and NULLs `clientId` on every quote, invoice and project.** The FKs are `ON DELETE SET NULL`, verified in the migration SQL rather than inferred, so tidying the client list rewrites documents already in customers' hands: the public invoice and quote pages render `clientName: null`, the accountant exports lose the name, reminders cannot resolve a recipient, a project loses its client for job profit. `suppliers.service.ts` documents avoiding exactly this — the twin that never got the fix. The confirm dialog says only "This can't be undone", and no tombstone reaches offline devices, so a later `upsert` from a phone re-creates the client permanently orphaned from its documents. |
+| S2 | **`javascript:` URLs are accepted by the DTO and rendered as an `href` on the CONTRACTOR dashboard.** `z.string().url()` takes `javascript:`, `mailto:` and `ftp:`. A correct `isHttpUrl` already existed as a private function in one web module — its own comment names those schemes — applied to that one form's client validation and never to the DTO or to the second render site. One place out of three. |
+| S3 | **The allowance gate shipped an hour ago is bypassed across a month boundary, and double-charges.** `quoteAllowanceWhere` counts `createdAt >= startOfJamaicaMonth`, and `createdAt` is stamped when `revise` created the row — so clearing the lineage files it in a month that is no longer being counted. Measured: 25 sendable quotes on a limit of 3 when the rows were created in a prior month. Separately, `create` already charges for a clientless draft, so the legitimate "draft before picking a client" flow now costs two slots for one job, reintroducing the over-charging `quote-allowance.ts` was written to remove. **The harness could see neither**: its in-memory `countsTowardAllowance` ignores `where.createdAt` entirely, and no row it creates carries a `createdAt` at all — a test for a monthly allowance that models a world with no month in it. |
+
+### P1 — permissions and money the customer reads
+
+| # | Finding |
+|---|---|
+| S4 | **`VIEW_FINANCIALS` gates a screen that an ungated route already serves.** `GET /admin/tenants` requires no capability and returns, per tenant, `plan`, `interval`, `priceCents` — the negotiated price — and `renewsAt`. MRR, pro count, annual count and upcoming renewals are all derivable by summing that payload. The subscription payment ledger is gated on `MANAGE_TENANTS` rather than `VIEW_FINANCIALS`. |
+| S5 | **`promoteAdmin` bypasses "only a super-admin may modify a super-admin."** `updateAdmin` and `revokeAdmin` both refuse a super-admin target to a non-super actor; `promoteAdmin` checks only the incoming flag, so `POST /admin/admins` carrying a super-admin's email clears their capabilities. |
+| S6 | **A 403 where its twin returns 404**, confirming another tenant's row exists. `material-prices.service.ts` reads unscoped then throws Forbidden; `suppliers.service.ts` states the rule and returns 404 "because confirming its existence would leak that they have it". |
+| S7 | **Caller-supplied `supplierId` is never ownership-checked** on purchases or on quote/invoice line items, while `projectId` and `labourRateId` beside it are. `QuoteLineItem.supplier` is a real FK. No disclosure today because no read path includes it — one `include: { supplier: true }` away. |
+| S8 | **Tenant-facing emails hand-format platform money.** The dunning, renewal and revert notices build `${currency} $${cents / 100}` — printing `USD $1,000.00` where core prints `US$1,000.00` — and the overdue digest keeps a local `money()` with a hardcoded `$`, wrong for every non-JMD jurisdiction the rule pack already supports. The twin of the console money sweep, on the surface a customer actually reads. |
+| S9 | **Persisted precision is narrower than validated precision.** `quantity` is `z.number().positive()` against `Decimal(12,3)`, and `markupPct` is unbounded against `Decimal(6,2)`. `subtotalCents` is computed from SUBMITTED values while the public page recomputes from PERSISTED ones, so a quantity of `1.0005` at $10,000 diverges by **$50**. The builder's Qty input carries no `step`, so this is reachable from the UI, and the tenant's own detail page, PDF and emailed total disagree with the stored figure by the same amount. |
+
+### P2 — contract drift between the two hand-mirrored halves
+
+| # | Finding |
+|---|---|
+| S10 | `StatutoryCustomEntry` in `rulepack.service.ts` omits `"SELF_EMPLOYED"` and `note` — both accepted by the DTO, present in core, present in the web mirror, and offered by the console's own dropdown. Runtime survives through a spread, so what the API declares it returns and what it returns disagree, on the very shape that lost `statutoryRetired` two weeks ago. |
+| S11 | `.min(1)` on a statutory code does not hold: Zod runs the length floor BEFORE the trim transform, so `"   "` passes and stores an empty code that then merges into every tenant's rule pack. |
+| S12 | The client accepts `verifiedAsOf: "2026-02-31"` on a regex while the DTO uses `z.string().date()` — a save refused by an array path instead of the field message that validator exists to give. |
+| S13 | `AdminSubscriptionPayment` drops `interval`, which the endpoint does send, so a ledger row cannot say whether a receipt bought a month or a year — on the screen reconciled against a bank statement. |
+
+### P3 — five more defeated guards, each bypassed by execution
+
+| # | Guard | The bypass that passed |
+|---|---|---|
+| S14 | `quote-decision.service.test.ts`, "never writes anything but the decision fields" | It asserts `Object.keys` of the FIRST `quote.update` only. A SECOND update zeroing `depositCents` and rewriting `terms` from the unauthenticated route passed 8 of 8. |
+| S15 | `apps/web/middleware.ts` `PROTECTED_PREFIXES` | Twelve hand-written literals with nothing pairing them to the filesystem. A new `app/(app)/payroll/page.tsx` shipped with no cookie gate and 6 of 6 passed. |
+| S16 | `hand-written-shapes.test.ts` | Parses `^export interface (Api\w+)`, so no admin shape is in scope at all — the family in which the `statutoryRetired` loss actually happened. An unreferenced `AdminZombieShape` passed 4 of 4. |
+| S17 | `admin-console-honesty.test.ts`, generation 5 | `formatPlatformMoney(r.amountCents, CURRENCY_CODES[0])` — an index expression is neither a string literal nor a named const — and `{+3}` as element text, since `"+3"` fails `/^\d{1,6}$/`. Both passed 25 of 25. |
+| S18 | `input-bounds-usage.test.ts` | `min={"0"}` walks past it, because the pattern needs a digit straight after the brace or quote. It also scans only `.tsx`, so the DTO half of every bound is unpoliced — 2 of 10 bounds actually share a definition — and its `AdminConsole` allow-list silently covers the subscription payment form, which has no client validation at all: typing `0` in the amount, or a 121-character reference, is a refused save. |
+| S19 | `unit-label-usage.test.ts` | It detects `RATE_UNIT_LABEL[` and a redeclared literal map. The public, client-facing quote page uses `l.rateUnit.toLowerCase()` — identical output today, divergent the moment a member's label is not its lowercased name. The guard is green with the bypass standing in the codebase right now. |
+
+### P3 — comments and labels that describe something else
+
+`MANAGE_TENANTS` is described as "Suspend, restore, delete businesses and change their
+plan" while it also gates impersonation — which the service itself calls "the most
+sensitive capability in the console" — and the payment ledger. `TenantAuthGuard`'s
+docblock states that admins are issued no `businessId`; `promoteAdmin` never clears it,
+so every admin made through the console holds both roles. `startOfJamaicaDayMs` says it
+exists "so nothing writes a fifth copy" and has exactly one caller, in its own file,
+while `daysLate` and `jamaicaTodayAsUtcMidnight` each implement the shift separately.
+
+### Confirmed sound, which is the half that tells you where to stop looking
+
+`assert-owned.ts` is wired into every caller-supplied `clientId` and `projectId` on a
+write, and the deliberate 404 leaks nothing by timing, message text or a sibling route.
+`public-view.ts` covers every unauthenticated surface, the contracts are genuinely
+`.strict()` at every nesting level, and no PDF or email route is reachable by token.
+All 17 mutating admin routes carry a capability. Impersonation is read-only by HTTP
+method, fails closed for routes added later, keeps the admin's own `sub`, expires,
+is refused by three separate guards, and writes its audit entry before minting the
+token. Every `QuoteStatus` member has a writer and VIEWED's downstream surfaces are
+wired. The sealed rule-pack patch holds, and `next build` passes on a clean tree.
+`deletedAt` is filtered on every model that has it — except clients.
+
 ## A second provenance failure, of a different kind
 
 The section below records findings filed in the name of agents that never ran. This

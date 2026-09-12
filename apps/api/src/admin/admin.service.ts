@@ -256,8 +256,16 @@ export class AdminService {
    * to preserve existing callers' expectations; pass includeSuspended: true
    * to see them too (each row still carries its own `suspended` flag either
    * way, so the shape never changes — only the set of rows returned does).
+   *
+   * `includePrice` (default true for callers that don't pass it — internal
+   * callers, not the controller) controls whether `priceCents` — the
+   * negotiated subscription price — is included. AdminController.tenants
+   * passes false for a caller without VIEW_FINANCIALS/MANAGE_TENANTS, since
+   * plan + interval + priceCents across every row is exactly what would let
+   * that caller reconstruct the financials screen (MRR, renewal mix) from a
+   * route that itself requires no capability.
    */
-  async tenants(includeSuspended = false): Promise<AdminTenant[]> {
+  async tenants(includeSuspended = false, includePrice = true): Promise<AdminTenant[]> {
     const businesses = await this.prisma.business.findMany({
       where: includeSuspended ? {} : { deletedAt: null },
       include: {
@@ -284,7 +292,7 @@ export class AdminService {
       parish: b.parish,
       plan: b.subscription?.plan ?? "Free",
       interval: b.subscription?.interval ?? "monthly",
-      priceCents: b.subscription?.priceCents ?? null,
+      priceCents: includePrice ? b.subscription?.priceCents ?? null : null,
       renewsAt: b.subscription?.renewsAt ?? null,
       trn: b.trn,
       createdAt: b.createdAt,
@@ -734,6 +742,16 @@ export class AdminService {
     });
     if (!user) {
       throw new NotFoundException("No user with that email — ask them to sign up first, then promote them.");
+    }
+
+    // The target may ALREADY be a super-admin (e.g. re-promoting an existing
+    // admin to change their capabilities) even when input.isSuperAdmin is
+    // false/undefined — the check above only looks at the incoming flag.
+    // Mirrors updateAdmin/revokeAdmin's "only a super-admin may modify a
+    // super-admin" rule so this route can't be used to reach that row by
+    // going through the promote path instead of update.
+    if (user.isSuperAdmin && !actor.isSuperAdmin) {
+      throw new ForbiddenException("Only a super-admin can modify a super-admin.");
     }
 
     const updated = await this.prisma.user.update({

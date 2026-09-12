@@ -141,6 +141,66 @@ describe("AdminService.tenants", () => {
       expect.objectContaining({ where: {} }),
     );
   });
+
+  it("omits priceCents when includePrice is false", async () => {
+    // AdminController.tenants passes includePrice: false for a caller
+    // without VIEW_FINANCIALS/MANAGE_TENANTS. GET /admin/tenants itself
+    // requires no capability, and plan + interval + priceCents across every
+    // row is exactly what would let such a caller reconstruct the
+    // financials screen (MRR, renewal mix) by summing this list. Without
+    // this the negotiated price leaks straight through.
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const prisma = {
+      business: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "biz-9",
+            name: "Priced Co",
+            parish: null,
+            trn: null,
+            createdAt: now,
+            deletedAt: null,
+            subscription: { plan: "Pro", interval: "annual", priceCents: 480000, renewsAt: now },
+            _count: { quotes: 1 },
+            quotes: [{ updatedAt: now }],
+          },
+        ]),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
+
+    const tenants = await svc.tenants(false, false);
+
+    expect(tenants[0]?.priceCents).toBeNull();
+  });
+
+  it("includes priceCents when includePrice is true (the default)", async () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const prisma = {
+      business: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "biz-9",
+            name: "Priced Co",
+            parish: null,
+            trn: null,
+            createdAt: now,
+            deletedAt: null,
+            subscription: { plan: "Pro", interval: "annual", priceCents: 480000, renewsAt: now },
+            _count: { quotes: 1 },
+            quotes: [{ updatedAt: now }],
+          },
+        ]),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
+
+    const tenants = await svc.tenants();
+
+    expect(tenants[0]?.priceCents).toBe(480000);
+  });
 });
 
 describe("AdminService.suspendTenant / restoreTenant", () => {

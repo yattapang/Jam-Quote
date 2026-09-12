@@ -6,7 +6,7 @@ import MoneyText from "@/components/ui/MoneyText";
 import { quoteStatusPill } from "@/lib/status";
 import { getQuotes, getClients, getBusiness, getInvoices, getRegulatoryUpdates } from "@/lib/api-server";
 import { sortRegulatoryAlerts } from "@/lib/regulatory";
-import { computeDashboardStats, QuoteStatus } from "@jamquote/core";
+import { computeDashboardStats, QuoteStatus, safeHref } from "@jamquote/core";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Dashboard · JamQuote" };
@@ -196,10 +196,16 @@ export default async function DashboardPage() {
                   // links — the rest stay plain text rather than pointing the
                   // contractor at a guessed page. noopener/noreferrer because
                   // the destination is a third-party government site.
-                  return a.sourceUrl ? (
+                  // `safeHref`, not the raw column. `z.string().url()` accepted
+                  // `javascript:` until this week, so rows written before the DTO was
+                  // tightened are still in the database — and this is a TENANT-facing
+                  // surface. Tightening the input without guarding the output would
+                  // have left every existing row live.
+                  const href = safeHref(a.sourceUrl);
+                  return href ? (
                     <a
                       key={a.id}
-                      href={a.sourceUrl}
+                      href={href}
                       target="_blank"
                       rel="noopener noreferrer"
                       className={shared.rowLink}
