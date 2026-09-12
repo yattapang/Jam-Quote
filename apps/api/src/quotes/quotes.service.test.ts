@@ -707,7 +707,7 @@ describe("what the free allowance counts", () => {
  * Quoting a different client is a different job, and a different job is a new quote.
  */
 describe("a descendant quote cannot be retargeted at another client", () => {
-  function editHarness(existing: Record<string, unknown>) {
+  function editHarness(existing: Record<string, unknown>, descendants = 0) {
     const prisma = {
       // The allowance gate runs before revise now; a pro plan short-circuits it.
       subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
@@ -718,7 +718,12 @@ describe("a descendant quote cannot be retargeted at another client", () => {
           quote: { update: vi.fn().mockResolvedValue({}) },
         }),
       ),
-      quote: { findFirst: vi.fn().mockResolvedValue(existing) },
+      quote: {
+        findFirst: vi.fn().mockResolvedValue(existing),
+        // "Has this row been revised?" — the lone-row exemption asks for it.
+        count: vi.fn().mockResolvedValue(descendants),
+        update: vi.fn().mockResolvedValue({}),
+      },
       client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-2", businessId: "b1" }) },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -766,6 +771,17 @@ describe("a descendant quote cannot be retargeted at another client", () => {
     ).resolves.toBeDefined();
   });
 
+  it("REFUSES a client change on an ORIGINAL that has already been revised", async () => {
+    // The same hole from the other end, and the previous fix left it open: retarget
+    // the ORIGINAL instead of the revision and the chain holds two clients — the
+    // revision keeps the old one and is still sendable — on one charge. Repeatable:
+    // revise, retarget the original, revise, retarget the original.
+    const { svc } = editHarness(draft, 1);
+    await expect(svc.update("b1", "q2", { clientId: "cl-2" } as never)).rejects.toThrow(
+      /keeps the client/,
+    );
+  });
+
   it("ALLOWS editing a revision as long as the client is unchanged", async () => {
     // Correcting the sheet is the whole point of a revision, and it stays free.
     const { svc } = editHarness({ ...draft, parentQuoteId: "q1" });
@@ -807,128 +823,97 @@ describe("the allowance clause is shared", () => {
   });
 });
 
-describe("a revision of a CLIENTLESS quote can still be given a client, but it now costs a slot", () => {
-  // `create` permits a draft with no client, and `revise` has no status gate — so a
-  // blanket refusal of "give this descendant a client" would also refuse that
-  // legitimate case. But letting it through for free is exactly the hole this file
-  // is about: see `acquiringFirstClient` in quotes.service.ts. It is gated like
-  // `create`, and — on success — its lineage is cleared so it counts from now on.
-
-  function harness(opts: { plan: "free" | "pro"; count: number; limit: number }) {
-    const quoteUpdate = vi.fn().mockResolvedValue({});
-    const prisma = {
-      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: opts.plan }) },
-      pricingService: undefined,
-      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
-        cb({
-          quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
-          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
-          quote: { update: quoteUpdate },
-        }),
-      ),
-      quote: {
-        findFirst: vi.fn().mockResolvedValue({
-          id: "q2",
-          businessId: "b1",
-          status: "DRAFT",
-          clientId: null,
-          projectId: null,
-          parentQuoteId: "q1",
-          variationOfQuoteId: null,
-          version: 2,
-          gctRate: 15,
-          discountPct: 0,
-          depositCents: 0,
-          detailLevel: "SUMMARY",
-          lineItems: [],
-          sections: [],
-        }),
-        count: vi.fn().mockResolvedValue(opts.count),
-      },
-      client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-1", businessId: "b1" }) },
-    };
-    const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: opts.limit }) };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new QuotesService(prisma as any, {} as any, pricingService as any);
-    return { svc, prisma, quoteUpdate };
-  }
-
-  it("allows setting a client where there was none, BELOW the cap", async () => {
-    const { svc } = harness({ plan: "free", count: 0, limit: 3 });
-    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
-  });
-
-  it("clears lineage on success, so the same trick can't be replayed for free", async () => {
-    const { svc, quoteUpdate } = harness({ plan: "free", count: 0, limit: 3 });
-    await svc.update("b1", "q2", { clientId: "cl-1" } as never);
-    expect(quoteUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ parentQuoteId: null, variationOfQuoteId: null }),
-      }),
-    );
-  });
-
-  it("REFUSES setting a client where there was none, AT the cap", async () => {
-    const { svc } = harness({ plan: "free", count: 3, limit: 3 });
-    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).rejects.toMatchObject({
-      response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
-    });
-  });
-
-  it("pro plans are never gated", async () => {
-    const { svc } = harness({ plan: "pro", count: 999, limit: 3 });
-    await expect(svc.update("b1", "q2", { clientId: "cl-1" } as never)).resolves.toBeDefined();
-  });
-});
-
 /**
- * The below-cap path, end to end.
+ * The below-cap path, end to end, with a MONTH in it.
  *
- * Every prior test of this allowance hardcoded the count to the cap
- * (`harnessAtCap` below fixes it at 5 of 5) — so every one of them exercised the
- * REFUSAL path, and none exercised the path where the count starts under the cap
- * and a determined tenant tries to make it grow past the cap anyway. That is
- * exactly where the clientless-original trick lived: `quotesThisMonth` never
- * moved, so it stayed under the cap forever no matter how many times the trick
- * ran.
- *
- * This harness is a tiny in-memory Prisma so `quote.count` reflects real writes
- * — the only way to prove the loop is actually bounded rather than merely
- * refused once when already at the cap.
+ * The previous version of this harness had an in-memory `countsTowardAllowance` that
+ * looked only at `parentQuoteId`/`variationOfQuoteId` and ignored `where.createdAt`
+ * entirely, and no row it wrote carried a `createdAt` at all: a test suite for a
+ * MONTHLY allowance modelling a world with no month in it. The sibling test that pins
+ * the Jamaica boundary asserted the shape of the `where` clause in isolation, so
+ * nothing joined the two facts and a fix that re-filed a row into an uncounted month
+ * passed both. This `quote.count` honours EVERY clause it is handed, throws on any
+ * clause it does not understand rather than ignoring it, and compares `createdAt`
+ * against a real value on the row \u2014 throwing if a row has none.
  */
-describe("the below-cap path: a clientless original cannot mint unlimited sendable quotes", () => {
+describe("the below-cap path: one clientless chain cannot mint unlimited sendable quotes", () => {
+  const MS_DAY = 24 * 60 * 60 * 1000;
+  const now = new Date();
+  const twoMonthsAgo = new Date(now.getTime() - 70 * MS_DAY);
+
   function fakeDb(limit: number) {
     const rows = new Map<string, Record<string, unknown>>();
+    const updateData: Record<string, unknown>[] = [];
     let seq = 0;
 
-    function countsTowardAllowance(row: Record<string, unknown>): boolean {
-      return row.parentQuoteId == null && row.variationOfQuoteId == null;
+    /**
+     * Honours every clause, or throws. Prisma's own semantics for the subset used
+     * here: a scalar means equality (and `null` means IS NULL), `{ gte }`/`{ lt }`
+     * compare dates, `OR` is a disjunction. Anything else is a clause this harness
+     * would otherwise silently drop \u2014 which is exactly how the month went missing \u2014
+     * so it is an error instead.
+     */
+    function matchesWhere(row: Record<string, unknown>, where: Record<string, unknown>): boolean {
+      for (const [key, cond] of Object.entries(where)) {
+        if (key === "OR" || key === "AND") {
+          const clauses = cond as Record<string, unknown>[];
+          const ok =
+            key === "OR"
+              ? clauses.some((c) => matchesWhere(row, c))
+              : clauses.every((c) => matchesWhere(row, c));
+          if (!ok) return false;
+          continue;
+        }
+        const value = row[key] ?? null;
+        if (cond !== null && typeof cond === "object" && !(cond instanceof Date)) {
+          for (const [op, operand] of Object.entries(cond as Record<string, unknown>)) {
+            if (op !== "gte" && op !== "lt" && op !== "lte" && op !== "gt") {
+              throw new Error(`fakeDb: unsupported clause ${key}.${op} \u2014 teach it, don't drop it`);
+            }
+            if (!(value instanceof Date)) {
+              throw new Error(
+                `fakeDb: row ${String(row.id)} has no ${key} to compare against ${op} \u2014 ` +
+                  `a monthly allowance cannot be tested on rows with no month`,
+              );
+            }
+            const a = value.getTime();
+            const b = (operand as Date).getTime();
+            if (op === "gte" && !(a >= b)) return false;
+            if (op === "gt" && !(a > b)) return false;
+            if (op === "lte" && !(a <= b)) return false;
+            if (op === "lt" && !(a < b)) return false;
+          }
+          continue;
+        }
+        if (value !== (cond ?? null)) return false;
+      }
+      return true;
     }
 
     const quote = {
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const id = `q${++seq}`;
-        const row = { id, lineItems: [], sections: [], ...data };
+        // Every row carries a createdAt, as Postgres's `@default(now())` gives it.
+        const row = { id, lineItems: [], sections: [], createdAt: new Date(), ...data };
         rows.set(id, row);
         return row;
       }),
       findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
-        const row = where.id ? rows.get(where.id as string) : undefined;
-        return row ?? null;
+        for (const row of rows.values()) if (matchesWhere(row, where)) return row;
+        return null;
       }),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-        const row = rows.get(where.id);
-        if (!row) throw new Error("no such row");
-        Object.assign(row, data);
-        return row;
-      }),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = rows.get(where.id);
+          if (!row) throw new Error("no such row");
+          updateData.push(data);
+          Object.assign(row, data);
+          return row;
+        },
+      ),
       count: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
         let n = 0;
-        for (const row of rows.values()) {
-          if (row.businessId !== where.businessId) continue;
-          if (!countsTowardAllowance(row)) continue;
-          n++;
-        }
+        for (const row of rows.values()) if (matchesWhere(row, where)) n++;
         return n;
       }),
       aggregate: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
@@ -944,7 +929,12 @@ describe("the below-cap path: a clientless original cannot mint unlimited sendab
 
     const prisma = {
       subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "free" }) },
-      client: { findFirst: vi.fn().mockResolvedValue({ id: "cl-real", businessId: "b1" }) },
+      client: {
+        findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => ({
+          id: where.id,
+          businessId: "b1",
+        })),
+      },
       quote,
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
         cb({
@@ -955,89 +945,238 @@ describe("the below-cap path: a clientless original cannot mint unlimited sendab
       ),
     };
     const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: limit }) };
-    const businessService = { reserveQuoteNumber: vi.fn().mockResolvedValue("Q-9999") };
+    const businessService = {
+      reserveQuoteNumber: vi.fn().mockResolvedValue("Q-9999"),
+      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
+    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
-    return { svc, rows };
-  }
 
-  it("bounds the revise-then-retarget loop to the allowance, not to infinity", async () => {
-    const limit = 3;
-    const { svc, rows } = fakeDb(limit);
-
-    // Seed one CLIENTLESS original — the whole exploit starts from a draft with
-    // no client, which `create` has always permitted.
-    rows.set("orig", {
-      id: "orig",
-      businessId: "b1",
-      status: "SENT",
-      clientId: null,
-      projectId: null,
-      parentQuoteId: null,
-      variationOfQuoteId: null,
-      number: "Q-0001",
-      version: 1,
-      gctRate: 15,
-      discountPct: 0,
-      depositCents: 0,
-      detailLevel: "SUMMARY",
-      lineItems: [],
-      sections: [],
-    });
-
-    let sendable = 0;
-    let refused = 0;
-    for (let i = 0; i < 25; i++) {
-      try {
-        const revised = await svc.revise("b1", "orig");
-        await svc.update("b1", revised.id, { clientId: "cl-real" } as never);
-        sendable++;
-      } catch (err) {
-        refused++;
-        expect(err).toMatchObject({
-          response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
-        });
-      }
+    function seed(over: Record<string, unknown>) {
+      const id = (over.id as string) ?? `seed${++seq}`;
+      const row = {
+        id,
+        businessId: "b1",
+        status: "SENT",
+        clientId: null,
+        projectId: null,
+        parentQuoteId: null,
+        variationOfQuoteId: null,
+        number: "Q-0001",
+        version: 1,
+        gctRate: 15,
+        discountPct: 0,
+        depositCents: 0,
+        detailLevel: "SUMMARY",
+        createdAt: now,
+        lineItems: [],
+        sections: [],
+        ...over,
+      };
+      rows.set(id, row);
+      return row;
     }
 
-    // The whole point: 25 attempts against a limit of 3 must not yield 25 (or any
-    // number greater than the limit) of sendable, client-addressed quotes.
-    expect(sendable).toBeLessThanOrEqual(limit);
-    expect(refused).toBe(25 - sendable);
+    /** The allowance as the gate and the Settings card both compute it. */
+    async function allowanceCount() {
+      const { quoteAllowanceWhere } = await import("../common/quote-allowance.js");
+      return quote.count({
+        where: quoteAllowanceWhere("b1") as unknown as Record<string, unknown>,
+      });
+    }
+
+    return { svc, rows, seed, allowanceCount, updateData, matchesWhere };
+  }
+
+  // --- the harness itself, before anything is asserted with it (verify the detector)
+  describe("the harness models a month", () => {
+    it("counts a row created THIS month and not one created two months ago", async () => {
+      const { seed, allowanceCount } = fakeDb(3);
+      seed({ id: "thismonth", createdAt: now });
+      expect(await allowanceCount()).toBe(1);
+      seed({ id: "old", createdAt: twoMonthsAgo, number: "Q-0002" });
+      expect(await allowanceCount()).toBe(1);
+    });
+
+    it("throws rather than ignore a clause it does not understand", async () => {
+      const { matchesWhere } = fakeDb(3);
+      expect(() =>
+        matchesWhere({ id: "x", number: "Q-1" }, { number: { contains: "Q" } }),
+      ).toThrow(/unsupported clause/);
+    });
+
+    it("throws rather than let a row with no createdAt slip past a month filter", async () => {
+      const { matchesWhere } = fakeDb(3);
+      expect(() => matchesWhere({ id: "x" }, { createdAt: { gte: now } })).toThrow(
+        /no createdAt/,
+      );
+    });
+
+    it("stamps a createdAt on every row the service writes", async () => {
+      const { svc, rows } = fakeDb(3);
+      await svc.create("b1", { sections: [], lineItems: [line] } as never);
+      for (const row of rows.values()) expect(row.createdAt).toBeInstanceOf(Date);
+    });
+  });
+
+  // --- the exploit, in both months
+  for (const [label, seededAt] of [
+    ["created THIS month", now],
+    ["created TWO MONTHS ago", twoMonthsAgo],
+  ] as const) {
+    it(`bounds the revise-then-retarget loop when the chain was ${label}`, async () => {
+      const limit = 3;
+      const { svc, rows, seed, allowanceCount } = fakeDb(limit);
+
+      // One CLIENTLESS original \u2014 the whole exploit starts from a draft with no
+      // client, which `create` has always permitted.
+      seed({ id: "orig", createdAt: seededAt });
+
+      const clientsReached = new Set<string>();
+      let refused = 0;
+      for (let i = 0; i < 25; i++) {
+        try {
+          const revised = await svc.revise("b1", "orig");
+          // Each copy aimed at a DIFFERENT client: that is the exploit \u2014 sendable
+          // quotes for new jobs, not corrections of one job.
+          await svc.update("b1", revised.id, { clientId: `cl-${i}` } as never);
+          clientsReached.add(`cl-${i}`);
+        } catch (err) {
+          refused++;
+          // Either refusal is correct; what must not happen is 25 successes.
+          expect(
+            (err as { response?: { code?: string }; message?: string }).response?.code ===
+              "FREE_LIMIT_REACHED" || /keeps the client/.test((err as Error).message),
+          ).toBe(true);
+        }
+      }
+
+      // The point: 25 attempts against a limit of 3 must not yield more than the
+      // limit of sendable, client-addressed JOBS \u2014 in either month.
+      expect(clientsReached.size).toBeLessThanOrEqual(limit);
+      expect(refused).toBe(25 - clientsReached.size);
+
+      // And every row still in the database points at the chain's one client (or at
+      // no client), so there is no second sendable job hiding in the chain.
+      const clientsOnRows = new Set(
+        [...rows.values()].map((r) => r.clientId).filter((c): c is string => c != null),
+      );
+      expect(clientsOnRows.size).toBeLessThanOrEqual(1);
+
+      // The count never went DOWN, which is what re-filing a prior-month row did.
+      expect(await allowanceCount()).toBe(seededAt === now ? 1 : 0);
+    });
+  }
+
+  it("bounds retargeting descendants that were CREATED in a prior month (the measured 25-of-3)", async () => {
+    // Defect 1, exactly as measured. `createdAt` is stamped when `revise` makes the
+    // row, not when the client is acquired, so a fix that re-files such a row as an
+    // original puts it in a month the count no longer looks at: it consumes nothing,
+    // the gate never advances, and the loop runs forever. Revising first and
+    // retargeting later is all it takes to get rows with a prior-month `createdAt`.
+    const limit = 3;
+    const { svc, rows, seed, allowanceCount } = fakeDb(limit);
+    seed({ id: "orig", createdAt: twoMonthsAgo });
+    for (let i = 0; i < 25; i++) {
+      seed({
+        id: `old-rev-${i}`,
+        createdAt: twoMonthsAgo,
+        parentQuoteId: "orig",
+        status: "DRAFT",
+        version: i + 2,
+      });
+    }
+    expect(await allowanceCount()).toBe(0); // nothing of this chain counts this month
+
+    const clientsReached = new Set<string>();
+    for (let i = 0; i < 25; i++) {
+      try {
+        await svc.update("b1", `old-rev-${i}`, { clientId: `cl-${i}` } as never);
+        clientsReached.add(`cl-${i}`);
+      } catch (err) {
+        expect(
+          (err as { response?: { code?: string } }).response?.code === "FREE_LIMIT_REACHED" ||
+            /keeps the client/.test((err as Error).message),
+        ).toBe(true);
+      }
+    }
+    expect(clientsReached.size).toBeLessThanOrEqual(limit);
+    const clientsOnRows = new Set(
+      [...rows.values()].map((r) => r.clientId).filter((c): c is string => c != null),
+    );
+    expect(clientsOnRows.size).toBeLessThanOrEqual(1);
+  });
+
+  it("one clientless draft plus one legitimate retarget costs exactly ONE slot", async () => {
+    // The flow the fix must not refuse: draft before picking a client, then pick one.
+    // A limit of 1 makes the double-charge fatal \u2014 charging again for the client
+    // would 402 on the retarget, for ONE job.
+    const { svc, allowanceCount } = fakeDb(1);
+    const draft = await svc.create("b1", { sections: [], lineItems: [line] } as never);
+    expect(await allowanceCount()).toBe(1);
+    await expect(
+      svc.update("b1", draft.id, { clientId: "cl-real" } as never),
+    ).resolves.toBeDefined();
+    expect(await allowanceCount()).toBe(1);
+  });
+
+  it("a clientless chain's REVISION acquiring the first client also costs exactly ONE slot", async () => {
+    // Same job, one step longer: create clientless (charged), revise (free), give the
+    // revision the client. Still one job, so still one slot \u2014 and the client is
+    // recorded on the original, which is what stops the sibling replay below. (A
+    // limit of 1 would refuse the `revise` itself, which is intended behaviour at the
+    // cap, so the one-slot claim is made against the count.)
+    const { svc, rows, allowanceCount } = fakeDb(3);
+    const draft = await svc.create("b1", { sections: [], lineItems: [line] } as never);
+    const revised = await svc.revise("b1", draft.id);
+    await expect(
+      svc.update("b1", revised.id, { clientId: "cl-real" } as never),
+    ).resolves.toBeDefined();
+    expect(await allowanceCount()).toBe(1);
+    expect(rows.get(draft.id)!.clientId).toBe("cl-real");
+  });
+
+  it("REFUSES a clientless SIBLING revision a second, different client", async () => {
+    // Revise first, retarget later: two clientless siblings of one chain, each
+    // "acquiring its first client". Pinning the chain's client on the original is
+    // what makes the second one a retarget rather than a first acquisition.
+    const { svc, seed, allowanceCount } = fakeDb(3);
+    seed({ id: "orig" });
+    const d1 = await svc.revise("b1", "orig");
+    const d2 = await svc.revise("b1", "orig");
+    await expect(svc.update("b1", d1.id, { clientId: "cl-a" } as never)).resolves.toBeDefined();
+    await expect(svc.update("b1", d2.id, { clientId: "cl-b" } as never)).rejects.toThrow(
+      /keeps the client/,
+    );
+    expect(await allowanceCount()).toBe(1);
+  });
+
+  it("never rewrites a row's lineage, so no row changes which month it counts in", async () => {
+    // The failure mode this replaces: clearing parentQuoteId on retarget made a row
+    // created in a prior month count in a month nothing looks at.
+    const { svc, seed, updateData } = fakeDb(3);
+    seed({ id: "orig", createdAt: twoMonthsAgo });
+    const revised = await svc.revise("b1", "orig");
+    await svc.update("b1", revised.id, { clientId: "cl-a" } as never);
+    for (const data of updateData) {
+      expect("parentQuoteId" in data).toBe(false);
+      expect("variationOfQuoteId" in data).toBe(false);
+    }
   });
 
   it("an ordinary revise-and-resend for the SAME client does not touch the gate again", async () => {
-    // Below cap, and the point is that `update` here takes neither branch of the
-    // retarget guard: the client isn't changing, so it isn't a retarget, and it
-    // isn't "acquiring a first client" either — it already had one. The legitimate
-    // "correct my own quote" path must stay exactly as free as it always was.
-    const { svc, rows } = fakeDb(3);
-    rows.set("orig", {
-      id: "orig",
-      businessId: "b1",
-      status: "SENT",
-      clientId: "cl-real",
-      projectId: null,
-      parentQuoteId: null,
-      variationOfQuoteId: null,
-      number: "Q-0001",
-      version: 1,
-      gctRate: 15,
-      discountPct: 0,
-      depositCents: 0,
-      detailLevel: "SUMMARY",
-      lineItems: [],
-      sections: [],
-    });
+    // The legitimate "correct my own quote" path must stay exactly as free as it
+    // always was, however many times it runs.
+    const { svc, seed, allowanceCount } = fakeDb(3);
+    seed({ id: "orig", clientId: "cl-real" });
 
-    const revised = await svc.revise("b1", "orig");
-    await expect(
-      svc.update("b1", revised.id, { clientId: "cl-real", discountPct: 5 } as never),
-    ).resolves.toBeDefined();
-
-    // And the count is unaffected by that update — still just the one original.
-    const countAfter = await svc["prisma"].quote.count({ where: { businessId: "b1" } });
-    expect(countAfter).toBe(1);
+    for (let i = 0; i < 25; i++) {
+      const revised = await svc.revise("b1", "orig");
+      await expect(
+        svc.update("b1", revised.id, { clientId: "cl-real", discountPct: 5 } as never),
+      ).resolves.toBeDefined();
+    }
+    expect(await allowanceCount()).toBe(1);
   });
 });
 

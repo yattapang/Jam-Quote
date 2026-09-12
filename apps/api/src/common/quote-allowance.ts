@@ -21,6 +21,21 @@ import { startOfJamaicaMonth } from "./month.util.js";
  * `version` did not, because `revise` of a CLOSED quote reserves a new number and
  * restarts at version 1.
  *
+ * **`createdAt` is the charge timestamp, so nothing may re-file a row.** THE RULE:
+ * a quote that can be SENT consumes exactly one unit of the month in which it becomes
+ * sendable, and a contractor's revisions of an already-counted job consume nothing. A
+ * row is sendable from the moment it exists — `share` and "mark as sent" never
+ * required a client — so the month a row becomes sendable IS the month it was
+ * created, and `createdAt` is the honest key. That holds only while a row's
+ * counted-ness is fixed at creation. A fix that cleared `parentQuoteId` /
+ * `variationOfQuoteId` on an existing row so it would "count from now on" broke it:
+ * the row kept the `createdAt` that `revise` stamped, so a row created in a PRIOR
+ * month got filed in a month this clause no longer looks at and consumed nothing,
+ * ever — measured at 25 sendable quotes against a limit of 3. "One chain, one client"
+ * is therefore enforced in `QuotesService.assertChainClientUnchanged`, which changes
+ * no row's lineage. If some future change ever needs the charge to happen AFTER
+ * creation, that needs a dedicated counted-at column — never a lineage rewrite.
+ *
  * **Issuance, not stock.** There is deliberately NO `deletedAt` filter. `remove`
  * soft-deletes, and excluding tombstones would give the slot back — a tenant at the
  * cap could create a draft, email the PDF to the client, delete it and repeat. The

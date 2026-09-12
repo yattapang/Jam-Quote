@@ -309,16 +309,22 @@ export class QuotesService {
    * the count excludes them and the two lineage paths stay ungated — the original
    * they descend from has already been paid for, in allowance terms.
    *
-   * **The residual this used to stop at, and no longer does:** a revision produces
-   * a DRAFT whose client can then be changed. For a descendant that already had a
-   * client, `update`'s retarget guard refuses that outright — a different client is
-   * a different job. But a descendant of a CLIENTLESS original had no client to
-   * keep, so the guard exempted it, and that exemption was the hole: revise, give
-   * it any client, send, repeat against the same clientless original — unlimited,
-   * below the cap, because none of those descendants were ever counted. `update`
-   * now gates and counts the moment such a descendant ACQUIRES its first client —
-   * see `acquiringFirstClient` there — which is the moment it becomes a job
-   * addressable to someone, the same event `create` charges for on a fresh quote.
+   * **THE RULE, in one sentence:** one lineage chain is one job, it is charged
+   * exactly once — when its original row is created, which is also the moment that
+   * row becomes sendable — and it serves exactly one client, so a chain's client may
+   * be filled in once where it was blank but never pointed at a different client.
+   *
+   * That is why `createdAt` is a sound counting key: the event this charges for IS
+   * the creation of the row, so the month a row is filed under is the month it was
+   * charged in, and nothing afterwards may change whether a row counts. An earlier
+   * fix broke exactly that — it cleared a descendant's lineage on retarget so the
+   * row would "start counting", which for a row created in a PREVIOUS month filed it
+   * in a month no longer being counted (`createdAt` is stamped by `revise`, not by
+   * the retarget), so it consumed nothing, ever: 25 sendable quotes against a limit
+   * of 3. It also charged twice for one job, because `create` already charged for the
+   * clientless draft. Both are gone: the residual is closed in `update` by pinning
+   * the chain's client instead of by re-filing rows — see
+   * `assertChainClientUnchanged`.
    */
   private async assertCanCreateQuote(businessId: string): Promise<void> {
     const subscription = await this.prisma.subscription.findUnique({ where: { businessId } });
@@ -583,6 +589,140 @@ export class QuotesService {
    * agreed to survives as its own record. §4m rejected variations-by-rewrite for
    * exactly this reason, and then left the rewrite reachable.
    */
+  /**
+   * The client belongs to the JOB (the lineage chain), not to the row.
+   *
+   * A chain is charged once, at `create`. Everything that makes that single charge
+   * honest is here: a chain may serve exactly one client, so one charge buys exactly
+   * one sendable job no matter how many revisions and variations hang off it.
+   *
+   * Three shapes, and the last two are what defeated the previous attempt:
+   *
+   * 1. A descendant that already has a client is retargeted. Refused — always was.
+   * 2. A CLIENTLESS chain acquires a client. Allowed, once, and FREE: the chain was
+   *    already charged at `create` (a clientless draft is sendable — `share` and
+   *    "mark as sent" never asked for a client), so charging again bills one job
+   *    twice, which is precisely the over-charging `quote-allowance.ts` exists to
+   *    prevent. The client is written onto the chain's ROOT too, because that is
+   *    where `revise`/`createVariation` copy it from and what every later row in the
+   *    chain is compared against.
+   * 3. A still-clientless SIBLING of that row tries to acquire a DIFFERENT client —
+   *    revise 25 times first, then retarget each copy. Refused, because case 2
+   *    recorded the chain's client on the root. Also refused: retargeting an ORIGINAL
+   *    that already has revisions, which would leave the chain holding two clients
+   *    from the other end.
+   *
+   * A lone row with no descendants is exempt: correcting the client on the only
+   * document in its chain adds no second sendable job, and refusing it would break
+   * the ordinary "wrong client, not sent yet" fix.
+   *
+   * Rejected: gating this through `assertCanCreateQuote` and clearing the row's
+   * lineage so it "counts from now on". That is the fix this replaces. It charged a
+   * second slot for one job (case 2), and it re-filed a row created in an earlier
+   * month into a month that is no longer counted, so the count went DOWN and 25
+   * sendable quotes came out of a limit of 3.
+   *
+   * Rejected: a dedicated `allowanceCountedAt` column, or a timestamp set when the
+   * client is acquired. Once the charge happens only at row creation, such a column
+   * holds `createdAt` for every row that counts and NULL for every row that does not
+   * — which `parentQuoteId`/`variationOfQuoteId` already say — so it buys a
+   * migration and a second source of truth for no new fact. It would be the right
+   * answer only if the charge moved to a later event than creation, and it cannot:
+   *
+   * Rejected: charging at "mark as sent"/`share` instead. Neither requires a client,
+   * so the charge would still have to fire for clientless drafts, and the gate would
+   * move to a path where a refusal throws away work already done. Creation is the
+   * earliest moment a row is sendable, so it is the honest moment to charge.
+   *
+   * Rejected: counting distinct `clientId`s. It cannot see a clientless-but-sendable
+   * draft at all, and it would let deleting a client hand allowance back —
+   * `quote-allowance.ts` is explicit that this allowance is issuance, not stock.
+   *
+   * @returns the chain's root row when a blank chain client is being filled in, so
+   * the caller can pin it; otherwise null.
+   */
+  private async assertChainClientUnchanged(
+    businessId: string,
+    existing: {
+      id: string;
+      clientId: string | null;
+      parentQuoteId: string | null;
+      variationOfQuoteId: string | null;
+    },
+    nextClientId: string | null | undefined,
+  ): Promise<{ id: string } | null> {
+    // Normalise first: "absent" and "null" are the same fact here, and reading an
+    // undefined lineage link as "is a descendant" would refuse the ordinary
+    // no-client-yet fix on a plain draft.
+    const existingClientId = existing.clientId ?? null;
+    const existingParentId = existing.parentQuoteId ?? null;
+    const existingVariationOfId = existing.variationOfQuoteId ?? null;
+    const next = nextClientId ?? null;
+    if (nextClientId === undefined || next === existingClientId) return null;
+
+    const isDescendant = existingParentId !== null || existingVariationOfId !== null;
+    if (!isDescendant) {
+      // A lone row: one document, one job, and no sibling to disagree with. A
+      // descendant of a descendant cannot exist if there is no direct descendant,
+      // so this one count settles the whole chain below.
+      const descendants = await this.prisma.quote.count({
+        where: {
+          businessId,
+          OR: [{ parentQuoteId: existing.id }, { variationOfQuoteId: existing.id }],
+        },
+      });
+      if (descendants === 0) return null;
+    }
+
+    // Walk to the chain's original. Depth is bounded by the number of revisions, and
+    // the visited set makes a cycle (which `onDelete: SetNull` could in principle
+    // leave behind) terminate rather than hang.
+    let root: {
+      id: string;
+      clientId: string | null;
+      parentQuoteId: string | null;
+      variationOfQuoteId: string | null;
+    } = {
+      id: existing.id,
+      clientId: existingClientId,
+      parentQuoteId: existingParentId,
+      variationOfQuoteId: existingVariationOfId,
+    };
+    const seen = new Set<string>([existing.id]);
+    for (;;) {
+      const parentId = root.parentQuoteId ?? root.variationOfQuoteId;
+      if (parentId === null || parentId === undefined || seen.has(parentId)) break;
+      // Mark the id BEFORE the read: a row whose parent link points at something the
+      // read cannot resolve to that id must still terminate the walk.
+      seen.add(parentId);
+      const parent = await this.prisma.quote.findFirst({
+        where: { id: parentId, businessId },
+        select: { id: true, clientId: true, parentQuoteId: true, variationOfQuoteId: true },
+      });
+      if (!parent) break;
+      seen.add(parent.id);
+      root = {
+        id: parent.id,
+        clientId: parent.clientId ?? null,
+        parentQuoteId: parent.parentQuoteId ?? null,
+        variationOfQuoteId: parent.variationOfQuoteId ?? null,
+      };
+    }
+
+    const chainClient = root.id === existing.id ? existingClientId : root.clientId;
+    if (chainClient !== null && chainClient !== next) {
+      throw new BadRequestException(
+        "A revision keeps the client of the quote it came from, and a quote that has " +
+          "been revised keeps the client its revisions were made for. Create a new " +
+          "quote for a different client.",
+      );
+    }
+    if (chainClient === null && next !== null && root.id !== existing.id) {
+      return { id: root.id };
+    }
+    return null;
+  }
+
   async update(businessId: string, id: string, input: UpdateQuoteInput): Promise<QuoteWithLines> {
     const existing = await this.findOne(businessId, id);
     if (existing.status !== QuoteStatus.DRAFT) {
@@ -591,80 +731,26 @@ export class QuotesService {
       );
     }
 
-    // A descendant keeps its client, and that is what closes the free-plan bypass.
+    // A chain is one job for one client, and that is what closes the free-plan
+    // bypass — without touching what counts, or when.
     //
-    // `revise` and `createVariation` are ungated on purpose — the job they descend
-    // from already consumed an allowance, and charging a contractor to correct their
-    // own quote is wrong. But a revision is a fully-priced DRAFT, and `update` let
-    // its `clientId` be changed: revise, retarget, send. Two requests, repeatable
-    // without limit, and a tenant at the cap had an unlimited supply of sendable
-    // quotes for new clients. A previous commit called that residual "a nudge toward
-    // Pro, not DRM" — which reframed a revenue hole as a design stance. PLANNING
-    // §4e is explicit that the free tier IS the trial, so the cap is the whole
-    // conversion lever.
+    // `revise` and `createVariation` do not COUNT on purpose: the job they descend
+    // from was charged when its original was created, and charging a contractor to
+    // correct their own quote is wrong. But a revision is a fully-priced DRAFT, and
+    // `update` let its `clientId` be changed: revise, retarget, send — two requests,
+    // repeatable without limit, one charge. A previous commit called that residual "a
+    // nudge toward Pro, not DRM", which reframed a revenue hole as a design stance;
+    // PLANNING §4e is explicit that the free tier IS the trial, so the cap is the
+    // whole conversion lever.
     //
     // Quoting a different client is a different job, and a different job is a new
-    // quote. Refusing the retarget says exactly that, and leaves corrections free.
-    if (
-      input.clientId !== undefined &&
-      input.clientId !== existing.clientId &&
-      // Only when there IS a client to keep — see `acquiringFirstClient` below for
-      // the other branch, where there was none.
-      existing.clientId !== null &&
-      (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null)
-    ) {
-      throw new BadRequestException(
-        "A revision keeps the client of the quote it came from. Create a new quote for a different client.",
-      );
-    }
-
-    /**
-     * The hole the guard above did not close: a CLIENTLESS original.
-     *
-     * `revise`/`createVariation` copy `clientId` from the quote they descend from,
-     * so a descendant is clientless only when the whole chain is — there is no
-     * "real" client anywhere upstream that this could be said to be correcting.
-     * The guard above exempted exactly this case (`existing.clientId !== null`),
-     * because refusing it outright would also refuse the legitimate "I created a
-     * draft before picking a client, now let me pick one" case. But the exemption
-     * did not distinguish that from a revision of a CLIENTLESS original — and gave
-     * both the same unlimited pass: revise, give it any client, send, repeat
-     * against the same original forever. 25 sendable quotes were produced this way
-     * against an allowance of 3.
-     *
-     * **The principle:** a quote that can be SENT to a client consumes one unit of
-     * the allowance. An original consumes it at `create`. A descendant that already
-     * had a client consumes nothing more, because the client — and so the job — was
-     * already paid for. A descendant that is ACQUIRING a client it did not have is
-     * neither: it is the moment this job first becomes addressable to anyone, which
-     * is exactly the moment `create` charges for on a fresh quote. So it is gated
-     * the same way `create` is, and it stops counting as a free descendant from
-     * here on: its lineage links are cleared so `quoteAllowanceWhere` — which was
-     * already the single shared definition of "counts" — picks it up as an
-     * original on every future check, the same way a real `create` would. Nothing
-     * about lineage bookkeeping changes: the ORIGINAL quote (if any) is untouched.
-     *
-     * Rejected: refusing the retarget outright. That would also refuse the
-     * legitimate "no client yet" case another test relies on
-     * (`update`'s only caller-supplied clientId is optional by design), and it
-     * does not follow the "jobs quoted" principle — a clientless draft that
-     * becomes addressable to a real client for the first time IS a new job, not a
-     * forbidden edit of an old one, so it should cost a slot rather than be banned.
-     *
-     * Rejected: counting `clientId` distinct-ness up front (e.g. one slot per
-     * distinct client ever seen). That needs a new column or a scan of every
-     * descendant on every check, and duplicates work `quoteAllowanceWhere` already
-     * does correctly for the ordinary case. Reusing the existing "does this row
-     * count" clause by making the row match it is the smaller, more auditable
-     * change.
-     */
-    const acquiringFirstClient =
-      input.clientId != null &&
-      existing.clientId === null &&
-      (existing.parentQuoteId !== null || existing.variationOfQuoteId !== null);
-    if (acquiringFirstClient) {
-      await this.assertCanCreateQuote(businessId);
-    }
+    // quote. See `assertChainClientUnchanged` for the three shapes that rule has to
+    // cover and the two that defeated the previous attempt.
+    const chainRootToPin = await this.assertChainClientUnchanged(
+      businessId,
+      existing,
+      input.clientId,
+    );
 
     await assertClientOwned(this.prisma, businessId, input.clientId);
     await assertProjectOwned(this.prisma, businessId, input.projectId);
@@ -706,12 +792,12 @@ export class QuotesService {
         data: {
           clientId: input.clientId ?? existing.clientId,
           projectId: input.projectId ?? existing.projectId,
-          // See `acquiringFirstClient` above: from the moment this descendant gets
-          // a client it did not have, it must count against the allowance like any
-          // other addressable quote — clearing its lineage is what makes
-          // `quoteAllowanceWhere` (the one shared definition of "counts") start
-          // counting it, exactly as it would a fresh `create`.
-          ...(acquiringFirstClient ? { parentQuoteId: null, variationOfQuoteId: null } : {}),
+          // NOTE: `parentQuoteId`/`variationOfQuoteId` are deliberately absent here
+          // and must stay absent. They decide WHETHER a row counts and `createdAt`
+          // decides WHICH MONTH it counts in, so rewriting lineage after the fact
+          // files a row under a month it was not created in. The previous fix did
+          // exactly that, and a row from a prior month then counted in no month at
+          // all — the count went DOWN and the loop became unbounded.
           detailLevel,
           gctRate: gctRatePct,
           discountPct,
@@ -723,6 +809,17 @@ export class QuotesService {
           totalCents: totals.totalCents,
         },
       });
+      if (chainRootToPin !== null) {
+        // The chain's client is recorded on its original, because that is where
+        // `revise`/`createVariation` copy `clientId` from: without this, revising
+        // the still-clientless original hands the whole loop straight back, and a
+        // clientless SIBLING revision could acquire a second client for free.
+        // Only ever fills a blank — `assertChainClientUnchanged` refuses a change.
+        await tx.quote.update({
+          where: { id: chainRootToPin.id },
+          data: { clientId: input.clientId },
+        });
+      }
       return id;
     });
 
