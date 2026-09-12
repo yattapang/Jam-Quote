@@ -57,12 +57,25 @@ afterwards and confirm `git status --porcelain` is empty. A theorised bypass tha
 turns out not to work wastes the author's time and costs your other findings
 their credibility.
 
+**The working tree is yours while you review, but it is not private.** Restore
+every file you touch and confirm `git status --porcelain` is empty before
+reporting. And say so if you see the tree change under you — another session may
+be committing while you work, and a concurrent `git add -A` would sweep your
+scratch state into someone's commit. One review saw exactly that and flagged it,
+which is the right instinct: report it rather than assume it was yours.
+
 **Verify your own pattern before reporting a hit.** A previous review of this
 codebase reported three routes as missing an actor because its grep looked for
 `req.user` and those routes used `req.adminContext`. The code was right and the
 pattern was wrong. Before reporting that N places lack something, confirm your
 detector fires on a place you know is correct, and does not fire on one you know
 is broken.
+
+**A test that asserts "defined" asserts almost nothing.** Where a commit adds
+tests for values, check whether they pin the VALUE or merely its existence. One
+pair asserted `Object.hasOwn` and `not.toBeUndefined()` on four fields; injecting
+a blank tax label that silently became the string "TAX" — renaming the tax on
+every quote and invoice — left all 534 tests green.
 
 **Check that claimed coverage exists.** When a commit deletes a check and names
 a replacement, `ls` the replacement. One commit deleted an assertion and said it
@@ -102,8 +115,13 @@ admin-screen bug the change was fixing. Say explicitly whether any did.
     If the commit replaced a guard with a type or a pure function, test whether
     the type actually holds: compile `as X`, `as unknown as X`, `any`,
     `JSON.parse`, a spread of a real value with one field replaced, and
-    `Object.assign`. A structural brand is carried by a spread; a class with a
-    private member is not. Report which of these compile, precisely.
+    `Object.assign`. Then go further, because each of these has worked here: a
+    direct `new` (a `private` constructor PARAMETER marks the field, not the
+    constructor), a subclass, `Object.create(X.prototype)`, and a write THROUGH
+    an accessor that returns by reference (`patch.body.field = []`). A structural
+    brand is carried by a spread; an exported class value can simply be
+    constructed; a getter that returns a reference protects nothing. Report which
+    of these compile, precisely, and check what actually goes over the wire.
 5. **Every claim in the commit message and in the comments the commit adds.**
     Overclaims are findings. "An inline literal is a compile error" was true of
     one call site and false of four constructs. Quote the claim and state what

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { UpdateRulePackInput } from "./api-client";
 import {
   buildRulePackPatch,
-  RulePackPatch,
   gridContributionCodes,
   normaliseCode,
   rulePackProblem,
@@ -348,12 +348,36 @@ describe("the wrapper is the guard", () => {
     expect(patch.body).not.toHaveProperty("statutoryCustom");
   });
 
-  it("a spread of a patch is not a patch", () => {
-    // The other bypass, and this one is a compile error rather than a runtime fact —
-    // a plain object cannot satisfy a class with a private member. Asserted here as
-    // a runtime shape too, so the reason survives a refactor of the type.
-    const spread = { ...buildRulePackPatch(base) };
-    expect(spread instanceof RulePackPatch).toBe(false);
+  it("a spread of a patch carries no body, so it cannot stand in for one", () => {
+    // The other bypass. It is a compile error — a plain object cannot satisfy a
+    // class with a private member — and this asserts the runtime reason too, so the
+    // point survives a refactor of the type. `body` is a prototype getter, so a
+    // spread does not copy it.
+    const spread = { ...buildRulePackPatch(base) } as Record<string, unknown>;
+    expect(spread.body).toBeUndefined();
+  });
+
+  it("the body cannot be reached through .body either", () => {
+    // The bypass my own test missed. The getter used to return the payload BY
+    // REFERENCE, so `patch.body.statutoryRetired = []` reached the wire — the
+    // original spread bypass restored by adding four characters, and
+    // `statutoryRetired: []` is the REPLACE that wipes every stored retirement.
+    // The getter returns a deep copy now, and is typed Readonly so the assignment
+    // does not compile either.
+    const patch = buildRulePackPatch({ ...base, contributionsTouched: true, retired: ["NIS"] });
+    const escaped = patch.body as UpdateRulePackInput;
+    escaped.statutoryRetired = [];
+    (escaped.statutoryCustom ??= []).push({ code: "X", label: "X", appliesTo: "BOTH" });
+    expect(patch.body.statutoryRetired, "a mutated copy must not reach the patch").toEqual([
+      "NIS",
+    ]);
+    expect(patch.body.statutoryCustom).toEqual([]);
+  });
+
+  it("hands back an equal body every time, not the same object", () => {
+    const patch = buildRulePackPatch(base);
+    expect(patch.body).toEqual(patch.body);
+    expect(patch.body).not.toBe(patch.body);
   });
 
   it("every scalar survives the round trip through the wrapper", () => {
@@ -383,9 +407,20 @@ describe("no scalar can be coerced into an omission, whatever the form holds", (
         statutory: { NIS: { employeePct: "", employerPct: "" } },
       },
     }).body;
+    // EXACT values, not `not.toBeUndefined()`. A review injected
+    // `taxLabel: x.trim() === "" ? "TAX" : x.trim()` — a blank label silently saved
+    // as "TAX", renaming the tax on every quote and invoice — and all 534 web tests
+    // stayed green, because "defined" was the whole assertion. "Not undefined" says
+    // nothing about whether the value is the one the admin typed.
+    expect(blank.taxLabel, "a blank label is sent blank, and the server refuses it").toBe("");
+    // `Number("")` is 0, not NaN. An earlier comment here claimed NaN; 0 passes the
+    // server's `.min(0)`, so this test cannot lean on the server to catch it — which
+    // is exactly why `rulePackProblem` refuses a blank rate before the build.
+    expect(blank.defaultTaxRatePct).toBe(0);
+    expect(blank.verifiedAsOf).toBeNull();
+    expect(blank.sourceUrl).toBeNull();
     for (const key of ["taxLabel", "defaultTaxRatePct", "verifiedAsOf", "sourceUrl"] as const) {
       expect(Object.hasOwn(blank, key), `${key} must be sent, not omitted`).toBe(true);
-      expect(blank[key], `${key} must not be undefined`).not.toBeUndefined();
     }
     // `statutoryRates` too: a blank rate is null, and the key is always present.
     expect(Object.hasOwn(blank, "statutoryRates")).toBe(true);
@@ -397,9 +432,13 @@ describe("no scalar can be coerced into an omission, whatever the form holds", (
       ...base,
       form: { ...base.form, taxLabel: "   ", defaultTaxRatePct: "  ", verifiedAsOf: " ", sourceUrl: " " },
     }).body;
+    // Trimmed to the same values a blank form produces — whitespace is not a value.
+    expect(padded.taxLabel).toBe("");
+    expect(padded.defaultTaxRatePct).toBe(0);
+    expect(padded.verifiedAsOf).toBeNull();
+    expect(padded.sourceUrl).toBeNull();
     for (const key of ["taxLabel", "defaultTaxRatePct", "verifiedAsOf", "sourceUrl"] as const) {
       expect(Object.hasOwn(padded, key), key).toBe(true);
-      expect(padded[key], key).not.toBeUndefined();
     }
   });
 });

@@ -1111,6 +1111,36 @@ character-identical and the `!rpForm` branch correctly dropped rather than lost;
 `gridContributionCodes` against duplicate and differently-cased codes; grid ordering
 unchanged; every rendered row still resolving its form entry; no orphaned helpers.
 
+## The review of `ee9cd61` — the first run of `commit-reviewer`, and it broke the brand
+
+Tenth consecutive review to find real defects, and the first using the new
+`commit-reviewer` brief. It earned itself immediately: the brief's instruction to
+compile a direct `new` and a write through an accessor — both added because they had
+worked before — found the two holes below in minutes.
+
+| What it found | Status |
+|---|---|
+| **The nominal class was open, and more easily than the thing it replaced.** `private` on a constructor PARAMETER marks the field, not the constructor — so `new RulePackPatch({ statutoryRetired: [] })` compiled with no cast and put that body on the wire. The spread bypass it replaced at least needed a real patch to spread; this needed nothing. Three comments added or kept by that commit said only the builder could produce one | FIXED — the class VALUE is no longer exported, only the type. Outside the module there is nothing to `new`, subclass or `Object.create`. All three comments corrected |
+| **`.body` returned the payload by reference**, so `patch.body.statutoryRetired = []` reached the wire — the original bypass restored by four characters. My test asserted only `Object.assign` on the WRAPPER, which is the shape the reviewer had happened to use: matching the text of a defeated bypass rather than its shape | FIXED — the getter returns a `structuredClone` typed `Readonly`, so the write is a compile error AND cannot reach the patch if cast past. Three tests, including one that mutates an escaped copy and asserts the patch is unchanged |
+| **The blank-form tests were satisfied by garbage.** They asserted `Object.hasOwn` and `not.toBeUndefined()`, so injecting a blank tax label that silently became `"TAX"` — renaming the tax on every quote and invoice — left all 534 web tests green. The comment claiming "blank means null or NaN" was also false: `Number("")` is `0`, which the server accepts | FIXED — exact values asserted (`""`, `0`, `null`, `null`), and the comment corrected. The garbage injection now fails both tests |
+| `updateAdminRulePack`'s transport was covered by nothing, before or after the `input` → `input.body` change. A wrapper sent whole would serialise as `{ nominal, patch }` rather than as nothing, because constructor parameter properties are own enumerable fields | FIXED — a stubbed-fetch test asserts what is on the wire and that the wrapper's own shape is absent. Reverting the unwrap fails it |
+| The grid's new `aria-label` used the raw code, so a screen reader said "EDUCATION_TAX employee rate" while the row read "Education Tax" | FIXED — one `statLabel` helper, shared with the visible label |
+
+**Confirmed clean:** the render test proves what it claims (both reverts reproduced
+exactly — render-everything fails two of three, baseline-only fails one); its
+`as unknown as AdminData` cast hides no omission (removing it yields one EXCESS
+property error and nothing missing); `gridInputsFor` cannot match the MAINTAIN
+CONTRIBUTIONS rows, which carry a `placeholder` and no `aria-label`; nothing
+imported `apiClient`, so un-exporting it reduced no coverage; the aria-labels are
+not a copy-paste and conflict with no visible label; nothing stringifies the
+wrapper; no blast radius in core, api or mobile.
+
+**The brief gained three lessons from its own first run:** the working tree is not
+private during a review (this review saw a concurrent commit and correctly flagged
+it rather than assuming); a test asserting "defined" asserts almost nothing; and the
+brand-defeating list now includes a direct `new`, a subclass, `Object.create` and a
+write through a by-reference accessor.
+
 ## Opened by the F38 work
 
 | New | Why it is worth doing |

@@ -1958,7 +1958,16 @@ finding is marked closed before a reviewer that did not write it has attacked it
 | F38 | Dead controls on the console: four Source links that went nowhere while the URL sat in scope, a search box with a ⌘K hint and no input, a hardcoded Regulatory badge, a PRODUCTION pill that said PRODUCTION on a laptop, and a LAST ACTIVE column showing the signup date |
 | F21, F39, F40, F41 | The last of the console: retiring a statutory contribution was a one-way door (and inert for entries an admin had added), the manual sweep was the one mutating route with no actor recorded, money rendered in JMD whatever the configured currency, and two saves reported success on a field they had dropped |
 
-**Every one of the nineteen reviews found something.** The nineteenth found that I
+**Every one of the twenty reviews found something.** The twentieth was the first
+run of the new `commit-reviewer` brief, and it broke the type I had claimed would
+hold: `private` on a constructor PARAMETER marks the field, not the constructor, so
+`new RulePackPatch({...})` compiled with no cast — an easier bypass than the spread
+it replaced. A getter returning by reference protected nothing either.
+
+**The correction to "prefer the compiler": a type only holds what it actually
+holds.** Exporting the class value hands out a constructor; returning a reference
+hands out the payload. The way to know is to compile the bypass — `new`, subclass,
+`Object.create`, a write through the accessor — not to reason about the type. The nineteenth found that I
 had deleted a guard and written that a named test file replaced it — a file I never
 wrote, because I had changed approach mid-task and left the sentence behind.
 

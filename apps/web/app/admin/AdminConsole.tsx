@@ -109,6 +109,15 @@ function dollarsStrToCents(v: string): number {
 // exists only so no call site has to remember to pass it. A row that carries its own
 // currency — a recorded payment — passes that instead, because a receipt taken in
 // JMD must not re-render as US$ when the platform is switched afterwards.
+/**
+ * A statutory code as a person reads it.
+ *
+ * The grid shows "Education Tax" and the code is EDUCATION_TAX, so an `aria-label`
+ * built from the raw code made a screen reader say "EDUCATION_TAX employee rate"
+ * while the visible row said something else. Same mapping the visible label uses.
+ */
+const statLabel = (code: string): string => (code === "EDUCATION_TAX" ? "Education Tax" : code);
+
 const archivo: CSSProperties = { fontFamily: "var(--font-archivo), system-ui, sans-serif" };
 const pill = (tone: string, extra?: CSSProperties): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 9px", borderRadius: 999,
@@ -1603,10 +1612,10 @@ export default function AdminConsole({
                       {gridContributions.map((s) => (
                         <div key={s.code} style={{ display: "contents" }}>
                           <div className={styles.statutoryLabel}>{s.code === "EDUCATION_TAX" ? "Education Tax" : s.code}<span style={{ fontWeight: 400, color: "var(--muted)" }}> · {s.label}</span></div>
-                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${s.code} employee rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${statLabel(s.code)} employee rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employeePct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employeePct", e.target.value)}
                             style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
-                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${s.code} employer rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
+                          <input className={styles.statInput} type="number" min={0} max={100} step="0.01" placeholder="—" aria-label={`${statLabel(s.code)} employer rate`} disabled={!canManageRulepack} value={rpForm.statutory[s.code]?.employerPct ?? ""}
                             onChange={(e) => setRpStat(s.code, "employerPct", e.target.value)}
                             style={{ height: 32, padding: "0 9px", borderRadius: 7, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", textAlign: "right" }} />
                         </div>

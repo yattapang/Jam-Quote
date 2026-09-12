@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { updateAdminRulePack } from "./api-client";
+import { buildRulePackPatch } from "./rulepack-patch";
 import {
   createClient,
   createInvoiceFromQuote,
@@ -1085,5 +1087,41 @@ describe("tenant-added material schema rows (#26 categories & units)", () => {
     expect(String(url)).toContain("/catalogs/material-schema/units");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body as string)).toEqual({ label: "per pallet" });
+  });
+});
+
+describe("updateAdminRulePack sends the patch body", () => {
+  it("puts the built body on the wire, not the wrapper", async () => {
+    // Untested before, in either form. `updateAdminRulePack` takes a RulePackPatch
+    // and sends `input.body`; if that were ever `input`, the request would carry
+    // `{ nominal: true, patch: {...} }` — constructor parameter properties are own
+    // enumerable fields, so the wrapper serialises to something the API would
+    // silently reject rather than to nothing. A review pointed out nothing covered
+    // the unwrap at all.
+    const spy = stubFetch({ "/admin/rulepack": { countryCode: "JM" } });
+    const patch = buildRulePackPatch({
+      form: {
+        taxLabel: "GCT",
+        defaultTaxRatePct: "15",
+        verifiedAsOf: "",
+        sourceUrl: "",
+        statutory: { NIS: { employeePct: "3", employerPct: "3" } },
+      },
+      custom: [],
+      retired: ["HEART"],
+      contributionsTouched: true,
+      sourcesTouched: false,
+      sourcesDraft: "",
+    });
+
+    await updateAdminRulePack(patch);
+
+    const init = spy.mock.calls[0]![1] as RequestInit;
+    const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(sent.taxLabel).toBe("GCT");
+    expect(sent.statutoryRetired).toEqual(["HEART"]);
+    // The wrapper's own shape must not appear.
+    expect(sent).not.toHaveProperty("nominal");
+    expect(sent).not.toHaveProperty("patch");
   });
 });

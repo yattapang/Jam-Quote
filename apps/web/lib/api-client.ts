@@ -1309,7 +1309,8 @@ export interface UpdateRulePackInput {
 /**
  * PATCH /admin/rulepack — edit the jurisdiction pack's editable slice.
  *
- * Takes a `RulePackPatch`, which only `buildRulePackPatch` can produce.
+ * Takes a `RulePackPatch`. Only `buildRulePackPatch` can produce one: the class
+ * value is not exported, so there is nothing to `new`, subclass or `Object.create`.
  *
  * This body decides whether a save changes data, leaves it alone, or destroys it:
  * `PATCH` reads an absent field as "leave unchanged" and an empty list as "clear",
@@ -1324,8 +1325,14 @@ export interface UpdateRulePackInput {
  * review got past it two ways: spreading a real patch and overriding a field, and
  * `Object.assign` onto one. Both kept the phantom property while replacing the field
  * that matters — `statutoryRetired: []` is a REPLACE, so it wipes every stored
- * retirement. A class cannot be spread into existence, and the body sits behind a
- * getter, so mutating the wrapper does not reach what is sent.
+ * retirement.
+ *
+ * The class version was then defeated twice more, which is worth recording: the
+ * constructor was public (`private` marks the FIELD, not the constructor), so
+ * `new RulePackPatch({ statutoryRetired: [] })` compiled with no cast at all; and
+ * `body` returned the payload by reference, so `patch.body.statutoryRetired = []`
+ * reached the wire. The value binding is unexported now and `body` hands back a
+ * deep copy typed `Readonly`. A deliberate cast still defeats it.
  *
  * The other door is closed too: `apiClient` is no longer exported, so nothing can
  * reach this endpoint with a hand-built body.

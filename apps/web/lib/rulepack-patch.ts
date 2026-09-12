@@ -84,7 +84,7 @@ function rate(typed: string): number | null {
  * cannot tell those apart; the type system can — `updateAdminRulePack` accepts only
  * this type, so an inline literal is a compile error rather than a review finding.
  */
-export class RulePackPatch {
+class RulePackPatchValue {
   /**
    * Private, which is what makes this nominal rather than structural.
    *
@@ -101,13 +101,51 @@ export class RulePackPatch {
    */
   private readonly nominal = true;
 
-  constructor(private readonly patch: UpdateRulePackInput) {}
+  /**
+   * Private, and the class VALUE is not exported — only the type below is.
+   *
+   * `private` on a constructor parameter property makes the field private, not the
+   * constructor. A review compiled `new RulePackPatch({ statutoryRetired: [] })`
+   * with no cast at all and watched that body go over the wire: an easier bypass
+   * than the spread this class was introduced to close. Exporting only the type
+   * removes the value binding, so outside this module there is nothing to `new`,
+   * nothing to subclass, and no prototype to `Object.create`.
+   */
+  private constructor(private readonly patch: UpdateRulePackInput) {}
 
-  /** The body to send. Read only by `updateAdminRulePack`. */
-  get body(): UpdateRulePackInput {
-    return this.patch;
+  /** Module-internal factory — the private constructor is reachable from here. */
+  static of(patch: UpdateRulePackInput): RulePackPatch {
+    return new RulePackPatchValue(patch);
+  }
+
+  /**
+   * A snapshot of the body to send, deeply copied and typed readonly.
+   *
+   * The first version returned `this.patch` by reference, so
+   * `patch.body.statutoryRetired = []` and `Object.assign(patch.body, …)` both
+   * reached the wire — the original bypass restored by adding four characters. My
+   * test asserted only the case the reviewer had used (`Object.assign` on the
+   * WRAPPER), which is failure mode "matched the text of the defeated bypass rather
+   * than its shape".
+   *
+   * `structuredClone` rather than a shallow copy because the damage is in the nested
+   * arrays: `statutoryRetired: []` is a REPLACE on the server and wipes every stored
+   * retirement.
+   */
+  get body(): Readonly<UpdateRulePackInput> {
+    return structuredClone(this.patch);
   }
 }
+
+/**
+ * The type only. There is deliberately no exported value.
+ *
+ * `updateAdminRulePack` accepts this, and the only way to obtain one is
+ * `buildRulePackPatch`. A deliberate `as` cast still defeats it — that is what a
+ * cast is for — so the honest claim is that this stops the accidental and the
+ * convenient, not the determined.
+ */
+export type RulePackPatch = RulePackPatchValue;
 
 /**
  * Statutory codes whose rate the custom list has taken over.
@@ -193,7 +231,7 @@ export function buildRulePackPatch(edits: RulePackEdits): RulePackPatch {
         }
       : {}),
   };
-  return new RulePackPatch(patch);
+  return RulePackPatchValue.of(patch);
 }
 
 /** A full http(s) address.
