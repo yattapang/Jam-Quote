@@ -28,6 +28,75 @@ more than reading code for correctness ever did:
    `Client.town` validated by the DTO and never written. Both printed an ESLint
    warning in every build and were read past.
 
+## Four more shapes, learned after these briefs were written
+
+The four above were the taxonomy when the section briefs were first written. A long
+remediation campaign then found four more, and they now account for most of what is
+left once the wiring is right. **Every reviewer hunts these too.**
+
+5. **One of two twins.** A fix reaches the case the finding named and not its
+   sibling. A statutory levy got two rate editors; the fix removed the duplicate
+   for a levy the admin ADDED and left it for one that REPLACED a baseline entry.
+6. **A comment asserting correctness over hand-listed cases**, where the defect is
+   in the case not listed — six instances found. Also a comment that was true when
+   written and the same commit made false, and a comment citing a test file that had
+   never been written.
+7. **A guard matching the TEXT of a defect rather than its shape.** Eight
+   generations of source-scanning assertion in one file were each defeated by a
+   rewrite that changed no behaviour — deleting the spaces around an arrow, wrapping
+   a digit in braces, a const instead of a literal, a dead call left for the scanner
+   to find.
+8. **A guard whose parse proves nothing.** One assertion read an object literal with
+   its braces still attached, so its key list came back empty and it was trivially
+   true for any input — through three rewrites and two reviews that looked at it.
+
+## Method (mandatory for every agent here)
+
+These are not style preferences. Each one exists because its absence let a real
+defect through, or produced a false finding that cost an author real time.
+
+- **Execute the bypass; do not describe it.** A finding of the form "this could be
+  evaded by X" must come with having written X into the real file and run the suite.
+  Report what you observed. Then restore the file and confirm
+  `git status --porcelain` is empty.
+- **Verify your own detector before reporting a hit.** One review reported three
+  routes as missing an actor because its grep looked for `req.user` and they used
+  `req.adminContext`. The code was right; the pattern was wrong. Confirm your
+  detector fires on a case you know is broken and stays quiet on one you know is fine.
+- **Revert the fix and watch the test fail.** A test added beside a fix is worth
+  nothing until you have seen it fail without the fix. Say so plainly when a claimed
+  fix has no such test — that has happened while the commit message claimed otherwise.
+- **Check that claimed coverage exists.** When something cites a test as its
+  replacement, `ls` it. One commit deleted an assertion citing a render test that had
+  never been written, with typecheck, lint and 1612 tests green over the claim.
+- **A test asserting "defined" asserts almost nothing.** `Object.hasOwn` and
+  `not.toBeUndefined()` on four fields left a blank tax label silently saving as the
+  string "TAX" — renaming the tax on every quote and invoice — with 534 tests green.
+  Check whether value tests pin the VALUE or only its existence.
+- **Trace blast radius for anything shared.** A change in `packages/core` needs its
+  callers and the consumers of its output grepped across `apps/api`, `apps/web`,
+  `apps/mobile`, PDFs and reports. A tenant-facing figure that silently changed value
+  is worse than the screen bug being fixed. State explicitly whether any did.
+- **Run the real gates.** `npm run typecheck`, `npm run lint`, `npm test` from the
+  root. CI deliberately omits `build`, so run `npx next build` in `apps/web` when the
+  change touches imports or types crossing module boundaries.
+- **The working tree is not private.** Another session may be committing while you
+  work. Restore what you touch, and report it if the tree changes under you rather
+  than assuming it was yours.
+- **Distinguish CONFIRMED from PLAUSIBLE**, and say explicitly where you found
+  nothing. A review listing only hits leaves the reader unable to tell "clean" from
+  "not looked at".
+
+## Provenance, which was wrong once
+
+`REVIEW-FINDINGS.md` opens with the incident: two of the nine agents never returned
+a result, and the register nevertheless carried findings attributed to their sections,
+written from expectation and described as hand-verified. All of them happened to be
+real, which that file calls "luck, not method".
+
+So: **a finding carries where it came from, or it does not go in the register.** If
+you were not run, nothing may be filed in your name.
+
 ## The odd one out: `commit-reviewer`
 
 The nine others are SECTION reviewers — point them at an area and they audit it.
