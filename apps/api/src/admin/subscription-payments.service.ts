@@ -257,51 +257,81 @@ export class SubscriptionPaymentsService {
     // A gap where nobody paid should not be, because the tenant was on the free tier
     // through it and those months are not owed. `voidedAt` distinguishes them, and
     // it was being discarded one line after it was read.
-    const vacated = all
-      .filter((p) => p.voidedAt !== null)
-      .map((p) => ({ from: p.coversFrom, until: p.coversUntil }));
     /**
-     * Does the WHOLE term fit inside one vacated window?
+     * THE RULE, in one sentence: a surviving payment continues the chain consecutively
+     * while the term it would occupy lies inside a RUN of ground the tenant's money
+     * ever covered — voided money included — and the payment itself was made inside
+     * that same run; otherwise it starts at its own `paidAt`.
      *
-     * Testing a single instant was not enough. `isVacated(from)` was true whenever
-     * the chain end happened to land in any vacated window, however small — so a
-     * voided one-month cheque let a subsequent ANNUAL payment be rewound a full
-     * year. Simulated: voiding one stale monthly payment cost an annual tenant
-     * **eight months of the year they had just paid for**, because for a term longer
-     * than the gap the date test can never fire and the rule collapsed to
-     * vacated-only.
+     * This is "money buys the earliest unpaid month" (the policy PLANNING records),
+     * narrowed to the months the tenant was actually paying through. A void removes
+     * money, not entitlement, so later money slides back over the hole. A lapse is
+     * months nobody paid for, and those are not owed.
      *
-     * A term may only refill a period that was actually emptied — all of it.
+     * ## Why it is runs, and not the two previous attempts
+     *
+     * This rule has now been wrong three times, each time because it reasoned about a
+     * single window instead of the whole ledger:
+     *
+     * 1. Vacated-only stranded a paid-up tenant: void Jan, lapse Feb–Jun, pay Jul gave
+     *    `renewsAt` Feb 1, five months in the past, so correcting one bounced cheque
+     *    knocked a paying tenant offline.
+     * 2. Date-only absorbed any gap shorter than one interval, so an annual tenant who
+     *    lapsed and paid in December got one month for a year's fee.
+     * 3. The conjunction of the two — what shipped — held for TWO payments and broke
+     *    at three. `vacated` was computed once from the voided rows' ORIGINAL windows,
+     *    so the first survivor refilled that window and every later payment chained
+     *    into ground that had been covered by a survivor rather than by the void.
+     *    `termFitsVacated` returned false, the date test fired, and the payment was
+     *    pushed forward to its own `paidAt` — reopening the gap it had just closed.
+     *    The cascade could not propagate past the first refill.
+     *
+     *    Measured, monthly payments on each 1st: void the first of three and
+     *    `renewsAt` was Apr 1 instead of Mar 1; of four, May 1 instead of Apr 1; void
+     *    the middle of four and `Mar1..Apr1` was covered by no surviving payment while
+     *    `renewsAt` claimed May 1. Three annuals, void the first, gave a free YEAR.
+     *    And in every one of those the void took nothing away at all — `renewsAt` was
+     *    identical before and after, which is the original symptom of the finding this
+     *    rule exists for.
+     *
+     * Merging every window the money ever held into runs is what makes the cascade
+     * work: the ground stays covered as the survivors shift back over it, so the test
+     * still answers "was this ground paid for" after the first refill. Requiring the
+     * payment to be in the SAME run is what keeps the lapse case out — asking merely
+     * "is `paidAt` inside some run" pulls a lapsed-then-paid tenant back onto the run
+     * their voided payment had held, which is regression 1 again.
+     *
+     * Ten ledgers were simulated against this before it was written, including both
+     * regressions above and the annual/monthly mixes. Simulation caught attempts 1 and
+     * 2; attempt 3 was the one that skipped it.
      */
-    const termFitsVacated = (from: Date, until: Date): boolean =>
-      vacated.some(
-        (v) => from.getTime() >= v.from.getTime() && until.getTime() <= v.until.getTime(),
+    const runs: { from: number; until: number }[] = [];
+    for (const span of all
+      .map((p) => ({ from: p.coversFrom.getTime(), until: p.coversUntil.getTime() }))
+      .sort((a, b) => a.from - b.from)) {
+      const last = runs[runs.length - 1];
+      if (last && span.from <= last.until) last.until = Math.max(last.until, span.until);
+      else runs.push({ ...span });
+    }
+    const sameRun = (from: Date, until: Date, paidAt: Date): boolean =>
+      runs.some(
+        (r) =>
+          from.getTime() >= r.from &&
+          until.getTime() <= r.until &&
+          paidAt.getTime() >= r.from &&
+          paidAt.getTime() <= r.until,
       );
 
     let end = anchor;
     for (const p of all) {
       if (p.voidedAt !== null) continue; // voided money buys no period
 
-      // Pull back only when BOTH hold: the period was vacated by a void, and the
-      // resulting term still reaches the payment date.
-      //
-      // The previous version replaced the date test with the vacated test instead of
-      // taking both, and that was a regression — a review caught it and a simulation
-      // of nine ledgers confirmed it. Vacated-only strands tenants PAST_DUE:
-      //
-      //   void Jan, lapse Feb-Jun, pay Jul  ->  renewsAt Feb 1, five months past
-      //
-      // which means **voiding one old bounced cheque knocked a currently paid-up
-      // tenant offline** — F7's symptom with a new trigger, on the button that exists
-      // precisely for correcting a mis-entered payment.
-      //
-      // Date-only was also wrong, in the other direction: it absorbed any gap shorter
-      // than one interval, so an annual tenant who lapsed and paid in December got one
-      // month for a year's fee. Each test catches what the other misses.
       let from = end;
       let until = nextTermEnd(p.interval, from.toISOString(), from);
-      const refillsVacated = termFitsVacated(from, until);
-      if (from.getTime() < p.paidAt.getTime() && (!refillsVacated || until.getTime() < p.paidAt.getTime())) {
+      // Already at or past the payment date means the chain is stacked ahead of it —
+      // a prepayment — and there is nothing to pull back.
+      const consecutive = from.getTime() >= p.paidAt.getTime() || sameRun(from, until, p.paidAt);
+      if (!consecutive) {
         from = p.paidAt;
         until = nextTermEnd(p.interval, from.toISOString(), from);
       }

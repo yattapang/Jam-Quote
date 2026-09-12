@@ -496,10 +496,97 @@ describe("voiding an old payment leaves a current tenant current", () => {
 
     await svc.record("biz-1", { method: "CASH" }, "admin-1");
 
-    // The survivor keeps the month it paid for, not the first vacated one.
+    // CHANGED, and this is a policy call rather than a mechanical fix.
+    //
+    // It used to expect 2026-04-01 — the survivor keeping the month it paid for, with
+    // the two vacated months forgiven. A review pointed out that this test and the one
+    // above it gave opposite answers to the same question, and that what the code
+    // actually keyed on was whether the pulled-back term still reached `paidAt` — an
+    // artifact of the old date test, not a policy.
+    //
+    // Under the policy PLANNING records — money buys the earliest unpaid month — three
+    // consecutive payments of which two were voided leave the tenant with ONE valid
+    // month, and it buys January. They then read PAST_DUE for February and March,
+    // which is honest: two of their three payments did not clear and those months are
+    // still owed. Expecting 2026-04-01 forgave them.
+    //
+    // The sibling test above stays as it was, and the two are now consistent rather
+    // than contradictory: there a real LAPSE separates the voided month from the
+    // payment, so the survivor keeps its own month. Here the payments are consecutive,
+    // so the money slides back. The difference is the lapse, which is what the run
+    // test in `reallocateTerms` measures.
+    //
+    // If the owner would rather forgive the bounced months, that is a one-line change
+    // to the rule and this test — but it should be a decision, not a side effect.
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2026-02-01");
+    expect(written).not.toContain("2026-04-01");
+  });
+
+  // ── The cascade: three or more payments with an earlier void ──────────────────
+  //
+  // Every one of the 27 tests here used at most TWO payments, and not one had two
+  // survivors with an earlier void — so the path where the rule broke was untested.
+  // A void that takes nothing away is the original symptom of the finding this rule
+  // exists for, and it returned silently at three payments.
+
+  const monthly = (n: number, voidIndex: number) => {
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      const m = String(i + 1).padStart(2, "0");
+      const next = String(i + 2).padStart(2, "0");
+      rows.push({
+        id: `sp-${i + 1}`,
+        paidAt: at(`2026-${m}-01`),
+        coversFrom: at(`2026-${m}-01`),
+        coversUntil: at(`2026-${next}-01`),
+        interval: "monthly" as const,
+        voidedAt: i === voidIndex ? new Date() : null,
+      });
+    }
+    return rows;
+  };
+
+  it("voiding the first of THREE shortens the term by exactly one month", async () => {
+    // Was 2026-04-01: the void took nothing away, because the second survivor chained
+    // into ground the FIRST survivor had vacated rather than ground the void had.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-04-01") },
+      ledger: monthly(3, 0),
+    });
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2026-03-01");
+    expect(written).not.toContain("2026-04-01");
+  });
+
+  it("voiding the MIDDLE of four leaves no month uncovered", async () => {
+    // Was 2026-05-01 with `2026-03-01..2026-04-01` covered by no surviving payment —
+    // a ledger that did not reconcile with the renewal date it had just written.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2026-05-01") },
+      ledger: monthly(4, 1),
+    });
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
     const written = JSON.stringify(subscriptionWrites);
     expect(written).toContain("2026-04-01");
-    expect(written).not.toContain("2026-02-01");
+    expect(written).not.toContain("2026-05-01");
+  });
+
+  it("voiding the first of three ANNUAL payments costs a year, not nothing", async () => {
+    // The most expensive case: was 2029-01-01, i.e. a free year — roughly JMD 20,000.
+    const { svc, subscriptionWrites } = build({
+      subscription: { businessId: "biz-1", renewsAt: at("2029-01-01") },
+      ledger: [
+        { id: "sp-1", paidAt: at("2026-01-01"), coversFrom: at("2026-01-01"), coversUntil: at("2027-01-01"), interval: "annual", voidedAt: new Date() },
+        { id: "sp-2", paidAt: at("2027-01-01"), coversFrom: at("2027-01-01"), coversUntil: at("2028-01-01"), interval: "annual", voidedAt: null },
+        { id: "sp-3", paidAt: at("2028-01-01"), coversFrom: at("2028-01-01"), coversUntil: at("2029-01-01"), interval: "annual", voidedAt: null },
+      ],
+    });
+    await svc.record("biz-1", { method: "CASH" }, "admin-1");
+    const written = JSON.stringify(subscriptionWrites);
+    expect(written).toContain("2028-01-01");
+    expect(written).not.toContain("2029-01-01");
   });
 
   it("does not pull a much later payment into an old vacated month", async () => {

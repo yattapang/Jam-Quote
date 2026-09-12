@@ -106,9 +106,28 @@ export const recordSubscriptionPaymentSchema = z.object({
   /** Cheque number, bank reference, wallet transaction id — whatever lets this
    * be matched against a bank statement later. */
   reference: z.string().max(120).optional(),
-  /** When the money actually arrived, if that differs from when it was keyed
-   * in. Defaults to now. */
-  paidAt: z.string().datetime().optional(),
+  /**
+   * When the money actually arrived, if that differs from when it was keyed in.
+   * Defaults to now.
+   *
+   * BOUNDED, because this field is load-bearing for `renewsAt`. It was
+   * `.datetime()` with no range, and `reallocateTerms` uses it as the start of a
+   * term — so `paidAt: "2126-01-15"` granted Pro until 2126-02-15 in ONE request,
+   * with no second payment needed: `record()` reallocates after inserting, the bad
+   * row sorts last, and it anchors everything after it.
+   *
+   * Back-dating is legitimate — a payment taken on site last week is keyed in
+   * today — so the past is open. The future is not: money that has not arrived
+   * cannot buy a period. A day of tolerance absorbs clock skew between a staffer's
+   * browser and the server without admitting a typo'd year.
+   */
+  paidAt: z
+    .string()
+    .datetime()
+    .refine((iso) => Date.parse(iso) <= Date.now() + 24 * 60 * 60 * 1000, {
+      message: "Payment date cannot be in the future — money that has not arrived cannot buy a term.",
+    })
+    .optional(),
   /** Switch the tenant onto a different term with this payment (e.g. monthly
    * to annual at renewal). Defaults to the term they are already on. */
   interval: z.enum(["monthly", "annual"]).optional(),

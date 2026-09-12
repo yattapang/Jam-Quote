@@ -1,67 +1,56 @@
 # Review findings — nine independent reviewers, 2026-09-08
 
-## OUTSTANDING — start the next session here
+## The void cascade and the paidAt bound — CLOSED, on a stated rule
 
-Two HIGH revenue defects from the billing sweep are **found, understood, and NOT
-fixed.** The agent assigned to them died at the session limit having completed its
-simulation and written nothing, so the tree is clean and the work is entirely to do.
+**B1 fixed, fourth attempt, and this one was simulated first.** The rule now reads:
+a surviving payment continues the chain consecutively while the term it would occupy
+lies inside a RUN of ground the tenant's money ever covered — voided money included —
+and the payment itself was made inside that same run; otherwise it starts at its own
+`paidAt`.
 
-**B1 — voiding any non-final payment in a ledger of three or more grants a free term.**
-`apps/api/src/admin/subscription-payments.service.ts`, `reallocateTerms` ~276-307.
-`vacated` is computed once from the ORIGINAL windows of voided rows. The first
-survivor refills that window; every payment after it then chains into a period that
-was never in `vacated`, so `termFitsVacated` returns false, the date test fires, and
-that payment is pushed to its own `paidAt` — reopening the gap. The cascade cannot
-propagate past the first refill. Observed, monthly payments on each 1st:
+That is "money buys the earliest unpaid month", narrowed to the months the tenant was
+actually paying through. A void removes money, not entitlement, so later money slides
+back over the hole; a lapse is months nobody paid for, and those are not owed.
 
-| ledger | void | renewsAt after | correct |
+Ten ledgers were simulated before anything was edited. The shipped rule was wrong on
+four of them; the run-based rule is wrong on none, and it leaves no uncovered month in
+the middle-void case where the old one did:
+
+| case | shipped | run-based | correct |
 |---|---|---|---|
-| Jan, Feb | p1 | Feb 1 correct | Feb 1 |
-| Jan, Feb, Mar | p1 | **Apr 1 wrong** | Mar 1 |
-| Jan, Feb, Mar, Apr | p1 | **May 1 wrong** | Apr 1 |
-| Jan, Feb, Mar, Apr | p2 (middle) | **May 1 wrong** | Apr 1 |
-| Jan, Feb, Mar, Apr | p4 (latest) | Apr 1 correct | Apr 1 |
-| 3 x ANNUAL from Jan 2026 | a1 | **Jan 1 2029 wrong** | Jan 1 2028 |
+| 3 monthly, void first | 2026-04-01 | 2026-03-01 | 2026-03-01 |
+| 4 monthly, void first | 2026-05-01 | 2026-04-01 | 2026-04-01 |
+| 4 monthly, void middle | 2026-05-01 | 2026-04-01 | 2026-04-01 |
+| 3 ANNUAL, void first | 2029-01-01 | 2028-01-01 | 2028-01-01 |
+| void Jan, lapse Feb–Jun, pay Jul | 2026-08-01 | 2026-08-01 | 2026-08-01 |
+| voided monthly, later annual | 2027-06-01 | 2027-06-01 | 2027-06-01 |
 
-The annual row is a free year, roughly JMD 20,000. Two things break at once: the void
-takes away nothing (`renewsAt` identical before and after — the original symptom of
-the finding this rule was written for), and the ledger stops reconciling (middle-void:
-`Mar1..Apr1` is covered by no surviving payment while `renewsAt` claims May 1).
+The last two are the regressions attempts 1 and 2 introduced, so the new rule holds
+both of them as well as fixing the cascade. **Why runs:** merging every window the
+money ever held keeps the ground covered as survivors shift back over it, so the test
+still answers "was this ground paid for" after the first refill — which is exactly
+what attempt 3 could not do. Requiring the payment to be in the SAME run is what keeps
+the lapse case out; asking only "is `paidAt` inside some run" reproduces attempt 1.
 
-**This rule has now been wrong three times, so do not patch it again without
-simulating first.** Both previous wrong fixes were caught by simulation before
-implementation; the third was not simulated. The agent that died reported one useful
-result before it went: *"Simulation confirms PAID_RUN is the only rule that reproduces
-every reviewer row."* Start by rebuilding that simulation.
+**The contradictory test pair is resolved, and it was a policy call.** The "TWO
+consecutive payments voided" test expected the survivor to keep the month it paid for,
+forgiving both vacated months. Under the recorded policy it buys the earliest unpaid
+month instead, and the tenant reads PAST_DUE for the rest — honest, because two of
+their three payments did not clear. The test is changed with that reasoning written
+into it, and a note that reversing the policy is a one-line change but should be a
+decision rather than a side effect. The sibling test is untouched, and the two are now
+consistent: the difference between them is a LAPSE, which is what the run test
+measures.
 
-Also unresolved and load-bearing: the rule has no stated principle, and two tests
-assert opposite answers. Line ~184 says voiding the FIRST of two consecutive months
-shortens the term (survivor pulled back); line ~487 says it must not strand a tenant
-when TWO consecutive are voided (survivor NOT pulled back, asserted via
-`not.toContain("2026-02-01")`). What the code keys on is whether the pulled-back term
-still reaches `paidAt` — an artifact, not a policy. One of those tests encodes the
-wrong policy and the fix must say which. PLANNING.md records the adopted policy as
-"money buys the earliest unpaid month"; state whether the new rule is that or a
-departure.
+Three cascade tests added where there were none — all 27 previous tests used at most
+two payments, and not one had two survivors with an earlier void. All four fail when
+the old rule is restored.
 
-**B2 — one typo'd digit in `paidAt` grants a century of Pro.**
-`apps/api/src/admin/admin.dto.ts:111` — `paidAt: z.string().datetime().optional()`, no
-range bound, and `reallocateTerms` uses it as `from`. Observed:
-`record("biz-1", { method: "CASH", paidAt: "2126-01-15T00:00:00.000Z" })` gives
-`renewsAt = 2126-02-15` in ONE request, because `record()` reallocates after inserting
-and the bad row sorts last. PLANNING.md lists this as an owner question; it is worse
-than recorded, since no second payment is needed. Bound it to roughly
-`[business.createdAt, now]` and name the field in the refusal.
-
-**Also outstanding, lower severity, from the same sweep:** `nextTermEnd` overflows
-month-end (31 Jan gives 3 Mar, a 61-day month) while three comments assert it keeps
-the day-of-month, and `subscription.test.ts:64-69` asserts only
-`.getUTCMonth()).not.toBe(0)`, which passes on the overflow its own name denies.
-Clamping to the month's last day is the standard billing choice and needs an owner
-decision. Plus: `pricing.service.ts:21` defaults `freeQuotesPerMonth: 5` while
-PLANNING records the owner decision as 3 and marks it DONE; and neither
-`assertCanCreateQuote` nor `BillingService.status` consults `subscriptionStanding`, so
-a PAST_DUE tenant keeps unlimited quotes until a sweep runs.
+**B2 fixed.** `paidAt` is bounded to now plus a day of clock skew. The past stays open
+because back-dating a payment taken on site last week is normal; the future does not,
+because money that has not arrived cannot buy a term. Five tests in a new
+`admin.dto.test.ts`, including next month as well as the absurd century — a
+fat-fingered month grants a month just as quietly.
 
 ## A second provenance failure, of a different kind
 
