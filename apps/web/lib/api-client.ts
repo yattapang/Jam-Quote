@@ -14,7 +14,7 @@
  */
 import type { RulePackPatch } from "@/lib/rulepack-patch";
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
-import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceReminderWire, InvoiceWire, LabourEntryWire, LineJobComponentWire, MaterialFavouriteWire, PaymentWire, ProjectWire, PurchaseWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceWire, LabourEntryWire, LineJobComponentWire, MaterialFavouriteWire, ProjectWire, PurchaseWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -282,9 +282,6 @@ export type ApiBusiness = BusinessWire;
  * string, and detailLevel is non-nullable with a default.
  */
 export type ApiQuote = QuoteWire;
-
-/** NOT declared here - see `packages/core/src/wire/README.md`. */
-export type ApiPayment = PaymentWire;
 
 // `ApiInvoiceSection` and `ApiInvoiceLineItem` used to sit here. They went with
 // the invoice wire contract - `invoiceDetailWire` carries the sections and their
@@ -1577,9 +1574,6 @@ export async function deleteLabourEntry(id: string): Promise<void> {
 export async function createQuoteVariation(quoteId: string): Promise<{ id: string }> {
   return apiClient.post<{ id: string }>(`/quotes/${quoteId}/variation`, {});
 }
-
-/** NOT declared here - see `packages/core/src/wire/README.md`. */
-export type ApiInvoiceReminder = InvoiceReminderWire;
 
 /** One chase, as it happened. */
 export interface InvoiceReminder {
