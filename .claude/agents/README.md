@@ -87,6 +87,37 @@ defect through, or produced a false finding that cost an author real time.
   nothing. A review listing only hits leaves the reader unable to tell "clean" from
   "not looked at".
 
+## Building a guard — the doctrine eleven defeated generations taught
+
+A guard is a test that asserts something about the CODE rather than about behaviour.
+This repo has lost eleven generations of them to rewrites that changed no behaviour, and
+the survivors share every property below. Anyone writing or reviewing a guard follows it.
+
+1. **Prefer, in this order:** a TYPE the defect cannot satisfy; a behavioural test over
+   the real code path; a parse of the AST; and never a text regex. Reach for the next
+   rung only when the one above cannot hold the fact — and say in the guard's comment
+   why it could not.
+2. **One parser, shared and tested.** In `apps/web` that is `lib/test/source-ast.ts`.
+   Every defeated guard had written its own matcher, and the matcher was where the
+   defect lived; one returned an empty list for every input and asserted nothing for
+   three rewrites. Do not write a second parser. If the shared one cannot answer the
+   question, extend it and add the case to its own tests.
+3. **Detect the class, not the spelling.** Before writing a guard, list every way the
+   defect could be spelled — and then execute each one against the finished guard. A
+   guard that recognises the spelling its author tried is not a guard.
+4. **Prove the parse found something.** Every guard asserts it located its subjects —
+   a count of files, calls or routes — so a rename or a move fails loudly instead of
+   emptying it silently.
+5. **Inject the defect and watch it fail.** A guard that has only ever been seen to pass
+   has not been seen to work. Restore the file afterwards and leave the tree clean.
+6. **Discovery over lists.** A hand-maintained list of routes, files or shapes rots the
+   day someone adds one. Derive the set from the filesystem or the AST; where an
+   allow-list is unavoidable, key it precisely (file and line, or exact name) and assert
+   every entry still exists.
+7. **Say what it does not prove.** A guard's comment states its limit. "A deliberate
+   cast defeats it" is honest; "an inline literal is a compile error", when four
+   constructs compile, is an overclaim a reviewer will find.
+
 ## Provenance, which was wrong once
 
 `REVIEW-FINDINGS.md` opens with the incident: two of the nine agents never returned
