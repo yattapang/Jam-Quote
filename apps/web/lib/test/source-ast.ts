@@ -466,6 +466,44 @@ function calleeNamespaceMatch(
 }
 
 /**
+ * Does `raw` (a callee) resolve, through the shared binder, to THIS SPECIFIC local
+ * declaration — not merely to a same-named one? Accepts a bare identifier, or a
+ * never-written local alias of one (`const f = pricingProblem; f()`). Built for a
+ * validator declared IN the file being scanned (a local function or `const` arrow),
+ * where `importedFrom` cannot apply because there is no import to resolve to — the
+ * binder's symbol identity is used instead, the same way `calleeIsImport` uses it for
+ * an import: a locally SHADOWING declaration (`const pricingProblem = () => null;`
+ * placed after the real one, with the call site rewired to it) resolves to a
+ * different symbol whose declarations do not include `declaration`, so it does not
+ * match — closing the exact gap spelling-only `namesTarget` left open.
+ */
+function calleeIsDeclaration(
+  raw: ts.Expression,
+  fc: FileContext,
+  declaration: ts.Node,
+  seen: Set<ts.Node> = new Set(),
+): boolean {
+  const e = unwrap(raw);
+  if (seen.has(e)) return false;
+  seen.add(e);
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+    return calleeIsDeclaration(e.right, fc, declaration, seen);
+  }
+  if (ts.isConditionalExpression(e)) {
+    return (
+      calleeIsDeclaration(e.whenTrue, fc, declaration, seen) ||
+      calleeIsDeclaration(e.whenFalse, fc, declaration, seen)
+    );
+  }
+  if (!ts.isIdentifier(e)) return false;
+  const sym = resolve(e, fc);
+  if (!sym) return false;
+  if ((sym.declarations ?? []).some((d): boolean => (d as ts.Node) === declaration)) return true;
+  const init = aliasInitializer(e, fc);
+  return init !== undefined && calleeIsDeclaration(init, fc, declaration, seen);
+}
+
+/**
  * Every call to a function by name — `name(...)`, `x.name(...)`, `x?.name(...)`,
  * `(name)(...)`, `x["name"](...)`, `(0, name)(...)`, a call through a never-written
  * alias (`const f = name; f(...)`, `import { name as f }`), and `name.call(...)` /
@@ -489,23 +527,28 @@ function calleeNamespaceMatch(
  * without the guard noticing. Pass `importedFrom` to close that: the callee must then
  * resolve, through the binder, to the import of `importedFrom.exportedName` from
  * `importedFrom.moduleSpecifier` — a direct or aliased identifier, a never-written local
- * alias of one, or a namespace-import property. Existing callers that pass only a name
- * keep the spelling-based match; passing `importedFrom` is strictly narrower.
+ * alias of one, or a namespace-import property. For a validator that is declared LOCALLY
+ * in the scanned file rather than imported — so `importedFrom` cannot apply, there being
+ * no import — pass `{ declaration }` with the specific `ts.Node` (a `FunctionDeclaration`
+ * or a `const`'s `VariableDeclaration`) the callee must resolve to; a same-named shadowing
+ * declaration resolves to a different symbol and does not match. Existing callers that
+ * pass only a name keep the spelling-based match; either option is strictly narrower.
  */
 export function callsTo(
   root: ts.Node,
   name: string,
-  importedFrom?: { moduleSpecifier: string; exportedName: string },
+  resolvesTo?: { moduleSpecifier: string; exportedName: string } | { declaration: ts.Node },
 ): ts.CallExpression[] {
   const sf = root.getSourceFile();
   if (!sf.text.includes(name)) return [];
   let fc: FileContext | undefined;
   const lazy = () => (fc ??= fileContext(root));
 
-  const matches = (expr: ts.Expression): boolean =>
-    importedFrom
-      ? calleeIsImport(expr, lazy(), importedFrom.moduleSpecifier, importedFrom.exportedName)
-      : namesTarget(expr, name, lazy, new Set());
+  const matches = (expr: ts.Expression): boolean => {
+    if (!resolvesTo) return namesTarget(expr, name, lazy, new Set());
+    if ("declaration" in resolvesTo) return calleeIsDeclaration(expr, lazy(), resolvesTo.declaration);
+    return calleeIsImport(expr, lazy(), resolvesTo.moduleSpecifier, resolvesTo.exportedName);
+  };
 
   const found: ts.CallExpression[] = [];
   for (const call of collect(root, ts.isCallExpression)) {
@@ -634,6 +677,34 @@ export function isImportedChain(expr: ts.Expression, moduleSpecifier: string, ex
   }
   if (!matched) return false;
   return !importChainWritten(sym, fc);
+}
+
+/**
+ * The transitive closure of `external` over a directed graph `edges` (`from -> {to, ...}`).
+ * Starts from every name in `external` and, for every name already reached that has
+ * outgoing edges, adds everything it points to — repeating until nothing new is added.
+ *
+ * Generic graph reachability, not specific to any one guard's shapes: a dead-code guard
+ * builds `external` from references found OUTSIDE any tracked declaration and `edges`
+ * from references found INSIDE one, so that two declarations referencing only each other
+ * (an edge each way, neither ever externally referenced) still come back unreachable —
+ * the same shape a reference count alone cannot tell from real liveness.
+ */
+export function reachableClosure(external: ReadonlySet<string>, edges: ReadonlyMap<string, ReadonlySet<string>>): Set<string> {
+  const live = new Set(external);
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const [from, tos] of edges) {
+      if (!live.has(from)) continue;
+      for (const to of tos) {
+        if (!live.has(to)) {
+          live.add(to);
+          changed = true;
+        }
+      }
+    }
+  }
+  return live;
 }
 
 /**

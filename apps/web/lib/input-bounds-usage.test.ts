@@ -63,6 +63,25 @@ import {
  * override as one nobody can — unsound the moment any call site supplies a real value —
  * so this stays a known gap, not a silent one: a parameter default is scoped to whichever
  * caller actually reaches this component's every call site, which no source scan proves.
+ *
+ * Adversarial-only, found by deliberately trying to defeat this guard rather than by any
+ * real defect seen in the codebase:
+ *
+ * - A property added to a class EXPRESSION after it is created — `(L as any).CAP = 100`,
+ *   where `L` is `const L = class { static CAP = 1 }`. `source-ast.test.ts` pins
+ *   `L.CAP = 100` on an EMPTY class (`class L {}`) as `data`, which is the write-detection
+ *   half of this; the read half (`staticClassFieldIsStatic`) is sound for `L.CAP` itself,
+ *   but a cast to `any` before the assignment is not something a source parse, as opposed
+ *   to a type checker enforcing `readonly`, can refuse.
+ * - A write to `BOUNDS` through `Object.assign(BOUNDS, { discountPct: { max: 1000 } })` —
+ *   `importChainWritten` recognises `BOUNDS.x = …`, `++`/`--`, `delete` and a destructuring
+ *   target reached through the chain, but not the receiver of a function call it does not
+ *   special-case the way `referenceTaints` special-cases the Array mutators; the object
+ *   still reads as the untouched import afterward.
+ * - A write through an ALIAS of `BOUNDS` — `const b = BOUNDS; b.discountPct.max = 1000;` —
+ *   defeats `importChainWritten` for the same reason a fresh binding always can: the write
+ *   is judged against `b`'s own symbol, and nothing here follows `b` back to `BOUNDS` to
+ *   ask whether the alias itself was ever tainted.
  */
 
 const WEB = process.cwd();
@@ -255,7 +274,15 @@ describe("numeric inputs spend the shared BOUNDS", () => {
     let handler: ts.Node | undefined = send[0];
     while (handler && !(ts.isArrowFunction(handler) && ts.isJsxExpression(handler.parent))) handler = handler.parent;
     expect(handler, "recordSubscriptionPayment is no longer sent from a JSX handler").toBeDefined();
-    expect(callsTo(handler!, "subscriptionPaymentProblem")).toHaveLength(1);
+    // Resolved to the specific top-level declaration, not merely the spelling: a
+    // shadowing `const subscriptionPaymentProblem = (..._a) => null;` placed above the
+    // real call would otherwise still count as "the validator ran".
+    const decl = admin.sf.statements.find(
+      (s): s is ts.FunctionDeclaration =>
+        ts.isFunctionDeclaration(s) && s.name?.text === "subscriptionPaymentProblem",
+    );
+    expect(decl, "subscriptionPaymentProblem's top-level declaration moved or was renamed").toBeDefined();
+    expect(callsTo(handler!, "subscriptionPaymentProblem", { declaration: decl! })).toHaveLength(1);
   });
 });
 

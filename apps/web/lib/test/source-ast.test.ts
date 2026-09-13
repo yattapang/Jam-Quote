@@ -9,6 +9,7 @@ import {
   isImportedChain,
   jsxAttributes,
   parseSource,
+  reachableClosure,
   renderedExpressions,
   renderedText,
 } from "./source-ast";
@@ -300,6 +301,38 @@ describe("callsTo: import-resolved callee", () => {
   });
 });
 
+describe("callsTo: declaration-resolved callee", () => {
+  it("a call to the specific local declaration", () => {
+    const sf = parseSource("d1.ts", "function pricingProblem() { return null; }\npricingProblem();");
+    const decl = collect(sf, ts.isFunctionDeclaration).find((d) => d.name?.text === "pricingProblem")!;
+    expect(callsTo(sf, "pricingProblem", { declaration: decl })).toHaveLength(1);
+  });
+
+  it("a call through a never-written local alias of the declaration", () => {
+    const sf = parseSource(
+      "d2.ts",
+      "function pricingProblem() { return null; }\nconst f = pricingProblem;\nf();",
+    );
+    const decl = collect(sf, ts.isFunctionDeclaration).find((d) => d.name?.text === "pricingProblem")!;
+    expect(callsTo(sf, "pricingProblem", { declaration: decl })).toHaveLength(1);
+  });
+
+  it("bypass: a same-named shadowing declaration does not resolve to the original", () => {
+    const sf = parseSource(
+      "d3.ts",
+      [
+        "function pricingProblem() { return null; }",
+        "{",
+        "  const pricingProblem = () => null;",
+        "  pricingProblem();",
+        "}",
+      ].join("\n"),
+    );
+    const outer = collect(sf, ts.isFunctionDeclaration).find((d) => d.name?.text === "pricingProblem")!;
+    expect(callsTo(sf, "pricingProblem", { declaration: outer })).toHaveLength(0);
+  });
+});
+
 describe("destructuredPropertyName", () => {
   it("a shorthand destructure", () => {
     const sf = parseSource("d.tsx", "function f({ rateUnit }) { return rateUnit; }");
@@ -490,5 +523,21 @@ describe("renderedExpressions", () => {
     const rendered = renderedExpressions(sf);
     expect(rendered).toHaveLength(3);
     expect(rendered.filter((e) => analyseStatic(e).static)).toHaveLength(2);
+  });
+});
+
+describe("reachableClosure", () => {
+  it("follows edges from every externally-referenced name", () => {
+    const edges = new Map([["A", new Set(["B"])], ["B", new Set(["C"])]]);
+    expect(reachableClosure(new Set(["A"]), edges)).toEqual(new Set(["A", "B", "C"]));
+  });
+
+  it("a pair referencing only each other is not reachable from nothing external", () => {
+    const edges = new Map([["A", new Set(["B"])], ["B", new Set(["A"])]]);
+    expect(reachableClosure(new Set(), edges)).toEqual(new Set());
+  });
+
+  it("a name with no outgoing edge is still live if it is external", () => {
+    expect(reachableClosure(new Set(["Z"]), new Map())).toEqual(new Set(["Z"]));
   });
 });

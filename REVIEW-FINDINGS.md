@@ -126,8 +126,28 @@ function, `void`, and writes through the `BOUNDS` import all hid a literal; the 
 lacked the parameter-default note its commit claimed. I re-planted `l["rateUnit"]` and
 the ZzA/ZzB pair myself: both fail. Gate green (web 680).
 
-**Still open:** a third independent review. Known residue to put to it: `callsTo` still
-matches by spelling for S17 and S18 callers (only S19 opted into import resolution).
+**Third independent review (of aa94e84): original bypasses held; 7 new, and a verdict of
+diminishing returns.** One overclaim: claim 5 said a literal set on a class expression was
+caught while `source-ast.test.ts` pinned it as data. Acted on the reviewer's recommendation
+rather than another full round:
+- S19 now scans every `rateUnit` read in the file, not only JSX, so a helper
+  (`unitOf(line)` - ordinary refactoring that silently restored the public-quote bug) is
+  caught, as are transformed aliases and const keys. Non-display plumbing is excluded
+  structurally (unchanged pass-through into a `rateUnit` property, JSX attribute values,
+  destructuring sites) - no allow-list, and no display defect in product code.
+- S17/S18 resolve `pricingProblem`, `subscriptionPaymentProblem` (local declarations) and
+  `rulePackProblem` (import) through the binder; a same-named shadow now fails.
+- S16's probe tests call the real `reachableClosure` instead of a copy; the
+  `import type * as` false alarm is fixed.
+- Adversarial-only residue is now written into the guard headers: a literal added to a
+  class expression after creation, `Object.assign`/alias writes to `BOUNDS`, a dead shape
+  kept alive by another dead file, barrel or helper parameter (test files ARE scanned).
+I re-planted the `unitOf` helper on the public quote page myself: it fails. Gate green
+(web 689). **Guard conversion S14-S19 is closed.**
+
+Process lesson: I launched a replacement agent believing the first had done nothing,
+when it had delegated to a still-running child; the two edited the same files at once.
+Before relaunching, check for live children, not just an unchanged tree.
 
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 

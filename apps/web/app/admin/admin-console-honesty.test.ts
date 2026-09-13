@@ -110,6 +110,23 @@ function importBindings(sf: ts.SourceFile): { imported: string; local: string; f
   return out;
 }
 
+/**
+ * The declaration node itself for a named function — `function f() {}` or `const f = () =>
+ * {}` — for passing to `callsTo`'s `{ declaration }` resolution, which needs the exact
+ * node the binder's symbol carries in `sym.declarations`, not the function's body.
+ */
+function functionDeclarationNamed(sf: ts.SourceFile, name: string): ts.Node | null {
+  let found: ts.Node | null = null;
+  walk(sf, (n) => {
+    if (found) return;
+    if (ts.isFunctionDeclaration(n) && n.name?.text === name) found = n;
+    if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === name && n.initializer) {
+      found = n;
+    }
+  });
+  return found;
+}
+
 /** A named function's body: `function f()`, or `const f = () =>` / `function () {}`. */
 function functionNamed(sf: ts.SourceFile, name: string): ts.Node | null {
   let found: ts.Node | null = null;
@@ -533,8 +550,17 @@ describe("the console cannot claim a figure it does not have", () => {
       .filter((n) => /^(update|create|record|review|delete|promote|revoke|void|run|set)[A-Z]/.test(n));
     expect(mutators.length, "no api-client mutators found — check the import").toBeGreaterThan(5);
     expect(mutators).toEqual(expect.arrayContaining(["updateAdminPricing", "updateAdminRulePack"]));
-    expect(callsTo(SF, "pricingProblem").length, "the pricing save must run its validator").toBeGreaterThan(0);
-    expect(callsTo(SF, "rulePackProblem").length, "the rule-pack save must run its validator").toBeGreaterThan(0);
+    const pricingProblemDecl = functionDeclarationNamed(SF, "pricingProblem");
+    expect(pricingProblemDecl, "pricingProblem not found — has it been renamed?").not.toBeNull();
+    expect(
+      callsTo(SF, "pricingProblem", { declaration: pricingProblemDecl! }).length,
+      "the pricing save must run its validator",
+    ).toBeGreaterThan(0);
+    expect(
+      callsTo(SF, "rulePackProblem", { moduleSpecifier: "@/lib/rulepack-patch", exportedName: "rulePackProblem" })
+        .length,
+      "the rule-pack save must run its validator",
+    ).toBeGreaterThan(0);
   });
 
   // Two assertions were deleted earlier and are held elsewhere: the rule-pack payload

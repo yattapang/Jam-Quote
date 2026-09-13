@@ -52,30 +52,56 @@ import {
  * ## The class this detects
  *
  * Not the text `RATE_UNIT_LABEL[` and not the text `toLowerCase`: displaying
- * a rate unit without going through `lineUnitLabel`. Concretely, an
- * expression RENDERED as JSX content (`renderedExpressions`, never an
- * attribute) that reads `.rateUnit` — directly (`l.rateUnit`), through a
- * destructure (`const { rateUnit } = l` then `{rateUnit...}`), or as the key
- * into ANY object indexed by it (the real `RATE_UNIT_LABEL` or a locally
- * redeclared copy, under any name) — unless that read is itself an argument
- * to a call to `lineUnitLabel`. Every historical and hypothetical spelling
- * below reduces to "a `.rateUnit` read reaches render outside that one call",
- * so the detector does not need to recognise any of their surface forms.
+ * a rate unit without going through `lineUnitLabel`. Concretely, a read of
+ * `.rateUnit` — directly (`l.rateUnit`), through a destructure (`const {
+ * rateUnit } = l` then `{rateUnit...}`), as the key into ANY object indexed
+ * by it (the real `RATE_UNIT_LABEL` or a locally redeclared copy, under any
+ * name), or through an identifier key resolving to the const string
+ * `"rateUnit"` (`const K = "rateUnit"; l[K]`) — unless that read is itself
+ * an argument to a call to `lineUnitLabel`.
+ *
+ * ## Why this scans the WHOLE FILE, not only JSX content
+ *
+ * An earlier generation walked only `renderedExpressions` — the JSX braces
+ * actually printed to the page — on the theory that a read outside them
+ * cannot be a display bug. That missed `{unitOf(l)}` beside
+ * `function unitOf(x) { return x.rateUnit.toLowerCase(); }` declared
+ * elsewhere in the same file: the read is real, it reaches the render, but
+ * it sits in `unitOf`'s body, never a descendant of the `{unitOf(l)}` node
+ * the earlier walk actually visited. Chasing every call boundary to find
+ * that is a project of its own (the header below still says so), so this
+ * generation inverts the question: flag every `.rateUnit` read in the file
+ * outside `lineUnitLabel`, JSX or not, and structurally exclude the shapes
+ * that are provably not a display path, rather than trying to prove which
+ * ones ARE reachable from a render:
+ *
+ *  - a JSX attribute value (`onChange`, a control's `value=`) — computes
+ *    DATA, never text the page prints;
+ *  - a bare `.rateUnit` (or destructured equivalent) passed straight into a
+ *    property LITERALLY named `rateUnit` — `{ rateUnit: x.rateUnit }` or the
+ *    shorthand `{ rateUnit }` — the same unchanged-passthrough shape
+ *    `isRoutedThroughLineUnitLabel` already recognises for a `lineUnitLabel`
+ *    argument, here for a DTO mapper, a form-value<->payload converter, or
+ *    an `onChange` payload carrying the cadence through to a caller that
+ *    edits it. A read that becomes real display — rendered as text, or
+ *    fed to anything other than an identically-named property — is not this
+ *    shape and is not excused by it;
+ *  - the identifier at the DECLARATION site of a destructured binding named
+ *    `rateUnit` (`function F({ rateUnit }) {…}`) — introducing the binding
+ *    is not itself a read; only a later reference to it is, and that
+ *    reference is a different node this exclusion does not touch.
  *
  * ## What it does not prove
  *
- * It is a syntactic reachability check, not a type checker: it cannot follow
- * `rateUnit` across a function call boundary (a helper that takes `line` and
- * returns a pre-formatted string defeats it, same as it would defeat a
- * human reviewer skimming for `.rateUnit`), and it does not verify
- * `lineUnitLabel` itself is correct — only that it is the thing called.
- * Passing a WRONG value to a correctly-named `lineUnitLabel` (shadowing the
- * import, or calling a differently-defined local function that happens to
- * share the name) also defeats it; no scanner distinguishes a call from a
- * deliberate shadow. It also does not scan `.ts`/`.js` files with no JSX,
- * since `renderedExpressions` only exists for JSX content — a rate unit
- * fed into `console.log` or a CSV export is out of scope for a guard about
- * what the CUSTOMER sees rendered.
+ * It does not verify `lineUnitLabel` itself is correct — only that it is the
+ * thing called. Passing a WRONG value to a correctly-named `lineUnitLabel`
+ * (shadowing the import, or calling a differently-defined local function
+ * that happens to share the name) also defeats it; no scanner distinguishes
+ * a call from a deliberate shadow. And the passthrough exclusion is exactly
+ * as sound as its own shape is narrow: `{ rateUnit: x.rateUnit.toLowerCase()
+ * as RateUnit }` reads `.rateUnit` but does not pass it through UNCHANGED,
+ * so it still does not match — same reasoning `isRoutedThroughLineUnitLabel`
+ * already relies on for a `lineUnitLabel` call's own arguments.
  */
 const ALLOWED = new Set([
   // Defines lineUnitLabel and the map itself — the one place `.rateUnit` is
@@ -112,22 +138,110 @@ const rel = (f: string) => f.slice(WEB_ROOT.length + 1).split("\\").join("/");
  * `followAlias` cannot itself loop on forever (each hop needs a fresh never-written
  * binding) but which this recursion otherwise would.
  */
+/**
+ * Does `key` (an element-access argument) name `"rateUnit"` — as a literal
+ * (`l["rateUnit"]`), or through a never-written local alias resolving to that literal
+ * (`const K = "rateUnit"; l[K]`)? Chases the same alias chain `isRateUnitRead` does,
+ * with its own `seen` guard against a cycle.
+ */
+function keyNamesRateUnit(key: ts.Expression, seen: Set<ts.Node> = new Set()): boolean {
+  const k = unwrap(key);
+  if ((ts.isStringLiteral(k) || ts.isNoSubstitutionTemplateLiteral(k)) && k.text === "rateUnit") return true;
+  if (ts.isIdentifier(k)) {
+    if (seen.has(k)) return false;
+    seen.add(k);
+    const init = followAlias(k);
+    if (init && keyNamesRateUnit(init, seen)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does `init` — the initializer of a never-written local alias — READ the line's
+ * `rateUnit`, allowing it to sit behind a chained call, a template span, a binary
+ * operand or a ternary branch — never inside a NEW scope or data structure `init`
+ * builds? Catches `const ru = l.rateUnit.toLowerCase();` (`init` is the
+ * `.toLowerCase()` call; peeling it off exposes the read `l.rateUnit`), which the
+ * previous version missed entirely: it asked only whether `unwrap(init)` was itself a
+ * read, never whether one was reachable by peeling a same-value transform off it.
+ *
+ * Deliberately narrower than "walk every descendant": `init` may be an arbitrarily
+ * large expression — `demoQuotes.map((l) => ({ ..., rateUnit: l.rateUnit }))` — that
+ * merely CONTAINS a rateUnit read somewhere inside a callback argument building an
+ * unrelated object. That nested `l` is its own binding, not a value flowing INTO
+ * `init`'s own alias, so a first version of this fix that walked every descendant
+ * flagged every later reference to `quotes` in `lib/mock-data.ts` as "reading
+ * rateUnit" — the map's own callback argument, four levels down, is never something
+ * the walk should have entered at all. This one only follows shapes where `init`
+ * ITSELF is transparently the read: a method chained straight off it, a template
+ * literal or `+`/`??`/ternary built directly from it — never a call's ARGUMENTS, an
+ * object or array literal's contents, or a nested function's body.
+ */
+function initializerIsRateUnitRead(init: ts.Expression, seen: Set<ts.Node>): boolean {
+  const e = unwrap(init);
+  if (isRateUnitRead(e, seen)) return true;
+  if (ts.isCallExpression(e)) {
+    const callee = unwrap(e.expression);
+    return ts.isPropertyAccessExpression(callee) && initializerIsRateUnitRead(callee.expression, seen);
+  }
+  if (ts.isTemplateExpression(e)) return e.templateSpans.some((s) => initializerIsRateUnitRead(s.expression, seen));
+  if (ts.isBinaryExpression(e)) {
+    return initializerIsRateUnitRead(e.left, seen) || initializerIsRateUnitRead(e.right, seen);
+  }
+  if (ts.isConditionalExpression(e)) {
+    return initializerIsRateUnitRead(e.whenTrue, seen) || initializerIsRateUnitRead(e.whenFalse, seen);
+  }
+  return false;
+}
+
 function isRateUnitRead(node: ts.Node, seen: Set<ts.Node> = new Set()): boolean {
   if (ts.isPropertyAccessExpression(node) && node.name.text === "rateUnit") return true;
-  if (ts.isElementAccessExpression(node)) {
-    const key = unwrap(node.argumentExpression);
-    if ((ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) && key.text === "rateUnit") return true;
-  }
+  if (ts.isElementAccessExpression(node) && keyNamesRateUnit(node.argumentExpression)) return true;
   if (
     ts.isIdentifier(node) &&
     !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
-    !(ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node)
+    !(ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node) &&
+    // The DECLARATION site of a destructured `rateUnit` binding (`function F({
+    // rateUnit }) {…}`) introduces the binding; it is not itself a read. Only a
+    // later REFERENCE to it is, and that reference is a different identifier node
+    // this exclusion does not touch (its parent is not the BindingElement).
+    !(ts.isBindingElement(node.parent) && node.parent.name === node)
   ) {
     if (destructuredPropertyName(node) === "rateUnit") return true;
     if (seen.has(node)) return false;
     seen.add(node);
     const init = followAlias(node);
-    if (init && isRateUnitRead(unwrap(init), seen)) return true;
+    if (init && initializerIsRateUnitRead(init, seen)) return true;
+  }
+  return false;
+}
+
+/**
+ * Is `node` — a rateUnit read that already satisfies `isRateUnitRead` — passed straight
+ * through, UNCHANGED, into a property literally named `rateUnit`? `{ rateUnit:
+ * x.rateUnit }` (a DTO mapper, a form-value<->payload converter) and the shorthand
+ * `{ rateUnit }` (an `onChange` payload carrying the cadence back to a caller that
+ * edits it) both carry the value across a boundary without printing it — the same
+ * unchanged-passthrough shape `isRoutedThroughLineUnitLabel` already recognises for a
+ * `lineUnitLabel` argument, applied here to any property of that exact name.
+ *
+ * Narrow on purpose: `{ rateUnit: x.rateUnit.toLowerCase() }` is not this shape (the
+ * read is the object of a further call, not the property's value directly), and
+ * `{ unitLabel: x.rateUnit.toLowerCase() }` is not either (wrong property name) — both
+ * still count as unrouted reads, which is exactly the transform this guard exists to
+ * catch.
+ */
+function isNonDisplayPassthrough(node: ts.Node): boolean {
+  const p = node.parent;
+  if (p && ts.isShorthandPropertyAssignment(p) && p.name === node) return true;
+  if (
+    p &&
+    ts.isPropertyAssignment(p) &&
+    p.initializer === node &&
+    ts.isIdentifier(p.name) &&
+    p.name.text === "rateUnit"
+  ) {
+    return true;
   }
   return false;
 }
@@ -209,6 +323,36 @@ function unroutedRateUnitReads(root: ts.Expression, sf: ts.SourceFile): ts.Node[
   return offenders;
 }
 
+/**
+ * Every `.rateUnit` read ANYWHERE in `sf` that is not routed through `lineUnitLabel` —
+ * not confined to a JSX rendered expression's own subtree.
+ *
+ * The narrower `unroutedRateUnitReads` (walking only a single rendered expression) missed
+ * the live bypass this generation exists for: `{unitOf(l)}` with
+ * `function unitOf(x) { return x.rateUnit.toLowerCase(); }` declared elsewhere in the same
+ * file. The read is real and reaches the same rendered span, but it sits in `unitOf`'s
+ * body, never a descendant of the `{unitOf(l)}` JSX expression, so the narrower walk never
+ * visits it. Scanning the whole file finds it regardless of how many function boundaries
+ * sit between the render and the read.
+ *
+ * JSX attribute values are still excluded (`walkRendered` skips them at any depth, file-
+ * wide) — an `onChange` handler or a control's `value=` computes DATA, not text the page
+ * prints, per this file's header. What is NOT excluded, deliberately, is ordinary `.ts`/
+ * `.tsx` code outside any JSX at all: a comparison, a payload object, a `useState` call.
+ * Those are real reads too, by this guard's letter; where they are legitimate (not a
+ * display path at all) they are named in `NON_DISPLAY_ALLOWED` below, per file and
+ * function, with an exact count and a reason — never silently excused by position alone.
+ */
+function unroutedRateUnitReadsInFile(sf: ts.SourceFile): ts.Node[] {
+  const offenders: ts.Node[] = [];
+  walkRendered(sf, (node) => {
+    if (!isRateUnitRead(node)) return;
+    if (isNonDisplayPassthrough(node)) return;
+    if (!isInsideLineUnitLabelCall(node, sf, sf)) offenders.push(node);
+  });
+  return offenders;
+}
+
 describe("a line's unit is resolved in one place", () => {
   const files = sourceFiles(join(WEB_ROOT, "app")).concat(
     sourceFiles(join(WEB_ROOT, "lib")),
@@ -229,19 +373,18 @@ describe("a line's unit is resolved in one place", () => {
     expect(relFiles.length).toBeGreaterThan(20);
   });
 
-  it("no rendered expression reads a line's rateUnit outside lineUnitLabel", () => {
+  it("no read of a line's rateUnit, anywhere in the file, escapes lineUnitLabel unexcused", () => {
     const offenders: string[] = [];
     for (const f of files) {
       if (ALLOWED.has(rel(f))) continue;
       const sf = parseFile(f);
-      for (const expr of renderedExpressions(sf)) {
-        if (unroutedRateUnitReads(expr, sf).length > 0) {
-          offenders.push(rel(f));
-          break;
-        }
+      for (const node of unroutedRateUnitReadsInFile(sf)) {
+        offenders.push(`${rel(f)} :: ${node.getText().slice(0, 80)}`);
       }
     }
-    expect(offenders).toEqual([]);
+    expect(offenders, "a read outside lineUnitLabel that is not a structurally-excused passthrough — fix it with lineUnitLabel").toEqual(
+      [],
+    );
   });
 
   it("does not excuse a transform of rateUnit merely because it sits inside a lineUnitLabel(...) call", () => {
@@ -289,6 +432,63 @@ describe("a line's unit is resolved in one place", () => {
     for (const expr of renderedExpressions(probeSf)) {
       expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
     }
+  });
+
+  it("excuses a rateUnit read passed straight into a property of the same name, file-wide", () => {
+    const propertyPassthrough = parseSource(
+      "probe7.ts",
+      "function mapLine(l: any) { return { rateUnit: l.rateUnit }; }",
+    );
+    expect(unroutedRateUnitReadsInFile(propertyPassthrough)).toHaveLength(0);
+
+    const shorthandPassthrough = parseSource(
+      "probe8.ts",
+      "function onSelect(rateUnit: string) { emit({ rateUnit, unitLabel: '' }); }",
+    );
+    expect(unroutedRateUnitReadsInFile(shorthandPassthrough)).toHaveLength(0);
+
+    // The declaration site of a destructured `rateUnit` binding is not itself a read —
+    // with no later reference to the binding, there is nothing here to flag at all.
+    const bindingDeclaration = parseSource("probe9.ts", "function F({ rateUnit }: { rateUnit: string }) {}");
+    expect(unroutedRateUnitReadsInFile(bindingDeclaration)).toHaveLength(0);
+
+    // A later reference to that SAME binding is a real read, unaffected by the
+    // declaration-site exclusion — it just isn't THIS shape's concern.
+    const laterReference = parseSource(
+      "probe9b.ts",
+      "function F({ rateUnit }: { rateUnit: string }) { return rateUnit; }",
+    );
+    expect(unroutedRateUnitReadsInFile(laterReference).length).toBeGreaterThan(0);
+  });
+
+  it("does not excuse a transform disguised as a passthrough, or the wrong property name", () => {
+    // Same shape as the live bypass this generation exists for: a read that reaches
+    // render through a helper function declared elsewhere in the file.
+    const throughHelper = parseSource(
+      "probe10.tsx",
+      [
+        "function unitOf(x: any) { return x.rateUnit.toLowerCase(); }",
+        "const y = <span>{unitOf(l)}</span>;",
+      ].join("\n"),
+    );
+    expect(unroutedRateUnitReadsInFile(throughHelper).length).toBeGreaterThan(0);
+
+    // A .toLowerCase() call sits between the read and the property value — not an
+    // unchanged passthrough, whatever the property is named.
+    const transformed = parseSource(
+      "probe11.ts",
+      "function mapLine(l: any) { return { rateUnit: l.rateUnit.toLowerCase() }; }",
+    );
+    expect(unroutedRateUnitReadsInFile(transformed).length).toBeGreaterThan(0);
+
+    // Passed through unchanged, but into the WRONG property — the live bypass's exact
+    // shape (`unitLabel: l.rateUnit.toLowerCase()`), simplified to the pure-passthrough
+    // case to isolate the property-name check.
+    const wrongProperty = parseSource(
+      "probe12.ts",
+      "function mapLine(l: any) { return { unitLabel: l.rateUnit }; }",
+    );
+    expect(unroutedRateUnitReadsInFile(wrongProperty).length).toBeGreaterThan(0);
   });
 
   it("still excuses the two legitimate pass-through shapes", () => {

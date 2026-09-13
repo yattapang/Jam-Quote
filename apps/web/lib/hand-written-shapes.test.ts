@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { collect, parseFile, parseSource, unwrap } from "./test/source-ast";
+import { collect, parseFile, parseSource, reachableClosure, unwrap } from "./test/source-ast";
 
 /**
  * The response shapes still written by hand, and whether anything reads them.
@@ -57,6 +57,37 @@ import { collect, parseFile, parseSource, unwrap } from "./test/source-ast";
  *   else in the app naming `ZzDead`) is dead, not live. Two distinct shapes
  *   that happen to share a name would still be indistinguishable to this
  *   check; nothing in api-client.ts does.
+ * - Test files ARE included in the scanned set (`sourceFiles` excludes only
+ *   `node_modules`, `.next`, dotfiles, and this file itself by exact path) — a shape
+ *   referenced only from a `.test.ts` counts as live. That is deliberate: a shape a
+ *   test imports and asserts against is genuinely reachable code, not dead. It is also
+ *   the exact adversarial gap below: a test file can keep a shape "live" while nothing
+ *   that ships references it at all.
+ *
+ * Adversarial-only, found by deliberately trying to defeat this guard rather than by any
+ * real defect seen in the codebase:
+ *
+ * - A dead shape kept alive by another dead file: `ZzDead` referenced only from
+ *   `zz-unused-helper.ts`, which nothing imports either. The reachability closure over
+ *   `edges`/`external` only asks "is there a reference to this name outside every shape's
+ *   own declaration" — it does not ask whether the FILE holding that reference is itself
+ *   ever reached from anything real. A whole unused module keeps every shape it mentions
+ *   "live" forever.
+ * - An unused barrel re-export — `export { ZzDead } from "@/lib/api-client";` in a barrel
+ *   nothing imports — produces a real `ExportSpecifier` `typeReferences` counts, so the
+ *   same gap applies: the re-export is a reference, whether or not the barrel itself is
+ *   ever used.
+ * - An unused HELPER's parameter type: `function neverCalled(x: ZzDead) {}`, where
+ *   `neverCalled` is itself never referenced. The parameter type is a real
+ *   `TypeReferenceNode`, so `ZzDead` reads as live via a function that nothing calls.
+ *
+ * None of these three is a TYPE-checker question this parse could answer even in
+ * principle without becoming a second dead-code checker over the whole app (which files
+ * are ever imported from an entry point, which functions are ever called) — exactly the
+ * kind of project-of-its-own scope this file's own doctrine (S16's header above) refuses
+ * to take on for rendering. "Referenced by something" is not "used"; only a real
+ * reachability analysis from the app's actual entry points would close this, and that is
+ * a different, much larger guard.
  */
 
 const WEB = join(process.cwd());
@@ -183,11 +214,15 @@ function contains(range: ts.Node, node: ts.Node): boolean {
 
 /**
  * Does `sf` import `name` from `api-client.ts` (by any relative or aliased path, e.g.
- * `"./api-client"`, `"@/lib/api-client"`), re-export it from there, or is `sf` the
- * CLIENT file itself (so no import is needed for a reference to resolve)? A reference is
- * only ever counted as pointing at a shape's declaration when this holds — otherwise a
- * same-named identifier in another file is just that: a different, unrelated name that
- * happens to be spelled the same, and must not keep a dead shape alive.
+ * `"./api-client"`, `"@/lib/api-client"`), re-export it from there, import the whole
+ * module as a namespace (`import * as C`, or the type-only `import type * as C` — a
+ * reference used only as a TYPE goes through a namespace import exactly like a value
+ * one does, and a shape referenced only as `C.ApiJob` is a real use of `ApiJob`, not a
+ * dead one), or is `sf` the CLIENT file itself (so no import is needed for a reference to
+ * resolve)? A reference is only ever counted as pointing at a shape's declaration when
+ * this holds — otherwise a same-named identifier in another file is just that: a
+ * different, unrelated name that happens to be spelled the same, and must not keep a
+ * dead shape alive.
  */
 function importsNameFromClient(sf: ts.SourceFile, name: string): boolean {
   if (sf === clientSf) return true;
@@ -196,7 +231,9 @@ function importsNameFromClient(sf: ts.SourceFile, name: string): boolean {
   for (const imp of collect(sf, ts.isImportDeclaration)) {
     if (!fromClientModule(imp.moduleSpecifier)) continue;
     const clause = imp.importClause;
-    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    if (!clause?.namedBindings) continue;
+    if (ts.isNamespaceImport(clause.namedBindings)) return true;
+    if (!ts.isNamedImports(clause.namedBindings)) continue;
     if (clause.namedBindings.elements.some((el) => (el.propertyName ?? el.name).text === name)) return true;
   }
   for (const exp of collect(sf, ts.isExportDeclaration)) {
@@ -298,19 +335,7 @@ describe("hand-written response shapes", () => {
       }
     }
 
-    const live = new Set(external);
-    for (let changed = true; changed; ) {
-      changed = false;
-      for (const [from, tos] of edges) {
-        if (!live.has(from)) continue;
-        for (const to of tos) {
-          if (!live.has(to)) {
-            live.add(to);
-            changed = true;
-          }
-        }
-      }
-    }
+    const live = reachableClosure(external, edges);
 
     const dead = discovered.filter((name) => !live.has(name));
     expect(dead).toEqual([]);
@@ -344,14 +369,7 @@ describe("hand-written response shapes", () => {
         external.add(name);
       }
     }
-    const live = new Set(external);
-    for (let changed = true; changed; ) {
-      changed = false;
-      for (const [from, tos] of edges) {
-        if (!live.has(from)) continue;
-        for (const to of tos) if (!live.has(to)) { live.add(to); changed = true; }
-      }
-    }
+    const live = reachableClosure(external, edges);
     expect(live.has("ZzA")).toBe(false);
     expect(live.has("ZzB")).toBe(false);
   });
@@ -368,6 +386,26 @@ describe("hand-written response shapes", () => {
       'import type { ZzDead } from "@/lib/api-client";\nconst x: ZzDead = { } as ZzDead;',
     );
     expect(importsNameFromClient(importingFile, "ZzDead")).toBe(true);
+  });
+
+  it("a type-only namespace import used as C.Name counts as a use of Name", () => {
+    // False alarm the previous version carried: `import type * as C from "./api-client"`
+    // followed by a reference as `C.ApiJob` is a real use of ApiJob — TypeReferenceNode's
+    // typeName is the QualifiedName `C.ApiJob`, and `entityName` already reduces that to
+    // "ApiJob" — but `importsNameFromClient` only ever inspected `ts.isNamedImports`
+    // bindings, so a namespace import (type-only or not) was invisible to it and a shape
+    // referenced ONLY this way falsely read as unreachable/dead.
+    const viaNamespace = parseSource(
+      "ns.ts",
+      'import type * as C from "@/lib/api-client";\nconst x: C.ApiJob = {} as C.ApiJob;',
+    );
+    expect(importsNameFromClient(viaNamespace, "ApiJob")).toBe(true);
+
+    const viaValueNamespace = parseSource(
+      "ns2.ts",
+      'import * as C from "./api-client";\nconst x: C.ApiJob = {} as C.ApiJob;',
+    );
+    expect(importsNameFromClient(viaValueNamespace, "ApiJob")).toBe(true);
   });
 
   it("a shape that references only itself counts as dead, not live", () => {
