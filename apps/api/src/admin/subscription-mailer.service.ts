@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Resend } from "resend";
-import { NoticeKind } from "@jamquote/core";
+import { NoticeKind, formatPlatformMoney } from "@jamquote/core";
 
 /**
  * The subscription emails: renewal reminders, and the notice that a term
@@ -78,10 +78,7 @@ export class SubscriptionMailerService {
       month: "long",
       day: "numeric",
     });
-    const amount = `${currency} $${(amountCents / 100).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+    const amount = formatPlatformMoney(amountCents, currency);
 
     // Deliberately plain. These go to a contractor or their bookkeeper, not to
     // a marketing list, and the one thing each must communicate is a date and

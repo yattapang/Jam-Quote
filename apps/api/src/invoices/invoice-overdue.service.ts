@@ -5,6 +5,7 @@ import {
   InvoiceStatus,
   JAMAICA_UTC_OFFSET_MS,
   settlementOf,
+  formatPlatformMoney,
   type RetainableInvoice,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -176,6 +177,7 @@ export class InvoiceOverdueService {
       select: {
         id: true,
         name: true,
+        currency: true,
         billingContactEmail: true,
         users: { where: { email: { not: null } }, select: { email: true, role: true } },
         invoices: {
@@ -212,7 +214,13 @@ export class InvoiceOverdueService {
       // "$0.00 outstanding" against a $0.00 total.
       if (outstandingCents <= 0) continue;
 
-      const delivered = await this.sendDigest(to, business.name, business.invoices, outstandingCents);
+      const delivered = await this.sendDigest(
+        to,
+        business.name,
+        business.currency,
+        business.invoices,
+        outstandingCents,
+      );
       // The date is stamped whether or not the send succeeded. A bounced
       // digest retried every hour for a week would be worse than one missed
       // day, and the figures are on the dashboard regardless.
@@ -228,6 +236,7 @@ export class InvoiceOverdueService {
   private async sendDigest(
     to: string,
     businessName: string,
+    currency: string,
     invoices: (RetainableInvoice & { number: string; dueDate: Date | null })[],
     outstandingCents: number,
   ): Promise<boolean> {
@@ -237,8 +246,7 @@ export class InvoiceOverdueService {
       return false;
     }
 
-    const money = (c: number) =>
-      `$${(c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const money = (c: number) => formatPlatformMoney(c, currency);
     const rows = invoices
       .map(
         (i) =>
