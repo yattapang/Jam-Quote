@@ -311,6 +311,9 @@ function ComponentRow({
         <Input
           label="Qty / unit"
           type="number"
+          min={BOUNDS.quantity.min}
+          max={BOUNDS.quantity.max}
+          step={BOUNDS.quantity.step}
           value={draft.quantityPerUnit}
           onChange={(e) => onChange({ quantityPerUnit: e.target.value })}
         />
@@ -326,6 +329,7 @@ function ComponentRow({
         <Input
           label="Unit price $"
           type="number"
+          min={BOUNDS.moneyDollars.min}
           value={draft.unitPriceDollars}
           onChange={(e) => onChange({ unitPriceDollars: e.target.value })}
         />

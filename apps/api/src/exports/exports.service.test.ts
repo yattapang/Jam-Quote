@@ -82,11 +82,12 @@ function invoices() {
 // `rows` is deliberately loose: the fixtures differ by design — one carries
 // markup and a discount, the others do not — and inferring the type from one of
 // them would make adding the honest shape a type error rather than a test.
-function harness(rows: any[] = invoices(), payments: unknown[] = []) {
+function harness(rows: any[] = invoices(), payments: unknown[] = [], currency = "JMD") {
   // Typed with the args parameter so the tests below can assert on the WHERE
   // clause — the filtering (drafts out, tenant scoping, the range) is the part
   // worth pinning, and it is only observable in the query.
   const prisma = {
+    business: { findUniqueOrThrow: vi.fn((_args: any) => Promise.resolve({ currency })) },
     invoice: { findMany: vi.fn((_args: any) => Promise.resolve(rows)) },
     payment: { findMany: vi.fn((_args: any) => Promise.resolve(payments)) },
     client: { findMany: vi.fn((_args: any) => Promise.resolve([])) },
@@ -535,6 +536,43 @@ describe("the export headers are a contract", () => {
  * limits are now assertions, including the two cases where it is knowingly wrong,
  * which is the difference between a documented limit and a latent bug.
  */
+describe("exports carry the tenant's own currency, not a hardcoded JMD", () => {
+  const usdPayment = {
+    paidAt: new Date("2026-08-05T00:00:00.000Z"),
+    amountCents: 500_000,
+    method: "CARD",
+    status: "completed",
+    providerCode: null,
+    reference: null,
+    invoice: { number: "INV-0001", client: { firstName: "Marcia", lastName: "Brown" } },
+  };
+
+  it("labels invoices-issued rows and the header note with a USD business's own currency", async () => {
+    const { svc } = harness(invoices(), [], "USD");
+    const { csv } = await svc.invoicesIssued("b1", RANGE);
+    const dataRow = dataRows(csv, "Invoice number,Issue date,Due date")[0]!;
+    expect(dataRow.endsWith(",USD")).toBe(true);
+    expect(csv).toContain("Amounts are USD");
+    expect(csv).not.toContain("JMD");
+  });
+
+  it("labels invoice-lines rows with a USD business's own currency", async () => {
+    const { svc } = harness(invoices(), [], "USD");
+    const { csv } = await svc.invoiceLines("b1", RANGE);
+    const dataRow = dataRows(csv, "Invoice number,Issue date,Client")[0]!;
+    expect(dataRow.endsWith(",USD")).toBe(true);
+    expect(csv).not.toContain("JMD");
+  });
+
+  it("labels payments-received rows with a USD business's own currency", async () => {
+    const { svc } = harness(invoices(), [usdPayment], "USD");
+    const { csv } = await svc.paymentsReceived("b1", RANGE);
+    const dataRow = dataRows(csv, "Date received,Invoice number")[0]!;
+    expect(dataRow.endsWith(",USD")).toBe(true);
+    expect(csv).not.toContain("JMD");
+  });
+});
+
 describe("cellByHeader — what it is safe against", () => {
   const csv = (header: string, row: string) => "﻿" + ["meta", "", header, row].join("\r\n");
 

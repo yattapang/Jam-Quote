@@ -376,6 +376,14 @@ function edgeProblems(schema: AnyZod, b: NumericBound): string[] {
     if (!ok(b.max)) problems.push(`refuses max ${b.max}`);
     if (ok(b.max + nudge)) problems.push(`accepts above max (${b.max + nudge})`);
   }
+  // S18: a fractional step is a DECIMAL-PLACE limit, not just a range edge. A
+  // value finer than the step — min + step/10 — has more decimal places than
+  // the step allows and must be refused; checking only min/max let a scale
+  // check that always passes go unnoticed.
+  if (b.step !== undefined && b.step < 1) {
+    const finer = b.min + b.step / 10;
+    if (ok(finer)) problems.push(`accepts a value finer than step ${b.step} (${finer})`);
+  }
   return problems;
 }
 

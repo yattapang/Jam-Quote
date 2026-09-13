@@ -61,6 +61,10 @@ export class ExportsService {
    * `issueDate` exists as a separate field.
    */
   async invoicesIssued(businessId: string, range: ExportRange): Promise<ExportFile> {
+    // Fired alongside the query below, not awaited first: tests assert on the
+    // query's mock call synchronously (before any microtask turn), and an
+    // await here first would push that call a tick later.
+    const currencyPromise = this.businessCurrency(businessId);
     const invoices = await this.prisma.invoice.findMany({
       where: {
         businessId,
@@ -71,6 +75,7 @@ export class ExportsService {
       orderBy: { issueDate: "asc" },
       include: { client: { select: { firstName: true, lastName: true } } },
     });
+    const currency = await currencyPromise;
 
     const rows = invoices.map((i) => [
       i.number,
@@ -92,7 +97,7 @@ export class ExportsService {
       // file it has been billed and is receivable, just not yet payable.
       csvMoney(i.totalCents - i.paidCents),
       csvMoney(i.retentionCents),
-      "JMD",
+      currency,
     ]);
 
     return this.file("invoices-issued", "Accrual (invoices issued)", range, [
@@ -113,7 +118,7 @@ export class ExportsService {
       "Outstanding",
       "Retention held",
       "Currency",
-    ], rows);
+    ], rows, currency);
   }
 
   /**
@@ -124,6 +129,7 @@ export class ExportsService {
    * cannot be checked, while STANDARD / ZERO_RATED / EXEMPT lines can.
    */
   async invoiceLines(businessId: string, range: ExportRange): Promise<ExportFile> {
+    const currencyPromise = this.businessCurrency(businessId);
     const invoices = await this.prisma.invoice.findMany({
       where: {
         businessId,
@@ -138,6 +144,7 @@ export class ExportsService {
         sections: { orderBy: { sort: "asc" }, include: { lineItems: { orderBy: { sort: "asc" } } } },
       },
     });
+    const currency = await currencyPromise;
 
     const rows: CsvValue[][] = [];
     for (const invoice of invoices) {
@@ -171,7 +178,7 @@ export class ExportsService {
           // differently — or, as happened here, read different fields.
           csvMoney(lineTotalCents),
           line.gctTreatment,
-          "JMD",
+          currency,
         ]);
       }
     }
@@ -189,7 +196,7 @@ export class ExportsService {
       "Line total",
       "GCT treatment",
       "Currency",
-    ], rows);
+    ], rows, currency);
   }
 
   /**
@@ -200,6 +207,7 @@ export class ExportsService {
    * that was reversed never was one.
    */
   async paymentsReceived(businessId: string, range: ExportRange): Promise<ExportFile> {
+    const currencyPromise = this.businessCurrency(businessId);
     const payments = await this.prisma.payment.findMany({
       where: {
         deletedAt: null,
@@ -226,6 +234,7 @@ export class ExportsService {
         },
       },
     });
+    const currency = await currencyPromise;
 
     const rows = payments.map((p) => [
       csvDate(p.paidAt),
@@ -237,7 +246,7 @@ export class ExportsService {
       // Text, not a number: a bank reference with leading zeros must survive.
       csvText(p.providerRef),
       p.status,
-      "JMD",
+      currency,
     ]);
 
     return this.file("payments-received", "Cash (payments received)", range, [
@@ -250,7 +259,7 @@ export class ExportsService {
       "Reference",
       "Status",
       "Currency",
-    ], rows);
+    ], rows, currency);
   }
 
   /**
@@ -291,6 +300,20 @@ export class ExportsService {
   }
 
   /**
+   * The tenant's own currency, for the "Currency" column and the header
+   * note. Every export is scoped to one business, so this is one lookup, not
+   * a per-row join — a USD contractor's file must not read "JMD" just
+   * because that is the platform's own default.
+   */
+  private async businessCurrency(businessId: string): Promise<string> {
+    const business = await this.prisma.business.findUniqueOrThrow({
+      where: { id: businessId },
+      select: { currency: true },
+    });
+    return business.currency;
+  }
+
+  /**
    * Wraps rows in the header block every file carries.
    *
    * The basis and the generation timestamp are IN the file, not just in its
@@ -305,12 +328,13 @@ export class ExportsService {
     range: ExportRange,
     headers: readonly string[],
     rows: readonly (readonly CsvValue[])[],
+    currency?: string,
   ): ExportFile {
     const meta: (readonly (string | number)[])[] = [
       ["Basis", basis],
       ["Period", `${csvDate(range.from)} to ${csvDate(range.to)}`],
       ["Generated", new Date().toISOString()],
-      ["Note", "Draft documents are excluded. Amounts are JMD."],
+      ["Note", `Draft documents are excluded.${currency ? ` Amounts are ${currency}.` : ""}`],
       [],
     ];
     // The meta block is written as leading rows of the same file rather than a

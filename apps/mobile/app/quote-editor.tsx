@@ -1,4 +1,4 @@
-import { GctTreatment, RateUnit } from "@jamquote/core";
+import { formatPlatformMoney, GctTreatment, RateUnit } from "@jamquote/core";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
@@ -227,8 +227,11 @@ function TotalsRow({
 }
 
 function formatUnitPrice(cents: number, rateUnit: RateUnit): string {
-  const dollars = (cents / 100).toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `$${dollars}${rateUnitLabel[rateUnit]}`;
+  // No business currency is tracked on the client yet (mobile has nothing
+  // equivalent to a business record), so this passes null — same JMD-shaped
+  // fallback formatPlatformMoney uses for an unset code, and what the
+  // hand-rolled "$" + en-JM formatting here always produced anyway.
+  return `${formatPlatformMoney(cents, null)}${rateUnitLabel[rateUnit]}`;
 }
 
 function gctLabel(treatment: GctTreatment): string {
