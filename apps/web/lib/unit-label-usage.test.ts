@@ -2,7 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { parseFile, walk, renderedExpressions, unwrap } from "./test/source-ast";
+import { parseFile, parseSource, callsTo, destructuredPropertyName, renderedExpressions, unwrap } from "./test/source-ast";
 
 /**
  * A source-scanning guard, not a behaviour test.
@@ -91,38 +91,56 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 const WEB_ROOT = join(__dirname, "..");
 const rel = (f: string) => f.slice(WEB_ROOT.length + 1).split("\\").join("/");
 
-/** Every name a variable-declaration's binding pattern destructures from a `rateUnit` property. */
-function rateUnitBoundNames(sf: ts.SourceFile): Set<string> {
-  const names = new Set<string>();
-  walk(sf, (n) => {
-    if (!ts.isBindingElement(n) || !ts.isIdentifier(n.name)) return;
-    const propertyName = n.propertyName
-      ? ts.isIdentifier(n.propertyName)
-        ? n.propertyName.text
-        : undefined
-      : n.name.text;
-    if (propertyName === "rateUnit") names.add(n.name.text);
-  });
-  return names;
-}
-
-/** Is `node` a read of the line's rate unit — `l.rateUnit`, or a destructured `rateUnit`? */
-function isRateUnitRead(node: ts.Node, destructured: Set<string>): boolean {
+/**
+ * Is `node` a read of the line's rate unit — `l.rateUnit`, or an identifier that resolves,
+ * through the shared binder, to a `rateUnit` property destructured from something? Binder
+ * resolution replaces the previous file-wide name match, which keyed every identifier
+ * spelled `rateUnit` anywhere in the file rather than the one actually bound to that
+ * property — a bypass nobody had to try for, the same class the parser's own header warns
+ * about for `const cur`.
+ */
+function isRateUnitRead(node: ts.Node): boolean {
   if (ts.isPropertyAccessExpression(node) && node.name.text === "rateUnit") return true;
-  if (ts.isIdentifier(node) && !ts.isPropertyAccessExpression(node.parent) && destructured.has(node.text)) {
-    return true;
+  if (ts.isIdentifier(node) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)) {
+    return destructuredPropertyName(node) === "rateUnit";
   }
   return false;
 }
 
-/** Does `node` sit inside an argument (at any depth) of a call to `lineUnitLabel`? */
-function isInsideLineUnitLabelCall(node: ts.Node, stopAt: ts.Node): boolean {
+/**
+ * Is a `.rateUnit` read excused because it is routed through `lineUnitLabel`, unchanged?
+ * Excused only when:
+ *  - the read IS (not merely "inside") the call's first argument — `lineUnitLabel(l.rateUnit)`,
+ *    the read passed straight through with nothing done to it first; or
+ *  - the read is the value of a `rateUnit:` property inside an object-literal argument,
+ *    passing the field through unchanged (`lineUnitLabel({ ...l, rateUnit: x.rateUnit })`).
+ * `lineUnitLabel({ ...l, unitLabel: l.rateUnit.toLowerCase() })` — the live bypass this
+ * replaces — matches neither: the read is not the argument itself (it is the object of a
+ * further `.toLowerCase()` call), and it is assigned to `unitLabel`, not `rateUnit`.
+ */
+function isRoutedThroughLineUnitLabel(node: ts.Node, call: ts.CallExpression): boolean {
+  if (call.arguments.length > 0 && unwrap(call.arguments[0]!) === node) return true;
+  const p = node.parent;
+  if (p && ts.isPropertyAssignment(p) && p.initializer === node && ts.isIdentifier(p.name) && p.name.text === "rateUnit") {
+    const obj = p.parent;
+    if (ts.isObjectLiteralExpression(obj) && call.arguments.some((a) => unwrap(a) === obj)) return true;
+  }
+  return false;
+}
+
+/**
+ * Does `node` sit inside an argument (at any depth) of a REAL call to `lineUnitLabel`,
+ * resolved via the shared binder's `callsTo` (so an alias, `.call`/`.apply`, or a shadowed
+ * name is judged correctly rather than by matching the callee's identifier text), and is
+ * that specific occurrence excused per `isRoutedThroughLineUnitLabel`?
+ */
+function isInsideLineUnitLabelCall(node: ts.Node, sf: ts.SourceFile, stopAt: ts.Node): boolean {
+  const calls = new Set(callsTo(sf, "lineUnitLabel"));
   let current: ts.Node = node;
   while (current !== stopAt && current.parent) {
     const parent = current.parent;
-    if (ts.isCallExpression(parent) && parent.arguments.includes(current as ts.Expression)) {
-      const callee = unwrap(parent.expression);
-      if (ts.isIdentifier(callee) && callee.text === "lineUnitLabel") return true;
+    if (ts.isCallExpression(parent) && calls.has(parent) && isRoutedThroughLineUnitLabel(node, parent)) {
+      return true;
     }
     current = parent;
   }
@@ -149,11 +167,11 @@ function walkRendered(node: ts.Node, visit: (n: ts.Node) => void): void {
 }
 
 /** Every `.rateUnit` (or destructured equivalent) read inside `root` that is not routed through `lineUnitLabel`. */
-function unroutedRateUnitReads(root: ts.Expression, destructured: Set<string>): ts.Node[] {
+function unroutedRateUnitReads(root: ts.Expression, sf: ts.SourceFile): ts.Node[] {
   const offenders: ts.Node[] = [];
   walkRendered(root, (node) => {
-    if (!isRateUnitRead(node, destructured)) return;
-    if (!isInsideLineUnitLabelCall(node, root)) offenders.push(node);
+    if (!isRateUnitRead(node)) return;
+    if (!isInsideLineUnitLabelCall(node, sf, root)) offenders.push(node);
   });
   return offenders;
 }
@@ -183,14 +201,43 @@ describe("a line's unit is resolved in one place", () => {
     for (const f of files) {
       if (ALLOWED.has(rel(f))) continue;
       const sf = parseFile(f);
-      const destructured = rateUnitBoundNames(sf);
       for (const expr of renderedExpressions(sf)) {
-        if (unroutedRateUnitReads(expr, destructured).length > 0) {
+        if (unroutedRateUnitReads(expr, sf).length > 0) {
           offenders.push(rel(f));
           break;
         }
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it("does not excuse a transform of rateUnit merely because it sits inside a lineUnitLabel(...) call", () => {
+    // The live bypass: excusing ANY .rateUnit read anywhere inside the call's arguments
+    // let this exact rewrite through, because `l.rateUnit.toLowerCase()` is textually
+    // inside the call even though its result feeds `unitLabel`, not `rateUnit`, and
+    // nothing routes it through lineUnitLabel at all.
+    const probeSf = parseSource(
+      "probe.tsx",
+      "const x = <span>{lineUnitLabel({ ...l, unitLabel: l.rateUnit.toLowerCase() })}</span>;",
+    );
+    for (const expr of renderedExpressions(probeSf)) {
+      expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("still excuses the two legitimate pass-through shapes", () => {
+    const passThroughFirstArg = parseSource(
+      "probe2.tsx",
+      "const x = <span>{lineUnitLabel(l.rateUnit, l.unitLabel)}</span>;",
+    );
+    const passThroughField = parseSource(
+      "probe3.tsx",
+      "const x = <span>{lineUnitLabel({ ...l, rateUnit: l.rateUnit })}</span>;",
+    );
+    for (const sf of [passThroughFirstArg, passThroughField]) {
+      for (const expr of renderedExpressions(sf)) {
+        expect(unroutedRateUnitReads(expr, sf)).toHaveLength(0);
+      }
+    }
   });
 });

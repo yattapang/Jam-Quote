@@ -56,15 +56,42 @@ import ts from "typescript";
  *   not a literal yields a call whose arguments are unknown (a single spread).
  * - `jsxAttributes` follows spreads of object literals and of never-written bindings to
  *   them; `{...props}` from a parameter or a call is not reported.
+ * - A destructured PARAMETER's default is data, even when every call site in the file
+ *   happens to omit the argument: `function F({ cap = 100 }) { return <input max={cap}/> }`
+ *   reads `cap` as a parameter, not a `BindingElement` reachable from a
+ *   `VariableDeclaration`, so `declarationIsStatic` refuses it on purpose. Treating it as
+ *   static would be unsound the moment ANY caller supplies a real argument — the same
+ *   source location would then render two different things depending on the caller, which
+ *   is exactly the "genuinely unknowable" case this file's own tie-break sends toward data,
+ *   not toward a false alarm. A class `static` FIELD read as `L.CAP` does not have this
+ *   problem (it belongs to the class, not to a call site) and IS treated as static, via
+ *   `staticClassFieldIsStatic`, when it is declared with a static initializer and never
+ *   written to elsewhere.
  */
 
 export function parseFile(path: string): ts.SourceFile {
   return parseSource(path, readFileSync(path, "utf8"));
 }
 
+/**
+ * `ts.createSourceFile` parses even badly broken text into a best-effort tree — it never
+ * throws on its own. Every guard here is a claim about the SHAPE of real source, and a
+ * shape read from a file that does not compile proves nothing. `parseDiagnostics` is the
+ * parser's own internal record of what it could not make sense of (not part of the public
+ * `.d.ts`, hence the cast); a non-empty list means the tree is a guess, not a parse, so a
+ * guard reading it would stay green over a syntax error nobody noticed.
+ */
 export function parseSource(fileName: string, text: string): ts.SourceFile {
   const kind = /\.[jt]sx$/.test(fileName) ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  return ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind);
+  const sf = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, kind);
+  const diagnostics = (sf as unknown as { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ?? [];
+  if (diagnostics.length > 0) {
+    const first = diagnostics[0]!;
+    const message = ts.flattenDiagnosticMessageText(first.messageText, "\n");
+    const at = sf.getLineAndCharacterOfPosition(first.start ?? 0);
+    throw new Error(`source-ast: ${fileName}:${at.line + 1}:${at.character + 1} does not parse: ${message}`);
+  }
+  return sf;
 }
 
 /** Depth-first visit of every node. */
@@ -398,6 +425,92 @@ export function callsTo(root: ts.Node, name: string): ts.CallExpression[] {
   return found;
 }
 
+/**
+ * Unwraps a pure property/index-access chain — literal string keys only, no calls, no
+ * arithmetic — down to its root identifier. Returns `undefined` the moment anything else
+ * is in the way, e.g. `Math.min(BOUNDS.x, 50)` (root is wrapped in a call) or
+ * `BOUNDS.x + 50` (root is the left side of a `+`, not the whole expression).
+ */
+function chainRoot(expr: ts.Expression): { root: ts.Identifier; path: string[] } | undefined {
+  const e = unwrap(expr);
+  if (ts.isIdentifier(e)) return { root: e, path: [] };
+  if (ts.isPropertyAccessExpression(e)) {
+    const base = chainRoot(e.expression);
+    return base && { root: base.root, path: [...base.path, e.name.text] };
+  }
+  if (ts.isElementAccessExpression(e)) {
+    const key = unwrap(e.argumentExpression);
+    if (!ts.isStringLiteral(key) && !ts.isNoSubstitutionTemplateLiteral(key)) return undefined;
+    const base = chainRoot(e.expression);
+    return base && { root: base.root, path: [...base.path, key.text] };
+  }
+  return undefined;
+}
+
+/** The `ImportDeclaration` a node sits under, or `undefined` if it is not part of one. */
+function enclosingImportDeclaration(node: ts.Node): ts.ImportDeclaration | undefined {
+  for (let n: ts.Node | undefined = node; n; n = n.parent) {
+    if (ts.isImportDeclaration(n)) return n;
+  }
+  return undefined;
+}
+
+function moduleSpecifierOf(decl: ts.ImportDeclaration): string | undefined {
+  return ts.isStringLiteral(decl.moduleSpecifier) ? decl.moduleSpecifier.text : undefined;
+}
+
+/**
+ * Is `expr` (after unwrapping parens/as/!/satisfies) a pure property/index-access chain
+ * whose ROOT identifier is bound to an import of `exportedName` from `moduleSpecifier`?
+ * True for a named import (`import { BOUNDS } from "m"`, used as `BOUNDS.x` or bare
+ * `BOUNDS`), an aliased named import (`import { BOUNDS as B }`, used as `B.x`), and a
+ * namespace import used as `NS.BOUNDS.x` (`import * as NS from "m"`).
+ *
+ * Built for guards that must tell "spends the approved constant" from "is merely static":
+ * `BOUNDS.x` is both; a local `const BOUNDS = { x: 1 }`, `Math.min(BOUNDS.x, 50)` and
+ * `BOUNDS.x + 50` are static but this returns `false` for all three, because none of them
+ * is a bare read of the imported value — the boundary between "the approved constant" and
+ * "a value merely derived from it" is exactly where a guard should still call the result
+ * hand-typed.
+ */
+export function isImportedChain(expr: ts.Expression, moduleSpecifier: string, exportedName: string): boolean {
+  const chain = chainRoot(expr);
+  if (!chain) return false;
+  const fc = fileContext(chain.root);
+  const sym = resolve(chain.root, fc);
+  if (!sym) return false;
+  for (const d of sym.declarations ?? []) {
+    if (ts.isImportSpecifier(d)) {
+      const imported = (d.propertyName ?? d.name).text;
+      const decl = enclosingImportDeclaration(d);
+      if (imported === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+    } else if (ts.isNamespaceImport(d)) {
+      const decl = enclosingImportDeclaration(d);
+      if (chain.path[0] === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * If `id`'s declaration is a destructuring `BindingElement`, the property name it draws
+ * from — its explicit `propertyName` (`const { x: id } = …`), or its own name when
+ * shorthand (`const { id } = …`). `undefined` for anything else: a parameter that is not
+ * itself destructured, a plain variable, an unresolved name. Resolution goes through the
+ * shared binder, not name text, so a parameter named the same thing in an unrelated
+ * function is not mistaken for this binding.
+ */
+export function destructuredPropertyName(id: ts.Identifier): string | undefined {
+  const fc = fileContext(id);
+  const sym = resolve(id, fc);
+  if (!sym) return undefined;
+  const decls = (sym.declarations ?? []).filter(ts.isBindingElement);
+  if (decls.length !== 1) return undefined;
+  const d = decls[0]!;
+  if (d.propertyName) return ts.isIdentifier(d.propertyName) ? d.propertyName.text : undefined;
+  return ts.isIdentifier(d.name) ? d.name.text : undefined;
+}
+
 // ─────────────────────────────────────────────────────────────────────────── JSX
 
 /** The property values named `name` that a JSX spread expression supplies. */
@@ -614,7 +727,11 @@ function isStatic(raw: ts.Expression, ctx: Ctx): boolean {
     });
   }
   if (ts.isIdentifier(expr)) return identifierIsStatic(expr, ctx);
-  if (ts.isPropertyAccessExpression(expr)) return sourceIsStatic(expr.expression, ctx);
+  if (ts.isPropertyAccessExpression(expr)) {
+    const cls = staticClassFieldIsStatic(expr, ctx);
+    if (cls !== undefined) return cls;
+    return sourceIsStatic(expr.expression, ctx);
+  }
   if (ts.isElementAccessExpression(expr)) {
     return isStatic(expr.argumentExpression, ctx) && sourceIsStatic(expr.expression, ctx);
   }
@@ -649,6 +766,15 @@ function callIsStatic(call: ts.CallExpression, ctx: Ctx): boolean {
     if (!argsStatic(call.arguments, ctx)) return false;
     for (const r of sub.roots) ctx.roots.add(r);
     return true;
+  }
+
+  // An immediately-invoked arrow or function expression — `(() => 3)()` — is exactly the
+  // same shape as `const f = () => 3; f()` (already handled below via `returnsStatic`),
+  // just without the intervening name. Read as data, `(() => 3)()` typed directly inside
+  // rendered JSX was a live bypass. `returnsStatic` already refuses a body that reads a
+  // parameter, so this stays sound without substituting the call's arguments.
+  if (ts.isArrowFunction(callee) || ts.isFunctionExpression(callee)) {
+    return returnsStatic(callee, ctx);
   }
 
   if (!ts.isIdentifier(callee)) return false;
@@ -687,6 +813,55 @@ function returnsStatic(fn: ts.FunctionLikeDeclaration, ctx: Ctx): boolean {
   };
   ts.forEachChild(body, visit);
   return returns.every((r) => !r.expression || isStatic(r.expression, ctx));
+}
+
+/**
+ * `L.CAP` where `L` is a class and `CAP` is a `static` field: sound to call static on its
+ * own terms, unlike a class instance property, because a static field belongs to the
+ * class itself rather than to any particular value flowing through the program — there is
+ * no "which `L` is this" question the way there is for a parameter or a destructured
+ * value. Static when the field is declared `static`, is never written to outside its own
+ * initializer (checked the same way a module `let` is, via `bindingTainted` on the field's
+ * own symbol — so `L.CAP = 5` elsewhere defeats it), and its initializer is itself static.
+ * Returns `undefined` (not a class-static-field access at all) rather than `false` so the
+ * caller falls through to the ordinary property-read path for every other case, e.g.
+ * `C.jmd` off a local object literal.
+ */
+/**
+ * Is a class's static field ever written to outside its own declaration's initializer?
+ * `referenceTaints`/`bindingTainted` assume a value binding — a variable, a parameter —
+ * referenced BY VALUE; a static field is instead reached through `X.CAP`, where the
+ * identifier `CAP` sits in the `.name` position of a `PropertyAccessExpression`, never by
+ * itself, so that machinery never sees a write through it. This walks every identifier
+ * bound to the field's symbol and asks whether the ENCLOSING property access is a write
+ * target (`L.CAP = …`, `L.CAP++`, a destructuring target).
+ */
+function classFieldWritten(propSym: ts.Symbol, fc: FileContext): boolean {
+  for (const id of fc.byName.get(propSym.name) ?? []) {
+    const p = id.parent;
+    if (!ts.isPropertyAccessExpression(p) || p.name !== id) continue;
+    if (fc.checker.getSymbolAtLocation(id) !== propSym) continue;
+    if (writeOf(climb(p)) !== "none") return true;
+  }
+  return false;
+}
+
+function staticClassFieldIsStatic(pae: ts.PropertyAccessExpression, ctx: Ctx): boolean | undefined {
+  const obj = unwrap(pae.expression);
+  if (!ts.isIdentifier(obj)) return undefined;
+  const fc = fileContext(obj);
+  const classSym = resolve(obj, fc);
+  if (!classSym || !(classSym.declarations ?? []).some(ts.isClassDeclaration)) return undefined;
+  const propSym = fc.checker.getSymbolAtLocation(pae.name);
+  if (!propSym) return undefined;
+  const propDecls = (propSym.declarations ?? []).filter(ts.isPropertyDeclaration);
+  if (propDecls.length === 0) return undefined;
+  const allStatic = propDecls.every((d) => (ts.getCombinedModifierFlags(d) & ts.ModifierFlags.Static) !== 0);
+  if (!allStatic) return undefined;
+  if (classFieldWritten(propSym, fc)) return false;
+  const ok = propDecls.every((d) => !!d.initializer && isStatic(d.initializer, ctx));
+  if (ok) ctx.roots.add(pae.name.text);
+  return ok;
 }
 
 /** The object of `x.y` or `x[0]`: an import counts, as does anything itself static. */

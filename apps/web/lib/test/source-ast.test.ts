@@ -5,6 +5,8 @@ import {
   attributeValue,
   callsTo,
   collect,
+  destructuredPropertyName,
+  isImportedChain,
   jsxAttributes,
   parseSource,
   renderedExpressions,
@@ -48,6 +50,8 @@ describe("analyseStatic: values fixed by constants", () => {
     ["a global coercion behind a cast", 'String("JMD") as CurrencyCode'],
     ["a ternary over literals", 'true ? "JMD" : "USD"'],
     ["undefined", "undefined"],
+    ["an immediately-invoked arrow — the `(() => 3)()` bypass", "(() => 3)()"],
+    ["an immediately-invoked function expression", "(function () { return 3; })()"],
   ])("%s", (_label, expr) => {
     expect(analyseStatic(probe(expr)).static).toBe(true);
   });
@@ -100,6 +104,7 @@ describe("analyseStatic: values computed from data", () => {
     ["a call to an undeclared function", "load()", ""],
     ["an impure global — `fetch(\"/api\")`", 'fetch("/api")', ""],
     ["a global method call", "Date.now()", ""],
+    ["an immediately-invoked arrow reading its own parameter", "((x) => x)(load())", ""],
   ])("%s", (_label, expr, prelude) => {
     expect(analyseStatic(probe(expr, prelude)).static).toBe(false);
   });
@@ -140,6 +145,89 @@ describe("analyseStatic: values computed from data", () => {
 
   it("a self-referencing initializer does not loop and is not a constant", () => {
     expect(analyseStatic(probe("A", "const A = A;")).static).toBe(false);
+  });
+});
+
+describe("analyseStatic: class static fields", () => {
+  it("a static field with a literal initializer, read off the class", () => {
+    const result = analyseStatic(probe("L.CAP", "class L { static CAP = 100; }"));
+    expect(result.static).toBe(true);
+  });
+
+  it("a static field written to elsewhere is data, not a constant", () => {
+    const prelude = "class L { static CAP = 100; } function reset() { L.CAP = load(); }";
+    expect(analyseStatic(probe("L.CAP", prelude)).static).toBe(false);
+  });
+
+  it("an instance (non-static) field is not treated as a class-static read", () => {
+    const prelude = "class L { CAP = 100; } const l = new L();";
+    expect(analyseStatic(probe("l.CAP", prelude)).static).toBe(false);
+  });
+});
+
+describe("isImportedChain: telling the approved constant from a merely-static value", () => {
+  const named = 'import { BOUNDS } from "@jamquote/core";';
+  const aliased = 'import { BOUNDS as B } from "@jamquote/core";';
+  const namespace = 'import * as C from "@jamquote/core";';
+
+  it("a bare named import", () => {
+    expect(isImportedChain(probe("BOUNDS", named), "@jamquote/core", "BOUNDS")).toBe(true);
+  });
+
+  it("a property chain off a named import", () => {
+    expect(isImportedChain(probe("BOUNDS.discountPct.min", named), "@jamquote/core", "BOUNDS")).toBe(true);
+  });
+
+  it("an aliased named import", () => {
+    expect(isImportedChain(probe("B.discountPct.min", aliased), "@jamquote/core", "BOUNDS")).toBe(true);
+  });
+
+  it("a namespace import", () => {
+    expect(isImportedChain(probe("C.BOUNDS.discountPct.min", namespace), "@jamquote/core", "BOUNDS")).toBe(true);
+  });
+
+  it("bypass: arithmetic on the imported value is not a bare read", () => {
+    expect(isImportedChain(probe("BOUNDS.depositPct.max + 50", named), "@jamquote/core", "BOUNDS")).toBe(false);
+  });
+
+  it("bypass: wrapped in a call is not a bare read", () => {
+    expect(isImportedChain(probe("Math.min(BOUNDS.x, 50)", named), "@jamquote/core", "BOUNDS")).toBe(false);
+  });
+
+  it("bypass: a local binding sharing the imported name", () => {
+    expect(isImportedChain(probe("BOUNDS.cap", "const BOUNDS = { cap: 100 };"), "@jamquote/core", "BOUNDS")).toBe(
+      false,
+    );
+  });
+});
+
+describe("destructuredPropertyName", () => {
+  it("a shorthand destructure", () => {
+    const sf = parseSource("d.tsx", "function f({ rateUnit }) { return rateUnit; }");
+    const id = collect(sf, ts.isIdentifier).find((n) => n.text === "rateUnit" && ts.isReturnStatement(n.parent))!;
+    expect(destructuredPropertyName(id)).toBe("rateUnit");
+  });
+
+  it("a renamed destructure", () => {
+    const sf = parseSource("d.tsx", "function f({ rateUnit: ru }) { return ru; }");
+    const id = collect(sf, ts.isIdentifier).find((n) => n.text === "ru" && ts.isReturnStatement(n.parent))!;
+    expect(destructuredPropertyName(id)).toBe("rateUnit");
+  });
+
+  it("a plain parameter is not a destructure", () => {
+    const sf = parseSource("d.tsx", "function f(rateUnit) { return rateUnit; }");
+    const id = collect(sf, ts.isIdentifier).find((n) => n.text === "rateUnit" && ts.isReturnStatement(n.parent))!;
+    expect(destructuredPropertyName(id)).toBeUndefined();
+  });
+});
+
+describe("parseSource: a syntax error is not silently parsed", () => {
+  it("throws on unparseable text instead of returning a best-effort guess", () => {
+    expect(() => parseSource("broken.ts", "const x = (;")).toThrow(/does not parse/);
+  });
+
+  it("does not throw on ordinary valid source", () => {
+    expect(() => parseSource("fine.tsx", "const x = <div>{1}</div>;")).not.toThrow();
   });
 });
 

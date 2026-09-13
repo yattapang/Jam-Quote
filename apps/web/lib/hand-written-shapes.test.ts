@@ -48,9 +48,15 @@ import { collect, parseFile, parseSource, unwrap } from "./test/source-ast";
  *   a shape can be "live" by this guard's definition and still have drifted a
  *   field, exactly as `EffectiveRulePack` did. Only a wire contract closes that gap.
  * - "Referenced" means a real type-reference AST node (`ts.TypeReferenceNode`,
- *   an `extends`/`implements` heritage clause, or a named export specifier) whose
- *   name resolves to the shape - never a text match, so a comment or a string
- *   naming the shape does not count.
+ *   an `extends`/`implements` heritage clause, or a named export specifier)
+ *   whose text is the shape's name - never a text match inside a comment or a
+ *   string literal, since neither produces a node here at all. Matching IS by
+ *   NAME, though, not by declaration identity: a reference is counted only
+ *   when it falls OUTSIDE the shape's own declaration, so a shape that refers
+ *   only to itself (`export interface ZzDead { next?: ZzDead }`, with nothing
+ *   else in the app naming `ZzDead`) is dead, not live. Two distinct shapes
+ *   that happen to share a name would still be indistinguishable to this
+ *   check; nothing in api-client.ts does.
  */
 
 const WEB = join(process.cwd());
@@ -114,34 +120,50 @@ function discoverShapes(sf: ts.SourceFile): { interfaces: string[]; aliases: str
   return { interfaces, aliases };
 }
 
+/** Every exported interface/type-alias declaration in `api-client.ts`, keyed by name. */
+function declarationsByName(sf: ts.SourceFile): Map<string, ts.Node> {
+  const byName = new Map<string, ts.Node>();
+  for (const n of collect(sf, ts.isInterfaceDeclaration)) if (isExported(n)) byName.set(n.name.text, n);
+  for (const n of collect(sf, ts.isTypeAliasDeclaration)) if (isExported(n)) byName.set(n.name.text, n);
+  return byName;
+}
+
 /** The rightmost segment of a possibly-qualified type name: `NS.Foo` reads as `Foo`. */
 function entityName(name: ts.EntityName): string {
   return ts.isQualifiedName(name) ? name.right.text : name.text;
 }
 
 /**
- * Every name a file references AS A TYPE: `TypeReferenceNode`s (covers `Foo`, `Foo<T>`,
- * `Foo[]`, `Partial<Foo>`, a JSDoc-free generic argument, everywhere they appear), the
- * `extends`/`implements` targets of an interface or class heritage clause (those are
- * `ExpressionWithTypeArguments`, not `TypeReferenceNode`), and named export specifiers
- * (`export { Foo }`, `export type { Foo as Bar }` - the specifier's own name, or its
- * `propertyName` when the export renames it).
+ * Every AST node that references a name AS A TYPE: `TypeReferenceNode`s (covers `Foo`,
+ * `Foo<T>`, `Foo[]`, `Partial<Foo>`, a JSDoc-free generic argument, everywhere they
+ * appear), the `extends`/`implements` targets of an interface or class heritage clause
+ * (those are `ExpressionWithTypeArguments`, not `TypeReferenceNode`), and named export
+ * specifiers (`export { Foo }`, `export type { Foo as Bar }` - the specifier's own name,
+ * or its `propertyName` when the export renames it).
  *
  * Never a substring match: a shape's name spelled inside a comment or a string literal
  * produces no node here at all, because comments and strings are not represented as
- * identifiers in the AST.
+ * identifiers in the AST. Returned with the referencing node (not collapsed to a `Set` of
+ * names) so a caller can tell a shape's own self-reference - inside its own declaration -
+ * from a reference anywhere else, which matters for the dead-shape check below: a shape
+ * that only ever references itself must count as dead.
  */
-function typeReferences(sf: ts.SourceFile): Set<string> {
-  const names = new Set<string>();
-  for (const ref of collect(sf, ts.isTypeReferenceNode)) names.add(entityName(ref.typeName));
+function typeReferences(sf: ts.SourceFile): { name: string; node: ts.Node }[] {
+  const refs: { name: string; node: ts.Node }[] = [];
+  for (const ref of collect(sf, ts.isTypeReferenceNode)) refs.push({ name: entityName(ref.typeName), node: ref });
   for (const heritage of collect(sf, ts.isExpressionWithTypeArguments)) {
     const expr = unwrap(heritage.expression);
-    if (ts.isIdentifier(expr)) names.add(expr.text);
+    if (ts.isIdentifier(expr)) refs.push({ name: expr.text, node: heritage });
   }
   for (const spec of collect(sf, ts.isExportSpecifier)) {
-    names.add((spec.propertyName ?? spec.name).text);
+    refs.push({ name: (spec.propertyName ?? spec.name).text, node: spec });
   }
-  return names;
+  return refs;
+}
+
+/** Does `range` (a declaration) contain `node`? Used to exclude a shape's self-reference. */
+function contains(range: ts.Node, node: ts.Node): boolean {
+  return node.getStart() >= range.getStart() && node.getEnd() <= range.getEnd();
 }
 
 describe("hand-written response shapes", () => {
@@ -194,14 +216,31 @@ describe("hand-written response shapes", () => {
       .concat(sourceFiles(join(WEB, "components")))
       .filter((f) => f !== SELF);
 
+    const declByName = declarationsByName(clientAst);
     const referenced = new Set<string>();
     for (const file of files) {
       const sf = file === CLIENT ? clientAst : parseFile(file);
-      for (const name of typeReferences(sf)) referenced.add(name);
+      for (const { name, node } of typeReferences(sf)) {
+        const decl = declByName.get(name);
+        if (decl && contains(decl, node)) continue; // a shape referencing only itself is dead
+        referenced.add(name);
+      }
     }
 
     const dead = discovered.filter((name) => !referenced.has(name));
     expect(dead).toEqual([]);
+  });
+
+  it("a shape that references only itself counts as dead, not live", () => {
+    // The defect: `export interface ZzDead { next?: ZzDead }` has a real
+    // TypeReferenceNode naming ZzDead, but it is ZzDead's OWN self-reference, not
+    // something else pointing at it. Excluding that self-reference is what this test
+    // pins; without the exclusion, every self-referencing shape would read as live no
+    // matter how dead it actually is.
+    const sf = parseSource("probe.ts", "export interface ZzDead { next?: ZzDead }");
+    const decl = declarationsByName(sf).get("ZzDead")!;
+    const referencedElsewhere = typeReferences(sf).some((r) => r.name === "ZzDead" && !contains(decl, r.node));
+    expect(referencedElsewhere).toBe(false);
   });
 
   it("the detector fires on a shape referenced only in a comment or a string", () => {
@@ -212,7 +251,7 @@ describe("hand-written response shapes", () => {
       "probe.ts",
       ["// ApiJob is fine, trust me", 'const label = "ApiJob";'].join("\n"),
     );
-    expect(typeReferences(sf).has("ApiJob")).toBe(false);
+    expect(typeReferences(sf).some((r) => r.name === "ApiJob")).toBe(false);
   });
 
   it("the detector fires on a real type reference, an extends clause, and a re-export", () => {
@@ -225,11 +264,11 @@ describe("hand-written response shapes", () => {
         "export type { Qux as Renamed };",
       ].join("\n"),
     );
-    const refs = typeReferences(sf);
-    expect(refs.has("Foo")).toBe(true);
-    expect(refs.has("Bar")).toBe(true);
-    expect(refs.has("Baz")).toBe(true);
-    expect(refs.has("Qux")).toBe(true);
+    const names = typeReferences(sf).map((r) => r.name);
+    expect(names).toContain("Foo");
+    expect(names).toContain("Bar");
+    expect(names).toContain("Baz");
+    expect(names).toContain("Qux");
   });
 
   // Guard against the source file changing under us mid-run without noticing - the

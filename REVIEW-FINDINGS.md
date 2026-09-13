@@ -98,8 +98,26 @@ core 316, api 792, mobile 28, web 632):**
    from syntax errors; typecheck and lint caught it. A source guard passing is not
    evidence the file compiles - the full gate is the gate.
 
-**Still open:** independent review of the whole S14-S19 batch plus the parser rewrite,
-since S17-S19 were originally built against the flawed parser.
+**Independent review of 1b1f35c..99f7412 confirmed 8 more gaps, all now fixed** (every one
+planted in real source and reverted; none was a live product defect):
+S18 accepted any root merely NAMED `BOUNDS` (`BOUNDS.x.max + 50`, `Math.min(...)`, a local
+look-alike) and flagged aliased/namespace imports - now a chain resolved by the binder to
+the `@jamquote/core` import; S18 missed class static fields (fixed) and parameter
+defaults (left as data - a caller can pass a real value - and named in the header);
+S19 excused any `.rateUnit` anywhere inside a `lineUnitLabel(...)` call - now only the
+argument itself or an unchanged pass-through, callee and destructuring via the binder;
+S16 kept a self-referencing dead shape alive; the parser read an unnamed IIFE as data;
+the parser never reported syntax errors (it now throws - the invalid-JSX lesson above);
+S15 only discovered routes under `app/(app)` - it now walks all of `app/` against an
+explicit, reasoned public list. I re-planted the S18 `+ 50` and the S19 `.toLowerCase()`
+bypasses myself: both fail. Gate green (web 656).
+
+**Lesson for the next generation:** three of the eight were the same shape - a check
+keyed on a NAME's spelling (`BOUNDS`, `lineUnitLabel`, a type name) instead of what the
+name resolves to. Doctrine rule 3 ("the class, not the spelling") applies to identifiers
+too: resolve through the binder, never compare text.
+
+**Still open:** a second independent review of these fixes.
 
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 

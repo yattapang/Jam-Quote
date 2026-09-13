@@ -3,7 +3,15 @@ import { join, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
 import { BOUNDS, type NumericBound } from "@jamquote/core";
-import { analyseStatic, attributeValue, callsTo, jsxAttributes, parseFile, parseSource } from "./test/source-ast";
+import {
+  analyseStatic,
+  attributeValue,
+  callsTo,
+  isImportedChain,
+  jsxAttributes,
+  parseFile,
+  parseSource,
+} from "./test/source-ast";
 
 /**
  * A numeric input a contractor types into is bounded, and bounded from `BOUNDS`.
@@ -80,15 +88,23 @@ function enclosingName(node: ts.Node): string {
  * A bound is hand-typed when it is fixed by constants and none of them is `BOUNDS`.
  *
  * One rule for every spelling: `0`, `"0"`, `{"0"}`, `{(0)}`, `{Number(0)}`, `{+0}`,
- * `{1 + 99}` and a file-local `const MAX = 100` are all static with no `BOUNDS` root.
- * `{inputMin(BOUNDS.x)}` is a call to a non-conversion function, which the parser
- * classes as data — correct, since it is the approved helper over the approved source.
+ * `{1 + 99}` and a file-local `const MAX = 100` are all static and none is a bare read of
+ * the imported `BOUNDS`. `{inputMin(BOUNDS.x)}` is a call to a non-conversion function,
+ * which the parser classes as data — correct, since it is the approved helper over the
+ * approved source.
+ *
+ * "Spends `BOUNDS`" means `isImportedChain`, not `roots.has("BOUNDS")`: the latter is a
+ * NAME match and is defeated by a local `const BOUNDS = { cap: 100 }` (whose own root is
+ * also named "BOUNDS"), and it does not distinguish a bare read of the import from one
+ * wrapped in arithmetic or a call — `BOUNDS.depositPct.max + 50` and
+ * `Math.min(BOUNDS.x, 50)` both carry "BOUNDS" in their roots but are hand-typed bounds
+ * merely derived from the approved source, not the approved source itself.
  */
 function isHandTyped(attr: ts.JsxAttribute): boolean {
   const value = attributeValue(attr);
   if (!value) return false;
-  const { static: isStatic, roots } = analyseStatic(value);
-  return isStatic && !roots.has("BOUNDS");
+  const { static: isStatic } = analyseStatic(value);
+  return isStatic && !isImportedChain(value, "@jamquote/core", "BOUNDS");
 }
 
 function boundAttributes(sf: ts.SourceFile): ts.JsxAttribute[] {
@@ -141,7 +157,7 @@ describe("numeric inputs spend the shared BOUNDS", () => {
     const spending = files.flatMap(({ sf }) =>
       boundAttributes(sf).filter((a) => {
         const v = attributeValue(a);
-        return v !== null && analyseStatic(v).roots.has("BOUNDS");
+        return v !== null && isImportedChain(v, "@jamquote/core", "BOUNDS");
       }),
     );
     expect(spending.length).toBeGreaterThanOrEqual(20);
@@ -183,6 +199,26 @@ describe("numeric inputs spend the shared BOUNDS", () => {
     const imp = 'import { BOUNDS, inputMin } from "@jamquote/core";';
     expect(isHandTyped(attr("<Input min={BOUNDS.discountPct.min} />", imp))).toBe(false);
     expect(isHandTyped(attr("<Input min={inputMin(BOUNDS.coveragePerSellUnit)} />", imp))).toBe(false);
+  });
+
+  it("catches the three ways a value merely derived from BOUNDS could pass as spending it, and still accepts an aliased or namespaced import", () => {
+    const attr = (jsx: string, prelude = "") => {
+      const sf = parseSource("probe2.tsx", `${prelude}\nconst x = ${jsx};\n`);
+      return boundAttributes(sf)[0]!;
+    };
+    const imp = 'import { BOUNDS } from "@jamquote/core";';
+    // Bypass: arithmetic on the imported value is not a bare read of it.
+    expect(isHandTyped(attr("<Input max={BOUNDS.depositPct.max + 50} />", imp))).toBe(true);
+    // Bypass: wrapped in a call is not a bare read either.
+    expect(isHandTyped(attr("<Input max={Math.min(BOUNDS.x, 50)} />", imp))).toBe(true);
+    // Bypass: a local binding that merely shares the imported name.
+    expect(isHandTyped(attr("<Input max={BOUNDS.cap} />", "const BOUNDS = { cap: 100 };"))).toBe(true);
+    // False alarm check: a namespace import used as C.BOUNDS.
+    const ns = 'import * as C from "@jamquote/core";';
+    expect(isHandTyped(attr("<Input min={C.BOUNDS.discountPct.min} />", ns))).toBe(false);
+    // False alarm check: an aliased named import.
+    const aliased = 'import { BOUNDS as B } from "@jamquote/core";';
+    expect(isHandTyped(attr("<Input min={B.discountPct.min} />", aliased))).toBe(false);
   });
 
   it("the subscription payment form is not exempt and validates before it sends", () => {
