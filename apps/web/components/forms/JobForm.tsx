@@ -17,6 +17,7 @@ import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-comp
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
 import styles from "./JobForm.module.css";
+import { equipmentLabel, keptUnit, labourLabel } from "./job-component-units";
 
 const kindOptions = [
   { value: JobComponentKind.MATERIAL, label: "Material" },
@@ -125,17 +126,6 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
 // though the quote builder's picker told them apart. Both now render the
 // same variant name + unit + price.
 
-function equipmentLabel(e: EquipmentItem): string {
-  const price = `$${e.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const unit = e.unitLabel?.trim() || e.rateUnit.toLowerCase();
-  return `${e.name} (${price}/${unit})`;
-}
-
-function labourLabel(r: LabourRate): string {
-  const price = `$${r.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const trade = r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade;
-  return `${trade} (${price}/${r.rateUnit.toLowerCase()})`;
-}
 
 /**
  * One component row: a kind selector, a source picker for Material/Labour
@@ -213,12 +203,8 @@ function ComponentRow({
    * Nothing is invented now. An empty unit renders as a bare quantity
    * (componentQuantityLabel), which is the correct way to say "no unit".
    */
-  const keepTypedUnit = (own: string | null | undefined): { unitLabel?: string } => {
-    const theirs = draft.unitLabel?.trim();
-    if (theirs) return {}; // never clobber what the contractor wrote
-    const mine = own?.trim();
-    return mine ? { unitLabel: mine } : {};
-  };
+  const keepTypedUnit = (own: string | null | undefined): { unitLabel?: string } =>
+    keptUnit(draft.unitLabel, own);
 
   function pickMaterial(id: string) {
     const m = materials.find((x) => x.id === id);
@@ -586,12 +572,24 @@ export default function JobForm({
             onSubmit={async (formValues) => {
               const created = await createEquipmentItem(equipmentPayloadFromValues(formValues));
               setEquipmentList((es) => [...es, created]);
-              patchComponent(adding.componentKey, {
-                equipmentItemId: created.id,
-                description: created.name,
-                unitLabel: created.unitLabel?.trim() || created.rateUnit.toLowerCase(),
-                unitPriceDollars: String(created.rateCents / 100),
-              });
+              // Judged inside the updater, against the row as it is NOW: this runs
+              // after an await, so a unit typed while the request was in flight must
+              // not be overwritten by a value read before it.
+              const key = adding.componentKey;
+              setValues((v) => ({
+                ...v,
+                components: v.components.map((c) =>
+                  c.key === key
+                    ? {
+                        ...c,
+                        equipmentItemId: created.id,
+                        description: created.name,
+                        unitPriceDollars: String(created.rateCents / 100),
+                        ...keptUnit(c.unitLabel, created.unitLabel),
+                      }
+                    : c,
+                ),
+              }));
               setAdding(null);
             }}
           />

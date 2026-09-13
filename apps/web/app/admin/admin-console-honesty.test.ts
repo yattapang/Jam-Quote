@@ -1,6 +1,18 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  analyseStatic,
+  attributeValue,
+  callsTo,
+  collect,
+  parseFile,
+  parseSource,
+  renderedExpressions,
+  renderedText,
+  unwrap,
+  walk,
+} from "../../lib/test/source-ast";
 
 /**
  * A source guard over the staff console.
@@ -13,45 +25,396 @@ import { describe, expect, it } from "vitest";
  * worse than an outage: they are actionable and they look authoritative.
  *
  * This cannot be caught by a behaviour test — the fake values were valid
- * TypeScript and rendered perfectly. So the invariant is enforced over source
- * text: the specific fabrications must not come back, and if a new mock is
- * added it should trip the "recognisable placeholder" check.
+ * TypeScript and rendered perfectly — so it is a parse of the AST.
+ *
+ * ## Why every assertion here goes through `lib/test/source-ast.ts`
+ *
+ * FIVE generations of this file were defeated, and each time the defect lived in a
+ * matcher this file had written for itself: a brace counter, an argument splitter, a
+ * `const`-name regex, a text-child normaliser. One of them returned an empty list for
+ * every input. The final two fell to `CURRENCY_CODES[0]` and `{+3}` with 25 of 25
+ * tests green. There is no private parser left in this file; the questions it asks
+ * are questions about the TypeScript AST, answered by the shared, tested one.
+ *
+ * ## What it does not prove
+ *
+ * It parses; it does not type-check or follow values across modules or through calls.
+ * A value built in another file and imported, or passed through a helper function,
+ * is invisible to "static". A deliberate indirection defeats every assertion below.
  */
-const SOURCE = readFileSync(join(__dirname, "AdminConsole.tsx"), "utf8");
+const SF = parseFile(join(__dirname, "AdminConsole.tsx"));
 
-/** Comments explain what was removed and why — strip them before scanning. */
-const CODE = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+/**
+ * The file's code with every comment removed, re-emitted by the compiler's printer.
+ * Only the denylists and the PRODUCTION check read text, and they read THIS — the
+ * comments explain the defects and quote the very strings being policed.
+ */
+const CODE = ts.createPrinter({ removeComments: true }).printFile(SF);
+
+// ─────────────────────────────────────────────────────────────── AST queries
+// Thin queries over the shared parser's nodes. None of them reads source text.
+
+type Element = ts.JsxOpeningElement | ts.JsxSelfClosingElement;
+
+const isElement = (n: ts.Node): n is Element =>
+  ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n);
+
+const tagName = (el: Element): string => el.tagName.getText();
+
+/** The text of a string-like literal, or null for anything computed. */
+function literalText(expr: ts.Expression | null | undefined): string | null {
+  if (!expr) return null;
+  const e = unwrap(expr);
+  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return e.text;
+  if (ts.isTemplateExpression(e)) return e.head.text;
+  return null;
+}
+
+function attr(el: Element, name: string): ts.JsxAttribute | undefined {
+  return el.attributes.properties.find(
+    (p): p is ts.JsxAttribute => ts.isJsxAttribute(p) && p.name.getText() === name,
+  );
+}
+
+/** Every `obj.prop` and `obj["prop"]` in the tree. */
+function accesses(root: ts.Node, obj: string, prop: string): ts.Node[] {
+  return collect(root, (n): n is ts.Node => {
+    if (ts.isPropertyAccessExpression(n)) {
+      const o = unwrap(n.expression);
+      return n.name.text === prop && ts.isIdentifier(o) && o.text === obj;
+    }
+    if (ts.isElementAccessExpression(n)) {
+      const o = unwrap(n.expression);
+      return literalText(n.argumentExpression) === prop && ts.isIdentifier(o) && o.text === obj;
+    }
+    return false;
+  });
+}
+
+/** Every binding an import introduces: the exported name, the local name, the module. */
+function importBindings(sf: ts.SourceFile): { imported: string; local: string; from: string }[] {
+  const out: { imported: string; local: string; from: string }[] = [];
+  for (const decl of sf.statements.filter(ts.isImportDeclaration)) {
+    const from = (decl.moduleSpecifier as ts.StringLiteral).text;
+    const clause = decl.importClause;
+    if (!clause) continue;
+    if (clause.name) out.push({ imported: "default", local: clause.name.text, from });
+    const b = clause.namedBindings;
+    if (b && ts.isNamespaceImport(b)) out.push({ imported: "*", local: b.name.text, from });
+    if (b && ts.isNamedImports(b)) {
+      for (const el of b.elements) {
+        out.push({ imported: (el.propertyName ?? el.name).getText(), local: el.name.text, from });
+      }
+    }
+  }
+  return out;
+}
+
+/** A named function's body: `function f()`, or `const f = () =>` / `function () {}`. */
+function functionNamed(sf: ts.SourceFile, name: string): ts.Node | null {
+  let found: ts.Node | null = null;
+  walk(sf, (n) => {
+    if (found) return;
+    if (ts.isFunctionDeclaration(n) && n.name?.text === name && n.body) found = n.body;
+    if (
+      ts.isVariableDeclaration(n) &&
+      ts.isIdentifier(n.name) &&
+      n.name.text === name &&
+      n.initializer &&
+      (ts.isArrowFunction(unwrap(n.initializer)) || ts.isFunctionExpression(unwrap(n.initializer)))
+    ) {
+      found = (unwrap(n.initializer) as ts.ArrowFunction).body;
+    }
+  });
+  return found;
+}
+
+/** Climb past parentheses and casts, which do not change what a node is used as. */
+function usedAs(node: ts.Node): { node: ts.Node; parent: ts.Node } {
+  let cur = node;
+  while (
+    ts.isParenthesizedExpression(cur.parent) ||
+    ts.isAsExpression(cur.parent) ||
+    ts.isSatisfiesExpression(cur.parent) ||
+    ts.isNonNullExpression(cur.parent)
+  ) {
+    cur = cur.parent;
+  }
+  return { node: cur, parent: cur.parent };
+}
+
+// ─────────────────────────────────────────────────────────────── predicates
+// Each is exercised by the bypass block at the bottom, against parsed snippets.
+
+/**
+ * A `formatPlatformMoney` call whose currency nobody decided at runtime.
+ *
+ * ONE rule: the currency argument must not be `analyseStatic(...).static`. The
+ * defeated versions each recognised one spelling — a quote character, then a named
+ * const, while `)` inside the first argument, `const JMD = "JMD"` and finally
+ * `CURRENCY_CODES[0]` walked past. A literal, a const or `let` never reassigned, an
+ * indexed import, `String("JMD") as CurrencyCode`, `C.jmd` and `undefined` are all
+ * static; the argument is a real node, so the first argument's parentheses are
+ * irrelevant. A missing argument is the same defect (the formatter's fallback) and
+ * is refused too.
+ *
+ * Limit: a currency returned from a helper function, or imported already-resolved
+ * from another module, is "data" to the parser and passes.
+ */
+function hardcodedCurrency(call: ts.CallExpression): boolean {
+  const code = call.arguments[1];
+  if (!code) return true;
+  return analyseStatic(code).static;
+}
+
+/**
+ * A figure rendered as element content that nobody counted.
+ *
+ * The Regulatory nav badge was a hardcoded `3`. Its guards fell to `>{3}<`, a newline
+ * before the digit, `>{"3"}<`, and finally `{+3}` — each a normaliser missing one
+ * spelling. Now: a rendered expression that is STATIC is a figure fixed at build time.
+ *
+ * Roots, decided deliberately:
+ *   - empty roots (`3`, `+3`, `"3"`, `1 + 2`) — a violation;
+ *   - roots that are all FILE-LOCAL bindings (`const N = 3; {N}`) — a violation. A
+ *     local const is the literal with a name; accepting it would re-open the exact
+ *     `const JMD = "JMD"` bypass that beat the currency check;
+ *   - at least one IMPORTED root (`{CURRENCY_CODES.length}`) — allowed. The figure is
+ *     derived from a code-owned source of truth in another module: it changes when that
+ *     source changes, which is what "counted" means for a build-time fact.
+ *
+ * Exempt: a static string-like literal with no digit in it (`{" "}`, `{"—"}`) is
+ * punctuation, not a figure.
+ *
+ * Limit: `{flag ? 3 : 0}` over a computed flag is not static and passes.
+ */
+function literalFigure(expr: ts.Expression, imports: Set<string>): boolean {
+  const result = analyseStatic(expr);
+  if (!result.static) return false;
+  if ([...result.roots].some((r) => imports.has(r))) return false;
+  const text = literalText(expr);
+  const e = unwrap(expr);
+  const pureText =
+    text !== null && (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e));
+  if (pureText && !/\d/.test(text)) return false;
+  return true;
+}
+
+/**
+ * Bare JSX text that is only a number: `<span>3</span>` — the first-generation defect.
+ * `renderedText` returns it trimmed, so padding and newlines stop mattering.
+ */
+const digitText = (t: { text: string }): boolean => /^\d+$/.test(t.text);
+
+/** Is this expression only `e.preventDefault()`, `stopPropagation()`, `void <static>`? */
+function inert(expr: ts.Expression): boolean {
+  const e = unwrap(expr);
+  if (ts.isVoidExpression(e)) return analyseStatic(e.expression).static;
+  if (ts.isCallExpression(e)) {
+    const callee = unwrap(e.expression);
+    return (
+      ts.isPropertyAccessExpression(callee) &&
+      ["preventDefault", "stopPropagation"].includes(callee.name.text) &&
+      e.arguments.length === 0
+    );
+  }
+  return analyseStatic(e).static;
+}
+
+/**
+ * An `<a>` that leads nowhere and does nothing.
+ *
+ * The first version was one regex, broken eight ways (spacing, parens, a typed
+ * parameter, a braced body, attribute order, `href={"#"}`, `href=""`, no href). Now:
+ * no href or a literal `#` / empty / `javascript:void(0)` href, AND an onClick that is
+ * absent or a function whose every statement is inert.
+ *
+ * Limits: an href held in a const is not resolved (treated as a destination); an
+ * element with a spread attribute is not judged; a named handler is assumed to act.
+ */
+function deadAnchor(el: Element): boolean {
+  if (tagName(el) !== "a") return false;
+  if (el.attributes.properties.some(ts.isJsxSpreadAttribute)) return false;
+
+  const href = attr(el, "href");
+  if (href) {
+    const value = attributeValue(href);
+    const text = value && (ts.isStringLiteral(unwrap(value)) || ts.isNoSubstitutionTemplateLiteral(unwrap(value)))
+      ? literalText(value)
+      : null;
+    if (text === null || !["#", "", "javascript:void(0)"].includes(text.trim())) return false;
+  }
+
+  const onClick = attr(el, "onClick");
+  if (!onClick) return true;
+  const handler = attributeValue(onClick);
+  if (!handler) return true;
+  const fn = unwrap(handler);
+  if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) return false;
+  if (!ts.isBlock(fn.body)) return inert(fn.body);
+  return fn.body.statements.every((s) => ts.isEmptyStatement(s) || (ts.isExpressionStatement(s) && inert(s.expression)));
+}
+
+const CLAIM = /^\s*(Verified|Code-owned)\b/;
+const CONTROL_TAGS = new Set(["input", "select", "textarea"]);
+
+function containsControl(node: ts.Node): boolean {
+  return collect(node, isElement).some((el) => CONTROL_TAGS.has(tagName(el)));
+}
+
+/**
+ * Is this rendered verification claim conditional on something computed — ITS OWN
+ * condition, not one around the whole screen?
+ *
+ * It read `<span style={verified}>Verified ✓</span>` unconditionally. The text-window
+ * version accepted any `?` or `&&` in the enclosing brace region, so a claim inside
+ * `{screen === "rules" && (...)}` was "conditional". Now the claim, or the ONE element
+ * that holds it, must be a branch of a ternary or the right of `&&`, and the condition
+ * must not be static (`true ? <Verified/> : null` is not a condition).
+ */
+function claimIsConditional(node: ts.Node): boolean {
+  let { node: cur, parent } = usedAs(node);
+  if (ts.isJsxText(node) || ts.isJsxElement(parent)) {
+    // Text: climb to its element, then to what that element is used as.
+    const el = ts.isJsxText(node) ? node.parent : parent;
+    ({ node: cur, parent } = usedAs(el));
+  }
+  if (ts.isConditionalExpression(parent) && cur !== parent.condition) {
+    return !analyseStatic(parent.condition).static;
+  }
+  if (
+    ts.isBinaryExpression(parent) &&
+    parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+    cur === parent.right
+  ) {
+    return !analyseStatic(parent.left).static;
+  }
+  return false;
+}
+
+/** Every verification claim rendered as content: JSX text, or a literal in a JSX child. */
+function renderedClaims(root: ts.Node): ts.Node[] {
+  const claims: ts.Node[] = [];
+  for (const { text, node: t } of renderedText(root)) {
+    if (!CLAIM.test(text)) continue;
+    // A <label> naming a form field ("Verified as of" beside a date input) is a field
+    // name, not a claim — excused only when it really wraps a control.
+    const el = t.parent;
+    if (ts.isJsxElement(el) && tagName(el.openingElement) === "label" && containsControl(el)) continue;
+    claims.push(t);
+  }
+  for (const expr of renderedExpressions(root)) {
+    walk(expr, (n) => {
+      if (
+        (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n)) &&
+        CLAIM.test(literalText(n as ts.Expression) ?? "") &&
+        !collect(expr, ts.isJsxAttribute).some((a) => a.pos <= n.pos && n.end <= a.end)
+      ) {
+        claims.push(n);
+      }
+    });
+  }
+  return claims;
+}
+
+/**
+ * A coercion to "absent" inside a save function: `x || undefined`, `x ?? void 0`,
+ * `c ? undefined : v`, `{ field: undefined }`, `const rate = … ? undefined : …`.
+ * The server reads an absent field as "leave unchanged", so each reports "Saved"
+ * over a value that never moved. `undefined` in a TYPE is a keyword node, not this.
+ *
+ * Limit: an absent value produced by a helper function is not seen.
+ */
+function coercesToAbsent(root: ts.Node): ts.Node[] {
+  return collect(root, (n): n is ts.Node =>
+    (ts.isIdentifier(n) && n.text === "undefined") || ts.isVoidExpression(n),
+  ).filter((n) => {
+    if (ts.isVoidExpression(n) && !analyseStatic(n.expression).static) return false;
+    const { node, parent } = usedAs(n);
+    if (ts.isConditionalExpression(parent)) return node !== parent.condition;
+    if (ts.isBinaryExpression(parent)) {
+      const op = parent.operatorToken.kind;
+      return (
+        node === parent.right &&
+        (op === ts.SyntaxKind.BarBarToken ||
+          op === ts.SyntaxKind.QuestionQuestionToken ||
+          op === ts.SyntaxKind.AmpersandAmpersandToken ||
+          op === ts.SyntaxKind.EqualsToken)
+      );
+    }
+    if (ts.isPropertyAssignment(parent)) return node === parent.initializer;
+    if (ts.isVariableDeclaration(parent)) return node === parent.initializer;
+    return false;
+  });
+}
+
+/**
+ * An inline style promising a click its own element cannot honour: `cursor` whose
+ * value includes `"pointer"`, inside a JSX attribute of an element with no onClick or
+ * href and not itself interactive — or a `<label>` that wraps no control.
+ */
+function hollowPointer(prop: ts.PropertyAssignment): { el: Element; hollow: boolean } | null {
+  let a: ts.Node = prop;
+  while (a && !ts.isJsxAttribute(a)) {
+    if (ts.isSourceFile(a) || ts.isFunctionLike(a)) return null;
+    a = a.parent;
+  }
+  if (!a) return null;
+  const el = a.parent.parent as Element;
+  if (attr(el, "onClick") || attr(el, "href")) return { el, hollow: false };
+  const name = tagName(el);
+  if (["a", "button", "Link", ...CONTROL_TAGS].includes(name)) return { el, hollow: false };
+  if (name === "label" && ts.isJsxOpeningElement(el) && containsControl(el.parent)) {
+    return { el, hollow: false };
+  }
+  return { el, hollow: true };
+}
+
+function pointerCursors(root: ts.Node): ts.PropertyAssignment[] {
+  return collect(root, ts.isPropertyAssignment).filter(
+    (p) =>
+      p.name.getText().replace(/["']/g, "") === "cursor" &&
+      collect(p.initializer, (n): n is ts.StringLiteral => ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)).some(
+        (s) => s.text === "pointer",
+      ),
+  );
+}
+
+/** Words that make a label a claim about a QUERY, not just about a number. */
+const WINDOW_WORD =
+  /\b(this month|last month|today|this week|this year|ytd|year to date|mtd|per month|monthly)\b/i;
+
+/** Every metric label: `label: "…"` in an object, or `label="…"` on an element. */
+function metricLabels(root: ts.Node): string[] {
+  const fromProps = collect(root, ts.isPropertyAssignment)
+    .filter((p) => p.name.getText().replace(/["']/g, "") === "label")
+    .map((p) => literalText(p.initializer));
+  const fromAttrs = collect(root, ts.isJsxAttribute)
+    .filter((a) => a.name.getText() === "label")
+    .map((a) => literalText(attributeValue(a)));
+  return [...fromProps, ...fromAttrs].filter((l): l is string => l !== null);
+}
+
+const snippet = (code: string) => parseSource("snippet.tsx", code);
+
+// ─────────────────────────────────────────────────────────────── the guards
 
 describe("the staff console shows no invented data", () => {
   it("has no hardcoded platform figures", () => {
-    // Each of these was rendered to staff as though it were measured.
+    // A denylist of the exact past fabrications — kept, because each was rendered
+    // to staff as though it were measured. The classes are policed further down.
     for (const fabricated of ["2418540", "1,284", "108,420", '"892"', "1.9%"]) {
       expect(CODE).not.toContain(fabricated);
     }
   });
 
   it("invents nothing in the tenant drawer", () => {
-    // The drawer is where staff decide whether to suspend or bill a business,
-    // so invented figures here are the most expensive kind. It used to carry
-    // seat counts and quota caps derived from a plan-name lookup, storage
-    // usage, "invoices sent" as quotes x 0.6, a hardcoded per-plan price
-    // table, and fixed started/renews dates with a payment rail.
-    for (const fabricated of [
-      '"2.1 / 10 GB"',
-      "2024-08-19",
-      "2025-05-19",
-      '"Lynk"',
-      "q * 0.6",
-      "Starter: 4900",
-    ]) {
+    for (const fabricated of ['"2.1 / 10 GB"', "2024-08-19", "2025-05-19", '"Lynk"', "q * 0.6", "Starter: 4900"]) {
       expect(CODE).not.toContain(fabricated);
     }
   });
 
   it("has no platform supplier directory left", () => {
-    // Suppliers became tenant-owned in #31. What remained was a dead
-    // /admin/suppliers fetch that 404'd on every admin page load, and a
-    // "Suppliers added" tile implying the platform maintains them.
     expect(CODE).not.toContain("Suppliers added");
   });
 
@@ -68,602 +431,132 @@ describe("the staff console shows no invented data", () => {
     }
   });
 
-  it("keeps no *Mock fallback arrays", () => {
-    // The fallback is what made a failed fetch indistinguishable from real
-    // data. Empty must be allowed to render as empty.
-    expect(CODE).not.toMatch(/const \w*Mock\w*\s*[:=]/);
+  it("keeps no *Mock fallback bindings", () => {
+    // Any declaration — const, let, var or function — whose name carries Mock.
+    const declared = collect(SF, (n): n is ts.VariableDeclaration | ts.FunctionDeclaration =>
+      ts.isVariableDeclaration(n) || ts.isFunctionDeclaration(n),
+    ).map((d) => (d.name && ts.isIdentifier(d.name) ? d.name.text : ""));
+    expect(declared.length, "no declarations parsed").toBeGreaterThan(50);
+    expect(declared.filter((n) => /Mock/.test(n))).toEqual([]);
   });
 
   it("tells the viewer when a section failed to load", () => {
-    // With the mocks gone, silence would make "could not reach the API" look
-    // identical to "this platform has no tenants".
-    expect(CODE).toContain("data.failed");
+    expect(accesses(SF, "data", "failed").length).toBeGreaterThan(0);
   });
 });
 
-/**
- * The classes of dishonesty, not the historical strings.
- *
- * A review showed the assertions above are five denylists of figures already deleted
- * plus a naming-convention check — they can only re-detect the exact past defect. They
- * passed green alongside a lifetime quote count labelled "This month", a status pill
- * that could only ever say "Active", an unconditional "Verified ✓", and a fake search
- * box. Every original fabrication was written as a literal inlined at its render site,
- * which matches no pattern here and declares no `const`.
- *
- * So these assert the SHAPE of each defect. Each one fails on the version of this file
- * from before the fix, which is the only test of a guard worth having.
- */
-/**
- * Reads the open tag a character offset sits inside — `<button ... >` with all of
- * its attributes, and nothing else.
- *
- * ## Why this is parsed rather than sniffed
- *
- * The first version of these assertions looked for evidence in a WINDOW of
- * characters around the match. A review defeated three of the four by hand: it
- * re-added `cursor: "pointer"` to the dead filter pills, dropped a handler-less
- * `<input disabled={true} />` above them, and the suite went green — the evidence
- * does not even have to be on the same element. In a file of this size a generous
- * window makes almost every position pre-satisfied, so a proximity check reports on
- * the file's average density rather than on the element in front of it.
- *
- * Returns null when the offset is not inside a tag (a style factory, a plain
- * object), which the callers treat as "not an element, not this guard's business".
- */
-function enclosingOpenTag(src: string, index: number): string | null {
-  let open = -1;
-  for (let i = index; i >= 0; i--) {
-    const ch = src[i];
-    if (ch === ">") return null; // a tag closed before one opened: not inside a tag
-    if (ch === "<" && /[A-Za-z]/.test(src[i + 1] ?? "")) {
-      open = i;
-      break;
-    }
-  }
-  if (open < 0) return null;
-  return tagAt(src, open);
-}
-
-/** The whole open tag beginning at `open`, brace- and quote-aware. */
-function tagAt(src: string, open: number): string | null {
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = open; i < src.length; i++) {
-    const ch = src[i]!;
-    if (quote) {
-      if (ch === quote) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") quote = ch;
-    else if (ch === "{") depth++;
-    else if (ch === "}") depth--;
-    else if (ch === ">" && depth === 0) return src.slice(open, i + 1);
-  }
-  return null;
-}
-
-/**
- * The `{...}` expression an offset sits in, with NESTED braces blanked out.
- *
- * The same review defeated the badge assertion by wrapping an unconditional badge in
- * `<span style={{ marginLeft: c.label ? 4 : 0 }}>`: a `?` in a style object is not a
- * condition on the badge, but any check for a nearby `?` accepts it. Blanking nested
- * braces means only a ternary at the top level of the enclosing expression counts.
- */
-function enclosingExpression(src: string, index: number): string | null {
-  let depth = 0;
-  let open = -1;
-  for (let i = index; i >= 0; i--) {
-    if (src[i] === "}") depth++;
-    else if (src[i] === "{") {
-      if (depth === 0) {
-        open = i;
-        break;
-      }
-      depth--;
-    }
-  }
-  if (open < 0) return null;
-
-  let close = -1;
-  depth = 0;
-  for (let i = open + 1; i < src.length; i++) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") {
-      if (depth === 0) {
-        close = i;
-        break;
-      }
-      depth--;
-    }
-  }
-  if (close < 0) return null;
-
-  // Blank every nested brace group, keeping offsets so a message can be located.
-  let flattened = "";
-  depth = 0;
-  for (const ch of src.slice(open + 1, close)) {
-    if (ch === "{") depth++;
-    flattened += depth === 0 ? ch : " ";
-    if (ch === "}") depth--;
-  }
-  return flattened;
-}
-
-/** The value of one JSX attribute on an open tag: `{...}` contents, or a quoted string. */
-function attribute(tag: string, name: string): string | null {
-  const at = tag.search(new RegExp(`\\s${name}\\s*=`));
-  if (at < 0) return null;
-  const eq = tag.indexOf("=", at);
-  let i = eq + 1;
-  while (i < tag.length && /\s/.test(tag[i]!)) i++;
-  if (tag[i] === '"' || tag[i] === "'") {
-    const quote = tag[i]!;
-    const end = tag.indexOf(quote, i + 1);
-    return end < 0 ? null : tag.slice(i + 1, end);
-  }
-  if (tag[i] !== "{") return null;
-  let depth = 0;
-  for (let j = i; j < tag.length; j++) {
-    if (tag[j] === "{") depth++;
-    else if (tag[j] === "}") {
-      depth--;
-      if (depth === 0) return tag.slice(i + 1, j);
-    }
-  }
-  return null;
-}
-
-/**
- * Is this `<a>` tag a link that goes nowhere and does nothing?
- *
- * ## Why this parses the handler instead of matching it
- *
- * The first version was one regex —
- * `/href="#"[^>]*onClick=\{\(e\) => e\.preventDefault\(\)\}/` — and a review broke
- * it eight ways without changing the defect at all: deleting the spaces around the
- * arrow, dropping the parens on the parameter, typing the parameter, putting the
- * body in braces (the exact form the comment claimed to target), swapping the
- * attribute order, writing `href={"#"}`, writing `href=""`, or leaving `href` off
- * entirely. A guard that only recognises one spelling of a defect polices
- * formatting, not behaviour.
- *
- * So: an anchor is dead when it leads nowhere AND its click handler, with every
- * `preventDefault()` / `stopPropagation()` / `void 0` removed, has nothing left.
- */
-function deadAnchor(tag: string): boolean {
-  if (!/^<a[\s>]/.test(tag)) return false;
-
-  const href = attribute(tag, "href");
-  const leadsNowhere =
-    href === null || ["#", "", '"#"', "'#'", "javascript:void(0)"].includes(href.trim());
-  if (!leadsNowhere) return false;
-
-  const onClick = attribute(tag, "onClick");
-  if (onClick === null) return true; // nowhere to go and nothing to do
-
-  const body = onClick
-    .replace(/^\s*(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>\s*/, "") // strip the arrow head
-    .replace(/^\s*\{|\}\s*$/g, "") // and a braced body
-    .replace(/\b(?:e|ev|evt|event)\s*\.\s*(?:preventDefault|stopPropagation)\s*\(\s*\)/g, "")
-    .replace(/\bvoid\s+0\b/g, "")
-    .replace(/[\s;]/g, "");
-  return body === "";
-}
-
-/**
- * Is this JSX text child a figure nobody counted?
- *
- * The Regulatory nav badge was a hardcoded `3`, one line from the real count. The
- * first guard was `/>[ ]*\d{1,6}[ ]*</`, which a review walked straight past with
- * `>{3}<`, with a newline before the digit, and with `>{"3"}<`. Normalising first
- * means the shape of the whitespace and the quoting stop mattering.
- */
-function literalCount(text: string): boolean {
-  const bare = text
-    .trim()
-    .replace(/^\{|\}$/g, "")
-    .trim()
-    .replace(/^["'`]|["'`]$/g, "")
-    .trim();
-  return /^\d{1,6}$/.test(bare);
-}
-
-/** Every JSX text child in the source: the runs between `>` and the next `<`. */
-function textChildren(src: string): { text: string; index: number }[] {
-  const out: { text: string; index: number }[] = [];
-  for (const m of src.matchAll(/>([^<>]*)</g)) {
-    const text = m[1]!;
-    if (text.trim() !== "") out.push({ text, index: m.index! + 1 });
-  }
-  return out;
-}
-
-/**
- * The argument list of every call to `name(`, split at top level.
- *
- * Written because a regex could not do it. The currency guard was
- * `/formatPlatformMoney\([^)]*,\s*["'`]/` and a review defeated it by putting a call
- * inside the first argument: `formatPlatformMoney(Number(r.amountCents), "JMD")`.
- * `[^)]*` cannot cross the `)` of `Number(...)`, so the match never reached the
- * second argument, and a hardcoded JMD on the bank-reconciled payment ledger — the
- * precise defect the assertion exists for — passed again.
- *
- * That was the second time I fixed the spelling I had tried rather than the class.
- * Paren-, brace- and quote-aware splitting has no such edge.
- */
-function callArguments(src: string, name: string): string[][] {
-  const calls: string[][] = [];
-  for (let at = src.indexOf(`${name}(`); at >= 0; at = src.indexOf(`${name}(`, at + 1)) {
-    // Not a definition or a longer identifier ending in the same letters.
-    const before = src[at - 1] ?? " ";
-    if (/[A-Za-z0-9_$.]/.test(before) && before !== ".") continue;
-
-    const open = at + name.length;
-    let depth = 0;
-    let quote: string | null = null;
-    let current = "";
-    const args: string[] = [];
-    for (let i = open; i < src.length; i++) {
-      const ch = src[i]!;
-      if (quote) {
-        current += ch;
-        if (ch === quote && src[i - 1] !== "\\") quote = null;
-        continue;
-      }
-      if (ch === '"' || ch === "'" || ch === "`") {
-        quote = ch;
-        current += ch;
-        continue;
-      }
-      if (ch === "(" || ch === "[" || ch === "{") {
-        depth++;
-        if (depth > 1) current += ch;
-        continue;
-      }
-      if (ch === ")" || ch === "]" || ch === "}") {
-        depth--;
-        if (depth === 0) {
-          args.push(current.trim());
-          break;
-        }
-        current += ch;
-        continue;
-      }
-      if (ch === "," && depth === 1) {
-        args.push(current.trim());
-        current = "";
-        continue;
-      }
-      current += ch;
-    }
-    calls.push(args.filter((a) => a !== ""));
-  }
-  return calls;
-}
-
-/** Is this argument a string literal rather than an expression? */
-const isStringLiteral = (arg: string): boolean => /^["'`]/.test(arg.trim());
-
-/**
- * Every name imported from a module, however the import is formatted.
- *
- * Was a regex requiring two-space indentation and a trailing comma. A review emptied
- * it by moving one name to a single-line `import { updateAdminRulePack } from …`,
- * which dropped the one mutator that mattered while leaving enough survivors to pass
- * the count floor — so the defect this guard exists for passed too.
- */
-function importedNames(src: string, moduleId: string): string[] {
-  const names: string[] = [];
-  const needle = `from "${moduleId}"`;
-  for (let at = src.indexOf(needle); at >= 0; at = src.indexOf(needle, at + 1)) {
-    const close = src.lastIndexOf("}", at);
-    const open = src.lastIndexOf("{", close);
-    if (open < 0 || close < 0) continue;
-    for (const raw of src.slice(open + 1, close).split(",")) {
-      const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]!.trim();
-      if (name !== "") names.push(name);
-    }
-  }
-  return names;
-}
-
-/**
- * Identifiers bound to a string literal — `const JMD = "JMD"`.
- *
- * A review passed a const holding "JMD" as the currency argument, reproducing the
- * exact F40 defect on the bank-reconciled payment ledger. The commit before it had
- * already learned this lesson for route decorators ("the lesson was literal-ness")
- * and did not carry it across to the guard beside it — one of two twins again.
- */
-function stringConstants(src: string): Set<string> {
-  const names = new Set<string>();
-  for (const m of src.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*["'`]/g)) {
-    names.add(m[1]!);
-  }
-  return names;
-}
-
-/**
- * The body of a top-level `function name(` declaration, brace-matched.
- *
- * Needed because the coercion guard was inspecting only argument text that began
- * with `{`, and a review hoisted the coercion one line above the call —
- * `const rate = x === "" ? undefined : Number(x)` then `defaultTaxRatePct: rate`.
- * Third distinct spelling to walk past that assertion; the answer is to read the
- * whole function that builds the payload rather than the payload alone.
- */
-function functionBody(src: string, name: string): string | null {
-  const sig = new RegExp(String.raw`\b(?:async\s+)?function\s+${name}\s*\(`);
-  const m = sig.exec(src);
-  if (!m) return null;
-  let open = -1;
-  let d = 0;
-  for (let i = m.index; i < src.length; i++) {
-    if (src[i] === "(") d++;
-    else if (src[i] === ")") {
-      d--;
-      if (d === 0) {
-        open = src.indexOf("{", i);
-        break;
-      }
-    }
-  }
-  if (open < 0) return null;
-  d = 0;
-  for (let i = open; i < src.length; i++) {
-    if (src[i] === "{") d++;
-    else if (src[i] === "}") {
-      d--;
-      if (d === 0) return src.slice(open, i + 1);
-    }
-  }
-  return null;
-}
-
-/** Words that make a label a claim about a QUERY, not just about a number. */
-const WINDOW_WORD =
-  /\b(this month|last month|today|this week|this year|ytd|year to date|mtd|per month|monthly)\b/i;
-
 describe("the console cannot claim a figure it does not have", () => {
-  // Comments stripped first. The badge assertion matched its own explanatory
-  // comment — the text it was written to police appears in the note describing the
-  // defect, which is a false positive a guard should not have.
-  const src = SOURCE.replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
-    .replace(/^\s*\/\/[^\n]*$/gm, "");
+  const elements = collect(SF, isElement);
+  const imports = new Set(importBindings(SF).map((b) => b.local));
 
-  /** Every open tag in the file, parsed once. */
-  const tags: string[] = [];
-  for (const m of src.matchAll(/<[A-Za-z]/g)) {
-    const tag = tagAt(src, m.index!);
-    if (tag) tags.push(tag);
-  }
-
-  /** Labels allowed a window, each because the query behind it really applies one. */
   const WINDOWED_OK: Record<string, string> = {
-    "Quotes created (all time)":
-      "names its own window, and the window it names is the one the query uses",
+    "Quotes created (all time)": "names its own window, and the window it names is the one the query uses",
   };
 
   it("found its subjects, so nothing below can pass on an empty file", () => {
-    // Every assertion in this block scans `src` or `tags`. A rename, a move or a
-    // failed read would otherwise empty all of them at once, silently.
-    expect(tags.length, "no JSX tags parsed").toBeGreaterThan(200);
-    expect(tags.filter((t) => t.startsWith("<a")).length, "no anchors").toBeGreaterThan(0);
-    expect(textChildren(src).length, "no text children").toBeGreaterThan(50);
+    expect(elements.length, "no JSX elements parsed").toBeGreaterThan(200);
+    expect(elements.filter((e) => tagName(e) === "a").length, "no anchors").toBeGreaterThan(0);
+    expect(renderedExpressions(SF).length, "no rendered expressions").toBeGreaterThan(50);
+    expect(imports.size, "no imports").toBeGreaterThan(10);
   });
 
   it("no metric is labelled with a time window the query does not apply", () => {
-    // A class, not a denylist. The first version listed four exact strings
-    // (`"This month"`, `"Today"`, …) and a review immediately found a live survivor
-    // it had not listed: `label: "Applied (YTD)"`, over a query with no date
-    // predicate at all. Hand-listing the cases is the defect this register keeps
-    // finding, and a guard written that way finds only what its author remembered.
-    const labels = [...src.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1]!);
+    const labels = metricLabels(SF);
     expect(labels.length, "found no metric labels — has the shape changed?").toBeGreaterThan(8);
-
     const offenders = labels.filter((l) => WINDOW_WORD.test(l) && !(l in WINDOWED_OK));
-    expect(
-      offenders,
-      "a window in a label is a claim about the query: either window the query or drop the word",
-    ).toEqual([]);
+    expect(offenders, "a window in a label is a claim about the query: either window the query or drop the word").toEqual([]);
+    // The allow-list is keyed exactly; an entry nothing uses is a stale excuse.
+    for (const ok of Object.keys(WINDOWED_OK)) expect(labels, `stale allow-list entry: ${ok}`).toContain(ok);
   });
 
   it("every verification claim is derived, not asserted", () => {
-    // It read `<span style={verified}>Verified ✓</span>` unconditionally, beneath a
-    // banner saying nobody had confirmed the figures. A literal verification claim
-    // in JSX must sit in a ternary at the top level of its own expression.
-    const claims = [...src.matchAll(/>\s*(Verified|Code-owned)\b[^<]*</g)];
+    const claims = renderedClaims(SF);
     expect(claims.length, "found no verification badges — were they renamed?").toBeGreaterThan(0);
-
-    for (const m of claims) {
-      const region = enclosingExpression(src, m.index!);
-      expect(
-        region ?? "",
-        `"${m[0]!.trim()}" is a literal verification claim; derive it or make it conditional`,
-      ).toMatch(/\?|&&/);
-    }
+    const unconditional = claims.filter((c) => !claimIsConditional(c)).map((c) => c.getText().trim().slice(0, 80));
+    expect(unconditional, "a literal verification claim must be the branch of its own computed condition").toEqual([]);
   });
 
   it("does not read Subscription.status, which is only ever written 'active'", () => {
-    // Three of the four branches of the old statusMap were unreachable, and its
-    // fallback asserted a healthy green account for anything it did not recognise.
-    // Asserting on the FIELD rather than on the names of its consumers: the column
-    // used to be carried in TenantRow and discarded with `void status`, which passed
-    // a name-based check while leaving the field one edit from being read again.
-    expect(src, "the tenant row must not carry Subscription.status at all").not.toMatch(
-      /t\.status\b/,
-    );
-    expect(src, "a discarded field is still a plumbed field").not.toMatch(/void status/);
-    // And the honest source is still in use, so this cannot pass by deleting both.
-    expect(src).toContain("subscriptionStanding(");
+    expect(accesses(SF, "t", "status").map((n) => n.getText()), "the tenant row must not carry Subscription.status").toEqual([]);
+    const voided = collect(SF, ts.isVoidExpression).filter((v) => {
+      const e = unwrap(v.expression);
+      return ts.isIdentifier(e) && e.text === "status";
+    });
+    expect(voided.length, "a discarded field is still a plumbed field").toBe(0);
+    expect(callsTo(SF, "subscriptionStanding").length).toBeGreaterThan(0);
   });
 
   it("no link is an anchor to nowhere", () => {
-    // Four rule-card "Source ↗" links were `href="#"` with a `preventDefault`-only
-    // handler, while the real URL sat in scope and working links were 150 lines
-    // above. A staffer clicking "TAJ ↗" to check a tax rate got nothing.
-    const dead = tags.filter(deadAnchor);
-    expect(
-      dead.map((t) => t.slice(0, 120)),
-      "an anchor that leads nowhere and does nothing is a dead control: give it the URL or make it text",
-    ).toEqual([]);
+    const dead = elements.filter(deadAnchor).map((e) => e.getText().slice(0, 120));
+    expect(dead, "an anchor that leads nowhere and does nothing is a dead control").toEqual([]);
   });
 
   it("the deployment badge is derived, not asserted", () => {
-    // A green "PRODUCTION" pill with no check behind it, on every build, including a
-    // laptop pointed at localhost. On a console whose buttons suspend tenants, that
-    // is the one badge that must not be decorative.
-    //
-    // The word itself must not appear in this file in any form — the first version
-    // allowed it outside a `{`, and `>{"PRODUCTION"}` walked past. The label is a
-    // prop now, resolved on the server from the same constant every fetch uses.
-    expect(src, "PRODUCTION must come from apiEnv, not from a literal here").not.toContain(
-      "PRODUCTION",
-    );
-    expect(src, "the badge must render the resolved environment").toContain("apiEnv.label");
+    expect(CODE, "PRODUCTION must come from apiEnv, not from a literal here").not.toContain("PRODUCTION");
+    const rendered = renderedExpressions(SF).filter((e) => accesses(e, "apiEnv", "label").length > 0);
+    expect(rendered.length, "the badge must render the resolved environment").toBeGreaterThan(0);
   });
 
   it("no count is a literal in the markup", () => {
-    // The Regulatory nav badge was a hardcoded `3`, one line from `regChanges`: it
-    // said "3 waiting" on an empty queue and stayed 3 after a staffer cleared it.
-    // Any bare number rendered as element text is a figure nobody counted.
-    const offenders = textChildren(src).filter((c) => literalCount(c.text));
-    expect(
-      offenders.map((c) => c.text.trim()),
-      "render a figure from data, or do not render it",
-    ).toEqual([]);
+    const texts = renderedText(SF);
+    expect(texts.length, "no JSX text parsed").toBeGreaterThan(50);
+    const offenders = [
+      ...texts.filter(digitText).map((t) => t.text),
+      ...renderedExpressions(SF).filter((e) => literalFigure(e, imports)).map((e) => `{${e.getText()}}`),
+    ];
+    expect(offenders, "render a figure from data, or do not render it").toEqual([]);
   });
 
   it("no money is rendered in a currency the platform may not be using", () => {
-    // All seven money figures went through `formatJmd` while the platform currency
-    // was editable free text, so setting it to USD showed a JMD symbol beside the
-    // letters USD.
-    expect(src, "platform money must spend the configured currency").not.toMatch(
-      /formatJmd\(/,
-    );
+    const jmd = collect(SF, (n): n is ts.Identifier => ts.isIdentifier(n) && n.text === "formatJmd");
+    expect(jmd.length, "platform money must spend the configured currency").toBe(0);
 
-    // The currency argument must not be a literal — INCLUDING a const that holds
-    // one. Three versions of this assertion have now been walked past: a regex that
-    // could not cross a paren, then one that only checked for a quote character, and
-    // a review passing `const JMD = "JMD"`. Literal-ness, not quoting.
-    const literals = stringConstants(src);
-    const calls = callArguments(src, "formatPlatformMoney");
+    const calls = callsTo(SF, "formatPlatformMoney");
     expect(calls.length, "no formatPlatformMoney calls found — check the name").toBeGreaterThan(2);
-    const hardcoded = calls
-      .filter((args) => {
-        const code = args[1]?.trim();
-        if (!code) return false;
-        return isStringLiteral(code) || literals.has(code.replace(/\s+as\s+\w+$/, ""));
-      })
-      .map((args) => args.join(", "));
-    expect(hardcoded, "pass the configured currency, not a literal one").toEqual([]);
+    const hardcoded = calls.filter(hardcodedCurrency).map((c) => c.getText());
+    expect(hardcoded, "pass the configured currency, not a static one").toEqual([]);
   });
 
   it("no save reports success on a value it dropped", () => {
-    // The server reads an absent field as "leave unchanged", so any coercion to
-    // `undefined` on the way into a payload reports "Saved" over a value that never
-    // moved. Four spellings have now shipped or been demonstrated: `|| undefined`,
-    // `?? undefined`, `|| void 0`, and `x === "" ? undefined : Number(x)`.
-    //
-    // The whole SAVE FUNCTION is read, not just the object literal: a review hoisted
-    // the coercion one line above the call (`const rate = … ? undefined : …`) and
-    // walked past the payload-only version. These functions contain no JSX, so the
-    // legitimate `undefined`-as-a-CSS-value uses elsewhere in the file cannot fire.
-    const savers = ["savePricing", "saveRulepack"];
     const offenders: string[] = [];
-    for (const fn of savers) {
-      const body = functionBody(src, fn);
+    for (const fn of ["savePricing", "saveRulepack"]) {
+      const body = functionNamed(SF, fn);
       expect(body, `${fn} not found — has it been renamed?`).not.toBeNull();
-      for (const m of (body ?? "").matchAll(
-        /(?:\|\||\?\?|\?|:)\s*(?:undefined|void\s+0)\s*(?::|,|\}|;|$)/gm,
-      )) {
-        offenders.push(`${fn}: ${(body ?? "").slice(Math.max(0, m.index! - 70), m.index! + 18).trim()}`);
-      }
+      for (const n of coercesToAbsent(body!)) offenders.push(`${fn}: ${n.parent.getText().slice(0, 90)}`);
     }
-    expect(
-      offenders,
-      "refuse the value and name the field instead of turning it into an omission",
-    ).toEqual([]);
-    // And every mutator this console can call is one of the two functions above or
-    // sends no optional field — so a THIRD save form cannot quietly appear without
-    // its own validation.
-    const mutators = importedNames(src, "@/lib/api-client").filter((n) =>
-      /^(update|create|record|review|delete|promote|revoke|void|run|set)[A-Z]/.test(n),
-    );
+    expect(offenders, "refuse the value and name the field instead of turning it into an omission").toEqual([]);
+
+    // Every mutator this console can call — so a THIRD save form cannot appear unseen.
+    const mutators = importBindings(SF)
+      .filter((b) => b.from === "@/lib/api-client")
+      .map((b) => b.imported)
+      .filter((n) => /^(update|create|record|review|delete|promote|revoke|void|run|set)[A-Z]/.test(n));
     expect(mutators.length, "no api-client mutators found — check the import").toBeGreaterThan(5);
-    expect(mutators, "the pricing and rule-pack mutators must be among them").toEqual(
-      expect.arrayContaining(["updateAdminPricing", "updateAdminRulePack"]),
-    );
-    // Both saves refuse rather than omit. `pricingProblem` is still a closure here;
-    // `rulePackProblem` moved beside the payload builder so it can judge what will
-    // actually be SENT — validating form state instead refused saves over a value
-    // the payload had already decided to skip, naming an input that had unmounted.
-    expect(src).toContain("pricingProblem()");
-    expect(src, "the rule-pack save must run its validator").toMatch(/rulePackProblem\(/);
+    expect(mutators).toEqual(expect.arrayContaining(["updateAdminPricing", "updateAdminRulePack"]));
+    expect(callsTo(SF, "pricingProblem").length, "the pricing save must run its validator").toBeGreaterThan(0);
+    expect(callsTo(SF, "rulePackProblem").length, "the rule-pack save must run its validator").toBeGreaterThan(0);
   });
 
-  // NOTE: two assertions were deleted here, and not replaced by better regexes.
-  //
-  // One required `saveRulepack` to call `buildRulePackPatch` and the rule-pack
-  // mutator not to receive an inline object literal. A review defeated it by leaving
-  // a dead `void buildRulePackPatch(...)` call for the scanner to find and passing a
-  // hand-built object to the mutator — a regex cannot tell a live call from a dead
-  // one. `updateAdminRulePack` now takes a `RulePackPatch`, a CLASS with a private
-  // member that only the builder constructs, so a literal (and a spread of a real
-  // patch) is a compile error. `apiClient` is also no longer exported, closing the
-  // direct-`patch` door. The compiler holds this better than this file could.
-  //
-  // The other required the rate grid to read the filtered list rather than the
-  // effective one. The same review defeated it by copying the effective list into a
-  // differently-named local. It is held by `statutory-grid.test.tsx`, which renders
-  // the console, navigates to the rule-pack screen and COUNTS the rate inputs a code
-  // is offered — verified against both earlier wrong versions of the filter.
-  //
-  // That file is named here because it exists. An earlier version of this comment
-  // cited it before it was written: a claim of coverage that was simply false, and
-  // the worst thing in the commit a review found it in.
+  // Two assertions were deleted earlier and are held elsewhere: the rule-pack payload
+  // by the `RulePackPatch` class (a compile error), and the rate grid by
+  // `statutory-grid.test.tsx`, which renders the console and counts inputs.
 
   it("nothing that looks clickable lacks a handler", () => {
-    // The tenant filter pills carried `cursor: "pointer"` and no onClick, so "Past
-    // due (3)" looked like a filter and did nothing.
-    const pointers = [...src.matchAll(/cursor:\s*"pointer"/g)];
-    expect(pointers.length, "no pointer cursors found at all — check the pattern").toBeGreaterThan(
-      0,
-    );
-
-    for (const m of pointers) {
-      const tag = enclosingOpenTag(src, m.index!);
-      // Not inside a tag: a style factory or a plain object, applied at call sites
-      // this guard cannot see. Out of scope — the defect was a pointer cursor in an
-      // INLINE style on an element with no handler of its own.
-      if (tag === null) continue;
-      // A <label> wrapping a form control is a real affordance — clicking it
-      // activates the control — but only if it actually contains one. Checked
-      // rather than allow-listed by tag name: an empty <label> with a pointer
-      // cursor is exactly the lie this guard is written for.
-      if (tag.startsWith("<label")) {
-        const close = src.indexOf("</label>", m.index!);
-        const body = close < 0 ? "" : src.slice(m.index!, close);
-        if (/<(input|select|textarea)\b/.test(body)) continue;
-      }
-      expect(tag, `this element promises a click it cannot honour: ${tag.slice(0, 90)}…`).toMatch(
-        /onClick|href=|<(a|button|Link|select|input|textarea)\b/,
-      );
-    }
+    const inline = pointerCursors(SF)
+      .map(hollowPointer)
+      .filter((r): r is { el: Element; hollow: boolean } => r !== null);
+    expect(inline.length, "no inline pointer cursors found at all").toBeGreaterThan(5);
+    const hollow = inline.filter((r) => r.hollow).map((r) => r.el.getText().slice(0, 90));
+    expect(hollow, "this element promises a click it cannot honour").toEqual([]);
   });
 });
 
 describe("the guards above cannot be walked past", () => {
-  // Every bypass a review demonstrated against the earlier versions, kept as a
-  // test. These exercise the SAME predicates the block above uses — the previous
-  // attempt gave each control test its own private copy of the regex, so editing a
-  // guard could not fail its own control.
+  // Every bypass that defeated an earlier version, run through the SAME predicates.
+
+  const firstElement = (code: string) => collect(snippet(`const x = ${code};`), isElement)[0]!;
 
   it("a dead anchor is caught however it is spelled", () => {
-    // Each of these passed the single-regex version unchanged.
     for (const tag of [
       '<a href="#" onClick={(e) => e.preventDefault()}>TAJ</a>',
       '<a href="#" onClick={(e)=>e.preventDefault()}>TAJ</a>',
@@ -673,73 +566,149 @@ describe("the guards above cannot be walked past", () => {
       '<a href="#" onClick={() => void 0}>TAJ</a>',
       '<a onClick={(e) => e.preventDefault()} href="#">TAJ</a>',
       '<a href={"#"} onClick={(e) => e.preventDefault()}>TAJ</a>',
-      '<a href="" onClick={(e) => e.preventDefault()}>TAJ</a>',
+      '<a href="" onClick={(ev) => ev.stopPropagation()}>TAJ</a>',
       '<a href="javascript:void(0)">TAJ</a>',
       "<a>TAJ</a>",
     ]) {
-      expect(deadAnchor(tagAt(tag, 0)!), tag).toBe(true);
+      expect(deadAnchor(firstElement(tag)), tag).toBe(true);
     }
   });
 
   it("a working anchor is not caught", () => {
     for (const tag of [
-      // A real in-page navigation keeps its anchor and its preventDefault.
       '<a href="#" onClick={(e) => { e.preventDefault(); go("tenants"); }}>View all</a>',
-      '<a href={c.sourceUrl} target="_blank" rel="noopener noreferrer">Source ↗</a>',
-      '<a href="https://www.jamaicatax.gov.jm/gct">TAJ ↗</a>',
+      '<a href={c.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>',
+      '<a href="https://www.jamaicatax.gov.jm/gct">TAJ</a>',
     ]) {
-      expect(deadAnchor(tagAt(tag, 0)!), tag).toBe(false);
+      expect(deadAnchor(firstElement(tag)), tag).toBe(false);
     }
-    // And a non-anchor is none of this guard's business.
-    expect(deadAnchor('<button onClick={go}>Go</button>')).toBe(false);
+    expect(deadAnchor(firstElement("<button onClick={go}>Go</button>"))).toBe(false);
   });
+
+  const IMPORTS = 'import { CURRENCY_CODES, formatPlatformMoney } from "@jamquote/core";';
+  const rendered = (prelude: string, child: string) => {
+    const sf = snippet(`${IMPORTS}\n${prelude}\nfunction Comp({ q, needsReviewCount, regChanges }: any) { return <span>${child}</span>; }`);
+    const names = new Set(importBindings(sf).map((b) => b.local));
+    return {
+      figure: renderedExpressions(sf).some((e) => literalFigure(e, names)) || renderedText(sf).some(digitText),
+    };
+  };
 
   it("a literal count is caught however it is written", () => {
-    for (const text of ["3", " 3 ", "{3}", '{"3"}', "{`3`}", "\n  3\n", "\t3\t", "1234567890"]) {
-      // The last one is longer than six digits, so it is NOT a count — a phone
-      // number or an id. Everything else is.
-      expect(literalCount(text), JSON.stringify(text)).toBe(text !== "1234567890");
+    for (const [prelude, child] of [
+      ["", "3"],
+      ["", "\n  3\n"],
+      ["", "{3}"],
+      ["", "{+3}"],
+      ["", '{"3"}'],
+      ["", "{`3`}"],
+      ["", "{1 + 2}"],
+      ["", "{(3) as number}"],
+      ["", '{String(3)}'],
+      ["const N = 3;", "{N}"],
+      ["let N = 3;", "{N}"],
+      ["const C = { n: 3 };", "{C.n}"],
+      ["const L = [1, 2, 3];", "{L.length}"],
+    ]) {
+      expect(rendered(prelude!, child!).figure, `${prelude} ${JSON.stringify(child)}`).toBe(true);
     }
   });
 
-  it("a rendered expression is not a literal count", () => {
-    for (const text of ["{needsReviewCount}", "{regChanges.length}", "3 waiting", "{String(q)}"]) {
-      expect(literalCount(text), text).toBe(false);
+  it("a rendered expression from data or from an imported source is not a literal count", () => {
+    for (const child of ["{needsReviewCount}", "{regChanges.length}", "3 waiting", "{String(q)}", "{CURRENCY_CODES.length}", '{" "}', '{"—"}']) {
+      expect(rendered("", child).figure, child).toBe(false);
     }
   });
 
-  it("a pointer cursor is not excused by a disabled element nearby", () => {
-    const snippet = [
-      '<input disabled={true} value="" readOnly />',
-      '<div style={{ padding: 7, cursor: "pointer" }}>Past due (3)</div>',
-    ].join("\n");
-    const tag = enclosingOpenTag(snippet, snippet.indexOf('cursor: "pointer"'));
-    expect(tag).toContain("<div");
-    expect(tag).not.toMatch(/onClick|href=|<(a|button|Link|select|input|textarea)\b/);
+  const currencyOf = (prelude: string, call: string) => {
+    const sf = snippet(`${IMPORTS}\ntype CurrencyCode = string;\n${prelude}\nfunction R({ r, currency }: any) { return <div>{${call}}</div>; }`);
+    const calls = callsTo(sf, "formatPlatformMoney");
+    expect(calls.length, call).toBe(1);
+    return hardcodedCurrency(calls[0]!);
+  };
+
+  it("a hardcoded currency is caught however it is spelled", () => {
+    for (const [prelude, call] of [
+      ["", 'formatPlatformMoney(r.amountCents, "JMD")'],
+      ["", "formatPlatformMoney(r.amountCents, `JMD`)"],
+      ["", 'formatPlatformMoney(Number(r.amountCents), "JMD")'],
+      ["", "formatPlatformMoney(r.amountCents, CURRENCY_CODES[0])"],
+      ['const JMD = "JMD";', "formatPlatformMoney(r.amountCents, JMD)"],
+      ['let J = "JMD";', "formatPlatformMoney(r.amountCents, J)"],
+      ["", 'formatPlatformMoney(r.amountCents, String("JMD") as CurrencyCode)'],
+      ['const C = { jmd: "JMD" };', "formatPlatformMoney(r.amountCents, C.jmd)"],
+      ["", "formatPlatformMoney(r.amountCents, undefined)"],
+      ["", "formatPlatformMoney(r.amountCents)"],
+    ]) {
+      expect(currencyOf(prelude!, call!), `${prelude} ${call}`).toBe(true);
+    }
   });
 
-  it("a pointer cursor IS excused by a handler on its own tag", () => {
-    const snippet = '<button style={{ cursor: "pointer" }} onClick={go}>Go</button>';
-    expect(enclosingOpenTag(snippet, snippet.indexOf('cursor: "pointer"'))).toMatch(/onClick/);
+  it("a configured currency is not caught", () => {
+    for (const call of ["formatPlatformMoney(r.amountCents, r.currency ?? currency)", "formatPlatformMoney(r.amountCents, currency)"]) {
+      expect(currencyOf("", call), call).toBe(false);
+    }
   });
 
-  it("a badge is not made conditional by a ternary in its style", () => {
-    const snippet =
-      '<span style={{ marginLeft: c.label ? 4 : 0 }}><span style={v}>Verified ✓</span></span>';
-    // The nested style ternary is blanked, so the region holds no condition.
-    expect(enclosingExpression(snippet, snippet.search(/>\s*Verified/)) ?? "").not.toMatch(/\?|&&/);
+  const claimsIn = (code: string) => {
+    const sf = snippet(`function B({ p, c, screen }: any) { return ${code}; }`);
+    return renderedClaims(sf).map(claimIsConditional);
+  };
+
+  it("a badge is not made conditional by a ternary in its style or a condition around the screen", () => {
+    expect(claimsIn('<span style={{ marginLeft: c.label ? 4 : 0 }}><span style={v}>Verified ✓</span></span>')).toEqual([false]);
+    expect(claimsIn('<div>{screen === "rules" && (<div><div><span>Verified ✓</span></div></div>)}</div>')).toEqual([false]);
+    expect(claimsIn("<td>{true ? <span>Verified ✓</span> : null}</td>")).toEqual([false]);
+    expect(claimsIn('<td>{"Verified ✓"}</td>')).toEqual([false]);
   });
 
   it("a badge IS conditional when the ternary is its own", () => {
-    const snippet =
-      "<td>{p.verified ? <span style={v}>Verified ✓</span> : <span>Unverified</span>}</td>";
-    expect(enclosingExpression(snippet, snippet.search(/>\s*Verified/)) ?? "").toMatch(/\?/);
+    expect(claimsIn("<td>{p.verified ? <span>Verified ✓</span> : <span>Unverified</span>}</td>")).toEqual([true]);
+    expect(claimsIn('<td>{p.verified ? `Verified ${p.at}` : "Unverified"}</td>')).toEqual([true]);
+    expect(claimsIn("<td>{p.verified && <span>Verified</span>}</td>")).toEqual([true]);
+    // A label naming a date field is not a claim at all.
+    expect(claimsIn('<label>Verified as of<input type="date" /></label>')).toEqual([]);
+  });
+
+  it("a coercion to absent is caught however it is spelled", () => {
+    for (const body of [
+      "const payload = { rate: x || undefined };",
+      "const payload = { rate: x ?? void 0 };",
+      'const rate = x === "" ? undefined : Number(x); send({ rate });',
+      "send({ rate: undefined });",
+      "const rate = (x || undefined) as number;",
+    ]) {
+      const sf = snippet(`async function savePricing(x: string) { ${body} }`);
+      expect(coercesToAbsent(functionNamed(sf, "savePricing")!).length, body).toBeGreaterThan(0);
+    }
+    const clean = snippet("async function savePricing(x: string) { let y: string | undefined; if (x === undefined) return; send({ rate: Number(x) }); }");
+    expect(coercesToAbsent(functionNamed(clean, "savePricing")!)).toEqual([]);
+  });
+
+  const pointerIn = (code: string) =>
+    pointerCursors(snippet(`const x = ${code};`))
+      .map(hollowPointer)
+      .filter((r) => r !== null)
+      .map((r) => r!.hollow);
+
+  it("a pointer cursor is not excused by a disabled element nearby or an empty label", () => {
+    expect(pointerIn('<>\n<input disabled={true} value="" readOnly />\n<div style={{ padding: 7, cursor: "pointer" }}>Past due (3)</div></>')).toEqual([true]);
+    expect(pointerIn('<div style={{ cursor: busy ? "default" : "pointer" }}>x</div>')).toEqual([true]);
+    expect(pointerIn('<label style={{ cursor: "pointer" }}>Nothing inside</label>')).toEqual([true]);
+  });
+
+  it("a pointer cursor IS excused by a handler or a control on its own element", () => {
+    expect(pointerIn('<button style={{ cursor: "pointer" }} onClick={go}>Go</button>')).toEqual([false]);
+    expect(pointerIn('<tr onClick={go} style={{\n cursor: "pointer",\n }}><td /></tr>')).toEqual([false]);
+    expect(pointerIn('<label style={{ cursor: "pointer" }}><input type="checkbox" /> A</label>')).toEqual([false]);
+    // A style factory outside any element is not this guard's business.
+    expect(pointerIn('({ cursor: "pointer" })')).toEqual([]);
   });
 
   it("a window word is caught however it is spelled", () => {
-    for (const label of ["This month", "Applied (YTD)", "Signups today", "Revenue monthly"]) {
-      expect(WINDOW_WORD.test(label), label).toBe(true);
-    }
+    const labels = metricLabels(snippet('const a = [{ label: "This month" }, { "label": `Applied (YTD)` }, { label: `Signups today ${n}` }];\nconst b = <Tile label="Revenue monthly" />;'));
+    expect(labels.length).toBe(4);
+    expect(labels.every((l) => WINDOW_WORD.test(l))).toBe(true);
     expect(WINDOW_WORD.test("Quotes created (all time)")).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { formatJmd, formatTrn } from "@jamquote/core";
 import { getSharedQuote, type PublicQuoteLine } from "@/lib/public-quote";
+import { lineUnitLabel } from "@/lib/quote-totals";
 import styles from "./shared-quote.module.css";
 import PrintButton from "./PrintButton";
 import QuoteDecision from "./QuoteDecision";
@@ -76,7 +77,7 @@ export default async function SharedQuotePage({ params }: { params: { token: str
                       {l.description}
                       <span className={styles.qty}>
                         {" "}
-                        — {l.quantity} {l.unitLabel?.trim() || l.rateUnit.toLowerCase()}
+                        — {l.quantity} {lineUnitLabel(l)}
                       </span>
                     </td>
                     <td className={styles.amount}>

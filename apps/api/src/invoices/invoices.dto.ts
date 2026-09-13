@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  BOUNDS,
   JobComponentKind,
   QuoteDetailLevel,
   quoteLineItemSchema,
@@ -63,8 +64,8 @@ export const updateInvoiceSchema = z.object({
   // financial field, not a cosmetic one — see Invoice.issueDate in schema.
   issueDate: z.coerce.date().optional(),
   terms: z.string().max(5000).optional(),
-  gctRatePct: z.number().min(0).max(100).optional(),
-  discountPct: z.number().min(0).max(100).optional(),
+  gctRatePct: z.number().min(BOUNDS.gctRatePct.min).max(BOUNDS.gctRatePct.max).optional(),
+  discountPct: z.number().min(BOUNDS.discountPct.min).max(BOUNDS.discountPct.max).optional(),
   depositCents: z.number().int().nonnegative().optional(),
   // Display setting only — does not affect totals math.
   detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
@@ -95,8 +96,8 @@ export const createInvoiceSchema = z.object({
   terms: z.string().max(5000).optional(),
   // Defaults are applied from the business's own settings when omitted — see
   // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
-  gctRatePct: z.number().min(0).max(100).optional(),
-  discountPct: z.number().min(0).max(100).default(0),
+  gctRatePct: z.number().min(BOUNDS.gctRatePct.min).max(BOUNDS.gctRatePct.max).optional(),
+  discountPct: z.number().min(BOUNDS.discountPct.min).max(BOUNDS.discountPct.max).default(0),
   depositCents: z.number().int().nonnegative().default(0),
   detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
   sections: z.array(invoiceSectionInputSchema).default([]),

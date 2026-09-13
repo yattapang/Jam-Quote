@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BOUNDS, formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
+import { lineUnitLabel } from "@/lib/quote-totals";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -84,7 +85,7 @@ export default function ProjectCosts({
     const r = labourRates.find((x) => x.id === id);
     if (!r) return;
     setRate(String(r.rateDollars));
-    setUnitLabel(r.unitLabel?.trim() || r.rateUnit.toLowerCase());
+    setUnitLabel(lineUnitLabel(r));
     if (!who.trim()) setWho(r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade);
   }
 
@@ -299,7 +300,7 @@ export default function ProjectCosts({
                   {labourRates.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade} ·{" "}
-                      {formatJmd(r.rateCents)}/{r.unitLabel?.trim() || r.rateUnit.toLowerCase()}
+                      {formatJmd(r.rateCents)}/{lineUnitLabel(r)}
                     </option>
                   ))}
                 </select>

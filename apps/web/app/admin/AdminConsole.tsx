@@ -14,6 +14,8 @@ import {
   formatPlatformMoney,
   type CurrencyCode,
   safeHref,
+  BOUNDS,
+  inputMin,
 } from "@jamquote/core";
 import {
   getAdminPricing,
@@ -2545,6 +2547,32 @@ function RegulatoryEditor({
   );
 }
 
+/**
+ * `reference: z.string().max(120)` in `recordSubscriptionPaymentSchema`. A string
+ * length is not a `BOUNDS` entry, so this is a copy — and
+ * `input-bounds-usage.test.ts` parses the real DTO to prove the two agree.
+ */
+export const SUBSCRIPTION_REFERENCE_MAX = 120;
+
+/**
+ * Why a subscription payment cannot be recorded, in words, or null.
+ *
+ * The form had no client validation: `min={0}` let `0` through to a server rule of
+ * `amountCents: .int().positive()`, which refused it as "Number must be greater
+ * than 0" at `amountCents`, and a long reference came back as a path name. These
+ * match `recordSubscriptionPaymentSchema` field for field, and are checked against
+ * the TRIMMED values the payload actually sends. A blank amount is not a problem:
+ * it is omitted and means the agreed price.
+ */
+export function subscriptionPaymentProblem(reference: string, amount: string): string | null {
+  if (reference.trim().length > SUBSCRIPTION_REFERENCE_MAX)
+    return `Reference must be ${SUBSCRIPTION_REFERENCE_MAX} characters or fewer.`;
+  if (amount.trim()) {
+    const cents = dollarsStrToCents(amount.trim());
+    if (!Number.isFinite(cents) || cents <= 0) return "Amount must be above zero, or blank for the agreed price.";
+  }
+  return null;
+}
 
 /**
  * A tenant's platform-subscription payments: what they have paid JamQuote, and
@@ -2644,11 +2672,11 @@ function TenantBilling({
           </label>
           <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
             Reference
-            <input style={field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Bank ref, cheque no." />
+            <input style={field} value={reference} maxLength={SUBSCRIPTION_REFERENCE_MAX} onChange={(e) => setReference(e.target.value)} placeholder="Bank ref, cheque no." />
           </label>
           <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
             Amount (leave blank for the agreed price)
-            <input style={field} type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Standard" />
+            <input style={field} type="number" min={inputMin(BOUNDS.moneyDollars)} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Standard" />
           </label>
           <label style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
             Term
@@ -2661,8 +2689,14 @@ function TenantBilling({
           <button
             type="button"
             disabled={busy}
-            onClick={() =>
-              run(() =>
+            onClick={() => {
+              const problem = subscriptionPaymentProblem(reference, amount);
+              if (problem) {
+                // Refused here, and named — not sent to be refused by path.
+                setError(problem);
+                return;
+              }
+              void run(() =>
                 recordSubscriptionPayment(businessId, {
                   method,
                   ...(reference.trim() ? { reference: reference.trim() } : {}),
@@ -2671,8 +2705,8 @@ function TenantBilling({
                   ...(amount.trim() ? { amountCents: Math.round(Number(amount) * 100) } : {}),
                   ...(interval ? { interval } : {}),
                 }),
-              )
-            }
+              );
+            }}
             style={{ height: 34, borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "none", background: "var(--good)", color: "#fff", opacity: busy ? 0.6 : 1 }}
           >
             {busy ? "Recording…" : "Record & extend term"}

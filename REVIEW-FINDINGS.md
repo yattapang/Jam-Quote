@@ -52,6 +52,52 @@ because money that has not arrived cannot buy a term. Five tests in a new
 `admin.dto.test.ts`, including next month as well as the absurd century — a
 fat-fingered month grants a month just as quietly.
 
+## Guard conversion (S14-S19) — state at the session limit, START HERE next
+
+**Committed and verified by me, not on an agent's report:** S14 quote-decision (every
+database call recorded before acting), S15 middleware (routes discovered from the
+filesystem), S16 mirrored shapes (every exported interface and alias, which found two
+genuinely dead shapes), S17 admin-console honesty (every assertion on the shared
+parser, twelve private helpers deleted), S18 input bounds (DTOs now SPEND `BOUNDS`,
+checked behaviourally by moving `BOUNDS`; live payment-form validation defect fixed),
+S19 unit labels (the public quote page's bypass fixed), plus the shared parser
+`apps/web/lib/test/source-ast.ts` and the guard doctrine in `.claude/agents/README.md`.
+
+**Found by the conversions and fixed:** the public INVOICE page had the same unit-label
+bypass as the public quote page; `ProjectCosts.tsx` had it twice; `JobForm.tsx` had it in
+two picker labels (the labour one ignored the rate's own unit entirely) and in the
+add-new-equipment path, which still stamped a unit invented from the billing cadence -
+the exact defect a comment in that file records as fixed, fixed for picking an item and
+not for creating one. The rule now lives once in `components/forms/job-component-units.ts`
+with tests, because the add-new path could not reach the picker's closure and had grown
+its own copy.
+
+**NOT DONE — two agents died at the usage limit mid-task. Their work is SAVED, unverified,
+outside the repo:**
+
+1. **The shared parser has real flaws an independent review confirmed, and S17/S18/S19
+   are built on the unfixed version.** The worst: names are tracked file-wide by name, not
+   by lexical scope, so a genuine module constant (`const currency = "JMD"`) reads as
+   DATA whenever an unrelated function reuses the name — a bypass nobody has to try for.
+   Also: enum members, method calls on literals and const arrows returning literals read
+   as data (bypasses); destructuring assignment, for-of targets and mutation through a
+   property read as constants (false alarms); `callsTo` misses aliases, `.call`, `.apply`;
+   `jsxAttributes` misses spread attributes; and the parser's own comment calls its list of
+   pure conversions "closed by the ECMAScript spec", which is false — a hand-picked list
+   described as closed, an overclaim in the commit that introduced the rule against them.
+   A 571-line rewrite onto the compiler's binder (`ts.Program` + `getSymbolAtLocation`)
+   was in progress and is saved at
+   `scratchpad/unverified/source-ast.binder-rewrite.ts`. It has NOT been run against its
+   tests or against the three guards. Restore it, verify both, and only then commit.
+2. **S15 route discovery still misses routes.** Nested route groups are skipped instead
+   of descended; `page.jsx`/`page.ts`/`route.js` are not recognised; top-level groups,
+   `@slot` and intercepting folders put wrong segments in the URL (false alarms). A fix
+   was in progress (19 tests passing) with a typecheck error at line 67, saved at
+   `scratchpad/unverified/middleware.test.discovery-fix.ts`.
+
+After both: send the whole S14-S19 batch for independent review, since S17-S19 were
+built against the flawed parser.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape

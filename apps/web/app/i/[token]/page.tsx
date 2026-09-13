@@ -1,6 +1,7 @@
 import { formatJmd, invoiceSettlement, formatTrn } from "@jamquote/core";
 import { getSharedInvoice } from "@/lib/public-invoice";
 import type { PublicQuoteLine } from "@/lib/public-quote";
+import { lineUnitLabel } from "@/lib/quote-totals";
 import styles from "../../q/[token]/shared-quote.module.css";
 import PrintButton from "../../q/[token]/PrintButton";
 
@@ -84,7 +85,7 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
                       {l.description}
                       <span className={styles.qty}>
                         {" "}
-                        — {l.quantity} {l.unitLabel?.trim() || l.rateUnit.toLowerCase()}
+                        — {l.quantity} {lineUnitLabel(l)}
                       </span>
                     </td>
                     <td className={styles.amount}>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PARISHES, RateUnit } from "@jamquote/core";
+import { BOUNDS, PARISHES, RateUnit } from "@jamquote/core";
 
 export const createLabourRateSchema = z.object({
   trade: z.string().max(80).min(1),
@@ -38,7 +38,7 @@ export const createMaterialFavouriteSchema = z.object({
   // decision — this is deliberately not a general conversion graph.
   measureUnit: z.string().max(40).optional(),
   coveragePerSellUnit: z.number().positive().optional(),
-  wastePct: z.number().min(0).max(100).optional(),
+  wastePct: z.number().min(BOUNDS.wastePct.min).max(BOUNDS.wastePct.max).optional(),
   // LEGACY free-text fields, still accepted so pre-2a clients (the mobile app,
   // any cached web bundle) keep working against this endpoint. Superseded by
   // categoryDefId / unitId, which win when both are supplied.

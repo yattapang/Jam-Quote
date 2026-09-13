@@ -1,6 +1,8 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import { parseFile, walk, renderedExpressions, unwrap } from "./test/source-ast";
 
 /**
  * A source-scanning guard, not a behaviour test.
@@ -10,22 +12,69 @@ import { describe, expect, it } from "vitest";
  * screens simply did not call it: the quote and invoice detail pages each
  * rendered `RATE_UNIT_LABEL[line.rateUnit]` directly, so a line sold by the
  * metre printed "30 units". Two library pages had gone further and declared
- * their OWN copy of the cadence map.
+ * their own copy of the cadence map. Most recently the PUBLIC quote page
+ * (`app/q/[token]/page.tsx` — the one a contractor's CLIENT reads) rendered
+ * `l.unitLabel?.trim() || l.rateUnit.toLowerCase()`, which is behaviourally
+ * identical to the bug above (it prints the wrong thing the moment a
+ * `RateUnit` member's label stops being its lowercased name) but was neither
+ * of the two text shapes the previous version of this guard matched. It was
+ * green with that bypass in the codebase.
  *
- * Nothing in the type system objects to any of that — the bypass is a valid
- * lookup on a valid map — and with no DOM tests in this repo, no unit test can
- * observe what a page rendered. So the invariant is enforced where it is
- * actually expressible: over the source text.
+ * ## Why this is a parse, not a behavioural test
  *
- * The rule: a line's unit is resolved in exactly one place. If you need a
- * direct RATE_UNIT_LABEL lookup, it is almost certainly because you are
- * enumerating the cadence vocabulary (building a picker), not labelling a
- * priced row — add the file below with a note saying which.
+ * Doctrine ranks a TYPE or a behavioural test over the real code path above a
+ * source parse. Both were considered for this guard and rejected:
+ *
+ * - No TYPE rejects the bypass. `l.rateUnit.toLowerCase()` and
+ *   `RATE_UNIT_LABEL[l.rateUnit]` both type-check; `RateUnit` is a plain
+ *   string union and its members currently lowercase to their own label,
+ *   which is exactly why the divergence is invisible until a label stops
+ *   matching its lowercased name.
+ * - A single behavioural test proving every surface renders
+ *   `lineUnitLabel`'s output would need to actually render each one: two
+ *   Next.js SERVER components with a database dependency (`quotes/[id]`,
+ *   `invoices/[id]`, and this public page — none render without mocking a
+ *   data-access module), and two `@react-pdf/renderer` documents, which do
+ *   not produce DOM nodes `@testing-library` can query at all. Building that
+ *   harness for four unrelated rendering mechanisms is a project in its own
+ *   right, not a guard, and `line-editor.ts`'s own comment already states
+ *   the quote/invoice builders "cannot be render-tested in this repo". So the
+ *   fact is expressed over the AST instead, per doctrine's rung 3.
+ *
+ * ## The class this detects
+ *
+ * Not the text `RATE_UNIT_LABEL[` and not the text `toLowerCase`: displaying
+ * a rate unit without going through `lineUnitLabel`. Concretely, an
+ * expression RENDERED as JSX content (`renderedExpressions`, never an
+ * attribute) that reads `.rateUnit` — directly (`l.rateUnit`), through a
+ * destructure (`const { rateUnit } = l` then `{rateUnit...}`), or as the key
+ * into ANY object indexed by it (the real `RATE_UNIT_LABEL` or a locally
+ * redeclared copy, under any name) — unless that read is itself an argument
+ * to a call to `lineUnitLabel`. Every historical and hypothetical spelling
+ * below reduces to "a `.rateUnit` read reaches render outside that one call",
+ * so the detector does not need to recognise any of their surface forms.
+ *
+ * ## What it does not prove
+ *
+ * It is a syntactic reachability check, not a type checker: it cannot follow
+ * `rateUnit` across a function call boundary (a helper that takes `line` and
+ * returns a pre-formatted string defeats it, same as it would defeat a
+ * human reviewer skimming for `.rateUnit`), and it does not verify
+ * `lineUnitLabel` itself is correct — only that it is the thing called.
+ * Passing a WRONG value to a correctly-named `lineUnitLabel` (shadowing the
+ * import, or calling a differently-defined local function that happens to
+ * share the name) also defeats it; no scanner distinguishes a call from a
+ * deliberate shadow. It also does not scan `.ts`/`.js` files with no JSX,
+ * since `renderedExpressions` only exists for JSX content — a rate unit
+ * fed into `console.log` or a CSV export is out of scope for a guard about
+ * what the CUSTOMER sees rendered.
  */
 const ALLOWED = new Set([
-  // Defines lineUnitLabel and the map itself.
+  // Defines lineUnitLabel and the map itself — the one place `.rateUnit` is
+  // read to PRODUCE the label, not to render a line.
   "lib/quote-totals.ts",
-  // Enumerates the cadences to build the unit picker's options; not a row label.
+  // Enumerates the cadences to build the unit picker's options; not a row
+  // label, and has no JSX besides (a plain .ts file).
   "lib/line-editor.ts",
 ]);
 
@@ -42,27 +91,106 @@ function sourceFiles(dir: string, acc: string[] = []): string[] {
 const WEB_ROOT = join(__dirname, "..");
 const rel = (f: string) => f.slice(WEB_ROOT.length + 1).split("\\").join("/");
 
+/** Every name a variable-declaration's binding pattern destructures from a `rateUnit` property. */
+function rateUnitBoundNames(sf: ts.SourceFile): Set<string> {
+  const names = new Set<string>();
+  walk(sf, (n) => {
+    if (!ts.isBindingElement(n) || !ts.isIdentifier(n.name)) return;
+    const propertyName = n.propertyName
+      ? ts.isIdentifier(n.propertyName)
+        ? n.propertyName.text
+        : undefined
+      : n.name.text;
+    if (propertyName === "rateUnit") names.add(n.name.text);
+  });
+  return names;
+}
+
+/** Is `node` a read of the line's rate unit — `l.rateUnit`, or a destructured `rateUnit`? */
+function isRateUnitRead(node: ts.Node, destructured: Set<string>): boolean {
+  if (ts.isPropertyAccessExpression(node) && node.name.text === "rateUnit") return true;
+  if (ts.isIdentifier(node) && !ts.isPropertyAccessExpression(node.parent) && destructured.has(node.text)) {
+    return true;
+  }
+  return false;
+}
+
+/** Does `node` sit inside an argument (at any depth) of a call to `lineUnitLabel`? */
+function isInsideLineUnitLabelCall(node: ts.Node, stopAt: ts.Node): boolean {
+  let current: ts.Node = node;
+  while (current !== stopAt && current.parent) {
+    const parent = current.parent;
+    if (ts.isCallExpression(parent) && parent.arguments.includes(current as ts.Expression)) {
+      const callee = unwrap(parent.expression);
+      if (ts.isIdentifier(callee) && callee.text === "lineUnitLabel") return true;
+    }
+    current = parent;
+  }
+  return false;
+}
+
+/**
+ * Depth-first visit of `root`'s descendants, EXCLUDING the contents of any
+ * nested JSX attribute. An attribute's value — `onChange={(e) => ...}`,
+ * `onSubmit={async () => { patchComponent(..., { unitLabel: x.rateUnit... }) }}`
+ * — sits inside a rendered expression's subtree syntactically, but it
+ * computes DATA (an event handler body, a draft-state patch), not text the
+ * page prints. Without this exclusion, a callback anywhere inside a
+ * conditionally-rendered block reads as if it were rendered content, which
+ * is a false positive this guard's own doctrine (rung 4, "prove the parse
+ * found something" — precisely, not approximately) rules out.
+ */
+function walkRendered(node: ts.Node, visit: (n: ts.Node) => void): void {
+  visit(node);
+  ts.forEachChild(node, (child) => {
+    if (ts.isJsxAttribute(child) || ts.isJsxSpreadAttribute(child)) return;
+    walkRendered(child, visit);
+  });
+}
+
+/** Every `.rateUnit` (or destructured equivalent) read inside `root` that is not routed through `lineUnitLabel`. */
+function unroutedRateUnitReads(root: ts.Expression, destructured: Set<string>): ts.Node[] {
+  const offenders: ts.Node[] = [];
+  walkRendered(root, (node) => {
+    if (!isRateUnitRead(node, destructured)) return;
+    if (!isInsideLineUnitLabelCall(node, root)) offenders.push(node);
+  });
+  return offenders;
+}
+
 describe("a line's unit is resolved in one place", () => {
   const files = sourceFiles(join(WEB_ROOT, "app")).concat(
     sourceFiles(join(WEB_ROOT, "lib")),
     sourceFiles(join(WEB_ROOT, "components")),
   );
+  const relFiles = files.map(rel);
 
-  it("no screen indexes RATE_UNIT_LABEL directly", () => {
-    const offenders = files.filter(
-      (f) => !ALLOWED.has(rel(f)) && readFileSync(f, "utf8").includes("RATE_UNIT_LABEL["),
-    );
-    expect(offenders.map(rel)).toEqual([]);
+  it("found the surfaces this guard exists for", () => {
+    // A rename or a move that emptied discovery should fail loudly, not scan
+    // zero files. These four are exactly the surfaces the doctrine names:
+    // the quote detail page, both PDFs, and the public page that was the
+    // live bypass.
+    expect(relFiles).toContain("app/(app)/quotes/[id]/page.tsx");
+    expect(relFiles).toContain("app/(app)/invoices/[id]/page.tsx");
+    expect(relFiles).toContain("lib/pdf/QuotePdf.tsx");
+    expect(relFiles).toContain("lib/pdf/InvoicePdf.tsx");
+    expect(relFiles).toContain("app/q/[token]/page.tsx");
+    expect(relFiles.length).toBeGreaterThan(20);
   });
 
-  it("no file redeclares the cadence map", () => {
-    // A local copy silently drops unitLabel handling and drifts from the real
-    // map — both library list pages had one.
-    const offenders = files.filter((f) => {
-      if (ALLOWED.has(rel(f))) return false;
-      const src = readFileSync(f, "utf8");
-      return /HOUR:\s*"hour"/.test(src) && /UNIT:\s*"unit"/.test(src);
-    });
-    expect(offenders.map(rel)).toEqual([]);
+  it("no rendered expression reads a line's rateUnit outside lineUnitLabel", () => {
+    const offenders: string[] = [];
+    for (const f of files) {
+      if (ALLOWED.has(rel(f))) continue;
+      const sf = parseFile(f);
+      const destructured = rateUnitBoundNames(sf);
+      for (const expr of renderedExpressions(sf)) {
+        if (unroutedRateUnitReads(expr, destructured).length > 0) {
+          offenders.push(rel(f));
+          break;
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

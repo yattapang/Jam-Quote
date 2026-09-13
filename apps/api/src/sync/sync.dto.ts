@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ProjectStage } from "@jamquote/core";
+import { BOUNDS, ProjectStage } from "@jamquote/core";
 import { clientFieldRules } from "../clients/clients.dto.js";
 import { projectFieldRules } from "../projects/projects.dto.js";
 
@@ -57,7 +57,7 @@ const projectDataSchema = z.object({
   // hold — and the stage it sends survives the round-trip rather than being
   // quietly rewritten to the default.
   stage: z.nativeEnum(ProjectStage).optional(),
-  progressPct: z.number().int().min(0).max(100).optional(),
+  progressPct: z.number().int().min(BOUNDS.progressPct.min).max(BOUNDS.progressPct.max).optional(),
 });
 
 const changeSchema = <T extends z.ZodTypeAny>(data: T) =>
