@@ -11,8 +11,8 @@ const newPasswordSchema = z.string().min(8);
 export const registerSchema = z.object({
   email: z.string().email(),
   password: newPasswordSchema,
-  fullName: z.string().max(120).min(1).optional(),
-  businessName: z.string().max(200).min(1),
+  fullName: z.string().trim().min(1).max(120).optional(),
+  businessName: z.string().trim().min(1).max(200),
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 

@@ -2,14 +2,14 @@ import { z } from "zod";
 import { BOUNDS, PARISHES, RateUnit, boundedNumber } from "@jamquote/core";
 
 export const createLabourRateSchema = z.object({
-  trade: z.string().max(80).min(1),
+  trade: z.string().trim().min(1).max(80),
   skillTier: z.string().max(40).optional(),
   rateCents: z.number().int().nonnegative(),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
   // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
-  unitLabel: z.string().max(40).min(1).optional(),
+  unitLabel: z.string().trim().min(1).max(40).optional(),
 });
 export type CreateLabourRateInput = z.infer<typeof createLabourRateSchema>;
 export const updateLabourRateSchema = createLabourRateSchema.partial();
@@ -19,7 +19,7 @@ export const createMaterialFavouriteSchema = z.object({
   // Optional as of 2a: when the material has a category, the name is COMPOSED
   // from its includeInName attributes (MaterialSchemaService.normalizeForWrite)
   // rather than typed. Supply a name together with nameCustom to pin one.
-  name: z.string().max(200).min(1).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   nameCustom: z.boolean().optional(),
   // Controlled vocabulary for how the material is sold. Validated against the
   // rows this business may see — a curated unit or one of its own.
@@ -93,7 +93,7 @@ export const createMaterialUnitSchema = z.object({
 export type CreateMaterialUnitInput = z.infer<typeof createMaterialUnitSchema>;
 
 export const createEquipmentItemSchema = z.object({
-  name: z.string().max(200).min(1),
+  name: z.string().trim().min(1).max(200),
   owned: z.boolean().default(false),
   vendor: z.string().max(120).optional(),
   vendorPhone: z.string().max(40).optional(),
@@ -102,7 +102,7 @@ export const createEquipmentItemSchema = z.object({
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
   // contractor's own vocabulary goes. Absent/blank = print the rateUnit.
-  unitLabel: z.string().max(40).min(1).optional(),
+  unitLabel: z.string().trim().min(1).max(40).optional(),
 });
 export type CreateEquipmentItemInput = z.infer<typeof createEquipmentItemSchema>;
 export const updateEquipmentItemSchema = createEquipmentItemSchema.partial();
@@ -116,7 +116,7 @@ export type UpdateEquipmentItemInput = z.infer<typeof updateEquipmentItemSchema>
  * on the model for the legacy platform rows that predate tenant ownership.
  */
 export const createSupplierSchema = z.object({
-  name: z.string().max(200).min(1),
+  name: z.string().trim().min(1).max(200),
   website: z.string().url().optional(),
   parish: z.enum(PARISHES).optional(),
 });

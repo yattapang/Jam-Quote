@@ -198,15 +198,55 @@ describe("nextTermEnd is timezone-independent", () => {
     expect(at.toISOString().slice(0, 10)).toBe("2027-03-01");
   });
 
-  it("handles a month-end start without silently changing the day", () => {
-    // 31 January + one month has no 31 February. JavaScript rolls it to 3 March,
-    // which is the documented behaviour of setUTCMonth and the same answer any
-    // calendar-month implementation has to pick. Pinned so the choice is visible
-    // rather than discovered by a tenant.
+  it("clamps a month-end start to the last day of the short month, not an overflow into the next one", () => {
+    // 31 January + one month has no 31 February. Raw setUTCMonth overflows to
+    // 3 March (28 days late Feb, then 3 more spill into March); the correct
+    // calendar-month answer clamps to the actual last day of February.
     expect(
       nextTermEnd("monthly", "2026-01-31T00:00:00.000Z", day("2026-01-31T00:00:00.000Z"))
         .toISOString()
         .slice(0, 10),
-    ).toBe("2026-03-03");
+    ).toBe("2026-02-28");
+  });
+
+  it("clamps 31 August to 30 September", () => {
+    expect(
+      nextTermEnd("monthly", "2026-08-31T00:00:00.000Z", day("2026-08-31T00:00:00.000Z"))
+        .toISOString()
+        .slice(0, 10),
+    ).toBe("2026-09-30");
+  });
+
+  it("clamps 29 Feb 2028 (leap) annual renewal to 28 Feb 2029 (non-leap)", () => {
+    expect(
+      nextTermEnd("annual", "2028-02-29T00:00:00.000Z", day("2028-02-29T00:00:00.000Z"))
+        .toISOString()
+        .slice(0, 10),
+    ).toBe("2029-02-28");
+  });
+
+  it("a chain of monthly renewals from 31 Jan drifts to the 28th and stays anchored there", () => {
+    // There is no separate "billing anchor day" column — only `renewsAt` is
+    // persisted — so a renewal computed from an already-clamped date cannot
+    // recover the original 31st. This pins that consequence rather than
+    // asserting (incorrectly) that it snaps back once a 31-day month recurs.
+    let at = new Date("2026-01-31T00:00:00.000Z");
+    const ends: string[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      at = nextTermEnd("monthly", at.toISOString(), at);
+      ends.push(at.toISOString().slice(0, 10));
+    }
+    expect(ends).toEqual(["2026-02-28", "2026-03-28", "2026-04-28", "2026-05-28"]);
+  });
+
+  it("is correct at the Jamaican day boundary (UTC-5)", () => {
+    // A UTC-midnight renewsAt is 7pm the previous day in Jamaica. The fix must
+    // still land on the calendar date a Jamaican reads, not shift because of
+    // the offset — this is exactly the boundary startOfJamaicaMonth's comment
+    // warns about for the sibling month-arithmetic bug.
+    expect(
+      nextTermEnd("monthly", "2026-01-31T00:00:00.000Z", day("2026-01-31T00:00:00.000Z"))
+        .toISOString(),
+    ).toBe("2026-02-28T00:00:00.000Z");
   });
 });

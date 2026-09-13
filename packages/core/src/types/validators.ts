@@ -47,7 +47,7 @@ export const jamaicaPhoneSchema = z
 
 export const quoteLineItemSchema = z.object({
   category: z.nativeEnum(LineCategory),
-  description: z.string().min(1),
+  description: z.string().trim().min(1),
   quantity: boundedNumber({ ...BOUNDS.quantity, positiveOnly: true }),
   rateUnit: z.nativeEnum(RateUnit),
   /**

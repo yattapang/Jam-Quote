@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { RulePackService, type StatutoryCustomEntry } from "./rulepack.service.js";
+import { updateRulePackSchema } from "./rulepack.dto.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -313,6 +314,48 @@ describe("RulePackService.update", () => {
     const { svc } = make({ findUnique: vi.fn().mockResolvedValue(null), upsert });
     await svc.update("JM", { verifiedAsOf: null }, "actor-1");
     expect(upsert.mock.calls[0]![0].create.verifiedAsOf).toBeNull();
+  });
+});
+
+describe("RulePackService.update — S10: a submitted code is normalised end to end", () => {
+  // The old version of this suite only checked TYPES (that StatutoryCustomEntry has
+  // the right members). It asserted nothing about VALUES, so it would have stayed
+  // green even if the normalisation the DTO's comment claims — uppercase, spaces to
+  // underscores, trimmed first — silently stopped happening. This drives a real
+  // whitespace-padded, lower-case code through updateRulePackSchema.parse (the DTO
+  // the controller actually calls) and then through RulePackService.update's real
+  // return path, and pins the value that comes back.
+  it('a code submitted as " new levy " comes back as NEW_LEVY through get()', async () => {
+    const parsed = updateRulePackSchema.parse({
+      statutoryCustom: [
+        { code: " new levy ", label: " New Levy ", appliesTo: "BOTH", employeePct: 1, employerPct: 1 },
+      ],
+    });
+    expect(parsed.statutoryCustom![0]!.code).toBe("NEW_LEVY");
+
+    const stored = {
+      countryCode: "JM",
+      taxLabel: null,
+      defaultTaxRatePct: null,
+      verifiedAsOf: null,
+      sourceUrl: null,
+      statutoryRates: {},
+      statutoryCustom: parsed.statutoryCustom,
+      statutoryRetired: [],
+      sources: [],
+      updatedByUserId: "u1",
+      updatedAt: new Date("2026-09-11T00:00:00.000Z"),
+    };
+    const { svc } = make({
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn().mockResolvedValue(stored),
+    });
+
+    const pack = await svc.update("JM", parsed, "u1");
+
+    expect(pack.statutoryCustom).toEqual([
+      expect.objectContaining({ code: "NEW_LEVY", label: "New Levy" }),
+    ]);
   });
 });
 

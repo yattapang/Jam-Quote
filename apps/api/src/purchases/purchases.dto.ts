@@ -15,7 +15,7 @@ export const createPurchaseSchema = z
      * insurance). Required would make contractors invent a job. */
     projectId: z.string().max(64).min(1).nullable().optional(),
     supplierId: z.string().max(64).min(1).nullable().optional(),
-    description: z.string().min(1).max(200),
+    description: z.string().trim().min(1).max(200),
     amountCents: z.number().int().positive(),
     gctCents: z.number().int().nonnegative().optional(),
     category: z.string().max(60).nullable().optional(),
@@ -35,7 +35,7 @@ export type CreatePurchaseInput = z.infer<typeof createPurchaseSchema>;
 export const updatePurchaseSchema = z.object({
   projectId: z.string().max(64).min(1).nullable().optional(),
   supplierId: z.string().max(64).min(1).nullable().optional(),
-  description: z.string().min(1).max(200).optional(),
+  description: z.string().trim().min(1).max(200).optional(),
   amountCents: z.number().int().positive().optional(),
   gctCents: z.number().int().nonnegative().optional(),
   category: z.string().max(60).nullable().optional(),
@@ -71,7 +71,7 @@ export const createLabourEntrySchema = z.object({
   projectId: z.string().max(64).min(1).nullable().optional(),
   /** The rate book entry this came from, when it came from one. */
   labourRateId: z.string().max(64).min(1).nullable().optional(),
-  description: z.string().min(1).max(200),
+  description: z.string().trim().min(1).max(200),
   /** Hours or days — half-days and part-hours are normal, so not an integer. */
   // `Decimal(12,3)`: a fourth decimal would be rounded on write (S9).
   quantity: z
@@ -80,7 +80,7 @@ export const createLabourEntrySchema = z.object({
     .max(100_000)
     .refine((v) => fitsStep(v, BOUNDS.quantity.step), { message: "Use at most 3 decimal places" }),
   rateCents: z.number().int().nonnegative(),
-  unitLabel: z.string().min(1).max(30).optional(),
+  unitLabel: z.string().trim().min(1).max(30).optional(),
   workedOn: z.string().datetime(),
   note: z.string().max(500).nullable().optional(),
 });

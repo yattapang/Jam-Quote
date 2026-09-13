@@ -14,11 +14,11 @@ import {
  */
 export const invoiceLineJobComponentSchema = z.object({
   kind: z.nativeEnum(JobComponentKind),
-  description: z.string().max(500).min(1),
+  description: z.string().trim().min(1).max(500),
   quantityPerUnit: z.number().positive(),
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
-  unitLabel: z.string().max(40).min(1).optional(),
+  unitLabel: z.string().trim().min(1).max(40).optional(),
   unitPriceCents: z.number().int().nonnegative(),
 });
 export type InvoiceLineJobComponentInput = z.infer<
@@ -35,15 +35,15 @@ export const invoiceLineItemInputSchema = quoteLineItemSchema.and(
   z.object({
     sort: z.number().int().nonnegative().optional(),
     jobId: z.string().max(64).min(1).optional(),
-    jobName: z.string().max(200).min(1).optional(),
-    jobUnit: z.string().max(40).min(1).optional(),
+    jobName: z.string().trim().min(1).max(200).optional(),
+    jobUnit: z.string().trim().min(1).max(40).optional(),
     jobComponents: z.array(invoiceLineJobComponentSchema).optional(),
   }),
 );
 export type InvoiceLineItemInput = z.infer<typeof invoiceLineItemInputSchema>;
 
 export const invoiceSectionInputSchema = z.object({
-  title: z.string().max(200).min(1),
+  title: z.string().trim().min(1).max(200),
   sort: z.number().int().nonnegative().optional(),
   lineItems: z.array(invoiceLineItemInputSchema).default([]),
 });

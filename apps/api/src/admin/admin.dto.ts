@@ -26,7 +26,7 @@ export type SetTenantPlanInput = z.infer<typeof setTenantPlanSchema>;
 
 /** Body for DELETE /admin/tenants/:id — must match the business's exact name. */
 export const hardDeleteTenantSchema = z.object({
-  confirmName: z.string().max(200).min(1),
+  confirmName: z.string().trim().min(1).max(200),
 });
 export type HardDeleteTenantInput = z.infer<typeof hardDeleteTenantSchema>;
 
@@ -68,9 +68,9 @@ export type UpdateAdminInput = z.infer<typeof updateAdminSchema>;
  * console. It is nullable so an entry can be downgraded to monitoring.
  */
 export const createRegulatoryUpdateSchema = z.object({
-  title: z.string().max(200).min(1),
-  category: z.string().max(80).min(1),
-  summary: z.string().max(2000).min(1),
+  title: z.string().trim().min(1).max(200),
+  category: z.string().trim().min(1).max(80),
+  summary: z.string().trim().min(1).max(2000),
   effectiveDate: z.coerce.date().nullable().optional(),
   actionNeeded: z.string().max(2000).nullable().optional(),
   // See rulepack.dto.ts: `z.string().url()` accepts `javascript:`, and this value is

@@ -84,11 +84,23 @@ function fieldOfPropertyRead(node: ts.Node): Field | null {
 
 /**
  * Offenders found in one file: a subtraction and a comparison list, each entry a
- * 1-based source line.
+ * 1-based source line, plus the same offenders keyed by their enclosing
+ * function's name (see `enclosingFunctionName`) with exact per-kind counts.
+ *
+ * Both views come from the SAME visit over the SAME AST nodes, so the line
+ * list and the per-function counts can never disagree about which
+ * expressions they describe — there is no second, independently-written
+ * classifier that could drift from the first.
  */
 interface Offenders {
   subtractLines: number[];
   compareLines: number[];
+  byFunction: Map<string, FunctionOffenders>;
+}
+
+interface FunctionOffenders {
+  subtract: number;
+  compare: number;
 }
 
 /**
@@ -130,12 +142,19 @@ function findOffenders(sourceText: string, fileName: string): Offenders {
 
   const subtractLines: number[] = [];
   const compareLines: number[] = [];
+  const byFunction = new Map<string, FunctionOffenders>();
   const COMPARE_OPS = new Set([
     ts.SyntaxKind.GreaterThanToken,
     ts.SyntaxKind.GreaterThanEqualsToken,
     ts.SyntaxKind.LessThanToken,
     ts.SyntaxKind.LessThanEqualsToken,
   ]);
+
+  function bump(key: string, kind: keyof FunctionOffenders) {
+    const cur = byFunction.get(key) ?? { subtract: 0, compare: 0 };
+    cur[kind] += 1;
+    byFunction.set(key, cur);
+  }
 
   function visit(node: ts.Node) {
     if (ts.isBinaryExpression(node)) {
@@ -144,32 +163,61 @@ function findOffenders(sourceText: string, fileName: string): Offenders {
       const isTotalPaidPair = left && right && left !== right; // one "total", one "paid"
       if (isTotalPaidPair) {
         const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
-        if (node.operatorToken.kind === ts.SyntaxKind.MinusToken) subtractLines.push(line);
-        else if (COMPARE_OPS.has(node.operatorToken.kind)) compareLines.push(line);
+        const key = `${fileName}#${enclosingFunctionName(sf, node)}`;
+        if (node.operatorToken.kind === ts.SyntaxKind.MinusToken) {
+          subtractLines.push(line);
+          bump(key, "subtract");
+        } else if (COMPARE_OPS.has(node.operatorToken.kind)) {
+          compareLines.push(line);
+          bump(key, "compare");
+        }
       }
     }
     ts.forEachChild(node, visit);
   }
   visit(sf);
 
-  return { subtractLines, compareLines };
+  return { subtractLines, compareLines, byFunction };
+}
+
+/** The named function, method, or `const X = () =>`/`function X()` a node sits
+ * in. Falls back to `<module>` for top-level code, matching the pattern
+ * `apps/web/lib/input-bounds-usage.test.ts` uses for the same purpose. */
+function enclosingFunctionName(sf: ts.SourceFile, node: ts.Node): string {
+  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
+    if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name) {
+      return ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
+    }
+    if (
+      (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) &&
+      ts.isVariableDeclaration(n.parent) &&
+      ts.isIdentifier(n.parent.name)
+    ) {
+      return n.parent.name.text;
+    }
+  }
+  return "<module>";
 }
 
 /**
- * Lines allowed to do it anyway, each with the reason it is correct.
+ * Functions allowed to do it anyway, each with EXACT counts and the reason.
  *
- * A genuine `file:line` pair: the exemption names the exact line of the
- * offending expression, so moving the code — or a second, unrelated offender
- * landing anywhere else in the same file — makes that new occurrence visible
- * instead of riding along on someone else's exemption.
+ * Keyed by `file#function`, with an exact `{ subtract, compare }` count — the
+ * same design `apps/web/lib/input-bounds-usage.test.ts` uses for S18. A new
+ * offender inside an already-exempt function changes its count and fails; so
+ * does removing the legitimate one.
  */
-const ALLOWED: Record<string, string> = {
-  "apps/api/src/exports/exports.service.ts:98": [
-    "The accountant's ACCRUAL file. Retention has been billed and is receivable,",
-    "just not yet payable — stated in a comment there, with the held amount in its",
-    "own column beside it. The cash-basis view is a different file.",
-  ].join(" "),
-};
+const ALLOWED: { key: string; subtract: number; compare: number; reason: string }[] = [
+  {
+    key: "apps/api/src/exports/exports.service.ts#invoicesIssued",
+    subtract: 1,
+    compare: 0,
+    reason:
+      "The accountant's ACCRUAL file. Retention has been billed and is receivable, " +
+      "just not yet payable — stated in a comment there, with the held amount in its " +
+      "own column beside it. The cash-basis view is a different file.",
+  },
+];
 
 const files = sourceFiles(SCANNED[0]!)
   .concat(...SCANNED.slice(1).map((d) => sourceFiles(d)))
@@ -178,8 +226,15 @@ const files = sourceFiles(SCANNED[0]!)
     return { file: rel, offenders: findOffenders(readFileSync(file, "utf8"), rel) };
   });
 
-function unexempted(lines: number[], file: string): number[] {
-  return lines.filter((line) => !(`${file}:${line}` in ALLOWED));
+const allowedByKey = new Map(ALLOWED.map((a) => [a.key, a]));
+
+/** All `file#function` keys with a non-zero count, across every scanned file. */
+function allOffenderKeys(): Map<string, FunctionOffenders> {
+  const merged = new Map<string, FunctionOffenders>();
+  for (const f of files) {
+    for (const [key, counts] of f.offenders.byFunction) merged.set(key, counts);
+  }
+  return merged;
 }
 
 describe("invoice settlement is decided in core, nowhere else", () => {
@@ -191,39 +246,35 @@ describe("invoice settlement is decided in core, nowhere else", () => {
     }
   });
 
-  it("no file subtracts paidCents from totalCents", () => {
-    const offenders = files
-      .filter((f) => unexempted(f.offenders.subtractLines, f.file).length > 0)
-      .map((f) => f.file);
+  it("no function subtracts paidCents from totalCents, except an exempt one at its exact count", () => {
+    const offenders = [...allOffenderKeys()]
+      .filter(([key, counts]) => counts.subtract !== (allowedByKey.get(key)?.subtract ?? 0))
+      .map(([key, counts]) => `${key}: ${counts.subtract} subtract (allowed ${allowedByKey.get(key)?.subtract ?? 0})`);
     // Use `settlementOf` (or `invoiceSettlement`) from core. What a client-facing
     // document should ask for is `outstandingCents`, with `heldCents` shown beside
     // it rather than silently dropped.
     expect(offenders).toEqual([]);
   });
 
-  it("no file decides settled or overdue by comparing paid against the total", () => {
+  it("no function decides settled or overdue by comparing paid against the total, except an exempt one at its exact count", () => {
     // `paid >= total` is right only when nothing is held, which the comparison
     // cannot know. This is the shape that kept a retention invoice PARTIAL for
     // ever, which then let the sweep flip it to OVERDUE.
-    const offenders = files
-      .filter((f) => unexempted(f.offenders.compareLines, f.file).length > 0)
-      .map((f) => f.file);
+    const offenders = [...allOffenderKeys()]
+      .filter(([key, counts]) => counts.compare !== (allowedByKey.get(key)?.compare ?? 0))
+      .map(([key, counts]) => `${key}: ${counts.compare} compare (allowed ${allowedByKey.get(key)?.compare ?? 0})`);
     expect(offenders).toEqual([]);
   });
 
-  it("does not let the allow-list rot", () => {
-    const scanned = new Set(files.map((f) => f.file));
-    const stillPresent = (key: string) => scanned.has(key.split(":")[0]!);
-    expect(Object.keys(ALLOWED).filter((key) => !stillPresent(key))).toEqual([]);
-    // And the exempted line must still actually be the offending line, or the
-    // exemption is covering nothing (comment rotted) or something else (comment lied).
-    for (const key of Object.keys(ALLOWED)) {
-      const [file, lineStr] = key.split(":");
-      const line = Number(lineStr);
-      const found = files.find((f) => f.file === file)!;
-      const onThatLine =
-        found.offenders.subtractLines.includes(line) || found.offenders.compareLines.includes(line);
-      expect(onThatLine, `${key} is exempt but line ${line} has no offending expression`).toBe(true);
+  it("does not let the allow-list rot: every entry's function exists and its counts match exactly", () => {
+    const merged = allOffenderKeys();
+    for (const a of ALLOWED) {
+      const [file] = a.key.split("#");
+      expect(files.some((f) => f.file === file), `${a.key}: file not scanned`).toBe(true);
+      const counts = merged.get(a.key);
+      expect(counts, `${a.key}: function no longer offends at all — exemption covers nothing`).toBeDefined();
+      expect(counts?.subtract, `${a.key}: subtract count drifted from the exemption`).toBe(a.subtract);
+      expect(counts?.compare, `${a.key}: compare count drifted from the exemption`).toBe(a.compare);
     }
   });
 
@@ -269,19 +320,51 @@ describe("invoice settlement is decided in core, nowhere else", () => {
     ).toEqual([]);
   });
 
-  it("a second offender in an already-exempt file is still caught", () => {
-    // This is the exact defeat a review executed: the allow-list used to be keyed
-    // by file path alone, so any new offender anywhere in exports.service.ts rode
-    // along on the one legitimate exemption. Proving it here, rather than only
-    // trusting the file:line design, is the point.
+  it("a second offender ON THE SAME LINE as an exempt one is still caught (the exact review defeat)", () => {
+    // This is the exact defeat a review executed against the old file:line key:
+    // `i.totalCents > i.paidCents ? 1 : 0,` planted on the SAME LINE as the
+    // allowed exports.service.ts subtraction stayed green, because the
+    // allow-list's `file:line` key existed for that line and the new offender
+    // was never asked about. Function-name-plus-exact-count closes that: the
+    // ternary's COMPARE is a second offending expression, and if it sits in the
+    // SAME function as an exemption that allows 0 compares, the count for that
+    // function becomes 1 and the exemption (0) no longer matches — a failure,
+    // exactly as it should be.
     const src = [
-      "const a = i.totalCents - i.paidCents; // line 1, imagine this is the allowed one",
-      "function cashBasis(x) { return x.totalCents - x.paidCents; } // a second, illegitimate one",
+      "function invoicesIssued(i) {",
+      "  const a = i.totalCents - i.paidCents; i.totalCents > i.paidCents ? 1 : 0;",
+      "}",
     ].join("\n");
-    const onlyFirstLineAllowed = new Set(["probe.ts:1"]);
-    const offenders = findOffenders(src, "probe.ts").subtractLines.filter(
-      (line) => !onlyFirstLineAllowed.has(`probe.ts:${line}`),
-    );
-    expect(offenders).toEqual([2]);
+    const byFunction = findOffenders(src, "probe.ts").byFunction;
+    const counts = byFunction.get("probe.ts#invoicesIssued");
+    expect(counts).toEqual({ subtract: 1, compare: 1 });
+    // An exemption modelled on the real one — subtract: 1, compare: 0 — no
+    // longer matches once the plant lands.
+    const allowed = { subtract: 1, compare: 0 };
+    expect(counts?.compare !== allowed.compare).toBe(true);
+  });
+
+  it("an unrelated line shift inside the exempt function still passes", () => {
+    // Moving the exempt subtraction to a different line in the SAME function,
+    // with nothing else changed, must not trip the guard — only the count
+    // matters, not the line.
+    const src = [
+      "function invoicesIssued(i) {",
+      "  const unrelated = 1 + 1;",
+      "  const a = i.totalCents - i.paidCents;",
+      "}",
+    ].join("\n");
+    const counts = findOffenders(src, "probe.ts").byFunction.get("probe.ts#invoicesIssued");
+    expect(counts).toEqual({ subtract: 1, compare: 0 });
+  });
+
+  it("removing the real offender fails the rot check (the exemption then covers nothing)", () => {
+    const src = "function invoicesIssued(i) { return i.totalCents; }";
+    const counts = findOffenders(src, "probe.ts").byFunction.get("probe.ts#invoicesIssued");
+    // No offending expression at all — the rot check in the suite above requires
+    // `counts` to be defined and to match the exemption's counts exactly; here
+    // it is undefined, which is exactly the "exemption covers nothing" failure
+    // that check exists to catch.
+    expect(counts).toBeUndefined();
   });
 });

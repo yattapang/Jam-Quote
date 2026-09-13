@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BOUNDS, boundedNumber, isHttpUrl } from "@jamquote/core";
+import { BOUNDS, boundedNumber, isHttpUrl, isIsoDate } from "@jamquote/core";
 
 /**
  * A web address we are willing to put in an `href`.
@@ -35,10 +35,20 @@ const statutoryRateSchema = z
  */
 export const updateRulePackSchema = z
   .object({
-    taxLabel: z.string().min(1).max(16).optional(),
+    taxLabel: z.string().trim().min(1).max(16).optional(),
     defaultTaxRatePct: taxRatePct.optional(),
-    /** ISO date (YYYY-MM-DD); null clears the verified date. */
-    verifiedAsOf: z.string().date().nullable().optional(),
+    /**
+     * ISO date (YYYY-MM-DD); null clears the verified date.
+     *
+     * `.date()` and `isIsoDate` are spent together rather than one replacing
+     * the other: `.date()` is Zod's own calendar check, and `isIsoDate` is the
+     * SAME rule the web client runs before submitting — see date.ts for why a
+     * naive `Date.UTC`-based check used to disagree with `.date()` on years
+     * below 100. Both must agree, so both are asserted here.
+     */
+    verifiedAsOf: z.string().date().refine(isIsoDate, {
+      message: "Must be a real calendar date (YYYY-MM-DD)",
+    }).nullable().optional(),
     /** Primary provenance link; null or "" clears it. */
     sourceUrl: z.union([httpUrl, z.literal("")]).nullable().optional(),
     /** Keyed by statutory code (NIS / NHT / EDUCATION_TAX / HEART). */
@@ -65,16 +75,16 @@ export const updateRulePackSchema = z
             .min(1)
             .max(40)
             .transform((c) => c.toUpperCase().replace(/\s+/g, "_")),
-          label: z.string().min(1).max(80),
+          label: z.string().trim().min(1).max(80),
           appliesTo: z.enum(["EMPLOYEE", "EMPLOYER", "BOTH", "SELF_EMPLOYED"]),
           employeePct: ratePct.nullable().optional(),
           employerPct: ratePct.nullable().optional(),
-          note: z.string().max(300).optional(),
+          note: z.string().trim().max(300).optional(),
         }),
       )
       .optional(),
     /** Baseline codes to stop showing — a withdrawn contribution. */
-    statutoryRetired: z.array(z.string().min(1)).optional(),
+    statutoryRetired: z.array(z.string().trim().min(1)).optional(),
     /** Pages to check when verifying. Replaces the list wholesale. */
     sources: z.array(httpUrl).max(20).optional(),
   })

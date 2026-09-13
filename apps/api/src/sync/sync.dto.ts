@@ -25,7 +25,7 @@ export type PullInput = z.infer<typeof pullSchema>;
  * replicate, while absent means untouched.
  */
 const clientDataSchema = z.object({
-  firstName: z.string().min(1).max(80),
+  firstName: z.string().trim().min(1).max(80),
   lastName: z.string().max(80).optional(),
   phone: clientFieldRules.phone.nullish(),
   whatsapp: clientFieldRules.whatsapp.nullish(),

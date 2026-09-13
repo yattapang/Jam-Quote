@@ -49,11 +49,11 @@ const clientContactFields = {
 
 export const createClientSchema = z
   .object({
-    firstName: z.string().max(80).min(1).optional(),
+    firstName: z.string().trim().min(1).max(80).optional(),
     lastName: z.string().max(80).optional(),
     // Legacy shape — apps/mobile's "add client" still sends a single `name`.
     // Accepted alongside firstName/lastName so it keeps working unmodified.
-    name: z.string().max(200).min(1).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
     ...clientContactFields,
   })
   .refine((v) => !!v.firstName || !!v.name, {
@@ -66,9 +66,9 @@ export const createClientSchema = z
 export type CreateClientInput = z.infer<typeof createClientSchema>;
 
 export const updateClientSchema = z.object({
-  firstName: z.string().max(80).min(1).optional(),
+  firstName: z.string().trim().min(1).max(80).optional(),
   lastName: z.string().max(80).optional(),
-  name: z.string().max(200).min(1).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   ...clientContactFields,
 });
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;

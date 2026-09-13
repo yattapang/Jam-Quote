@@ -1142,6 +1142,8 @@ export interface AdminUpcomingRenewal {
 export interface AdminFinancials {
   freeCount: number;
   proCount: number;
+  /** How many of the pro tenants are on a yearly term. */
+  annualCount: number;
   currency: string;
   proMonthlyPriceCents: number;
   /** CONTRACTED run-rate — what pro tenants owe per month. Not income. */

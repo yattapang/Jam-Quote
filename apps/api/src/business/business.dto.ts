@@ -2,7 +2,7 @@ import { z } from "zod";
 import { BOUNDS, PARISHES, boundedNumber, trnSchema } from "@jamquote/core";
 
 export const createBusinessSchema = z.object({
-  name: z.string().max(200).min(1),
+  name: z.string().trim().min(1).max(200),
   trn: trnSchema.optional(),
   logoUrl: z.string().url().optional(),
   addressLine: z.string().max(200).optional(),
@@ -11,8 +11,8 @@ export const createBusinessSchema = z.object({
   parish: z.enum(PARISHES).optional(),
   tradeType: z.string().max(80).optional(),
   defaultGctRate: boundedNumber(BOUNDS.gctRatePct).optional(),
-  quotePrefix: z.string().max(16).min(1).optional(),
-  invoicePrefix: z.string().max(16).min(1).optional(),
+  quotePrefix: z.string().trim().min(1).max(16).optional(),
+  invoicePrefix: z.string().trim().min(1).max(16).optional(),
   jmdPerUsd: boundedNumber(BOUNDS.jmdPerUsd).optional(),
   /**
    * Where subscription renewal and receipt mail goes.

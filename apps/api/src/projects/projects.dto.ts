@@ -16,7 +16,7 @@ import { BOUNDS, PARISHES, ProjectStage, boundedNumber } from "@jamquote/core";
  * a `parish` that was still free text. A right idea next to the wrong field.
  */
 export const projectFieldRules = {
-  name: z.string().min(1).max(120),
+  name: z.string().trim().min(1).max(120),
   addressLine: z.string().max(200),
   town: z.string().max(80),
   parish: z.enum(PARISHES),

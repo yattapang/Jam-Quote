@@ -160,6 +160,32 @@ Before relaunching, check for live children, not just an unchanged tree.
   its fields match the API, so S13's dropped `interval` was invisible by design. Field-
   level contract drift has no guard; a sample audit is with the reviewer.
 
+## Review of 939a185/3a01281, and the two open register items - fixed 2026-09-13
+
+- **HIGH, unhandled rejection in CSV exports** (my currency change started the business
+  lookup before the main query; if both failed, Node would crash): now `Promise.all`,
+  with an `unhandledRejection` test, injection-checked.
+- **Whitespace-only strings stored:** rule-pack `label`, `taxLabel`, retired codes, `note`,
+  then a sweep of every `.min(1)` string in api DTOs and core - names, labels, titles,
+  descriptions now trim first (17 tests). Left untrimmed with reason: ids, passwords,
+  tokens, base64.
+- **Retention guard allow-list** re-keyed from `file:line` to `file#function` with exact
+  subtract/compare counts; a second offender on the exempt line now fails (I re-planted
+  it). Residue: its local-alias tracking is still by name text, one hop - the pattern the
+  doctrine warns about; not rebuilt this round.
+- **`isIsoDate`** moved to `validation/date.ts`, fixed for years 0-99, and spent by the
+  DTO too; an 11-case table asserts it agrees with `z.string().date()`.
+- `AdminFinancials.annualCount` added to the web mirror; S10's test now asserts values.
+- **`nextTermEnd` month-end overflow FIXED:** Jan 31 +1 month gave Mar 3. Now clamps
+  (Feb 28; Aug 31 -> Sep 30; Feb 29 2028 annual -> Feb 28 2029). The admin console had a
+  second, worse copy (local-time `setMonth`) - deleted, it spends core. A renewal chain
+  from the 31st drifts to the 28th and stays: `renewsAt` is the only stored date, so no
+  anchor exists; documented, not changed.
+- **Free tier 5 vs 3 FIXED:** PLANNING.md records the owner decision (3). Code default is
+  3; the live row moves via NEW migration `20260913090000_free_tier_three_quotes`, only
+  where it still holds the seeded 5. The agent had edited the already-applied seed
+  migration, which would break Prisma's checksum on every deployed database - reverted.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape

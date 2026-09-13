@@ -61,21 +61,22 @@ export class ExportsService {
    * `issueDate` exists as a separate field.
    */
   async invoicesIssued(businessId: string, range: ExportRange): Promise<ExportFile> {
-    // Fired alongside the query below, not awaited first: tests assert on the
-    // query's mock call synchronously (before any microtask turn), and an
-    // await here first would push that call a tick later.
-    const currencyPromise = this.businessCurrency(businessId);
-    const invoices = await this.prisma.invoice.findMany({
-      where: {
-        businessId,
-        deletedAt: null,
-        status: { not: InvoiceStatus.DRAFT },
-        issueDate: { gte: range.from, lte: endOfDay(range.to) },
-      },
-      orderBy: { issueDate: "asc" },
-      include: { client: { select: { firstName: true, lastName: true } } },
-    });
-    const currency = await currencyPromise;
+    // Run together via Promise.all: if either rejects, the other's rejection
+    // is still observed (attached to the same combinator) so nothing becomes
+    // an unhandled rejection, regardless of which settles first.
+    const [invoices, currency] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: {
+          businessId,
+          deletedAt: null,
+          status: { not: InvoiceStatus.DRAFT },
+          issueDate: { gte: range.from, lte: endOfDay(range.to) },
+        },
+        orderBy: { issueDate: "asc" },
+        include: { client: { select: { firstName: true, lastName: true } } },
+      }),
+      this.businessCurrency(businessId),
+    ]);
 
     const rows = invoices.map((i) => [
       i.number,
@@ -129,22 +130,23 @@ export class ExportsService {
    * cannot be checked, while STANDARD / ZERO_RATED / EXEMPT lines can.
    */
   async invoiceLines(businessId: string, range: ExportRange): Promise<ExportFile> {
-    const currencyPromise = this.businessCurrency(businessId);
-    const invoices = await this.prisma.invoice.findMany({
-      where: {
-        businessId,
-        deletedAt: null,
-        status: { not: InvoiceStatus.DRAFT },
-        issueDate: { gte: range.from, lte: endOfDay(range.to) },
-      },
-      orderBy: { issueDate: "asc" },
-      include: {
-        client: { select: { firstName: true, lastName: true } },
-        lineItems: { where: { sectionId: null }, orderBy: { sort: "asc" } },
-        sections: { orderBy: { sort: "asc" }, include: { lineItems: { orderBy: { sort: "asc" } } } },
-      },
-    });
-    const currency = await currencyPromise;
+    const [invoices, currency] = await Promise.all([
+      this.prisma.invoice.findMany({
+        where: {
+          businessId,
+          deletedAt: null,
+          status: { not: InvoiceStatus.DRAFT },
+          issueDate: { gte: range.from, lte: endOfDay(range.to) },
+        },
+        orderBy: { issueDate: "asc" },
+        include: {
+          client: { select: { firstName: true, lastName: true } },
+          lineItems: { where: { sectionId: null }, orderBy: { sort: "asc" } },
+          sections: { orderBy: { sort: "asc" }, include: { lineItems: { orderBy: { sort: "asc" } } } },
+        },
+      }),
+      this.businessCurrency(businessId),
+    ]);
 
     const rows: CsvValue[][] = [];
     for (const invoice of invoices) {
@@ -207,34 +209,35 @@ export class ExportsService {
    * that was reversed never was one.
    */
   async paymentsReceived(businessId: string, range: ExportRange): Promise<ExportFile> {
-    const currencyPromise = this.businessCurrency(businessId);
-    const payments = await this.prisma.payment.findMany({
-      where: {
-        deletedAt: null,
-        // Cash that actually arrived. Opening a WiPay checkout writes a `pending`
-        // row for the full balance with paidAt defaulting to now, and an abandoned
-        // checkout is never upgraded and never removed — so with no status filter
-        // this file carried money that never came, dated today, for ever. A
-        // `failed` callback leaves a row too.
-        //
-        // The Reports page has always filtered on this list. It sat on the same
-        // screen as the download link, disagreeing, and the file is the one an
-        // accountant sums.
-        status: { in: COLLECTED_PAYMENT_STATUSES },
-        paidAt: { gte: range.from, lte: endOfDay(range.to) },
-        invoice: { businessId, deletedAt: null },
-      },
-      orderBy: { paidAt: "asc" },
-      include: {
-        invoice: {
-          select: {
-            number: true,
-            client: { select: { firstName: true, lastName: true } },
+    const [payments, currency] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          deletedAt: null,
+          // Cash that actually arrived. Opening a WiPay checkout writes a `pending`
+          // row for the full balance with paidAt defaulting to now, and an abandoned
+          // checkout is never upgraded and never removed — so with no status filter
+          // this file carried money that never came, dated today, for ever. A
+          // `failed` callback leaves a row too.
+          //
+          // The Reports page has always filtered on this list. It sat on the same
+          // screen as the download link, disagreeing, and the file is the one an
+          // accountant sums.
+          status: { in: COLLECTED_PAYMENT_STATUSES },
+          paidAt: { gte: range.from, lte: endOfDay(range.to) },
+          invoice: { businessId, deletedAt: null },
+        },
+        orderBy: { paidAt: "asc" },
+        include: {
+          invoice: {
+            select: {
+              number: true,
+              client: { select: { firstName: true, lastName: true } },
+            },
           },
         },
-      },
-    });
-    const currency = await currencyPromise;
+      }),
+      this.businessCurrency(businessId),
+    ]);
 
     const rows = payments.map((p) => [
       csvDate(p.paidAt),

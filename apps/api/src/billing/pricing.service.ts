@@ -16,9 +16,14 @@ export const DEFAULT_PRICING: PricingSnapshot = {
   // Only a DEFAULT — it applies when no PricingConfig row exists. The live
   // value is editable in the staff console (Pricing), and every quota check
   // reads the row, so changing it there takes effect immediately without a
-  // deploy. Starting at 5 rather than 3 so a contractor does not exhaust the
-  // month in week one and forget the app exists.
-  freeQuotesPerMonth: 5,
+  // deploy.
+  //
+  // 3, per PLANNING.md ("No trial. The free tier IS the trial: 3 quotes a
+  // month, indefinitely.") and the owner decision recorded there
+  // (2026-08-18): "Trial | None. Free tier is 3 quotes/month." This constant
+  // used to read 5 with a comment justifying it; that was the stale value,
+  // not the decision.
+  freeQuotesPerMonth: 3,
   proMonthlyPriceCents: 200_000, // JMD 2,000
   proAnnualPriceCents: 2_000_000, // JMD 20,000
   currency: "JMD",

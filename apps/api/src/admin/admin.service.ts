@@ -4,6 +4,7 @@ import {
   SubscriptionStanding,
   subscriptionStanding,
   supportedJurisdictions,
+  nextTermEnd,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { startOfJamaicaMonth } from "../common/month.util.js";
@@ -136,14 +137,12 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 // copy, and `startOfCurrentMonth` next to it had the server-clock bug.
 
 
-/** One term from today. Uses setMonth/setFullYear rather than adding a fixed
- * number of days, so a renewal lands on the same calendar date and does not
- * drift a day each year over a leap year. */
+// A manual staff-side renewal used to compute its own "one term from today"
+// with local setMonth/setFullYear — both the Jamaica-timezone bug and the
+// month-end overflow bug that `nextTermEnd` in core now fixes in one shared
+// place. Spend that instead of keeping a second copy here.
 function nextRenewal(interval: string, from: Date = new Date()): Date {
-  const d = new Date(from);
-  if (interval === "annual") d.setFullYear(d.getFullYear() + 1);
-  else d.setMonth(d.getMonth() + 1);
-  return d;
+  return nextTermEnd(interval, null, from);
 }
 
 /**

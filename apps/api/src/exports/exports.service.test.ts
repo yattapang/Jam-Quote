@@ -573,6 +573,41 @@ describe("exports carry the tenant's own currency, not a hardcoded JMD", () => {
   });
 });
 
+describe("ExportsService — a second rejection never becomes unhandled", () => {
+  // Promise.all attaches a handler to BOTH promises as soon as it is called,
+  // so whichever one rejects second is still observed. Before the fix, the
+  // currency lookup was started but not awaited until after `findMany`
+  // settled — if `findMany` rejected first, the currency rejection had no
+  // handler attached in that tick and crashed the process as an unhandled
+  // rejection.
+  for (const method of ["invoicesIssued", "invoiceLines", "paymentsReceived"] as const) {
+    it(`${method}: rejects with the query error and raises no unhandledRejection`, async () => {
+      const queryError = new Error("query failed");
+      const currencyError = new Error("currency lookup failed");
+      const prisma = {
+        business: { findUniqueOrThrow: vi.fn(() => Promise.reject(currencyError)) },
+        invoice: { findMany: vi.fn(() => Promise.reject(queryError)) },
+        payment: { findMany: vi.fn(() => Promise.reject(queryError)) },
+        client: { findMany: vi.fn(() => Promise.resolve([])) },
+      };
+      const svc = new ExportsService(prisma as any);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on("unhandledRejection", onUnhandled);
+
+      try {
+        await expect(svc[method]("b1", RANGE)).rejects.toBe(queryError);
+        // Give any stray unhandled rejection a turn to surface before checking.
+        await new Promise((r) => setTimeout(r, 0));
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+  }
+});
+
 describe("cellByHeader — what it is safe against", () => {
   const csv = (header: string, row: string) => "﻿" + ["meta", "", header, row].join("\r\n");
 
