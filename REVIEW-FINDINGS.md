@@ -149,6 +149,17 @@ Process lesson: I launched a replacement agent believing the first had done noth
 when it had delegated to a still-running child; the two edited the same files at once.
 Before relaunching, check for live children, not just an unchanged tree.
 
+## Process lessons, 2026-09-13
+
+- **I committed 939a185 on targeted tests only** because a parallel agent's edits were in
+  the tree, and it broke core's retention guard: that guard's allow-list is keyed
+  `file:line`, and the currency change shifted the exempt line in `exports.service.ts`
+  from 93 to 98. The S10-S13 agent found it; fixed in 3a01281. Rule: a partial commit
+  still needs the full gate - run it on a clean worktree or wait, never skip it.
+- **S16 does not check fields.** It proves a mirrored web shape is referenced, never that
+  its fields match the API, so S13's dropped `interval` was invisible by design. Field-
+  level contract drift has no guard; a sample audit is with the reviewer.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape
