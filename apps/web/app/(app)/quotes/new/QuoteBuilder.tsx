@@ -407,11 +407,17 @@ export default function QuoteBuilder({
                 "half up front" is as common as a flat figure, and working the
                 percentage out by hand is where a wrong number gets quoted. */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 6, alignItems: "end" }}>
+              {/* The percentage cap spends BOUNDS.depositPct rather than a typed 100. It was
+                  the example the bounds guard's own header cites as a known pattern not
+                  applied, and it survived that guard's conversion because the old parser did
+                  not follow a spread attribute. (This comment was first placed inside the
+                  attribute list, which is not legal JSX - the guards still passed, because
+                  the parser recovers from syntax errors; typecheck and lint did not.) */}
               <Input
                 label={depositMode === DepositMode.PERCENT ? "Deposit %" : "Deposit $"}
                 type="number"
                 min={BOUNDS.moneyDollars.min}
-                {...(depositMode === DepositMode.PERCENT ? { max: 100 } : {})}
+                {...(depositMode === DepositMode.PERCENT ? { max: BOUNDS.depositPct.max } : {})}
                 value={depositInput}
                 onChange={(e) => setDepositInput(e.target.value)}
               />

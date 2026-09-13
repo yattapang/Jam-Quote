@@ -72,31 +72,34 @@ not for creating one. The rule now lives once in `components/forms/job-component
 with tests, because the add-new path could not reach the picker's closure and had grown
 its own copy.
 
-**NOT DONE — two agents died at the usage limit mid-task. Their work is SAVED, unverified,
-outside the repo:**
+**Both agents' saved work is now restored, finished and verified by me (full gate green:
+core 316, api 792, mobile 28, web 632):**
 
-1. **The shared parser has real flaws an independent review confirmed, and S17/S18/S19
-   are built on the unfixed version.** The worst: names are tracked file-wide by name, not
-   by lexical scope, so a genuine module constant (`const currency = "JMD"`) reads as
-   DATA whenever an unrelated function reuses the name — a bypass nobody has to try for.
-   Also: enum members, method calls on literals and const arrows returning literals read
-   as data (bypasses); destructuring assignment, for-of targets and mutation through a
-   property read as constants (false alarms); `callsTo` misses aliases, `.call`, `.apply`;
-   `jsxAttributes` misses spread attributes; and the parser's own comment calls its list of
-   pure conversions "closed by the ECMAScript spec", which is false — a hand-picked list
-   described as closed, an overclaim in the commit that introduced the rule against them.
-   A 571-line rewrite onto the compiler's binder (`ts.Program` + `getSymbolAtLocation`)
-   was in progress and is saved at
-   `scratchpad/unverified/source-ast.binder-rewrite.ts`. It has NOT been run against its
-   tests or against the three guards. Restore it, verify both, and only then commit.
-2. **S15 route discovery still misses routes.** Nested route groups are skipped instead
-   of descended; `page.jsx`/`page.ts`/`route.js` are not recognised; top-level groups,
-   `@slot` and intercepting folders put wrong segments in the URL (false alarms). A fix
-   was in progress (19 tests passing) with a typecheck error at line 67, saved at
-   `scratchpad/unverified/middleware.test.discovery-fix.ts`.
+1. **Shared parser rewritten onto the compiler's binder** (`ts.Program` +
+   `getSymbolAtLocation`), so names resolve by lexical scope instead of file-wide by name.
+   Every confirmed reviewer case is now a test (62 parser tests): enum members, methods
+   on literals, spreads into arrays, const arrows, frozen objects, `String.raw`,
+   shorthand properties and destructuring defaults read as constants; destructuring
+   assignment, for-of targets, property mutation and a shadowing `const undefined` read
+   as data; `callsTo` finds aliases, `.call`, `.apply`, element access and comma calls;
+   `jsxAttributes` follows spread attributes. The "closed by the spec" overclaim is gone.
+   The restored rewrite had one regression its own tests caught: `undefined` has a
+   symbol with no declarations and read as data. Fixed.
+2. **S15 discovery fix restored** with its line-67 type error fixed: nested groups are
+   descended, `page.jsx`/`.ts`/`route.js` recognised, groups, `@slot` and intercepting
+   folders no longer put wrong segments in the URL.
+3. **The rewrite found a real defect the old parser hid.** `QuoteBuilder.tsx`'s deposit
+   field capped the percentage with a hand-typed `{ max: 100 }` inside a conditional
+   SPREAD attribute - the very example the bounds guard's header cites - invisible
+   because the old parser did not follow spreads. Now `BOUNDS.depositPct.max`; putting
+   the `100` back fails the guard (injection checked).
+4. **Lesson recorded:** my explanatory comment first went inside the JSX attribute list,
+   which is not legal JSX. The source guards still passed, because the parser recovers
+   from syntax errors; typecheck and lint caught it. A source guard passing is not
+   evidence the file compiles - the full gate is the gate.
 
-After both: send the whole S14-S19 batch for independent review, since S17-S19 were
-built against the flawed parser.
+**Still open:** independent review of the whole S14-S19 batch plus the parser rewrite,
+since S17-S19 were originally built against the flawed parser.
 
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 

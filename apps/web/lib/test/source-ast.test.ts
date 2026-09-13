@@ -4,6 +4,7 @@ import {
   analyseStatic,
   attributeValue,
   callsTo,
+  collect,
   jsxAttributes,
   parseSource,
   renderedExpressions,
@@ -112,11 +113,24 @@ describe("analyseStatic: values computed from data", () => {
     expect(analyseStatic(probe('String("JMD")', prelude)).static).toBe(false);
   });
 
-  it("a name declared twice, once from data, resolves to data", () => {
-    // Ambiguity resolves toward data: failing to recognise a constant is recoverable,
-    // excusing a computed value is the defect.
-    const prelude = 'const code = "JMD"; function f(code) { return code; }';
-    expect(analyseStatic(probe("code", prelude)).static).toBe(false);
+  it("a name is judged by the declaration that BINDS it, not by name file-wide", () => {
+    // This test used to assert the opposite: that a module constant reads as data
+    // because an unrelated function has a parameter of the same name. That was the
+    // parser's flaw, not a rule — an independent review showed it lets a genuine
+    // hardcoded `const currency = "JMD"` through whenever any other function in a large
+    // component reuses the name, without anyone trying to evade anything.
+    const sf = parseSource(
+      "shadow.tsx",
+      'const code = "JMD";\nconst atModule = code;\nfunction f(code) { const inside = code; return inside; }\n',
+    );
+    const init = (name: string) =>
+      collect(sf, ts.isVariableDeclaration).find(
+        (d) => ts.isIdentifier(d.name) && d.name.text === name,
+      )!.initializer!;
+    // At module scope `code` is the constant.
+    expect(analyseStatic(init("atModule")).static).toBe(true);
+    // Inside `f`, `code` is the parameter, which is data.
+    expect(analyseStatic(init("inside")).static).toBe(false);
   });
 
   it("an import on its own, unread", () => {
@@ -200,6 +214,82 @@ describe("renderedText", () => {
   it("drops whitespace-only runs between elements", () => {
     const sf = parseSource("ws.tsx", "const x = <div>\n  \n  <span />\n</div>;");
     expect(renderedText(sf)).toEqual([]);
+  });
+});
+
+/**
+ * Every case an independent review of the first version CONFIRMED by execution.
+ *
+ * The first version tracked names file-wide rather than by binding, gave up on any call
+ * that was not a value conversion, and never looked at destructuring writes or spread
+ * attributes. Each block below is the reviewer's list, kept so a later change to the
+ * parser cannot quietly reopen any of it.
+ */
+describe("review of the first version: constants it reported as data (bypasses)", () => {
+  it.each([
+    ["an enum member", "C.JMD", 'enum C { JMD = "JMD" }'],
+    ["a method call on a string literal", '"JMD".slice(0)', ""],
+    ["another method on a literal", '"jmd".toUpperCase()', ""],
+    ["a spread-and-join of a literal", '[..."JMD"].join("")', ""],
+    ["a const arrow returning a literal", "cur()", 'const cur = () => "JMD";'],
+    ["a frozen literal object", 'Object.freeze({ jmd: "JMD" }).jmd', ""],
+    ["String.raw over a literal", "String.raw`JMD`", ""],
+    ["a shorthand property of a const", "o.cur", 'const cur = "JMD"; const o = { cur };'],
+    ["a destructuring default over a literal source", "c", 'const { c = "JMD" } = {};'],
+    [
+      "a module const beside an unrelated reassigned let of the same name",
+      "cur",
+      'const cur = "JMD"; function g() { let cur = 1; cur = load(); return cur; }',
+    ],
+  ])("%s", (_label, expr, prelude) => {
+    expect(analyseStatic(probe(expr, prelude)).static).toBe(true);
+  });
+});
+
+describe("review of the first version: data it reported as constants (false alarms)", () => {
+  it.each([
+    ["an array destructuring assignment", "x", "let x = 0; [x] = load();"],
+    ["an object destructuring assignment", "x", "let x = 0; ({ x } = load());"],
+    ["a for-of target", "x", 'let x = "a"; for (x of rows) {}'],
+    ["mutation through a property", "o.a", "const o = { a: 1 }; o.a = load();"],
+    ["mutation through an array method", "a[0]", "const a = [1]; a.push(load());"],
+    ["a locally declared undefined", "undefined", "const undefined = load();"],
+  ])("%s", (_label, expr, prelude) => {
+    expect(analyseStatic(probe(expr, prelude)).static).toBe(false);
+  });
+});
+
+describe("review of the first version: callsTo and spread attributes", () => {
+  const sf = parseSource(
+    "review-calls.tsx",
+    [
+      'import { formatPlatformMoney } from "@jamquote/core";',
+      "const f = formatPlatformMoney;",
+      'f(1, "JMD");',
+      'formatPlatformMoney.call(null, 2, "JMD");',
+      'formatPlatformMoney.apply(null, [3, "JMD"]);',
+      'x["formatPlatformMoney"](4, "JMD");',
+      '(0, formatPlatformMoney)(5, "JMD");',
+    ].join("\n"),
+  );
+
+  it("finds a call through an alias, .call, .apply, an element access and a comma", () => {
+    expect(callsTo(sf, "formatPlatformMoney")).toHaveLength(5);
+  });
+
+  it("exposes .call and .apply arguments as the arguments the callee receives", () => {
+    // A guard on the currency argument must read "JMD", not `null`, the receiver.
+    for (const call of callsTo(sf, "formatPlatformMoney")) {
+      expect(call.arguments.length, call.getText()).toBeGreaterThanOrEqual(2);
+      expect(analyseStatic(call.arguments[1]!).static, call.getText()).toBe(true);
+    }
+  });
+
+  it("reports an attribute supplied through a spread of an object literal", () => {
+    const spread = parseSource("spread.tsx", "const a = <input {...{ min: 0 }} />;");
+    const found = jsxAttributes(spread, "min");
+    expect(found).toHaveLength(1);
+    expect(analyseStatic(attributeValue(found[0]!)!).static).toBe(true);
   });
 });
 
