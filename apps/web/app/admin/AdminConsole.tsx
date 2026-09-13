@@ -2585,7 +2585,7 @@ export function subscriptionPaymentProblem(reference: string, amount: string): s
  * a renewal date. That is the whole point of the endpoint: one action, and the
  * account state follows.
  */
-function TenantBilling({
+export function TenantBilling({
   businessId,
   onChanged,
   currency,
@@ -2735,6 +2735,7 @@ function TenantBilling({
                     Showing the payment date first read as the start of the
                     coverage period and made a correct row look wrong. */}
                 covers {r.coversFrom.slice(0, 10)} → {r.coversUntil.slice(0, 10)}
+                {r.interval === "annual" ? " · year" : " · month"}
                 {" · paid "}
                 {r.paidAt.slice(0, 10)}
                 {r.reference ? ` · ${r.reference}` : ""}

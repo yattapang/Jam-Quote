@@ -1,3 +1,4 @@
+import { isIsoDate } from "@jamquote/core";
 import type { UpdateRulePackInput } from "@/lib/api-client";
 
 /**
@@ -305,7 +306,7 @@ export function rulePackProblem(edits: RulePackEdits, overrideReadFailed: boolea
     }
   }
 
-  if (form.verifiedAsOf.trim() !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(form.verifiedAsOf.trim()))
+  if (form.verifiedAsOf.trim() !== "" && !isIsoDate(form.verifiedAsOf.trim()))
     return "Verified date must be a date (YYYY-MM-DD).";
   const sourceUrl = form.sourceUrl.trim();
   if (sourceUrl !== "" && !isHttpUrl(sourceUrl))

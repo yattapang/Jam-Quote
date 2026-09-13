@@ -37,6 +37,40 @@ describe("sourceUrl on the rule pack", () => {
   });
 });
 
+describe("verifiedAsOf on the rule pack", () => {
+  it("refuses a date that is not a real calendar date, matching the client's own check", () => {
+    // S12: the client used a shape-only regex that accepted "2026-02-31"; the DTO's
+    // z.string().date() already rejects it, and the client now shares the same
+    // calendar-aware check (isIsoDate, in @jamquote/core) so the two cannot drift.
+    const result = updateRulePackSchema.safeParse({ verifiedAsOf: "2026-02-31" });
+    expect(result.success).toBe(false);
+  });
+
+  it("still accepts a real date", () => {
+    expect(updateRulePackSchema.safeParse({ verifiedAsOf: "2026-02-28" }).success).toBe(true);
+  });
+});
+
+describe("statutoryCustom code", () => {
+  const row = { label: "New levy", appliesTo: "BOTH" as const };
+
+  it("refuses a whitespace-only code instead of storing it as empty", () => {
+    // `.min(1)` used to run BEFORE the trim, so "   " passed the length floor
+    // and the trim (done inside .transform) only emptied it out afterwards —
+    // storing a blank code that then merges into every tenant's rule pack.
+    const result = updateRulePackSchema.safeParse({ statutoryCustom: [{ ...row, code: "   " }] });
+    expect(result.success).toBe(false);
+  });
+
+  it("still trims and normalises a real code", () => {
+    const result = updateRulePackSchema.safeParse({
+      statutoryCustom: [{ ...row, code: "  new levy  " }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.statutoryCustom?.[0]?.code).toBe("NEW_LEVY");
+  });
+});
+
 describe("sourceUrl on a regulatory update", () => {
   it("refuses a javascript: URL on the feed the contractor dashboard links", () => {
     const result = createRegulatoryUpdateSchema.safeParse({

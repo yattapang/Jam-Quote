@@ -177,10 +177,10 @@ brief. Ordered by severity.
 
 | # | Finding |
 |---|---|
-| S10 | `StatutoryCustomEntry` in `rulepack.service.ts` omits `"SELF_EMPLOYED"` and `note` — both accepted by the DTO, present in core, present in the web mirror, and offered by the console's own dropdown. Runtime survives through a spread, so what the API declares it returns and what it returns disagree, on the very shape that lost `statutoryRetired` two weeks ago. |
-| S11 | `.min(1)` on a statutory code does not hold: Zod runs the length floor BEFORE the trim transform, so `"   "` passes and stores an empty code that then merges into every tenant's rule pack. |
-| S12 | The client accepts `verifiedAsOf: "2026-02-31"` on a regex while the DTO uses `z.string().date()` — a save refused by an array path instead of the field message that validator exists to give. |
-| S13 | `AdminSubscriptionPayment` drops `interval`, which the endpoint does send, so a ledger row cannot say whether a receipt bought a month or a year — on the screen reconciled against a bank statement. |
+| S10 | **FIXED** - `StatutoryCustomEntry` is derived from the DTO's `z.infer`, with a compile-time test that fails if `SELF_EMPLOYED` or `note` is lost. **Was:** `StatutoryCustomEntry` in `rulepack.service.ts` omits `"SELF_EMPLOYED"` and `note` — both accepted by the DTO, present in core, present in the web mirror, and offered by the console's own dropdown. Runtime survives through a spread, so what the API declares it returns and what it returns disagree, on the very shape that lost `statutoryRetired` two weeks ago. |
+| S11 | **FIXED** - `.trim()` now precedes `.min(1)`; `"   "` refused, tested, injection-checked by me. No other trim-after-min site in api DTOs or core. **Was:** `.min(1)` on a statutory code does not hold: Zod runs the length floor BEFORE the trim transform, so `"   "` passes and stores an empty code that then merges into every tenant's rule pack. |
+| S12 | **FIXED** - core `isIsoDate` (calendar-checked) spent by the web client; `2026-02-31` refused by core, DTO and client tests. **Was:** The client accepts `verifiedAsOf: "2026-02-31"` on a regex while the DTO uses `z.string().date()` — a save refused by an array path instead of the field message that validator exists to give. |
+| S13 | **FIXED** - `interval` added to the web type and rendered on the ledger row, render-tested. S16 missed it by design: it proves a shape is referenced, never that its fields match the API - field-level drift has no guard. **Was:** `AdminSubscriptionPayment` drops `interval`, which the endpoint does send, so a ledger row cannot say whether a receipt bought a month or a year — on the screen reconciled against a bank statement. |
 
 ### P3 — five more defeated guards, each bypassed by execution
 

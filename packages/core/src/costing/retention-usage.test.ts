@@ -164,7 +164,7 @@ function findOffenders(sourceText: string, fileName: string): Offenders {
  * instead of riding along on someone else's exemption.
  */
 const ALLOWED: Record<string, string> = {
-  "apps/api/src/exports/exports.service.ts:93": [
+  "apps/api/src/exports/exports.service.ts:98": [
     "The accountant's ACCRUAL file. Retention has been billed and is receivable,",
     "just not yet payable — stated in a comment there, with the held amount in its",
     "own column beside it. The cash-basis view is a different file.",

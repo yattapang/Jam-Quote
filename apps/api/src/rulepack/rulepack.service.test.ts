@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { RulePackService } from "./rulepack.service.js";
+import { RulePackService, type StatutoryCustomEntry } from "./rulepack.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -313,5 +313,27 @@ describe("RulePackService.update", () => {
     const { svc } = make({ findUnique: vi.fn().mockResolvedValue(null), upsert });
     await svc.update("JM", { verifiedAsOf: null }, "actor-1");
     expect(upsert.mock.calls[0]![0].create.verifiedAsOf).toBeNull();
+  });
+});
+
+describe("StatutoryCustomEntry", () => {
+  // Type-level guard for S10: `StatutoryCustomEntry` previously hand-listed its
+  // members and omitted `"SELF_EMPLOYED"` and `note`, which the DTO, core and the
+  // web mirror all carry. It is now derived from the DTO's own inferred type, so
+  // it cannot drift again — but a derivation can still be narrowed by a future
+  // edit, so this pins the members explicitly. If either member is lost, this
+  // object literal fails to type-check (and `tsc`/vitest's type-check step, not
+  // just this file's runtime, catches it).
+  it("still carries SELF_EMPLOYED and note", () => {
+    const entry: StatutoryCustomEntry = {
+      code: "SPECIAL_LEVY",
+      label: "Special Levy",
+      appliesTo: "SELF_EMPLOYED",
+      employeePct: null,
+      employerPct: null,
+      note: "Added for a contractor-only levy.",
+    };
+    expect(entry.appliesTo).toBe("SELF_EMPLOYED");
+    expect(entry.note).toBeDefined();
   });
 });

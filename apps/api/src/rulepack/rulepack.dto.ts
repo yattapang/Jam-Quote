@@ -54,11 +54,17 @@ export const updateRulePackSchema = z
     statutoryCustom: z
       .array(
         z.object({
+          // `.trim()` runs BEFORE `.min(1)` below: Zod's string checks and
+          // transforms fire in the order they are chained, so trimming after
+          // `.min(1)` (as this was) lets `"   "` pass the length floor and only
+          // gets emptied out afterwards — storing a blank code that then merges
+          // into every tenant's rule pack.
           code: z
             .string()
+            .trim()
             .min(1)
             .max(40)
-            .transform((c) => c.trim().toUpperCase().replace(/\s+/g, "_")),
+            .transform((c) => c.toUpperCase().replace(/\s+/g, "_")),
           label: z.string().min(1).max(80),
           appliesTo: z.enum(["EMPLOYEE", "EMPLOYER", "BOTH", "SELF_EMPLOYED"]),
           employeePct: ratePct.nullable().optional(),

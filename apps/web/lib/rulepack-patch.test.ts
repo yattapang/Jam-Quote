@@ -211,6 +211,20 @@ describe("rulePackProblem judges what will be sent", () => {
     expect(rulePackProblem(edits, false)).toMatch(/NIS employee/);
   });
 
+  it("refuses a verified date that is not a real calendar date, matching the DTO", () => {
+    // The client used to check this with /^\d{4}-\d{2}-\d{2}$/, which matches the
+    // SHAPE of "2026-02-31" but not the calendar — while the DTO validates with
+    // z.string().date(), which does check calendar validity. A save the DTO would
+    // refuse with a clear field message instead 400'd via the array-path error.
+    const edits: RulePackEdits = { ...base, form: { ...base.form, verifiedAsOf: "2026-02-31" } };
+    expect(rulePackProblem(edits, false)).toMatch(/Verified date/);
+  });
+
+  it("still accepts a real calendar date", () => {
+    const edits: RulePackEdits = { ...base, form: { ...base.form, verifiedAsOf: "2026-02-28" } };
+    expect(rulePackProblem(edits, false)).toBeNull();
+  });
+
   it("refuses to save at all when the stored override could not be read", () => {
     // First, because everything else is a judgement about values this screen may not
     // have: a failed read serves the baseline with empty override lists, which looks

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isHttpUrl, safeHref } from "./http-url.js";
+import { isHttpUrl, isIsoDate, safeHref } from "./http-url.js";
 
 /**
  * The check that keeps a `javascript:` URL out of an `href`.
@@ -53,5 +53,28 @@ describe("safeHref", () => {
     expect(safeHref(null)).toBeNull();
     expect(safeHref(undefined)).toBeNull();
     expect(safeHref("")).toBeNull();
+  });
+});
+
+describe("isIsoDate", () => {
+  it("accepts a real calendar date", () => {
+    expect(isIsoDate("2026-02-28")).toBe(true);
+    expect(isIsoDate("2024-02-29")).toBe(true); // leap year
+  });
+
+  it("refuses a date that matches the shape but not the calendar", () => {
+    // The exact gap: the DTO uses z.string().date() (calendar-checked), while the
+    // web client used to check with /^\d{4}-\d{2}-\d{2}$/, which "2026-02-31"
+    // passes despite February never having 31 days.
+    expect(isIsoDate("2026-02-31")).toBe(false);
+    expect(isIsoDate("2023-02-29")).toBe(false); // not a leap year
+    expect(isIsoDate("2026-13-01")).toBe(false);
+    expect(isIsoDate("2026-00-10")).toBe(false);
+  });
+
+  it("refuses anything not shaped like YYYY-MM-DD", () => {
+    for (const value of ["", "2026-2-3", "2026/02/03", "not a date", "2026-02-03T00:00:00Z"]) {
+      expect(isIsoDate(value), value).toBe(false);
+    }
   });
 });

@@ -26,14 +26,18 @@ export interface EffectiveStatutory {
  * admin console renders and the app consumes. Flattened/serialisable — no
  * functions — so it crosses the API boundary cleanly.
  */
-/** One levy an admin added or replaced, as stored on the override. */
-export interface StatutoryCustomEntry {
-  code: string;
-  label: string;
-  appliesTo: "EMPLOYEE" | "EMPLOYER" | "BOTH";
-  employeePct: number | null;
-  employerPct: number | null;
-}
+/**
+ * One levy an admin added or replaced, as stored on the override.
+ *
+ * Derived from `UpdateRulePackInput["statutoryCustom"]` (the DTO, which itself
+ * mirrors core and the console's own dropdown) rather than hand-listed, so this
+ * type cannot drift from what the DTO actually accepts and what the runtime
+ * spreads back out through `getEffectiveRulePack`. It previously omitted
+ * `"SELF_EMPLOYED"` and `note` — both accepted by the DTO and passed straight
+ * through the `{ ...c }` spread below, so the API's OWN DECLARED TYPE disagreed
+ * with what it actually returned.
+ */
+export type StatutoryCustomEntry = NonNullable<UpdateRulePackInput["statutoryCustom"]>[number];
 
 export interface EffectiveRulePack {
   countryCode: string;

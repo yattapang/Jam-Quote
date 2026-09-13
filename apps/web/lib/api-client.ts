@@ -1437,6 +1437,8 @@ export interface AdminSubscriptionPayment {
   /** The term this payment bought — whole terms only. */
   coversFrom: string;
   coversUntil: string;
+  /** Whether this payment bought a month or a year — the endpoint sends it. */
+  interval: "monthly" | "annual";
   note: string | null;
   /** Voided rows stay in the list: a mis-keyed receipt is history, and hiding
    * it would make the ledger impossible to reconcile against a bank statement. */
