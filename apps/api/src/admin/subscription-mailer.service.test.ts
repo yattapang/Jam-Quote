@@ -56,6 +56,9 @@ describe("SubscriptionMailerService money formatting", () => {
       expect(html).not.toMatch(/[A-Z]{3} \$/);
       expect(html).not.toContain("$$");
     },
+    // Fresh module import per case is slow under the full suite; a timed-out case
+    // would keep sending into the next case's mock. See invoice-overdue-money.test.ts.
+    30_000,
   );
 
   it.each(NON_JMD)(
@@ -81,5 +84,6 @@ describe("SubscriptionMailerService money formatting", () => {
       expect(html).toContain(expected);
       expect(html).not.toMatch(/[A-Z]{3} \$/);
     },
+    30_000,
   );
 });

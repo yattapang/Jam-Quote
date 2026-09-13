@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BOUNDS, fitsStep } from "@jamquote/core";
 
 /**
  * Recording what a contractor spent.
@@ -72,7 +73,12 @@ export const createLabourEntrySchema = z.object({
   labourRateId: z.string().max(64).min(1).nullable().optional(),
   description: z.string().min(1).max(200),
   /** Hours or days — half-days and part-hours are normal, so not an integer. */
-  quantity: z.number().positive().max(100_000),
+  // `Decimal(12,3)`: a fourth decimal would be rounded on write (S9).
+  quantity: z
+    .number()
+    .positive()
+    .max(100_000)
+    .refine((v) => fitsStep(v, BOUNDS.quantity.step), { message: "Use at most 3 decimal places" }),
   rateCents: z.number().int().nonnegative(),
   unitLabel: z.string().min(1).max(30).optional(),
   workedOn: z.string().datetime(),

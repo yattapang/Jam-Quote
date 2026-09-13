@@ -82,5 +82,9 @@ describe("overdue digest money formatting", () => {
       expect(call.html).not.toMatch(/[A-Z]{3} \$/);
       expect(call.html).not.toContain("$$");
     },
+    // A fresh module import per currency is slow under the full parallel suite.
+    // At the 5s default a timed-out test's run() kept sending into the NEXT test's
+    // mock, which then saw 3 calls instead of 1 - a flake, not a formatting fault.
+    30_000,
   );
 });

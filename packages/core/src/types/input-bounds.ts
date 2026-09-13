@@ -29,7 +29,15 @@
 export interface NumericBound {
   min: number;
   max?: number;
-  /** `1` for a whole number the server validates with `.int()`. */
+  /**
+   * `1` for a whole number the server validates with `.int()`.
+   *
+   * A fractional step (`0.01`, `0.001`, `0.0001`) is the SCALE of the Decimal column
+   * the field is persisted to (S9). `boundedNumber` refuses a value with more decimal
+   * places, because Postgres would round it on write while the totals stored beside it
+   * were computed from the unrounded value — `quantity: 1.0005` at $10,000 stored a
+   * subtotal $5 away from what every reader recomputes from the persisted row.
+   */
   step?: number;
   /** True when the server rejects zero — `.positive()`, not `.nonnegative()`. */
   positiveOnly?: boolean;
@@ -37,9 +45,9 @@ export interface NumericBound {
 
 export const BOUNDS = {
   /** Percentage off the subtotal. */
-  discountPct: { min: 0, max: 100 },
+  discountPct: { min: 0, max: 100, step: 0.01 },
   /** GCT rate. 100 is not a real rate, but it is the honest arithmetic limit. */
-  gctRatePct: { min: 0, max: 100 },
+  gctRatePct: { min: 0, max: 100, step: 0.01 },
   /** Deposit as a percentage of the total. */
   depositPct: { min: 0, max: 100 },
   /**
@@ -53,7 +61,7 @@ export const BOUNDS = {
   /** Progress on a job. Whole numbers only — the server validates `.int()`. */
   progressPct: { min: 0, max: 100, step: 1 },
   /** Retention held back under the contract. */
-  retentionPct: { min: 0, max: 100 },
+  retentionPct: { min: 0, max: 100, step: 0.01 },
   /**
    * How much one sold unit covers — 20 m² per tin of paint.
    *
@@ -61,11 +69,20 @@ export const BOUNDS = {
    * value, and `coverageConfigFromFavourite` treats a half-configured material as
    * unconfigured. The form used to allow `0` against a `.positive()` server rule.
    */
-  coveragePerSellUnit: { min: 0, positiveOnly: true },
-  /** A line quantity. Fractions are normal — half a day, 2.5 bags. */
-  quantity: { min: 0 },
+  coveragePerSellUnit: { min: 0, max: 99_999_999, step: 0.0001, positiveOnly: true },
+  /**
+   * A line quantity. Fractions are normal — half a day, 2.5 bags.
+   *
+   * `Decimal(12,3)` on quote, invoice and labour lines and job components: three
+   * decimal places, and a whole part of at most nine digits.
+   */
+  quantity: { min: 0, max: 999_999_999, step: 0.001 },
+  /** A per-line or per-job margin. `Decimal(6,2)`; 1000% is the validated ceiling. */
+  markupPct: { min: 0, max: 1000, step: 0.01 },
+  /** JMD per USD reference rate. `Decimal(10,4)`; zero is not an exchange rate. */
+  jmdPerUsd: { min: 0, max: 999_999, step: 0.0001, positiveOnly: true },
   /** Waste allowance on a material. `.min(0).max(100)` on the server. */
-  wastePct: { min: 0, max: 100 },
+  wastePct: { min: 0, max: 100, step: 0.01 },
   /**
    * How long a quote stays open, in days.
    *

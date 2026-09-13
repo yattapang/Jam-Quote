@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { JobComponentKind } from "@jamquote/core";
+import { BOUNDS, JobComponentKind, boundedNumber } from "@jamquote/core";
 
 // materialFavouriteId/labourRateId are optional recompute back-references,
 // not required — a component may be freeform (no library link).
@@ -9,7 +9,7 @@ export const assemblyComponentInputSchema = z.object({
   labourRateId: z.string().max(64).min(1).optional(),
   equipmentItemId: z.string().max(64).min(1).optional(),
   description: z.string().max(500).min(1),
-  quantityPerUnit: z.number().positive(),
+  quantityPerUnit: boundedNumber({ ...BOUNDS.quantity, positiveOnly: true }),
   /** What the quantity counts — "trip", "day". Free text; absent prints bare. */
   unitLabel: z.string().max(40).min(1).optional(),
   unitPriceCents: z.number().int().nonnegative(),
@@ -21,7 +21,7 @@ export type JobComponentInput = z.infer<typeof assemblyComponentInputSchema>;
 export const createJobSchema = z.object({
   name: z.string().max(200).min(1),
   unit: z.string().max(40).min(1),
-  markupPct: z.number().min(0).optional(),
+  markupPct: boundedNumber(BOUNDS.markupPct).optional(),
   components: z.array(assemblyComponentInputSchema).default([]),
 });
 export type CreateJobInput = z.infer<typeof createJobSchema>;
@@ -34,7 +34,7 @@ export type CreateJobInput = z.infer<typeof createJobSchema>;
 export const updateJobSchema = z.object({
   name: z.string().max(200).min(1).optional(),
   unit: z.string().max(40).min(1).optional(),
-  markupPct: z.number().min(0).optional(),
+  markupPct: boundedNumber(BOUNDS.markupPct).optional(),
   components: z.array(assemblyComponentInputSchema).optional(),
 });
 export type UpdateJobInput = z.infer<typeof updateJobSchema>;

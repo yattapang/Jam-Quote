@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
+import { BOUNDS, JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
 import { ADD_NEW_OPTION_VALUE, isAddNewOption } from "@/lib/catalog-options";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -480,6 +480,9 @@ export default function JobForm({
       <Input
         label="Markup %"
         type="number"
+        min={BOUNDS.markupPct.min}
+        max={BOUNDS.markupPct.max}
+        step={BOUNDS.markupPct.step}
         value={values.markupPct}
         onChange={(e) => set("markupPct", e.target.value)}
         hint="Applied on top of the summed component cost."

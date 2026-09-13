@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
-import { QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
+import { BOUNDS, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -344,7 +344,7 @@ function LineRows({
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Qty</span>
-            <Input type="number" placeholder="Qty" value={l.quantity} onChange={(e) => onPatch(l.key, { quantity: e.target.value })} />
+            <Input type="number" placeholder="Qty" min={BOUNDS.quantity.min} max={BOUNDS.quantity.max} step={BOUNDS.quantity.step} value={l.quantity} onChange={(e) => onPatch(l.key, { quantity: e.target.value })} />
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Unit</span>

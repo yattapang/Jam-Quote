@@ -362,7 +362,9 @@ const PAIRS: { name: string; bound: keyof typeof BOUNDS; field: (d: Dtos) => Any
 function edgeProblems(schema: AnyZod, b: NumericBound): string[] {
   const ok = (v: number) => schema.safeParse(v).success;
   const problems: string[] = [];
-  const nudge = b.step === 1 ? 1 : 0.001;
+  // One step, not a fixed 0.001: with a 2-place scale, `min - 0.001` is refused by
+  // the scale check alone, so a hand-typed `.min()` would pass unseen (S9).
+  const nudge = b.step ?? 0.001;
   if (b.positiveOnly) {
     if (ok(0)) problems.push("accepts 0 against positiveOnly");
     if (!ok(0.01)) problems.push("refuses the input's min 0.01");
@@ -440,7 +442,9 @@ describe("the subscription payment form refuses what the server refuses, in word
 
     expect(subscriptionPaymentProblem("", "0")).toBe("Amount must be above zero, or blank for the agreed price.");
     expect(subscriptionPaymentProblem(long + "x", "")).toBe(`Reference must be ${SUBSCRIPTION_REFERENCE_MAX} characters or fewer.`);
-  });
+    // Importing the whole admin console and the API DTO module is slow under the
+    // full parallel suite; at the 5s default this timed out intermittently.
+  }, 30_000);
 });
 
 describe("the bounds themselves are coherent", () => {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BOUNDS, PARISHES, ProjectStage } from "@jamquote/core";
+import { BOUNDS, PARISHES, ProjectStage, boundedNumber } from "@jamquote/core";
 
 /**
  * What a valid value for each project field IS, with no statement about
@@ -40,7 +40,7 @@ export const createProjectSchema = z.object({
    * The DEFAULT only. Each invoice keeps its own, so changing this mid-job
    * cannot restate a document the client is already holding. Null clears it.
    */
-  retentionPct: z.number().min(BOUNDS.retentionPct.min).max(BOUNDS.retentionPct.max).nullable().optional(),
+  retentionPct: boundedNumber(BOUNDS.retentionPct).nullable().optional(),
 });
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 

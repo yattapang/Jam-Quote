@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isHttpUrl } from "@jamquote/core";
+import { BOUNDS, boundedNumber, isHttpUrl } from "@jamquote/core";
 
 /**
  * A web address we are willing to put in an `href`.
@@ -15,6 +15,8 @@ const httpUrl = z.string().refine(isHttpUrl, {
 });
 
 const ratePct = z.number().min(0).max(100);
+/** `defaultTaxRatePct` is persisted to `Decimal(5,2)`; the statutory splits live in JSON. */
+const taxRatePct = boundedNumber(BOUNDS.gctRatePct);
 
 /** One statutory contribution's editable split rates. Either side may be null
  * to mean "not sourced yet". */
@@ -34,7 +36,7 @@ const statutoryRateSchema = z
 export const updateRulePackSchema = z
   .object({
     taxLabel: z.string().min(1).max(16).optional(),
-    defaultTaxRatePct: ratePct.optional(),
+    defaultTaxRatePct: taxRatePct.optional(),
     /** ISO date (YYYY-MM-DD); null clears the verified date. */
     verifiedAsOf: z.string().date().nullable().optional(),
     /** Primary provenance link; null or "" clears it. */
