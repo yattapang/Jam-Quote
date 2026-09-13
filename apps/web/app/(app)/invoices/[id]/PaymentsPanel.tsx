@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BOUNDS, InvoiceStatus, PaymentMethod } from "@jamquote/core";
+import { BOUNDS, InvoiceStatus, PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
@@ -209,6 +209,7 @@ export default function PaymentsPanel({
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               placeholder="Optional — cheque no., bank ref, wallet id"
+              maxLength={PAYMENT_REFERENCE_MAX_LENGTH}
             />
             {/* Warned about, not blocked: a customer really can overpay, and
                 refusing it would leave the contractor unable to record what

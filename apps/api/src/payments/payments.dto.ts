@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PaymentMethod } from "@jamquote/core";
+import { PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamquote/core";
 
 /**
  * Recording a payment the contractor took outside the app — cash, bank
@@ -18,7 +18,7 @@ export const recordManualPaymentSchema = z.object({
   method: z.nativeEnum(PaymentMethod),
   /** Cheque number, bank reference, wallet transaction id — whatever the
    * contractor needs to reconcile this against their own records later. */
-  reference: z.string().max(120).optional(),
+  reference: z.string().max(PAYMENT_REFERENCE_MAX_LENGTH).optional(),
   /** Defaults to now. Accepted so a payment taken on site last week can be
    * recorded with the date it actually happened, which is what the customer's
    * statement has to agree with. */

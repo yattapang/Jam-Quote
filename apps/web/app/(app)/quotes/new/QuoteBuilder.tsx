@@ -274,6 +274,15 @@ export default function QuoteBuilder({
     const validLines = savableLines(lines);
     if (validLines.length === 0) return setError("Add at least one line item with a description and quantity.");
 
+    // Refuse rather than silently coerce: `Number(validDays) || DEFAULT_VALID_DAYS`
+    // used to turn a typed `0` into 30 without telling anyone, and a negative
+    // value (`-5`) sailed through and saved a `validUntil` already in the past.
+    // The typed value is kept on screen either way — only the save is blocked.
+    const parsedValidDays = Number(validDays);
+    if (!Number.isInteger(parsedValidDays) || parsedValidDays < BOUNDS.validDays.min) {
+      return setError("Valid for (days) must be at least 1.");
+    }
+
     setSaving(true);
     setError("");
     setLimitReached(false);
@@ -286,7 +295,7 @@ export default function QuoteBuilder({
       lineItems: s.lines.map(lineToLineInput),
     }));
 
-    const days = Number(validDays) || DEFAULT_VALID_DAYS;
+    const days = parsedValidDays;
     const payload = {
       clientId: clientId || undefined,
       projectId: projectId || undefined,

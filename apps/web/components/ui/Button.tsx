@@ -44,6 +44,9 @@ export default function Button({
   }
   return (
     <button
+      // A native <button> inside a <form> defaults to submit, which made the business
+      // profile's Cancel save the edits. Default to "button"; a real submit says so.
+      type="button"
       className={classes(variant, size, fullWidth, className)}
       {...(rest as ButtonHTMLAttributes<HTMLButtonElement>)}
     >

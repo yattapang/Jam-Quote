@@ -6,6 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, MoneyText } from "../src/components";
 import { useQuoteDraft } from "../src/state/QuoteDraftContext";
 import { cementSupplierPrices, type SupplierPriceResult } from "../src/state/mockData";
+import { canSaveMaterialLine } from "../src/state/materialLine";
 import { resolveFontFamily } from "../src/theme/fontFamily";
 import { useTheme } from "../src/theme/ThemeProvider";
 
@@ -37,7 +38,7 @@ export default function AddMaterialScreen() {
   const effectiveUnitPriceCents = overrideCents ?? selected.unitPriceCents;
   const lineTotalCents = useMemo(() => Math.round(quantity * effectiveUnitPriceCents), [quantity, effectiveUnitPriceCents]);
 
-  const canSave = !isOverridden || overrideNote.trim().length > 0;
+  const canSave = canSaveMaterialLine(quantity, effectiveUnitPriceCents, isOverridden, overrideNote);
 
   const handleSelectSupplier = (s: SupplierPriceResult) => {
     setSelectedId(s.id);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AuditService } from "./audit.service.js";
+import { AuditService, FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
 
 describe("AuditService.record", () => {
   it("resolves the actor's email from actorUserId and writes an AuditLog row", async () => {
@@ -63,11 +63,64 @@ describe("AuditService.recent", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new AuditService(prisma as any);
 
-    await svc.recent();
+    await svc.recent(true);
 
     expect(prisma.auditLog.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: "desc" },
       take: 100,
     });
+  });
+
+  it("passes non-financial rows through unchanged when includeFinancials is false", async () => {
+    const row = {
+      id: "log-1",
+      action: "tenant.suspend",
+      details: { name: "Blackwood Construction" },
+    };
+    const prisma = { auditLog: { findMany: vi.fn().mockResolvedValue([row]) } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AuditService(prisma as any);
+
+    const rows = await svc.recent(false);
+
+    expect(rows[0]?.details).toEqual({ name: "Blackwood Construction" });
+  });
+
+  it("redacts details for a financial action when includeFinancials is false", async () => {
+    const row = {
+      id: "log-2",
+      action: "tenant.setPlan",
+      details: { plan: "pro", interval: "annual", priceCents: 480000, renewsAt: "2027-01-01" },
+    };
+    const prisma = { auditLog: { findMany: vi.fn().mockResolvedValue([row]) } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AuditService(prisma as any);
+
+    const rows = await svc.recent(false);
+
+    // The bypass: the caller lacks VIEW_FINANCIALS/MANAGE_TENANTS, so the
+    // negotiated price must not be reachable through this row at all.
+    expect(JSON.stringify(rows[0]?.details)).not.toMatch(/priceCents|480000/);
+  });
+
+  it("leaves details untouched for a financial action when includeFinancials is true", async () => {
+    const row = {
+      id: "log-3",
+      action: "subscription.payment.record",
+      details: { amountCents: 12000, method: "cash", coversUntil: "2026-12-01" },
+    };
+    const prisma = { auditLog: { findMany: vi.fn().mockResolvedValue([row]) } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AuditService(prisma as any);
+
+    const rows = await svc.recent(true);
+
+    expect(rows[0]?.details).toEqual(row.details);
+  });
+
+  it("FINANCIAL_AUDIT_ACTIONS names the three known money-carrying actions", () => {
+    expect([...FINANCIAL_AUDIT_ACTIONS].sort()).toEqual(
+      ["subscription.payment.record", "subscription.payment.void", "tenant.setPlan"].sort(),
+    );
   });
 });

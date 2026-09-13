@@ -326,10 +326,29 @@ export class AdminController {
     return this.admin.financials();
   }
 
-  /** Recent audit trail entries, newest first — GET /admin/audit. */
+  /**
+   * Recent audit trail entries, newest first — GET /admin/audit.
+   *
+   * Ungated (any admin), same reasoning as `tenants()` above: the general
+   * activity log — suspends, rulepack edits, admin promotions — is not
+   * financial data and the "activity" screen is shown to every admin
+   * regardless of capability. But three of the actions in this feed
+   * (`tenant.setPlan`, `subscription.payment.record/void`) carry the
+   * negotiated price or amount paid in `details` — exactly what
+   * `AdminService.tenants` strips from its own rows for the same caller.
+   * `AuditService.recent` redacts those rows' `details` unless the caller
+   * holds VIEW_FINANCIALS or MANAGE_TENANTS (who can already see the price
+   * via setTenantPlan) or is a super-admin.
+   */
   @Get("audit")
-  audit(): Promise<AuditLog[]> {
-    return this.auditService.recent();
+  audit(@Req() req: Request): Promise<AuditLog[]> {
+    const ctx = req.adminContext;
+    const canSeeFinancials =
+      !!ctx &&
+      (ctx.isSuperAdmin ||
+        ctx.capabilities.includes(AdminCapability.VIEW_FINANCIALS) ||
+        ctx.capabilities.includes(AdminCapability.MANAGE_TENANTS));
+    return this.auditService.recent(canSeeFinancials);
   }
 
   // --- Admin management (super-admin / MANAGE_ADMINS) -----------------------

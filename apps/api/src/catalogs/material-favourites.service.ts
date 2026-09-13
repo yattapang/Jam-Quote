@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { MaterialFavourite } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { assertSupplierOwned } from "../common/assert-owned.js";
 import { MaterialSchemaService } from "./material-schema.service.js";
 import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type {
@@ -29,6 +30,11 @@ export class MaterialFavouritesService {
     input: CreateMaterialFavouriteInput,
   ): Promise<MaterialFavourite> {
     if (input.unitId) await this.schema.assertUnitVisible(businessId, input.unitId);
+    // Ids are not capabilities: `supplierId` is stored unchecked in a plain
+    // String? column (not a Prisma relation — see remove() below), so without
+    // this a tenant could set their "usual supplier" to another tenant's
+    // private row, a soft-deleted one, or garbage.
+    if (input.supplierId) await assertSupplierOwned(this.prisma, businessId, input.supplierId);
     const normalized = await this.schema.normalizeForWrite(businessId, input);
     return this.prisma.materialFavourite.create({
       data: {
@@ -132,6 +138,7 @@ export class MaterialFavouritesService {
   ): Promise<MaterialFavourite> {
     const existing = await this.findOne(businessId, id);
     if (input.unitId) await this.schema.assertUnitVisible(businessId, input.unitId);
+    if (input.supplierId) await assertSupplierOwned(this.prisma, businessId, input.supplierId);
 
     const normalized = await this.schema.normalizeForWrite(businessId, input, {
       categoryDefId: existing.categoryDefId,

@@ -186,6 +186,96 @@ Before relaunching, check for live children, not just an unchanged tree.
   where it still holds the seeded 5. The agent had edited the already-applied seed
   migration, which would break Prisma's checksum on every deployed database - reverted.
 
+## Admin-console sweep, 2026-09-13 (read-only; findings from reading, fixes in progress)
+
+- **HIGH - `GET /admin/audit` declares no capability**, so any admin reads audit `details`
+  holding negotiated plan prices and subscription payments - the S4 data `/admin/tenants`
+  strips. Twin of S4. Fix in progress, executed-bypass test first.
+- **MEDIUM - Suspend and the plan `<select>` act on one click/change**, unlike revoke,
+  void and delete, which confirm. Fix in progress.
+- **OWNER QUESTION - read routes for pricing, regulatory feed and rule pack declare no
+  capability**, so any admin can read them. Not tenant data; possibly intended ("Viewable
+  by any admin" is documented only for the rule pack). Should reads follow the
+  capability model?
+- Sound: all 25 routes sit behind `AdminGuard` (role re-read from the database, view-as
+  tokens refused); all 17 mutations carry a capability and write an audit entry; hard
+  delete requires the typed name on both sides.
+
+## Catalog sweep, 2026-09-13 (read-only)
+
+- **P0 - jobs accept another tenant's material/labour/equipment ids** (`jobs.service.ts`
+  ~41): DTO checks shape only; real FKs accept the foreign row, and a made-up id fails the
+  FK - an existence oracle. Purchases has `assertLabourRateOwned`; jobs never calls it
+  (shape 5, the fix that reached one twin). Fix in progress, with a twin sweep.
+- **P0 - material favourites store any `supplierId`** (`material-favourites.service.ts`
+  ~333/~445), a plain `String?` with no relation - foreign, retired or garbage. `unitId`
+  and `categoryDefId` on the same path are checked. Fix in progress. Follow-up: a real
+  relation needs existing bad ids cleaned first.
+- **P1 - a labour rate's or equipment item's custom unit label (and labour `skillTier`)
+  can never be cleared:** the form sends a blank as `undefined`, and the update schema
+  rejects both `""` and `null` (executed); the save reports success and quotes keep the
+  old unit. Queued until the reviewer is out of the DTOs.
+- **P1 - equipment switched to owned keeps its hire vendor**, while the form's comment
+  claims `undefined` prevents a stale contact - on a PATCH it means "unchanged"
+  (shape 6). Queued with the above.
+- Not reviewed: the rest of the web catalog pages, `JobForm`, `unit-label.ts`.
+
+## Form-input sweep, 2026-09-13 (read-only; confirmed by reading, not run)
+
+- **HIGH - Cancel on the business profile SAVES** (`EditBusinessButton.tsx` ~134): `Button`
+  has no default `type`, so Cancel inside the `<form>` submits - the business name on
+  every quote and invoice. Same form's Save has no `disabled={saving}`.
+- **MEDIUM - project cost / labour Remove fails silently** (`ProjectCosts.tsx` ~222/~273):
+  no try/catch, no busy state; double-click sends two deletes.
+- **MEDIUM - "Valid for (days)"**: `0` silently becomes 30, `-5` saves an already-expired
+  quote; the DTO has no lower bound either (server half is a follow-up).
+- LOW: unit price and measured quantity lack `step`; project cost modals are not forms
+  (Enter does nothing); payment reference has no `maxLength` against the DTO's 120;
+  mobile add-material allows a $0 line (mock data only).
+- All in progress, each reproduced by a test first.
+- Not covered: AdminConsole, JobForm/MaterialForm/SupplierPricePanel internals,
+  SecuritySection, ClientForm, mobile invoice-detail.
+
+## Review of 6d11865 - stopped early, read-only (all PLAUSIBLE, none executed)
+
+The reviewer halted when REVIEW-FINDINGS.md changed under it - those were my own register
+notes, not a sweep editing. To be executed and fixed once the three fix agents land:
+- **Renewals from the 29th-31st lose paid days:** a Jan 31 monthly chain buys 362 days a
+  year (clamp without a stored anchor day). Needs an anchor-day column - design decision.
+- **Late-evening Jamaica starts end a day early:** month arithmetic runs on UTC fields, so
+  Jan 30 23:30 local renews Feb 27 23:30 local. Do the calendar step in Jamaica time.
+- **Admin plan change discards time already paid:** `nextRenewal` passes `null` for the
+  current `renewsAt`, so 20 remaining days are dropped.
+- **Retention guard bypasses:** file-wide name aliasing (shadowing misattributes), and
+  `!`, `as`, `Number(...)`, unary minus, renamed destructuring are not unwrapped. Same
+  resolve-don't-spell lesson; rebuild on the binder.
+- Possible double error on `verifiedAsOf` (`.date()` and `.refine` both firing).
+- Stale 5s only in test fixtures/comments; production reads the value from the database.
+- Claimed `" NIS"` -> `"_NIS"`; contradicts the trim-first fix - verify by executing.
+- Sound (by reading): migration valid, idempotent and sorted; seed migration unchanged;
+  trims cause no sync duplicates or login breakage; exports test listener does not leak.
+
+## Sweep fixes landed, 2026-09-13
+
+- **Admin:** `GET /admin/audit` strips money details (plan changes, payments, voids) for
+  admins without VIEW_FINANCIALS - executed bypass first (`priceCents: 480000` served),
+  injection-checked. The feed stays open to all admins because non-financial entries are
+  genuinely used. The financial-action list is guarded by a coverage test - to be checked
+  in review for text-matching. Suspend and plan change now confirm; cancel reverts.
+- **Catalog P0s:** jobs and material favourites check ownership of every referenced id
+  (shared `common/assert-owned.ts`, batched); a foreign and a made-up id get the same 404.
+  Twin sweep: **S7 is still open** - `supplierId` on purchases, quote lines and invoice
+  lines is written unchecked. Queued next.
+- **Forms:** `Button` now defaults to `type="button"` (every real submit already said
+  so); business-profile Save disables while saving; project cost/labour Remove report
+  errors and block double-clicks; cost modals are forms; "Valid for (days)" refuses < 1
+  (server bound is a follow-up); unit price and measured quantity carry steps; payment
+  reference `maxLength` spends one core constant with the DTO; mobile refuses a $0 line.
+- **My mistake while verifying:** to plant the Cancel defect I ran `git checkout` on
+  `Button.tsx`, which discarded the agent's uncommitted default. Caught by the diff
+  check and re-applied. Rule: plant and restore with a backup copy, never `git
+  checkout`, on a file with uncommitted work.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape

@@ -95,6 +95,13 @@ export const BOUNDS = {
 } as const satisfies Record<string, NumericBound>;
 
 /**
+ * Longest a free-text payment reference (cheque no., bank ref, wallet id) may
+ * be — spent by both the server (`recordManualPaymentSchema`) and the form
+ * (`PaymentsPanel`'s reference input), so neither can drift from the other.
+ */
+export const PAYMENT_REFERENCE_MAX_LENGTH = 120;
+
+/**
  * The `min` an HTML input should carry.
  *
  * A `positiveOnly` field cannot express "greater than zero" in HTML — `min` is

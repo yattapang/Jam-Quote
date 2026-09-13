@@ -585,7 +585,27 @@ export default function AdminConsole({
     return interval === "annual" ? "pro-annual" : "pro-monthly";
   }
 
-  async function setTenantPlanChoice(id: string, choice: string) {
+  const planChoiceLabel: Record<string, string> = { free: "Free", "pro-monthly": "Pro · monthly", "pro-annual": "Pro · annual" };
+
+  /**
+   * Saves on every change of the plan `<select>` — no separate "save" step —
+   * so a misclick immediately changes what a tenant is billed (choosing
+   * "Free" downgrades a paying tenant on the spot). Confirmed the same way
+   * the void-payment and delete-regulatory-entry actions already are
+   * (`window.confirm`), rather than inventing a second confirmation
+   * mechanism. On cancel this returns without calling the API or touching
+   * `tenantPlanOverride`, so the controlled `<select>` re-renders back to
+   * `planChoiceOf`'s existing value — the caller must NOT already have
+   * mutated the DOM value some other way.
+   */
+  async function setTenantPlanChoice(id: string, choice: string, tenantName: string) {
+    if (
+      !window.confirm(
+        `Change ${tenantName}'s plan to ${planChoiceLabel[choice] ?? choice}? This takes effect immediately.`,
+      )
+    ) {
+      return;
+    }
     const plan = choice === "free" ? "free" : "pro";
     const interval = choice === "pro-annual" ? "annual" : "monthly";
     setTenantPlanBusy((b) => ({ ...b, [id]: true }));
@@ -637,7 +657,17 @@ export default function AdminConsole({
   const [tenantLifecycleBusy, setTenantLifecycleBusy] = useState<Record<string, boolean>>({});
   const [tenantLifecycleError, setTenantLifecycleError] = useState<Record<string, string>>({});
 
-  async function toggleTenantSuspend(id: string, currentlySuspended: boolean) {
+  /**
+   * Suspend is destructive (it closes the tenant's account, reversibly but
+   * with no other warning) and used to fire on a single click. Restoring is
+   * not destructive — it undoes exactly that — so only the suspend
+   * direction confirms, using the same `window.confirm` mechanism as
+   * void-payment and delete-regulatory-entry.
+   */
+  async function toggleTenantSuspend(id: string, currentlySuspended: boolean, tenantName: string) {
+    if (!currentlySuspended && !window.confirm(`Suspend ${tenantName}? Their account will be closed until restored.`)) {
+      return;
+    }
     setTenantLifecycleBusy((b) => ({ ...b, [id]: true }));
     setTenantLifecycleError((e) => ({ ...e, [id]: "" }));
     try {
@@ -1350,7 +1380,7 @@ export default function AdminConsole({
                                     aria-label={`Plan for ${t[0]}`}
                                     disabled={busy}
                                     value={planChoiceOf(id, currentPlan, tenantInterval)}
-                                    onChange={(e) => setTenantPlanChoice(id, e.target.value)}
+                                    onChange={(e) => setTenantPlanChoice(id, e.target.value, t[0])}
                                     style={{ height: 28, padding: "0 7px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
                                   >
                                     <option value="free">Free</option>
@@ -1359,7 +1389,7 @@ export default function AdminConsole({
                                   </select>
                                   <button
                                     disabled={lifecycleBusy}
-                                    onClick={() => toggleTenantSuspend(id, suspended)}
+                                    onClick={() => toggleTenantSuspend(id, suspended, t[0])}
                                     style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: lifecycleBusy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: suspended ? "var(--good)" : "var(--warn)", opacity: lifecycleBusy ? 0.6 : 1 }}
                                   >
                                     {lifecycleBusy ? "…" : suspended ? "Restore" : "Suspend"}
@@ -2258,8 +2288,8 @@ function TenantDrawer({
   tenant: AdminTenant | null;
   canManage: boolean;
   busy: boolean;
-  onSetPlan: (id: string, choice: string) => void;
-  onToggleSuspend: (id: string, suspended: boolean) => void;
+  onSetPlan: (id: string, choice: string, tenantName: string) => void;
+  onToggleSuspend: (id: string, suspended: boolean, tenantName: string) => void;
   onDelete: (id: string, name: string) => void;
   /** Recording or voiding a payment changes the tenant's plan and renewal, so
    * the console behind the drawer has to re-read rather than show stale dates. */
@@ -2392,7 +2422,7 @@ function TenantDrawer({
                   <select
                     disabled={busy}
                     value={!isPro(plan) ? "free" : interval === "annual" ? "pro-annual" : "pro-monthly"}
-                    onChange={(e) => onSetPlan(businessId, e.target.value)}
+                    onChange={(e) => onSetPlan(businessId, e.target.value, name)}
                     style={{ height: 34, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }}
                   >
                     <option value="free">Free</option>
@@ -2403,7 +2433,7 @@ function TenantDrawer({
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     disabled={busy}
-                    onClick={() => onToggleSuspend(businessId, suspended)}
+                    onClick={() => onToggleSuspend(businessId, suspended, name)}
                     style={{ height: 34, padding: "0 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: suspended ? "var(--good)" : "var(--warn)", opacity: busy ? 0.6 : 1 }}
                   >
                     {suspended ? "Restore account" : "Suspend account"}

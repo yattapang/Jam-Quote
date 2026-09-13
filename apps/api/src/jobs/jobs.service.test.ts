@@ -49,6 +49,24 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    // Ownership lookups for component refs. Default: whatever id is asked
+    // for, one row comes back "owned" (findMany count matches the id count),
+    // so existing tests that don't care about this pass unmodified.
+    materialFavourite: {
+      findMany: vi.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(where.id.in.map((id: string) => ({ id }))),
+      ),
+    },
+    labourRate: {
+      findMany: vi.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(where.id.in.map((id: string) => ({ id }))),
+      ),
+    },
+    equipmentItem: {
+      findMany: vi.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(where.id.in.map((id: string) => ({ id }))),
+      ),
+    },
     ...overrides,
   };
   return { svc: new JobsService(prisma as any), prisma, tx };
@@ -98,6 +116,123 @@ describe("JobsService.create", () => {
     expect(tx.job.create).toHaveBeenCalledWith({
       data: { businessId: "b1", name: "Tiling — per sq ft", unit: "sq ft", markupPct: 0 },
     });
+  });
+});
+
+describe("JobsService.create — component ownership", () => {
+  it("refuses a materialFavouriteId belonging to another business", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.materialFavourite.findMany = vi.fn().mockResolvedValue([]); // not found for this business
+    await expect(
+      svc.create("b1", {
+        name: "x",
+        unit: "sq ft",
+        components: [{ ...materialComponent, materialFavouriteId: "someone-elses" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses a labourRateId belonging to another business", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.labourRate.findMany = vi.fn().mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        name: "x",
+        unit: "sq ft",
+        components: [{ ...labourComponent, labourRateId: "someone-elses" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses an equipmentItemId belonging to another business", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.equipmentItem.findMany = vi.fn().mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        name: "x",
+        unit: "sq ft",
+        components: [{ ...materialComponent, equipmentItemId: "someone-elses" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("gives the identical NotFoundException for a made-up id as for another tenant's real id — no existence oracle", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.materialFavourite.findMany = vi.fn().mockResolvedValue([]);
+    let foreignMessage: string | undefined;
+    let madeUpMessage: string | undefined;
+    try {
+      await svc.create("b1", {
+        name: "x",
+        unit: "sq ft",
+        components: [{ ...materialComponent, materialFavouriteId: "real-but-foreign" }],
+      } as any);
+    } catch (e) {
+      foreignMessage = (e as NotFoundException).message;
+    }
+    try {
+      await svc.create("b1", {
+        name: "x",
+        unit: "sq ft",
+        components: [{ ...materialComponent, materialFavouriteId: "totally-made-up" }],
+      } as any);
+    } catch (e) {
+      madeUpMessage = (e as NotFoundException).message;
+    }
+    expect(foreignMessage).toBeDefined();
+    expect(foreignMessage).toBe(madeUpMessage);
+  });
+
+  it("batches the lookup for multiple components and de-dupes repeated ids", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
+    await svc.create("b1", {
+      name: "x",
+      unit: "sq ft",
+      components: [
+        { ...materialComponent, materialFavouriteId: "m1" },
+        { ...materialComponent, materialFavouriteId: "m1" },
+        { ...materialComponent, materialFavouriteId: "m2" },
+      ],
+    } as any);
+    expect(prisma.materialFavourite.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.materialFavourite.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: { in: ["m1", "m2"] }, businessId: "b1", deletedAt: null }),
+      }),
+    );
+  });
+
+  it("allows components with no refs at all (plain OTHER lines)", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
+    await svc.create("b1", { name: "x", unit: "sq ft", components: [materialComponent] } as any);
+    expect(prisma.materialFavourite.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("JobsService.update — component ownership", () => {
+  it("refuses a foreign materialFavouriteId on a replacement component list", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow());
+    prisma.materialFavourite.findMany = vi.fn().mockResolvedValue([]);
+    await expect(
+      svc.update("b1", "a1", {
+        components: [{ ...materialComponent, materialFavouriteId: "someone-elses" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("does not check refs when components is omitted from the patch", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(tileAssemblyRow())
+      .mockResolvedValueOnce(tileAssemblyRow({ name: "x" }));
+    await svc.update("b1", "a1", { name: "x" } as any);
+    expect(prisma.materialFavourite.findMany).not.toHaveBeenCalled();
   });
 });
 

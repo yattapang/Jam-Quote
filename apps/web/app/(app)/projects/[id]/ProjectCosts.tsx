@@ -59,6 +59,9 @@ export default function ProjectCosts({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [removingPurchaseId, setRemovingPurchaseId] = useState<string | null>(null);
+  const [removingLabourId, setRemovingLabourId] = useState<string | null>(null);
+
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [gct, setGct] = useState("");
@@ -160,6 +163,9 @@ export default function ProjectCosts({
           Log a cost
         </Button>
       </div>
+      {error && !open && !labourOpen && (
+        <div style={{ fontSize: 12.5, color: "var(--critical)", marginBottom: 10 }}>{error}</div>
+      )}
       <Card>
         {/* Where the money went, largest first. This is what the category
             field is FOR — without a breakdown it is data entry with no
@@ -219,13 +225,22 @@ export default function ProjectCosts({
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={removingPurchaseId === p.id}
                   onClick={async () => {
                     if (!window.confirm(`Remove "${p.description}"?`)) return;
-                    await deletePurchase(p.id);
-                    router.refresh();
+                    setRemovingPurchaseId(p.id);
+                    setError(null);
+                    try {
+                      await deletePurchase(p.id);
+                      router.refresh();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : "Couldn't remove that.");
+                    } finally {
+                      setRemovingPurchaseId(null);
+                    }
                   }}
                 >
-                  Remove
+                  {removingPurchaseId === p.id ? "Removing…" : "Remove"}
                 </Button>
               </div>
             ))}
@@ -270,13 +285,22 @@ export default function ProjectCosts({
                   <Button
                     variant="ghost"
                     size="sm"
+                    disabled={removingLabourId === l.id}
                     onClick={async () => {
                       if (!window.confirm(`Remove "${l.description}"?`)) return;
-                      await deleteLabourEntry(l.id);
-                      router.refresh();
+                      setRemovingLabourId(l.id);
+                      setError(null);
+                      try {
+                        await deleteLabourEntry(l.id);
+                        router.refresh();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Couldn't remove that.");
+                      } finally {
+                        setRemovingLabourId(null);
+                      }
                     }}
                   >
-                    Remove
+                    {removingLabourId === l.id ? "Removing…" : "Remove"}
                   </Button>
                 </div>
               ))}
@@ -287,7 +311,14 @@ export default function ProjectCosts({
 
       {labourOpen && (
         <Modal title="Log time" onClose={() => (busy ? undefined : setLabourOpen(false))}>
-          <div style={{ display: "grid", gap: 12 }}>
+          <form
+            style={{ display: "grid", gap: 12 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy || !who.trim() || !qty.trim() || !rate.trim()) return;
+              void saveLabour();
+            }}
+          >
             {labourRates.length > 0 && (
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
                 Saved rate
@@ -344,24 +375,31 @@ export default function ProjectCosts({
             />
             {error && <span style={{ fontSize: 12.5, color: "var(--critical)" }}>{error}</span>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <Button variant="ghost" onClick={() => setLabourOpen(false)} disabled={busy}>
+              <Button variant="ghost" type="button" onClick={() => setLabourOpen(false)} disabled={busy}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                onClick={saveLabour}
+                type="submit"
                 disabled={busy || !who.trim() || !qty.trim() || !rate.trim()}
               >
                 {busy ? "Saving…" : "Log time"}
               </Button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
 
       {open && (
         <Modal title="Log a cost" onClose={() => (busy ? undefined : setOpen(false))}>
-          <div style={{ display: "grid", gap: 12 }}>
+          <form
+            style={{ display: "grid", gap: 12 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (busy || !description.trim() || !amount.trim()) return;
+              void save();
+            }}
+          >
             <Input
               label="What was it?"
               value={description}
@@ -443,18 +481,18 @@ export default function ProjectCosts({
             />
             {error && <span style={{ fontSize: 12.5, color: "var(--critical)" }}>{error}</span>}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-              <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
+              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
-                onClick={save}
+                type="submit"
                 disabled={busy || !description.trim() || !amount.trim()}
               >
                 {busy ? "Saving…" : "Log cost"}
               </Button>
             </div>
-          </div>
+          </form>
         </Modal>
       )}
     </section>

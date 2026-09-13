@@ -381,7 +381,7 @@ function LineRows({
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>Unit price ($)</span>
-            <Input type="number" placeholder="Unit $" value={l.unitPriceDollars} onChange={(e) => onPatch(l.key, { unitPriceDollars: e.target.value })} />
+            <Input type="number" placeholder="Unit $" min={BOUNDS.moneyDollars.min} step="0.01" value={l.unitPriceDollars} onChange={(e) => onPatch(l.key, { unitPriceDollars: e.target.value })} />
           </div>
           <div className={styles.fieldCell}>
             <span className={styles.mobileLabel}>GCT</span>
@@ -427,6 +427,8 @@ function LineRows({
                   aria-label={`Measured quantity, in ${coverageConfig.measureUnit}`}
                   type="number"
                   placeholder={`Measured qty (${coverageConfig.measureUnit})`}
+                  min={BOUNDS.quantity.min}
+                  step={BOUNDS.quantity.step}
                   value={measuredQtyText}
                   onChange={(e) => onMeasuredQtyChange(l.key, e.target.value)}
                 />

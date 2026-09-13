@@ -3,7 +3,10 @@ import type { Purchase } from "@prisma/client";
 import { computeJobProfit, labourEntryCostCents, type JobProfit } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 // Aliased so the private wrapper below cannot be read as recursive.
-import { assertProjectOwned as assertProjectOwnedBy } from "../common/assert-owned.js";
+import {
+  assertProjectOwned as assertProjectOwnedBy,
+  assertLabourRateOwned,
+} from "../common/assert-owned.js";
 import type {
   CreateLabourEntryInput,
   CreatePurchaseInput,
@@ -210,7 +213,7 @@ export class PurchasesService {
 
   async createLabour(businessId: string, input: CreateLabourEntryInput) {
     await this.assertProjectOwned(businessId, input.projectId);
-    await this.assertLabourRateOwned(businessId, input.labourRateId);
+    await assertLabourRateOwned(this.prisma, businessId, input.labourRateId);
     return this.prisma.labourEntry.create({
       data: {
         businessId,
@@ -232,17 +235,6 @@ export class PurchasesService {
     });
     if (!entry) throw new NotFoundException("Labour entry not found");
     await this.prisma.labourEntry.update({ where: { id }, data: { deletedAt: new Date() } });
-  }
-
-  /** Same reasoning as assertProjectOwned: an id is not a capability, and a
-   * rate reveals what a competitor pays their crew. */
-  private async assertLabourRateOwned(businessId: string, rateId?: string | null): Promise<void> {
-    if (!rateId) return;
-    const rate = await this.prisma.labourRate.findFirst({
-      where: { id: rateId, businessId },
-      select: { id: true },
-    });
-    if (!rate) throw new NotFoundException("Labour rate not found");
   }
 
   /**

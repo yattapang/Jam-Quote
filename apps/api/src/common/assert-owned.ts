@@ -39,6 +39,12 @@ import type { PrismaService } from "../prisma/prisma.service.js";
 /** A shape narrow enough to accept the real client or a fake in a test. */
 type ClientLookup = Pick<PrismaService, "client" | "project">;
 
+/** As above, for the catalog/job-costing foreign keys a caller can supply. */
+type CatalogLookup = Pick<
+  PrismaService,
+  "materialFavourite" | "labourRate" | "equipmentItem" | "supplier"
+>;
+
 /**
  * Refuses unless `clientId` names a live client of THIS business.
  *
@@ -88,6 +94,128 @@ export async function assertProjectOwned(
  * business that has been deleted must not cause the contractor's own project to
  * be thrown away.
  */
+/**
+ * As above, for a caller-supplied `labourRateId`.
+ *
+ * Moved here from `PurchasesService`'s private copy so jobs (which has the
+ * same shaped hole — `JobComponent.labourRateId`) spends the identical check
+ * rather than growing a second copy that drifts, as `assertProjectOwned` once
+ * did between purchases and quotes.
+ */
+export async function assertLabourRateOwned(
+  prisma: CatalogLookup,
+  businessId: string,
+  rateId?: string | null,
+): Promise<void> {
+  if (!rateId) return;
+  const rate = await prisma.labourRate.findFirst({
+    where: { id: rateId, businessId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!rate) throw new NotFoundException("Labour rate not found");
+}
+
+/** As above, for a caller-supplied `materialFavouriteId`. */
+export async function assertMaterialFavouriteOwned(
+  prisma: CatalogLookup,
+  businessId: string,
+  materialFavouriteId?: string | null,
+): Promise<void> {
+  if (!materialFavouriteId) return;
+  const material = await prisma.materialFavourite.findFirst({
+    where: { id: materialFavouriteId, businessId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!material) throw new NotFoundException("Material favourite not found");
+}
+
+/** As above, for a caller-supplied `equipmentItemId`. */
+export async function assertEquipmentItemOwned(
+  prisma: CatalogLookup,
+  businessId: string,
+  equipmentItemId?: string | null,
+): Promise<void> {
+  if (!equipmentItemId) return;
+  const item = await prisma.equipmentItem.findFirst({
+    where: { id: equipmentItemId, businessId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!item) throw new NotFoundException("Equipment item not found");
+}
+
+/**
+ * As above, for a caller-supplied `supplierId`.
+ *
+ * `Supplier.businessId` is nullable — a NULL row is legacy platform data no
+ * tenant owns (see the model comment in schema.prisma) — so it is deliberately
+ * excluded rather than matched: a NULL-owner supplier is not "this business's"
+ * either.
+ */
+export async function assertSupplierOwned(
+  prisma: CatalogLookup,
+  businessId: string,
+  supplierId?: string | null,
+): Promise<void> {
+  if (!supplierId) return;
+  const supplier = await prisma.supplier.findFirst({
+    where: { id: supplierId, businessId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!supplier) throw new NotFoundException("Supplier not found");
+}
+
+/**
+ * Batched form of the three catalog checks above, for a component array
+ * (`JobComponent[]`) rather than one field. One query per referenced table
+ * instead of one per component, and duplicate ids across components cost
+ * nothing extra: the id set is de-duped before the query.
+ *
+ * Throws the first missing kind found (material, then labour, then
+ * equipment) with the SAME "not found" message a single-field check would
+ * give, so a foreign id and a made-up id are indistinguishable to the caller.
+ */
+export async function assertJobComponentRefsOwned(
+  prisma: CatalogLookup,
+  businessId: string,
+  components: ReadonlyArray<{
+    materialFavouriteId?: string | null;
+    labourRateId?: string | null;
+    equipmentItemId?: string | null;
+  }>,
+): Promise<void> {
+  const materialIds = [...new Set(components.map((c) => c.materialFavouriteId).filter((v): v is string => Boolean(v)))];
+  const labourIds = [...new Set(components.map((c) => c.labourRateId).filter((v): v is string => Boolean(v)))];
+  const equipmentIds = [...new Set(components.map((c) => c.equipmentItemId).filter((v): v is string => Boolean(v)))];
+
+  if (materialIds.length > 0) {
+    const rows = await prisma.materialFavourite.findMany({
+      where: { id: { in: materialIds }, businessId, deletedAt: null },
+      select: { id: true },
+    });
+    if (rows.length !== materialIds.length) {
+      throw new NotFoundException("Material favourite not found");
+    }
+  }
+  if (labourIds.length > 0) {
+    const rows = await prisma.labourRate.findMany({
+      where: { id: { in: labourIds }, businessId, deletedAt: null },
+      select: { id: true },
+    });
+    if (rows.length !== labourIds.length) {
+      throw new NotFoundException("Labour rate not found");
+    }
+  }
+  if (equipmentIds.length > 0) {
+    const rows = await prisma.equipmentItem.findMany({
+      where: { id: { in: equipmentIds }, businessId, deletedAt: null },
+      select: { id: true },
+    });
+    if (rows.length !== equipmentIds.length) {
+      throw new NotFoundException("Equipment item not found");
+    }
+  }
+}
+
 export type ClientRefState = "owned" | "foreign" | "deleted";
 
 export async function clientReferenceState(

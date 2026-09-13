@@ -10,7 +10,10 @@ import type { MaterialSchemaService } from "./material-schema.service.js";
  * MaterialFavouritesService routes writes THROUGH it and persists what it
  * returns, rather than trusting client input.
  */
-function withPrisma(materialFavourite: Partial<Record<string, unknown>> = {}) {
+function withPrisma(
+  materialFavourite: Partial<Record<string, unknown>> = {},
+  supplier: Partial<Record<string, unknown>> = {},
+) {
   const prisma = {
     materialFavourite: {
       create: vi.fn(),
@@ -19,6 +22,12 @@ function withPrisma(materialFavourite: Partial<Record<string, unknown>> = {}) {
       update: vi.fn(),
       delete: vi.fn(),
       ...materialFavourite,
+    },
+    // Default: any supplierId checked resolves as owned by this business, so
+    // existing tests that don't care about suppliers pass unmodified.
+    supplier: {
+      findFirst: vi.fn().mockResolvedValue({ id: "supplier-owned" }),
+      ...supplier,
     },
   };
   const schema = {
@@ -88,6 +97,32 @@ describe("MaterialFavouritesService.create", () => {
     const { svc, schema } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
     await svc.create("biz-1", { name: "Cement", priceCents: 1200 });
     expect(schema.assertUnitVisible).not.toHaveBeenCalled();
+  });
+
+  it("checks a supplied supplierId is owned by this business before writing", async () => {
+    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    await svc.create("biz-1", { priceCents: 1200, supplierId: "sup-1" });
+    expect(prisma.supplier.findFirst).toHaveBeenCalledWith({
+      where: { id: "sup-1", businessId: "biz-1", deletedAt: null },
+      select: { id: true },
+    });
+  });
+
+  it("refuses another tenant's supplierId — the id is stored unchecked in a plain String? column, not a Prisma relation", async () => {
+    const { svc, prisma } = withPrisma(
+      { create: vi.fn().mockResolvedValue({}) },
+      { findFirst: vi.fn().mockResolvedValue(null) },
+    );
+    await expect(
+      svc.create("biz-1", { priceCents: 1200, supplierId: "someone-elses" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.materialFavourite.create).not.toHaveBeenCalled();
+  });
+
+  it("does not call the supplier check when no supplierId is supplied", async () => {
+    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({}) });
+    await svc.create("biz-1", { name: "Cement", priceCents: 1200 });
+    expect(prisma.supplier.findFirst).not.toHaveBeenCalled();
   });
 
   it("still accepts a bare name + price (pre-2a clients)", async () => {
@@ -169,6 +204,38 @@ describe("MaterialFavouritesService.update", () => {
     const { svc, prisma } = withPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
     await expect(svc.update("biz-1", "mat-1", { priceCents: 1 })).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.materialFavourite.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a supplierId belonging to another business on update", async () => {
+    const { svc, prisma } = withPrisma(
+      { findFirst: vi.fn().mockResolvedValue(existing), update: vi.fn().mockResolvedValue({}) },
+      { findFirst: vi.fn().mockResolvedValue(null) },
+    );
+    await expect(
+      svc.update("biz-1", "mat-1", { supplierId: "someone-elses" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.materialFavourite.update).not.toHaveBeenCalled();
+  });
+
+  it("gives the identical NotFoundException for another tenant's real supplierId as for a made-up one — no existence oracle", async () => {
+    const { svc } = withPrisma(
+      { findFirst: vi.fn().mockResolvedValue(existing), update: vi.fn().mockResolvedValue({}) },
+      { findFirst: vi.fn().mockResolvedValue(null) },
+    );
+    let foreignMessage: string | undefined;
+    let madeUpMessage: string | undefined;
+    try {
+      await svc.update("biz-1", "mat-1", { supplierId: "real-but-foreign" });
+    } catch (e) {
+      foreignMessage = (e as NotFoundException).message;
+    }
+    try {
+      await svc.update("biz-1", "mat-1", { supplierId: "totally-made-up" });
+    } catch (e) {
+      madeUpMessage = (e as NotFoundException).message;
+    }
+    expect(foreignMessage).toBeDefined();
+    expect(foreignMessage).toBe(madeUpMessage);
   });
 });
 

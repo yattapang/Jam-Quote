@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Job, Prisma } from "@prisma/client";
 import { computeJobUnitCostCents } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { assertJobComponentRefsOwned } from "../common/assert-owned.js";
 import type {
   JobComponentInput,
   CreateJobInput,
@@ -54,6 +55,13 @@ export class JobsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(businessId: string, input: CreateJobInput): Promise<JobWithCost> {
+    // Ids are not capabilities: without this a tenant could recipe a job
+    // component off another tenant's private material/labour-rate/equipment
+    // row by guessing its id, and a made-up id would otherwise fail the FK
+    // constraint instead of this check — telling the caller whether that id
+    // exists at all.
+    await assertJobComponentRefsOwned(this.prisma, businessId, input.components);
+
     const jobId = await this.prisma.$transaction(async (tx) => {
       const job = await tx.job.create({
         data: {
@@ -108,6 +116,9 @@ export class JobsService {
   ): Promise<JobWithCost> {
     const existing = await this.assertExists(businessId, id);
     const replacingComponents = input.components !== undefined;
+    if (replacingComponents) {
+      await assertJobComponentRefsOwned(this.prisma, businessId, input.components ?? []);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.job.update({

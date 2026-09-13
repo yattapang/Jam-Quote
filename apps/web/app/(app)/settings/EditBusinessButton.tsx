@@ -131,10 +131,10 @@ export default function EditBusinessButton({
             </div>
             {error && <span className={modalStyles.error}>{error}</span>}
             <div className={modalStyles.actions}>
-              <Button variant="ghost" onClick={() => setOpen(false)}>
+              <Button variant="ghost" type="button" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button variant="primary" type="submit">
+              <Button variant="primary" type="submit" disabled={saving}>
                 {saving ? "Saving…" : "Save changes"}
               </Button>
             </div>
