@@ -175,3 +175,12 @@ Reviewers are set to `opus` because the work is judgement, not enumeration.
 `form-input-auditor` is `sonnet`: its job is exhaustive breadth over every
 input in the app, which is mechanical. Change the frontmatter if the balance of
 cost and depth needs to shift.
+
+### Lesson from guard generations 12-14
+
+Three review rounds on S14-S19 kept finding the same shape: a check that compares a
+NAME's spelling (`BOUNDS`, `lineUnitLabel`, a type name) rather than what the name
+resolves to. Rule 3 applies to identifiers: resolve through the binder to the declaration
+or import, never compare `.text`. Two corollaries: a source guard passing does not prove
+the file compiles (the parser must throw on syntax errors), and "referenced by something"
+is not "used" (dead code can reference dead code - compute reachability).

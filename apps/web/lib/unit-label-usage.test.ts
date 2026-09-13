@@ -2,7 +2,15 @@ import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { parseFile, parseSource, callsTo, destructuredPropertyName, renderedExpressions, unwrap } from "./test/source-ast";
+import {
+  parseFile,
+  parseSource,
+  callsTo,
+  destructuredPropertyName,
+  followAlias,
+  renderedExpressions,
+  unwrap,
+} from "./test/source-ast";
 
 /**
  * A source-scanning guard, not a behaviour test.
@@ -92,17 +100,34 @@ const WEB_ROOT = join(__dirname, "..");
 const rel = (f: string) => f.slice(WEB_ROOT.length + 1).split("\\").join("/");
 
 /**
- * Is `node` a read of the line's rate unit — `l.rateUnit`, or an identifier that resolves,
- * through the shared binder, to a `rateUnit` property destructured from something? Binder
- * resolution replaces the previous file-wide name match, which keyed every identifier
- * spelled `rateUnit` anywhere in the file rather than the one actually bound to that
- * property — a bypass nobody had to try for, the same class the parser's own header warns
- * about for `const cur`.
+ * Is `node` a read of the line's rate unit — `l.rateUnit`, `l["rateUnit"]`, or an
+ * identifier that resolves, through the shared binder, to a `rateUnit` property
+ * destructured from something, or to a never-written local ALIAS of one (`const ru =
+ * l.rateUnit`, read later as `ru`)? Binder resolution replaces the previous file-wide
+ * name match, which keyed every identifier spelled `rateUnit` anywhere in the file rather
+ * than the one actually bound to that property — a bypass nobody had to try for, the
+ * same class the parser's own header warns about for `const cur`.
+ *
+ * `seen` guards the alias chase against a cycle (`const a = b; const b = a;`), which
+ * `followAlias` cannot itself loop on forever (each hop needs a fresh never-written
+ * binding) but which this recursion otherwise would.
  */
-function isRateUnitRead(node: ts.Node): boolean {
+function isRateUnitRead(node: ts.Node, seen: Set<ts.Node> = new Set()): boolean {
   if (ts.isPropertyAccessExpression(node) && node.name.text === "rateUnit") return true;
-  if (ts.isIdentifier(node) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)) {
-    return destructuredPropertyName(node) === "rateUnit";
+  if (ts.isElementAccessExpression(node)) {
+    const key = unwrap(node.argumentExpression);
+    if ((ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) && key.text === "rateUnit") return true;
+  }
+  if (
+    ts.isIdentifier(node) &&
+    !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
+    !(ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node)
+  ) {
+    if (destructuredPropertyName(node) === "rateUnit") return true;
+    if (seen.has(node)) return false;
+    seen.add(node);
+    const init = followAlias(node);
+    if (init && isRateUnitRead(unwrap(init), seen)) return true;
   }
   return false;
 }
@@ -130,12 +155,20 @@ function isRoutedThroughLineUnitLabel(node: ts.Node, call: ts.CallExpression): b
 
 /**
  * Does `node` sit inside an argument (at any depth) of a REAL call to `lineUnitLabel`,
- * resolved via the shared binder's `callsTo` (so an alias, `.call`/`.apply`, or a shadowed
- * name is judged correctly rather than by matching the callee's identifier text), and is
- * that specific occurrence excused per `isRoutedThroughLineUnitLabel`?
+ * resolved via the shared binder's `callsTo` with `importedFrom` set to the real
+ * `lineUnitLabel` export of `lib/quote-totals.ts` — so the callee must resolve THROUGH
+ * THE BINDER to that import (directly, aliased, or via a namespace-import property), not
+ * merely be spelled `lineUnitLabel`. Without `importedFrom`, `callsTo` matches by
+ * spelling alone, which is exactly what let
+ * `({ lineUnitLabel: (u) => u.toLowerCase() }).lineUnitLabel(l.rateUnit)` through: the
+ * callee IS spelled `lineUnitLabel`, but it is a method of an object literal built on the
+ * spot, not a call to the real function. Is that specific occurrence excused per
+ * `isRoutedThroughLineUnitLabel`?
  */
 function isInsideLineUnitLabelCall(node: ts.Node, sf: ts.SourceFile, stopAt: ts.Node): boolean {
-  const calls = new Set(callsTo(sf, "lineUnitLabel"));
+  const calls = new Set(
+    callsTo(sf, "lineUnitLabel", { moduleSpecifier: "@/lib/quote-totals", exportedName: "lineUnitLabel" }),
+  );
   let current: ts.Node = node;
   while (current !== stopAt && current.parent) {
     const parent = current.parent;
@@ -218,7 +251,40 @@ describe("a line's unit is resolved in one place", () => {
     // nothing routes it through lineUnitLabel at all.
     const probeSf = parseSource(
       "probe.tsx",
-      "const x = <span>{lineUnitLabel({ ...l, unitLabel: l.rateUnit.toLowerCase() })}</span>;",
+      [
+        'import { lineUnitLabel } from "@/lib/quote-totals";',
+        "const x = <span>{lineUnitLabel({ ...l, unitLabel: l.rateUnit.toLowerCase() })}</span>;",
+      ].join("\n"),
+    );
+    for (const expr of renderedExpressions(probeSf)) {
+      expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bypass: an element-access read of rateUnit is caught", () => {
+    const probeSf = parseSource("probe4.tsx", 'const x = <span>{l["rateUnit"].toLowerCase()}</span>;');
+    for (const expr of renderedExpressions(probeSf)) {
+      expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bypass: a never-written local alias of l.rateUnit is caught", () => {
+    const probeSf = parseSource(
+      "probe5.tsx",
+      "const ru = l.rateUnit;\nconst x = <span>{ru.toLowerCase()}</span>;",
+    );
+    for (const expr of renderedExpressions(probeSf)) {
+      expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("bypass: a call spelled lineUnitLabel that is not the real import is not excused", () => {
+    const probeSf = parseSource(
+      "probe6.tsx",
+      [
+        'import { lineUnitLabel } from "@/lib/quote-totals";',
+        "const x = <span>{({ lineUnitLabel: (u: string) => u.toLowerCase() }).lineUnitLabel(l.rateUnit)}</span>;",
+      ].join("\n"),
     );
     for (const expr of renderedExpressions(probeSf)) {
       expect(unroutedRateUnitReads(expr, probeSf).length).toBeGreaterThan(0);
@@ -226,13 +292,14 @@ describe("a line's unit is resolved in one place", () => {
   });
 
   it("still excuses the two legitimate pass-through shapes", () => {
+    const imp = 'import { lineUnitLabel } from "@/lib/quote-totals";';
     const passThroughFirstArg = parseSource(
       "probe2.tsx",
-      "const x = <span>{lineUnitLabel(l.rateUnit, l.unitLabel)}</span>;",
+      `${imp}\nconst x = <span>{lineUnitLabel(l.rateUnit, l.unitLabel)}</span>;`,
     );
     const passThroughField = parseSource(
       "probe3.tsx",
-      "const x = <span>{lineUnitLabel({ ...l, rateUnit: l.rateUnit })}</span>;",
+      `${imp}\nconst x = <span>{lineUnitLabel({ ...l, rateUnit: l.rateUnit })}</span>;`,
     );
     for (const sf of [passThroughFirstArg, passThroughField]) {
       for (const expr of renderedExpressions(sf)) {

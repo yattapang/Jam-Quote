@@ -51,6 +51,18 @@ import {
  * `max={cond ? 100 : undefined}` with `cond` a prop — is not static and is not
  * flagged; nor is a `BOUNDS` value re-exported under another name from another
  * module, which the parser cannot follow across files.
+ *
+ * It also does not flag a hardcoded DEFAULT on a destructured parameter —
+ * `function F({ cap = 100 }) { return <input max={cap}/> }` — even though `100` there is
+ * exactly as hand-typed as a literal `max={100}` at every call site that omits the
+ * argument. `source-ast.ts`'s `declarationIsStatic` deliberately refuses a destructured
+ * PARAMETER's default (it is a `BindingElement` reachable from a function parameter, not
+ * from a `VariableDeclaration`), because the same source location renders two different
+ * values depending on the caller: the default only when a caller omits `cap`, the real
+ * argument otherwise. Reading it as static would misclassify a value a caller CAN
+ * override as one nobody can — unsound the moment any call site supplies a real value —
+ * so this stays a known gap, not a silent one: a parameter default is scoped to whichever
+ * caller actually reaches this component's every call site, which no source scan proves.
  */
 
 const WEB = process.cwd();
@@ -219,6 +231,14 @@ describe("numeric inputs spend the shared BOUNDS", () => {
     // False alarm check: an aliased named import.
     const aliased = 'import { BOUNDS as B } from "@jamquote/core";';
     expect(isHandTyped(attr("<Input min={B.discountPct.min} />", aliased))).toBe(false);
+  });
+
+  it("a destructured parameter's default is NOT flagged — the documented gap, not a silent one", () => {
+    const src = "function F({ cap = 100 }: { cap?: number }) { return <Input max={cap} />; }";
+    const sf = parseSource("probe-param-default.tsx", src);
+    const found = boundAttributes(sf);
+    expect(found).toHaveLength(1);
+    expect(isHandTyped(found[0]!)).toBe(false);
   });
 
   it("the subscription payment form is not exempt and validates before it sends", () => {

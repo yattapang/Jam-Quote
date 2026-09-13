@@ -336,6 +336,17 @@ function aliasInitializer(id: ts.Identifier, fc: FileContext): ts.Expression | u
   return ts.isVariableDeclaration(d) && ts.isIdentifier(d.name) ? d.initializer : undefined;
 }
 
+/**
+ * Public wrapper over `aliasInitializer`, for guards that need to follow a never-written
+ * local alias back to its initializer through the shared binder — e.g. `const ru = l.rateUnit`
+ * then a later read of `ru`. Returns `undefined` for an import, a reassigned/tainted
+ * binding, a binding with more than one declaration, or a declaration that is not a plain
+ * `const`/`let x = …`.
+ */
+export function followAlias(id: ts.Identifier): ts.Expression | undefined {
+  return aliasInitializer(id, fileContext(id));
+}
+
 // ─────────────────────────────────────────────────────────────── call discovery
 
 type Mutable<T> = { -readonly [K in keyof T]: T[K] };
@@ -380,6 +391,81 @@ function reshapedCall(original: ts.CallExpression, callee: ts.Expression, args: 
 }
 
 /**
+ * Does `raw` (a callee, or the receiver of `.call`/`.apply`) resolve, through the shared
+ * binder, to the import of `exportedName` from `moduleSpecifier`? Accepts a direct or
+ * aliased named import used bare (`fn(...)`, or via a never-written local alias
+ * `const f = fn; f(...)`) and a namespace-import property (`NS.fn(...)`). Unlike
+ * `namesTarget`, this never matches on SPELLING alone — a same-named local function, a
+ * shadowed import, or an object literal with a same-named method (the
+ * `({ lineUnitLabel: … }).lineUnitLabel(...)` bypass) all resolve to a different symbol
+ * or no import symbol at all, and so do not match.
+ */
+function calleeIsImport(
+  raw: ts.Expression,
+  fc: FileContext,
+  moduleSpecifier: string,
+  exportedName: string,
+  seen: Set<ts.Node> = new Set(),
+): boolean {
+  const e = unwrap(raw);
+  if (seen.has(e)) return false;
+  seen.add(e);
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.CommaToken) {
+    return calleeIsImport(e.right, fc, moduleSpecifier, exportedName, seen);
+  }
+  if (ts.isConditionalExpression(e)) {
+    return (
+      calleeIsImport(e.whenTrue, fc, moduleSpecifier, exportedName, seen) ||
+      calleeIsImport(e.whenFalse, fc, moduleSpecifier, exportedName, seen)
+    );
+  }
+  if (ts.isIdentifier(e)) {
+    const sym = resolve(e, fc);
+    if (!sym) return false;
+    for (const d of sym.declarations ?? []) {
+      if (ts.isImportSpecifier(d)) {
+        const imported = (d.propertyName ?? d.name).text;
+        const decl = enclosingImportDeclaration(d);
+        if (imported === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+      }
+    }
+    const init = aliasInitializer(e, fc);
+    return init !== undefined && calleeIsImport(init, fc, moduleSpecifier, exportedName, seen);
+  }
+  if (ts.isElementAccessExpression(e)) {
+    const key = unwrap(e.argumentExpression);
+    if (!ts.isStringLiteral(key) && !ts.isNoSubstitutionTemplateLiteral(key)) return false;
+    return calleeNamespaceMatch(e.expression, key.text, fc, moduleSpecifier, exportedName);
+  }
+  if (ts.isPropertyAccessExpression(e)) {
+    return calleeNamespaceMatch(e.expression, e.name.text, fc, moduleSpecifier, exportedName);
+  }
+  return false;
+}
+
+/** Is `obj.propName` a namespace-import property naming the approved export? */
+function calleeNamespaceMatch(
+  obj: ts.Expression,
+  propName: string,
+  fc: FileContext,
+  moduleSpecifier: string,
+  exportedName: string,
+): boolean {
+  if (propName !== exportedName) return false;
+  const inner = unwrap(obj);
+  if (!ts.isIdentifier(inner)) return false;
+  const sym = resolve(inner, fc);
+  if (!sym) return false;
+  for (const d of sym.declarations ?? []) {
+    if (ts.isNamespaceImport(d)) {
+      const decl = enclosingImportDeclaration(d);
+      if (decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Every call to a function by name — `name(...)`, `x.name(...)`, `x?.name(...)`,
  * `(name)(...)`, `x["name"](...)`, `(0, name)(...)`, a call through a never-written
  * alias (`const f = name; f(...)`, `import { name as f }`), and `name.call(...)` /
@@ -394,21 +480,41 @@ function reshapedCall(original: ts.CallExpression, callee: ts.Expression, args: 
  * the function actually receives — `this` dropped, `.apply`'s array literal spread. A
  * guard reading `call.arguments[1]` therefore reads the right argument. `.apply` over
  * anything but an array literal yields a single spread argument: unknown.
+ *
+ * By default the callee is matched by SPELLING (`namesTarget`) — sound for a name local
+ * to the file being scanned, but a bypass the moment the same text can be spelled another
+ * way: `x.lineUnitLabel(...)` counts for ANY object with a `lineUnitLabel` property,
+ * including one built on the spot (`({ lineUnitLabel: (u) => u }).lineUnitLabel(l.rateUnit)`),
+ * and a local function or object literal that merely shares the name shadows the real one
+ * without the guard noticing. Pass `importedFrom` to close that: the callee must then
+ * resolve, through the binder, to the import of `importedFrom.exportedName` from
+ * `importedFrom.moduleSpecifier` — a direct or aliased identifier, a never-written local
+ * alias of one, or a namespace-import property. Existing callers that pass only a name
+ * keep the spelling-based match; passing `importedFrom` is strictly narrower.
  */
-export function callsTo(root: ts.Node, name: string): ts.CallExpression[] {
+export function callsTo(
+  root: ts.Node,
+  name: string,
+  importedFrom?: { moduleSpecifier: string; exportedName: string },
+): ts.CallExpression[] {
   const sf = root.getSourceFile();
   if (!sf.text.includes(name)) return [];
   let fc: FileContext | undefined;
   const lazy = () => (fc ??= fileContext(root));
 
+  const matches = (expr: ts.Expression): boolean =>
+    importedFrom
+      ? calleeIsImport(expr, lazy(), importedFrom.moduleSpecifier, importedFrom.exportedName)
+      : namesTarget(expr, name, lazy, new Set());
+
   const found: ts.CallExpression[] = [];
   for (const call of collect(root, ts.isCallExpression)) {
-    if (namesTarget(call.expression, name, lazy, new Set())) {
+    if (matches(call.expression)) {
       found.push(call);
       continue;
     }
     const callee = unwrap(call.expression);
-    if (!ts.isPropertyAccessExpression(callee) || !namesTarget(callee.expression, name, lazy, new Set())) continue;
+    if (!ts.isPropertyAccessExpression(callee) || !matches(callee.expression)) continue;
     if (callee.name.text === "call") {
       found.push(reshapedCall(call, callee.expression, call.arguments.slice(1)));
     } else if (callee.name.text === "apply") {
@@ -460,6 +566,38 @@ function moduleSpecifierOf(decl: ts.ImportDeclaration): string | undefined {
 }
 
 /**
+ * Does any reference to `sym` (found by name, filtered by binder identity — same pattern
+ * as `bindingTainted`) sit at the root of a chain that is written to at ANY point along
+ * it — `sym.a = …`, `sym.a.b = …`, a compound assignment, `++`/`--`, or `delete`, however
+ * many `as`/parens/`!` wrappers sit between hops? Unlike `referenceTaints` (which lets a
+ * write of a STATIC value keep an object "static", since that is sound for `analyseStatic`
+ * generally), a write through an imported chain always disqualifies here: an approved
+ * constant that the running program mutates is not "the approved constant" at that read
+ * regardless of what it was mutated to. Covers `(BOUNDS as any).wastePct.max = 50`.
+ */
+function importChainWritten(sym: ts.Symbol, fc: FileContext): boolean {
+  for (const id of fc.byName.get(sym.name) ?? []) {
+    if (resolve(id, fc) !== sym) continue;
+    let cur: ts.Expression = id;
+    for (;;) {
+      cur = climb(cur);
+      if (writeOf(cur) !== "none") return true;
+      const p = cur.parent;
+      if (ts.isPropertyAccessExpression(p) && p.expression === cur) {
+        cur = p;
+        continue;
+      }
+      if (ts.isElementAccessExpression(p) && p.expression === cur) {
+        cur = p;
+        continue;
+      }
+      break;
+    }
+  }
+  return false;
+}
+
+/**
  * Is `expr` (after unwrapping parens/as/!/satisfies) a pure property/index-access chain
  * whose ROOT identifier is bound to an import of `exportedName` from `moduleSpecifier`?
  * True for a named import (`import { BOUNDS } from "m"`, used as `BOUNDS.x` or bare
@@ -472,6 +610,10 @@ function moduleSpecifierOf(decl: ts.ImportDeclaration): string | undefined {
  * is a bare read of the imported value — the boundary between "the approved constant" and
  * "a value merely derived from it" is exactly where a guard should still call the result
  * hand-typed.
+ *
+ * Also `false` when the import binding is written through ANYWHERE in the file — see
+ * `importChainWritten` — because `(BOUNDS as any).wastePct.max = 50` elsewhere defeats
+ * the premise that `BOUNDS.wastePct.max` still reads the approved, unmodified constant.
  */
 export function isImportedChain(expr: ts.Expression, moduleSpecifier: string, exportedName: string): boolean {
   const chain = chainRoot(expr);
@@ -479,17 +621,19 @@ export function isImportedChain(expr: ts.Expression, moduleSpecifier: string, ex
   const fc = fileContext(chain.root);
   const sym = resolve(chain.root, fc);
   if (!sym) return false;
+  let matched = false;
   for (const d of sym.declarations ?? []) {
     if (ts.isImportSpecifier(d)) {
       const imported = (d.propertyName ?? d.name).text;
       const decl = enclosingImportDeclaration(d);
-      if (imported === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+      if (imported === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) matched = true;
     } else if (ts.isNamespaceImport(d)) {
       const decl = enclosingImportDeclaration(d);
-      if (chain.path[0] === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) return true;
+      if (chain.path[0] === exportedName && decl && moduleSpecifierOf(decl) === moduleSpecifier) matched = true;
     }
   }
-  return false;
+  if (!matched) return false;
+  return !importChainWritten(sym, fc);
 }
 
 /**
@@ -704,6 +848,7 @@ function isStatic(raw: ts.Expression, ctx: Ctx): boolean {
   if (ts.isTemplateExpression(expr)) {
     return expr.templateSpans.every((span) => isStatic(span.expression, ctx));
   }
+  if (ts.isVoidExpression(expr)) return true; // `void x` is always `undefined`, whatever x is
   if (ts.isPrefixUnaryExpression(expr)) {
     if (expr.operator === ts.SyntaxKind.PlusPlusToken || expr.operator === ts.SyntaxKind.MinusMinusToken) return false;
     return isStatic(expr.operand, ctx);
@@ -757,6 +902,21 @@ function callIsStatic(call: ts.CallExpression, ctx: Ctx): boolean {
 
   const global = globalName(callee, fc);
   if (global !== undefined) return DETERMINISTIC_GLOBALS.has(global) && argsStatic(call.arguments, ctx);
+
+  if (ts.isPropertyAccessExpression(callee)) {
+    // `(() => 100).call(null)` — invoking an inline function through `.call`/`.apply` is
+    // the same shape as invoking it directly (`(() => 100)()`, handled below): the
+    // receiver IS the function, not a static value holding one, so the general
+    // "static receiver, language method" branch below must not see it first, or it reads
+    // the function expression as a non-static callee and calls the whole thing data.
+    const receiver = unwrap(callee.expression);
+    if (
+      (ts.isArrowFunction(receiver) || ts.isFunctionExpression(receiver)) &&
+      (callee.name.text === "call" || callee.name.text === "apply")
+    ) {
+      return returnsStatic(receiver, ctx);
+    }
+  }
 
   if (ts.isPropertyAccessExpression(callee) || ts.isElementAccessExpression(callee)) {
     // A static receiver holds only primitives, arrays and plain objects, so its methods
@@ -846,20 +1006,51 @@ function classFieldWritten(propSym: ts.Symbol, fc: FileContext): boolean {
   return false;
 }
 
+/**
+ * The class-like declaration `sym` names: a `class L {}` directly, or a never-inspected
+ * `const L = class {}` — a class EXPRESSION is exactly as sound to read a static field
+ * off as a class declaration (the field still belongs to the class itself, not to any
+ * particular value flowing through the program), and treating the two inconsistently was
+ * itself a bypass: `const L = class { static CAP = 100 }; …L.CAP…` fell through to the
+ * ordinary property-read path, which reads a class expression as an unhandled callable
+ * and reports the whole thing as data — hiding a literal from a guard that should have
+ * caught it, the same direction of error `bindingTainted` refuses elsewhere.
+ */
+function classLikeOf(sym: ts.Symbol): ts.ClassLikeDeclaration | undefined {
+  for (const d of sym.declarations ?? []) {
+    if (ts.isClassDeclaration(d)) return d;
+    if (ts.isVariableDeclaration(d) && d.initializer) {
+      const init = unwrap(d.initializer);
+      if (ts.isClassExpression(init)) return init;
+    }
+  }
+  return undefined;
+}
+
 function staticClassFieldIsStatic(pae: ts.PropertyAccessExpression, ctx: Ctx): boolean | undefined {
   const obj = unwrap(pae.expression);
   if (!ts.isIdentifier(obj)) return undefined;
   const fc = fileContext(obj);
   const classSym = resolve(obj, fc);
-  if (!classSym || !(classSym.declarations ?? []).some(ts.isClassDeclaration)) return undefined;
+  if (!classSym || !classLikeOf(classSym)) return undefined;
   const propSym = fc.checker.getSymbolAtLocation(pae.name);
   if (!propSym) return undefined;
-  const propDecls = (propSym.declarations ?? []).filter(ts.isPropertyDeclaration);
+  // A `static get CAP() { return 100 }` is exactly as sound to read as a static field
+  // initializer: it belongs to the class, takes no argument, and its value at this call
+  // site does not depend on which instance is asking (there is no instance). Reading only
+  // `ts.isPropertyDeclaration` here — as the first version did — let a getter hide a
+  // literal from the guard entirely, since it fell through to the data-by-default path.
+  const propDecls = (propSym.declarations ?? []).filter(
+    (d): d is ts.PropertyDeclaration | ts.GetAccessorDeclaration =>
+      ts.isPropertyDeclaration(d) || ts.isGetAccessorDeclaration(d),
+  );
   if (propDecls.length === 0) return undefined;
   const allStatic = propDecls.every((d) => (ts.getCombinedModifierFlags(d) & ts.ModifierFlags.Static) !== 0);
   if (!allStatic) return undefined;
   if (classFieldWritten(propSym, fc)) return false;
-  const ok = propDecls.every((d) => !!d.initializer && isStatic(d.initializer, ctx));
+  const ok = propDecls.every((d) =>
+    ts.isPropertyDeclaration(d) ? !!d.initializer && isStatic(d.initializer, ctx) : returnsStatic(d, ctx),
+  );
   if (ok) ctx.roots.add(pae.name.text);
   return ok;
 }

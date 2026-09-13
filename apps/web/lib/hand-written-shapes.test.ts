@@ -62,6 +62,7 @@ import { collect, parseFile, parseSource, unwrap } from "./test/source-ast";
 const WEB = join(process.cwd());
 const CLIENT = join(WEB, "lib", "api-client.ts");
 const SELF = join(WEB, "lib", "hand-written-shapes.test.ts");
+const clientSf = parseFile(CLIENT);
 
 /**
  * Hand-written `Api*` response shapes still tracked toward a wire contract.
@@ -161,14 +162,54 @@ function typeReferences(sf: ts.SourceFile): { name: string; node: ts.Node }[] {
   return refs;
 }
 
-/** Does `range` (a declaration) contain `node`? Used to exclude a shape's self-reference. */
+/**
+ * Does `range` (a declaration) contain `node`? Used to exclude a shape's self-reference.
+ *
+ * Checks the SOURCE FILE first. Offsets alone are not enough: `range` always belongs to
+ * `api-client.ts`, but `node` may belong to any scanned file, and two unrelated files
+ * routinely share overlapping offset ranges (both start at 0). Without the source-file
+ * check, a same-named unrelated declaration in another file — `type ZzDead = number;`
+ * next to some reference at the same byte offset a real shape's declaration occupies in
+ * api-client.ts — could spuriously read as "inside its own declaration" or, worse, ride
+ * the offset coincidence into being misclassified rather than simply not matching by name.
+ */
 function contains(range: ts.Node, node: ts.Node): boolean {
-  return node.getStart() >= range.getStart() && node.getEnd() <= range.getEnd();
+  return (
+    range.getSourceFile() === node.getSourceFile() &&
+    node.getStart() >= range.getStart() &&
+    node.getEnd() <= range.getEnd()
+  );
+}
+
+/**
+ * Does `sf` import `name` from `api-client.ts` (by any relative or aliased path, e.g.
+ * `"./api-client"`, `"@/lib/api-client"`), re-export it from there, or is `sf` the
+ * CLIENT file itself (so no import is needed for a reference to resolve)? A reference is
+ * only ever counted as pointing at a shape's declaration when this holds — otherwise a
+ * same-named identifier in another file is just that: a different, unrelated name that
+ * happens to be spelled the same, and must not keep a dead shape alive.
+ */
+function importsNameFromClient(sf: ts.SourceFile, name: string): boolean {
+  if (sf === clientSf) return true;
+  const fromClientModule = (spec: ts.Expression | undefined): boolean =>
+    !!spec && ts.isStringLiteral(spec) && /(^|\/)api-client$/.test(spec.text);
+  for (const imp of collect(sf, ts.isImportDeclaration)) {
+    if (!fromClientModule(imp.moduleSpecifier)) continue;
+    const clause = imp.importClause;
+    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    if (clause.namedBindings.elements.some((el) => (el.propertyName ?? el.name).text === name)) return true;
+  }
+  for (const exp of collect(sf, ts.isExportDeclaration)) {
+    if (!fromClientModule(exp.moduleSpecifier)) continue;
+    if (!exp.exportClause || !ts.isNamedExports(exp.exportClause)) continue;
+    if (exp.exportClause.elements.some((el) => (el.propertyName ?? el.name).text === name)) return true;
+  }
+  return false;
 }
 
 describe("hand-written response shapes", () => {
   const clientSource = readFileSync(CLIENT, "utf8");
-  const clientAst = parseFile(CLIENT);
+  const clientAst = clientSf;
   const { interfaces, aliases } = discoverShapes(clientAst);
   const discovered = [...interfaces, ...aliases];
 
@@ -211,24 +252,122 @@ describe("hand-written response shapes", () => {
     // Universal - unlike the budget above, this runs over EVERY exported interface
     // and type alias api-client.ts declares, Api*-named or not. This is what catches
     // AdminZombieShape, and what the old guard structurally could not.
+    //
+    // A shape is live only if it is reachable from a reference located OUTSIDE every
+    // exported hand-written shape declaration - not merely "referenced by SOME other
+    // declaration", which a pair of shapes that reference only each other (`ZzA { b?:
+    // ZzB }` + `ZzB { a?: ZzA }`, nothing else in the app naming either) would satisfy
+    // while both are actually unreachable from anything real. So this builds a graph:
+    // an edge `from -> to` for every reference to `to` found INSIDE some other shape
+    // `from`'s own declaration, and a name is "externally referenced" when a reference
+    // to it is found OUTSIDE every shape declaration. Liveness is the transitive
+    // closure of the externally-referenced set over that graph - the same shape as a
+    // reachability search, because that is exactly what it is.
     const files = sourceFiles(join(WEB, "lib"))
       .concat(sourceFiles(join(WEB, "app")))
       .concat(sourceFiles(join(WEB, "components")))
       .filter((f) => f !== SELF);
 
     const declByName = declarationsByName(clientAst);
-    const referenced = new Set<string>();
+
+    function enclosingShapeDecl(node: ts.Node): string | undefined {
+      for (const [name, decl] of declByName) {
+        if (contains(decl, node)) return name;
+      }
+      return undefined;
+    }
+
+    const edges = new Map<string, Set<string>>();
+    const external = new Set<string>();
+
     for (const file of files) {
       const sf = file === CLIENT ? clientAst : parseFile(file);
       for (const { name, node } of typeReferences(sf)) {
         const decl = declByName.get(name);
         if (decl && contains(decl, node)) continue; // a shape referencing only itself is dead
-        referenced.add(name);
+        // Resolve the reference to the shape's declaration, not merely its name: a
+        // same-named unrelated declaration in another file must not count.
+        if (!importsNameFromClient(sf, name)) continue;
+        const enclosing = enclosingShapeDecl(node);
+        if (enclosing) {
+          if (!edges.has(enclosing)) edges.set(enclosing, new Set());
+          edges.get(enclosing)!.add(name);
+        } else {
+          external.add(name);
+        }
       }
     }
 
-    const dead = discovered.filter((name) => !referenced.has(name));
+    const live = new Set(external);
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [from, tos] of edges) {
+        if (!live.has(from)) continue;
+        for (const to of tos) {
+          if (!live.has(to)) {
+            live.add(to);
+            changed = true;
+          }
+        }
+      }
+    }
+
+    const dead = discovered.filter((name) => !live.has(name));
     expect(dead).toEqual([]);
+  });
+
+  it("a pair of shapes referencing only each other is dead, not kept alive by each other", () => {
+    // Bypass: ZzA { b?: ZzB } and ZzB { a?: ZzA } each have a real, non-self reference
+    // to the other, so a check that stops at "does SOMETHING else reference this name"
+    // reads both as live forever, no matter how unreachable they are from real code.
+    const sf = parseSource(
+      "probe-mutual.ts",
+      "export interface ZzA { b?: ZzB }\nexport interface ZzB { a?: ZzA }",
+    );
+    const declByName = declarationsByName(sf);
+    function enclosingShapeDecl(node: ts.Node): string | undefined {
+      for (const [name, decl] of declByName) {
+        if (contains(decl, node)) return name;
+      }
+      return undefined;
+    }
+    const edges = new Map<string, Set<string>>();
+    const external = new Set<string>();
+    for (const { name, node } of typeReferences(sf)) {
+      const decl = declByName.get(name);
+      if (decl && contains(decl, node)) continue;
+      const enclosing = enclosingShapeDecl(node);
+      if (enclosing) {
+        if (!edges.has(enclosing)) edges.set(enclosing, new Set());
+        edges.get(enclosing)!.add(name);
+      } else {
+        external.add(name);
+      }
+    }
+    const live = new Set(external);
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [from, tos] of edges) {
+        if (!live.has(from)) continue;
+        for (const to of tos) if (!live.has(to)) { live.add(to); changed = true; }
+      }
+    }
+    expect(live.has("ZzA")).toBe(false);
+    expect(live.has("ZzB")).toBe(false);
+  });
+
+  it("a same-named unrelated declaration in another file does not keep a shape alive", () => {
+    // Bypass: a totally unrelated `type ZzDead = number;` in some other file, with a
+    // reference to that LOCAL type - not to api-client.ts's ZzDead - must not count,
+    // because that file never imports ZzDead from api-client.ts at all.
+    const otherFile = parseSource("other.ts", "type ZzDead = number;\nconst x: ZzDead = 1;");
+    expect(importsNameFromClient(otherFile, "ZzDead")).toBe(false);
+
+    const importingFile = parseSource(
+      "importing.ts",
+      'import type { ZzDead } from "@/lib/api-client";\nconst x: ZzDead = { } as ZzDead;',
+    );
+    expect(importsNameFromClient(importingFile, "ZzDead")).toBe(true);
   });
 
   it("a shape that references only itself counts as dead, not live", () => {

@@ -117,7 +117,17 @@ keyed on a NAME's spelling (`BOUNDS`, `lineUnitLabel`, a type name) instead of w
 name resolves to. Doctrine rule 3 ("the class, not the spelling") applies to identifiers
 too: resolve through the binder, never compare text.
 
-**Still open:** a second independent review of these fixes.
+**Second independent review (of ba0dba0): all seven fixes held, 11 new bypasses, all now
+fixed** - S19 missed `l["rateUnit"]` and aliases, and matched `lineUnitLabel` by spelling
+(now resolved to the `@/lib/quote-totals` import); S16 kept mutually-referencing dead
+shapes and matched references by name across files (now a reachability closure, same
+source file, import required); class expressions, static getters, `.call` on an inline
+function, `void`, and writes through the `BOUNDS` import all hid a literal; the S18 header
+lacked the parameter-default note its commit claimed. I re-planted `l["rateUnit"]` and
+the ZzA/ZzB pair myself: both fail. Gate green (web 680).
+
+**Still open:** a third independent review. Known residue to put to it: `callsTo` still
+matches by spelling for S17 and S18 callers (only S19 opted into import resolution).
 
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 

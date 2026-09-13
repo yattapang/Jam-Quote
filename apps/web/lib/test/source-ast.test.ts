@@ -163,6 +163,53 @@ describe("analyseStatic: class static fields", () => {
     const prelude = "class L { CAP = 100; } const l = new L();";
     expect(analyseStatic(probe("l.CAP", prelude)).static).toBe(false);
   });
+
+  it("a class EXPRESSION's static field — the `const L = class { static CAP = 100 }` bypass", () => {
+    const result = analyseStatic(probe("L.CAP", "const L = class { static CAP = 100; };"));
+    expect(result.static).toBe(true);
+  });
+
+  it("a class expression's static field written to elsewhere is data", () => {
+    const prelude = "const L = class { static CAP = 100; }; function reset() { L.CAP = load(); }";
+    expect(analyseStatic(probe("L.CAP", prelude)).static).toBe(false);
+  });
+
+  it("a static GETTER returning a literal — the `static get CAP()` bypass", () => {
+    const result = analyseStatic(probe("L.CAP", "class L { static get CAP() { return 100; } }"));
+    expect(result.static).toBe(true);
+  });
+
+  it("a static getter reading data is not static", () => {
+    const prelude = "class L { static get CAP() { return load(); } }";
+    expect(analyseStatic(probe("L.CAP", prelude)).static).toBe(false);
+  });
+
+  it("`L.CAP = 100` outside the declaration is data, consistent with bindingTainted", () => {
+    const prelude = "class L { static CAP; } L.CAP = 100;";
+    expect(analyseStatic(probe("L.CAP", prelude)).static).toBe(false);
+  });
+});
+
+describe("analyseStatic: void and IIFE-via-call/apply", () => {
+  it("`void 0 ?? 100` is static — void always evaluates to undefined", () => {
+    expect(analyseStatic(probe("void 0 ?? 100")).static).toBe(true);
+  });
+
+  it("`void load()` is still static — the operand's staticness does not matter", () => {
+    expect(analyseStatic(probe("void load()")).static).toBe(true);
+  });
+
+  it("an IIFE invoked via `.call` — the `(() => 100).call(null)` bypass", () => {
+    expect(analyseStatic(probe("(() => 100).call(null)")).static).toBe(true);
+  });
+
+  it("an IIFE invoked via `.apply`", () => {
+    expect(analyseStatic(probe("(() => 100).apply(null)")).static).toBe(true);
+  });
+
+  it("an IIFE via `.call` that reads a parameter is still data", () => {
+    expect(analyseStatic(probe("((x) => x).call(null, load())")).static).toBe(false);
+  });
 });
 
 describe("isImportedChain: telling the approved constant from a merely-static value", () => {
@@ -198,6 +245,58 @@ describe("isImportedChain: telling the approved constant from a merely-static va
     expect(isImportedChain(probe("BOUNDS.cap", "const BOUNDS = { cap: 100 };"), "@jamquote/core", "BOUNDS")).toBe(
       false,
     );
+  });
+
+  it("bypass: a write through the import anywhere in the file defeats a later bare read", () => {
+    const prelude = `${named}\n(BOUNDS as any).wastePct.max = 50;`;
+    expect(isImportedChain(probe("BOUNDS.discountPct.min", prelude), "@jamquote/core", "BOUNDS")).toBe(false);
+  });
+
+  it("a compound assignment or ++ through the import also defeats it", () => {
+    expect(isImportedChain(probe("BOUNDS.x", `${named}\nBOUNDS.y += 1;`), "@jamquote/core", "BOUNDS")).toBe(false);
+    expect(isImportedChain(probe("BOUNDS.x", `${named}\nBOUNDS.y++;`), "@jamquote/core", "BOUNDS")).toBe(false);
+  });
+
+  it("an unrelated write to a same-named local binding does not taint the import", () => {
+    const prelude = `${named}\nfunction f() { const other = { z: 1 }; other.z = 2; }`;
+    expect(isImportedChain(probe("BOUNDS.discountPct.min", prelude), "@jamquote/core", "BOUNDS")).toBe(true);
+  });
+});
+
+describe("callsTo: import-resolved callee", () => {
+  const moduleSpecifier = "@/lib/quote-totals";
+  const importedFrom = { moduleSpecifier, exportedName: "lineUnitLabel" };
+  const imp = `import { lineUnitLabel } from "${moduleSpecifier}";`;
+
+  it("a direct call to the real import", () => {
+    const sf = parseSource("c1.tsx", `${imp}\nlineUnitLabel(l);`);
+    expect(callsTo(sf, "lineUnitLabel", importedFrom)).toHaveLength(1);
+  });
+
+  it("an aliased import, and a namespace-import property", () => {
+    const aliased = parseSource("c2.tsx", `import { lineUnitLabel as f } from "${moduleSpecifier}";\nf(l);`);
+    expect(callsTo(aliased, "lineUnitLabel", importedFrom)).toHaveLength(1);
+
+    const ns = parseSource("c3.tsx", `import * as QT from "${moduleSpecifier}";\nQT.lineUnitLabel(l);`);
+    expect(callsTo(ns, "lineUnitLabel", importedFrom)).toHaveLength(1);
+  });
+
+  it("bypass: a same-named property on an object literal built on the spot does not count", () => {
+    const sf = parseSource(
+      "c4.tsx",
+      "({ lineUnitLabel: (u: string) => u.toLowerCase() }).lineUnitLabel(l.rateUnit);",
+    );
+    expect(callsTo(sf, "lineUnitLabel", importedFrom)).toHaveLength(0);
+  });
+
+  it("bypass: a locally declared function with the same name does not count", () => {
+    const sf = parseSource("c5.tsx", "function lineUnitLabel(l: any) { return l; }\nlineUnitLabel(l);");
+    expect(callsTo(sf, "lineUnitLabel", importedFrom)).toHaveLength(0);
+  });
+
+  it("without importedFrom, matching stays spelling-based (existing callers keep working)", () => {
+    const sf = parseSource("c6.tsx", "function lineUnitLabel(l: any) { return l; }\nlineUnitLabel(l);");
+    expect(callsTo(sf, "lineUnitLabel")).toHaveLength(1);
   });
 });
 
