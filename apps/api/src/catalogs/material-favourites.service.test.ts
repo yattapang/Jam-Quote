@@ -237,6 +237,40 @@ describe("MaterialFavouritesService.update", () => {
     expect(foreignMessage).toBeDefined();
     expect(foreignMessage).toBe(madeUpMessage);
   });
+
+  it("allows re-sending the supplierId already persisted on this favourite even if it has since been soft-deleted (regression)", async () => {
+    const existingWithSupplier = { ...existing, supplierId: "sup-deleted" };
+    const { svc, prisma } = withPrisma(
+      { findFirst: vi.fn().mockResolvedValue(existingWithSupplier), update: vi.fn().mockResolvedValue({}) },
+      {
+        // Live lookup (deletedAt: null) finds nothing — it's been soft-deleted.
+        // Grandfathered lookup (no deletedAt filter) still finds it, because it
+        // still belongs to this business.
+        findFirst: vi.fn().mockImplementation(({ where }: { where: { id: string; deletedAt?: null } }) =>
+          Promise.resolve("deletedAt" in where ? null : { id: where.id }),
+        ),
+      },
+    );
+    await expect(
+      svc.update("biz-1", "mat-1", { supplierId: "sup-deleted" }),
+    ).resolves.toBeDefined();
+    expect(prisma.materialFavourite.update).toHaveBeenCalled();
+  });
+
+  it("still refuses a NEWLY chosen supplierId that has been soft-deleted, even though the favourite's current supplier is grandfathered", async () => {
+    const existingWithSupplier = { ...existing, supplierId: "sup-old" };
+    const { svc } = withPrisma(
+      { findFirst: vi.fn().mockResolvedValue(existingWithSupplier), update: vi.fn().mockResolvedValue({}) },
+      {
+        findFirst: vi.fn().mockImplementation(({ where }: { where: { id: string; deletedAt?: null } }) =>
+          Promise.resolve("deletedAt" in where ? null : { id: where.id }),
+        ),
+      },
+    );
+    await expect(
+      svc.update("biz-1", "mat-1", { supplierId: "sup-new-but-deleted" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
 });
 
 describe("every endpoint returns the same material shape", () => {

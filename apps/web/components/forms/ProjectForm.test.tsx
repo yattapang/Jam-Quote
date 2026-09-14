@@ -2,7 +2,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ProjectForm, { emptyProjectForm, projectPayloadFromValues } from "./ProjectForm";
+import ProjectForm, {
+  emptyProjectForm,
+  projectPayloadFromValues,
+  projectEditPayloadFromValues,
+} from "./ProjectForm";
 
 /**
  * The project form, where two distinctions matter more than they look.
@@ -111,5 +115,21 @@ describe("ProjectForm — submitting", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ name: "Retaining wall" }),
     );
+  });
+});
+
+describe("projectPayloadFromValues (create) vs projectEditPayloadFromValues (edit)", () => {
+  it("create omits blank town/parish/address rather than sending null", () => {
+    const payload = projectPayloadFromValues({ ...emptyProjectForm, name: "Wall" });
+    expect(payload.town).toBeUndefined();
+    expect(payload.parish).toBeUndefined();
+    expect(payload.addressLine).toBeUndefined();
+  });
+
+  it("edit sends null for blank town/parish/address so a PATCH clears them", () => {
+    const payload = projectEditPayloadFromValues({ ...emptyProjectForm, name: "Wall" });
+    expect(payload.town).toBeNull();
+    expect(payload.parish).toBeNull();
+    expect(payload.addressLine).toBeNull();
   });
 });

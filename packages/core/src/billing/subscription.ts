@@ -11,6 +11,8 @@
  * contractor. Two separate books of account — never sum them.
  */
 
+import { JAMAICA_UTC_OFFSET_MS } from "../reports/summary.js";
+
 export const SubscriptionInterval = {
   MONTHLY: "monthly",
   ANNUAL: "annual",
@@ -170,8 +172,19 @@ export function nextTermEnd(
   // instead of clamping (31 Jan + 1 month -> 3 Mar, not 28 Feb; 29 Feb 2028 + 1
   // year -> 1 Mar 2029, not 28 Feb 2029). `addUtcMonthsClamped` fixes that —
   // see its doc comment for the anchoring consequence.
-  if (interval === SubscriptionInterval.ANNUAL) return addUtcMonthsClamped(base, 12);
-  return addUtcMonthsClamped(base, 1);
+  //
+  // And the calendar step happens on the JAMAICA-LOCAL date, not the UTC one. A term
+  // bought at 23:30 on 30 January in Kingston is 04:30 on 31 January in UTC; stepping
+  // the UTC fields clamps 31 -> 28 and the term ended at 23:30 on 27 February local —
+  // a day short, for every evening purchase after 19:00 near a month end. Jamaica
+  // keeps no daylight saving, so a fixed offset is exact.
+  return addJamaicaMonthsClamped(base, interval === SubscriptionInterval.ANNUAL ? 12 : 1);
+}
+
+/** `addUtcMonthsClamped` applied to the Jamaica-local wall-clock reading of `date`. */
+function addJamaicaMonthsClamped(date: Date, months: number): Date {
+  const local = new Date(date.getTime() + JAMAICA_UTC_OFFSET_MS);
+  return new Date(addUtcMonthsClamped(local, months).getTime() - JAMAICA_UTC_OFFSET_MS);
 }
 
 /** The notices the platform can send about a subscription. */

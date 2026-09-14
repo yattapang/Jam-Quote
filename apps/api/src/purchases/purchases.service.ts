@@ -5,7 +5,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 // Aliased so the private wrapper below cannot be read as recursive.
 import {
   assertProjectOwned as assertProjectOwnedBy,
-  assertLabourRateOwned,
+  assertSupplierOwned,
 } from "../common/assert-owned.js";
 import type {
   CreateLabourEntryInput,
@@ -80,6 +80,10 @@ export class PurchasesService {
 
   async create(businessId: string, input: CreatePurchaseInput): Promise<Purchase> {
     await this.assertProjectOwned(businessId, input.projectId);
+    // An id in the body is not a capability — see assert-owned.ts. Without this
+    // a tenant could attach spend to another business's supplier by guessing
+    // an id, exactly like the project check above it.
+    await assertSupplierOwned(this.prisma, businessId, input.supplierId);
     return this.prisma.purchase.create({
       data: {
         businessId,
@@ -97,8 +101,15 @@ export class PurchasesService {
   }
 
   async update(businessId: string, id: string, input: UpdatePurchaseInput): Promise<Purchase> {
-    await this.findOne(businessId, id);
+    const existing = await this.findOne(businessId, id);
     if (input.projectId !== undefined) await this.assertProjectOwned(businessId, input.projectId);
+    // A supplierId that is UNCHANGED and already persisted on this same
+    // purchase stays allowed even if that supplier has since been
+    // soft-deleted — an old purchase must remain editable. Only a NEWLY
+    // introduced id has to name a live supplier.
+    if (input.supplierId !== undefined && input.supplierId !== existing.supplierId) {
+      await assertSupplierOwned(this.prisma, businessId, input.supplierId);
+    }
     return this.prisma.purchase.update({
       where: { id },
       data: {
@@ -213,7 +224,15 @@ export class PurchasesService {
 
   async createLabour(businessId: string, input: CreateLabourEntryInput) {
     await this.assertProjectOwned(businessId, input.projectId);
-    await assertLabourRateOwned(this.prisma, businessId, input.labourRateId);
+    // NOT the shared assertLabourRateOwned: a labour entry pins its OWN
+    // rateCents at record time — the FK is a label, not a live price lookup —
+    // and entries routinely arrive as an offline replay well after the work
+    // was done. The shared helper's `deletedAt: null` is right for a
+    // check-then-price lookup, but here it would refuse an ordinary replay or
+    // edit made after the contractor deleted a rate they no longer use. A
+    // rate this business never owned (foreign or made-up) must still be
+    // refused, so this checks OWNERSHIP only, not liveness.
+    await this.assertLabourRateBelongsToBusiness(businessId, input.labourRateId);
     return this.prisma.labourEntry.create({
       data: {
         businessId,
@@ -227,6 +246,27 @@ export class PurchasesService {
         note: input.note ?? null,
       },
     });
+  }
+
+  /**
+   * Ownership only — deliberately not the shared `assertLabourRateOwned`.
+   *
+   * A missing id is not an error, matching every other caller-supplied FK
+   * check: `labourRateId` is optional. A rate this business owns but has
+   * since soft-deleted still passes; only a foreign or made-up id is refused,
+   * with the same `NotFoundException` either way so the two are
+   * indistinguishable to the caller.
+   */
+  private async assertLabourRateBelongsToBusiness(
+    businessId: string,
+    labourRateId?: string | null,
+  ): Promise<void> {
+    if (!labourRateId) return;
+    const rate = await this.prisma.labourRate.findFirst({
+      where: { id: labourRateId, businessId },
+      select: { id: true },
+    });
+    if (!rate) throw new NotFoundException("Labour rate not found");
   }
 
   async removeLabour(businessId: string, id: string): Promise<void> {

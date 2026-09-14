@@ -44,6 +44,19 @@ describe("verifiedAsOf on the rule pack", () => {
     // calendar-aware check (isIsoDate, in @jamquote/core) so the two cannot drift.
     const result = updateRulePackSchema.safeParse({ verifiedAsOf: "2026-02-31" });
     expect(result.success).toBe(false);
+    // One mistake, one message: `.date()` and `.refine(isIsoDate)` both fired before.
+    expect(result.success ? [] : result.error.issues.map((i) => i.message)).toEqual([
+      "Must be a real calendar date (YYYY-MM-DD)",
+    ]);
+    // Shape errors go through the same single rule.
+    expect(updateRulePackSchema.safeParse({ verifiedAsOf: "2026-2-1" }).error?.issues).toHaveLength(1);
+  });
+
+  it("trims a statutory code before uppercasing, so a leading space is not an underscore", () => {
+    const r = updateRulePackSchema.safeParse({
+      statutoryCustom: [{ code: " NIS", label: "x", appliesTo: "BOTH" }],
+    });
+    expect(r.success && r.data.statutoryCustom?.[0]?.code).toBe("NIS");
   });
 
   it("still accepts a real date", () => {

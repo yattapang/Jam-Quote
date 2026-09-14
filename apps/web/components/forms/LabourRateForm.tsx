@@ -7,7 +7,7 @@ import Input from "@/components/ui/Input";
 import RateUnitField from "@/components/forms/RateUnitField";
 import { modalStyles } from "@/components/ui/Modal";
 import TradeSelectField from "@/components/forms/TradeSelectField";
-import type { NewLabourRateInput, Trade } from "@/lib/api-client";
+import type { NewLabourRateInput, Trade, UpdateLabourRateInput } from "@/lib/api-client";
 import type { LabourRate } from "@/lib/types";
 
 import { errorMessage } from "@/lib/error-message";
@@ -45,6 +45,23 @@ export function labourRatePayloadFromValues(values: LabourRateFormValues): NewLa
     rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
     rateUnit: values.rateUnit,
     unitLabel: values.unitLabel.trim() || undefined,
+  };
+}
+
+/**
+ * Same shape, for a PATCH (EditLabourRateButton). A PATCH treats an omitted
+ * field as "unchanged", so a blank skillTier/unitLabel must send `null` to
+ * actually clear it — unlike create, where omitting means "never set".
+ */
+export function labourRateEditPayloadFromValues(
+  values: LabourRateFormValues,
+): UpdateLabourRateInput {
+  return {
+    trade: values.trade.trim(),
+    skillTier: values.skillTier.trim() || null,
+    rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
+    rateUnit: values.rateUnit,
+    unitLabel: values.unitLabel.trim() || null,
   };
 }
 

@@ -569,6 +569,11 @@ export default function AdminConsole({
   const [tenantPlanOverride, setTenantPlanOverride] = useState<Record<string, string>>({});
   const [tenantPlanBusy, setTenantPlanBusy] = useState<Record<string, boolean>>({});
   const [tenantPlanError, setTenantPlanError] = useState<Record<string, boolean>>({});
+  // The choice staged in the <select> but not yet applied — keyed by tenant
+  // id, absent once there is nothing staged (the select then falls back to
+  // planChoiceOf's committed value). See setTenantPlanChoice below for why a
+  // separate "Apply" step exists.
+  const [tenantPlanStaged, setTenantPlanStaged] = useState<Record<string, string>>({});
 
   /**
    * Set a tenant's plan AND term in one call.
@@ -588,15 +593,25 @@ export default function AdminConsole({
   const planChoiceLabel: Record<string, string> = { free: "Free", "pro-monthly": "Pro · monthly", "pro-annual": "Pro · annual" };
 
   /**
-   * Saves on every change of the plan `<select>` — no separate "save" step —
-   * so a misclick immediately changes what a tenant is billed (choosing
-   * "Free" downgrades a paying tenant on the spot). Confirmed the same way
-   * the void-payment and delete-regulatory-entry actions already are
-   * (`window.confirm`), rather than inventing a second confirmation
-   * mechanism. On cancel this returns without calling the API or touching
-   * `tenantPlanOverride`, so the controlled `<select>` re-renders back to
-   * `planChoiceOf`'s existing value — the caller must NOT already have
-   * mutated the DOM value some other way.
+   * The `<select>`'s onChange only stages a choice (`tenantPlanStaged`) — it
+   * used to confirm and save on every `change` event, which fires once per
+   * arrow-key step while the dropdown is focused, so `window.confirm` popped
+   * repeatedly as staff merely browsed the options with the keyboard, and any
+   * one dismissal-that-should-have-been-a-browse could accidentally commit a
+   * downgrade. Saving now happens only from the explicit "Apply" button next
+   * to the select, so a single confirm covers a single deliberate choice.
+   */
+  function stageTenantPlanChoice(id: string, choice: string) {
+    setTenantPlanStaged((s) => ({ ...s, [id]: choice }));
+  }
+
+  /**
+   * Fired by the "Apply" button, once, for the currently staged choice.
+   * Confirmed the same way the void-payment and delete-regulatory-entry
+   * actions already are (`window.confirm`), rather than inventing a second
+   * confirmation mechanism. On cancel this clears the staged choice — the
+   * controlled `<select>` re-renders back to `planChoiceOf`'s committed
+   * value — without calling the API or touching `tenantPlanOverride`.
    */
   async function setTenantPlanChoice(id: string, choice: string, tenantName: string) {
     if (
@@ -604,6 +619,11 @@ export default function AdminConsole({
         `Change ${tenantName}'s plan to ${planChoiceLabel[choice] ?? choice}? This takes effect immediately.`,
       )
     ) {
+      setTenantPlanStaged((s) => {
+        const next = { ...s };
+        delete next[id];
+        return next;
+      });
       return;
     }
     const plan = choice === "free" ? "free" : "pro";
@@ -613,6 +633,11 @@ export default function AdminConsole({
     try {
       await setTenantPlan(id, { plan, interval });
       setTenantPlanOverride((o) => ({ ...o, [id]: choice }));
+      setTenantPlanStaged((s) => {
+        const next = { ...s };
+        delete next[id];
+        return next;
+      });
       router.refresh();
     } catch {
       setTenantPlanError((e) => ({ ...e, [id]: true }));
@@ -1323,6 +1348,9 @@ export default function AdminConsole({
                       const renewsAt = tenantRenewals[i] ?? null;
                       const busy = id ? !!tenantPlanBusy[id] : false;
                       const rowError = id ? !!tenantPlanError[id] : false;
+                      const committedChoice = id ? planChoiceOf(id, currentPlan, tenantInterval) : "free";
+                      const stagedChoice = (id ? tenantPlanStaged[id] : undefined) ?? committedChoice;
+                      const planDirty = stagedChoice !== committedChoice;
                       const suspended = id ? tenantSuspendOverride[id] ?? tenantSuspendedBase[i] ?? false : false;
                       const lifecycleBusy = id ? !!tenantLifecycleBusy[id] : false;
                       const lifecycleError = id ? tenantLifecycleError[id] : "";
@@ -1379,14 +1407,23 @@ export default function AdminConsole({
                                   <select
                                     aria-label={`Plan for ${t[0]}`}
                                     disabled={busy}
-                                    value={planChoiceOf(id, currentPlan, tenantInterval)}
-                                    onChange={(e) => setTenantPlanChoice(id, e.target.value, t[0])}
+                                    value={stagedChoice}
+                                    onChange={(e) => stageTenantPlanChoice(id, e.target.value)}
                                     style={{ height: 28, padding: "0 7px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", opacity: busy ? 0.6 : 1 }}
                                   >
                                     <option value="free">Free</option>
                                     <option value="pro-monthly">Pro · monthly</option>
                                     <option value="pro-annual">Pro · annual</option>
                                   </select>
+                                  {planDirty && (
+                                    <button
+                                      disabled={busy}
+                                      onClick={() => setTenantPlanChoice(id, stagedChoice, t[0])}
+                                      style={{ height: 28, padding: "0 11px", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--good)", background: "color-mix(in srgb, var(--good) 12%, transparent)", color: "var(--good)", opacity: busy ? 0.6 : 1 }}
+                                    >
+                                      {busy ? "…" : "Apply"}
+                                    </button>
+                                  )}
                                   <button
                                     disabled={lifecycleBusy}
                                     onClick={() => toggleTenantSuspend(id, suspended, t[0])}
@@ -2346,6 +2383,14 @@ function TenantDrawer({
     { label: "Last activity", value: lastActive },
   ];
   const interval = tenant?.interval ?? "monthly";
+  // Staged locally, same reason as the table row's plan <select>: onChange
+  // must not confirm-and-save on every change event (an arrow-key step while
+  // the dropdown is focused fires one each), so it only stages here — the
+  // explicit "Apply" button below fires the single confirmed request.
+  const [drawerPlanStaged, setDrawerPlanStaged] = useState<string | null>(null);
+  const drawerPlanCommitted = !isPro(plan) ? "free" : interval === "annual" ? "pro-annual" : "pro-monthly";
+  const drawerPlanChoice = drawerPlanStaged ?? drawerPlanCommitted;
+  const drawerPlanDirty = drawerPlanChoice !== drawerPlanCommitted;
   const sub: [string, string][] = [
     ["Plan", shown],
     ["Term", isPro(plan) ? (interval === "annual" ? "Annual" : "Monthly") : "—"],
@@ -2419,16 +2464,30 @@ function TenantDrawer({
               <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20 }}>
                 <label style={{ display: "flex", flexDirection: "column", gap: 5, fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
                   Plan &amp; term
-                  <select
-                    disabled={busy}
-                    value={!isPro(plan) ? "free" : interval === "annual" ? "pro-annual" : "pro-monthly"}
-                    onChange={(e) => onSetPlan(businessId, e.target.value, name)}
-                    style={{ height: 34, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit" }}
-                  >
-                    <option value="free">Free</option>
-                    <option value="pro-monthly">Pro · monthly</option>
-                    <option value="pro-annual">Pro · annual (discounted)</option>
-                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select
+                      disabled={busy}
+                      value={drawerPlanChoice}
+                      onChange={(e) => setDrawerPlanStaged(e.target.value)}
+                      style={{ height: 34, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13, fontFamily: "inherit", flex: 1 }}
+                    >
+                      <option value="free">Free</option>
+                      <option value="pro-monthly">Pro · monthly</option>
+                      <option value="pro-annual">Pro · annual (discounted)</option>
+                    </select>
+                    {drawerPlanDirty && (
+                      <button
+                        disabled={busy}
+                        onClick={() => {
+                          onSetPlan(businessId, drawerPlanChoice, name);
+                          setDrawerPlanStaged(null);
+                        }}
+                        style={{ height: 34, padding: "0 13px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer", fontFamily: "inherit", border: "1px solid var(--good)", background: "color-mix(in srgb, var(--good) 12%, transparent)", color: "var(--good)", opacity: busy ? 0.6 : 1 }}
+                      >
+                        Apply
+                      </button>
+                    )}
+                  </div>
                 </label>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button

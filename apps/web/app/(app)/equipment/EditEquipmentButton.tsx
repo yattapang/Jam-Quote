@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 import { updateEquipmentItem } from "@/lib/api-client";
 import EquipmentForm, {
   equipmentFormValuesFromItem,
-  equipmentPayloadFromValues,
+  equipmentEditPayloadFromValues,
   type EquipmentFormValues,
 } from "@/components/forms/EquipmentForm";
 import type { EquipmentItem } from "@/lib/types";
@@ -18,7 +18,7 @@ export default function EditEquipmentButton({ item }: { item: EquipmentItem }) {
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: EquipmentFormValues) {
-    await updateEquipmentItem(item.id, equipmentPayloadFromValues(values));
+    await updateEquipmentItem(item.id, equipmentEditPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }

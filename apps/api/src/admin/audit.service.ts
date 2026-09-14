@@ -11,37 +11,62 @@ export interface RecordAuditInput {
 }
 
 /**
- * Actions whose `details` payload carries a negotiated/paid money figure —
- * the same class of data `AdminController.tenants` strips from its own
- * response for a caller without VIEW_FINANCIALS/MANAGE_TENANTS (see
- * `AdminService.tenants`'s `canSeePrice`).
+ * Redact-by-default allow-list.
  *
- * `tenant.setPlan` (admin.service.ts) carries `priceCents`/`interval`/
- * `renewsAt`; `subscription.payment.record` and `subscription.payment.void`
- * (subscription-payments.service.ts) carry `amountCents`/`method`/
- * `coversUntil`. None of the three writers can be restructured to nest
- * their money fields under a `financial` sub-object without touching
- * admin.service.ts, so redaction here keys off the action name instead —
- * one exported list, spent by the guard test below (which scans both
- * writers for any `audit.record` call whose `details` mentions a
- * money-shaped key and asserts its action is registered here), so a new
- * financial action that forgets to register itself fails that test rather
- * than leaking silently.
+ * A hand-kept DENY-list (the old `FINANCIAL_AUDIT_ACTIONS`) leaks by omission:
+ * every action nobody thought to add — `pricing.update` (admin.service.ts),
+ * which carries `proMonthlyPriceCents`/`proAnnualPriceCents`, was never in
+ * that set and its `details` leaked in full to any admin without
+ * VIEW_FINANCIALS/MANAGE_TENANTS. A regex/text scan meant to catch that class
+ * of miss is also defeated trivially — spreading a variable instead of a
+ * literal, or a money field not spelled with a `Cents` suffix, both produce
+ * no match — and it skipped admin.controller.ts entirely.
  *
- * What this does NOT prove: an action recorded here with a details shape
- * that later adds a NON-money field would still redact that field too
- * (redaction hides the whole `details` for these three actions, not just
- * the money keys within it) — deliberately, since there is no structural
- * split to redact partially. Widening membership is safe; narrowing it
- * without checking every historical call site is not.
+ * So the direction is inverted: `details` is redacted for every action
+ * EXCEPT the ones named here. Registering an action is an explicit claim
+ * that its `details`, as actually written, carries no money — checked for
+ * every name below by audit-writer-details.test.ts, which calls each
+ * writer with mocked Prisma and asserts the real payload passed to
+ * `audit.record` contains no money-shaped value, so a writer that adds a
+ * `Cents` field later fails that test rather than leaking silently. A brand
+ * new action is redacted the moment it exists, whether or not anyone
+ * registers it — the unsafe case is now the default, not the miss.
+ *
+ * Deliberately excluded (and so still redacted): `tenant.setPlan`,
+ * `pricing.update` (admin.service.ts — `priceCents`), and
+ * `subscription.payment.record`/`subscription.payment.void`
+ * (subscription-payments.service.ts — `amountCents`).
+ *
+ * This list is every OTHER `audit.record`/`this.audit.record` call site in
+ * apps/api/src as of this writing: admin.service.ts (tenant.impersonate,
+ * tenant.suspend, tenant.restore, tenant.delete, regulatory.create,
+ * regulatory.update, regulatory.review, regulatory.reopen, regulatory.delete,
+ * admin.promote, admin.update, admin.revoke), admin.controller.ts
+ * (subscription.sweep.manual, subscription.sweep.manual.failed), and
+ * rulepack.service.ts (rulepack.update — percentage rates, not a paid/owed
+ * money amount).
  */
-export const FINANCIAL_AUDIT_ACTIONS: ReadonlySet<string> = new Set([
-  "tenant.setPlan",
-  "subscription.payment.record",
-  "subscription.payment.void",
+export const NON_FINANCIAL_AUDIT_ACTIONS: ReadonlySet<string> = new Set([
+  "tenant.impersonate",
+  "tenant.suspend",
+  "tenant.restore",
+  "tenant.delete",
+  "regulatory.create",
+  "regulatory.update",
+  "regulatory.review",
+  "regulatory.reopen",
+  "regulatory.delete",
+  "admin.promote",
+  "admin.update",
+  "admin.revoke",
+  "subscription.sweep.manual",
+  "subscription.sweep.manual.failed",
+  "rulepack.update",
 ]);
 
-const REDACTED_DETAILS = { redacted: "financial details — requires VIEW_FINANCIALS" };
+const REDACTED_DETAILS = {
+  redacted: "financial details — requires VIEW_FINANCIALS or MANAGE_TENANTS",
+};
 
 /**
  * Records an immutable audit trail entry for every destructive/financial
@@ -81,7 +106,7 @@ export class AuditService {
    * every capability legitimately needs it), but a caller without
    * VIEW_FINANCIALS/MANAGE_TENANTS must not be able to read the negotiated
    * price or amount paid back out of this feed, which is the twin of the
-   * `/admin/tenants` leak. See FINANCIAL_AUDIT_ACTIONS.
+   * `/admin/tenants` leak. See NON_FINANCIAL_AUDIT_ACTIONS.
    */
   async recent(includeFinancials: boolean, limit = 100): Promise<AuditLog[]> {
     const rows = await this.prisma.auditLog.findMany({
@@ -90,9 +115,9 @@ export class AuditService {
     });
     if (includeFinancials) return rows;
     return rows.map((row) =>
-      FINANCIAL_AUDIT_ACTIONS.has(row.action)
-        ? { ...row, details: REDACTED_DETAILS as unknown as AuditLog["details"] }
-        : row,
+      NON_FINANCIAL_AUDIT_ACTIONS.has(row.action)
+        ? row
+        : { ...row, details: REDACTED_DETAILS as unknown as AuditLog["details"] },
     );
   }
 }

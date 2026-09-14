@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { MaterialFavourite } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service.js";
-import { assertSupplierOwned } from "../common/assert-owned.js";
+import { assertSupplierOwned, assertSupplierOwnedForUpdate } from "../common/assert-owned.js";
 import { MaterialSchemaService } from "./material-schema.service.js";
 import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type {
@@ -138,7 +138,13 @@ export class MaterialFavouritesService {
   ): Promise<MaterialFavourite> {
     const existing = await this.findOne(businessId, id);
     if (input.unitId) await this.schema.assertUnitVisible(businessId, input.unitId);
-    if (input.supplierId) await assertSupplierOwned(this.prisma, businessId, input.supplierId);
+    // The supplier already persisted on this favourite stays allowed even if
+    // it has since been soft-deleted — editing a favourite must not 404
+    // because its supplier was deleted afterwards. A NEWLY chosen supplier
+    // must still be live. See assert-owned.ts.
+    if (input.supplierId) {
+      await assertSupplierOwnedForUpdate(this.prisma, businessId, input.supplierId, existing.supplierId);
+    }
 
     const normalized = await this.schema.normalizeForWrite(businessId, input, {
       categoryDefId: existing.categoryDefId,

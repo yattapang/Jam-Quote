@@ -44,5 +44,12 @@ export const createProjectSchema = z.object({
 });
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 
-export const updateProjectSchema = createProjectSchema.partial();
+// addressLine/town/parish also accept `null` on a PATCH — distinct from
+// omitting the field (leave unchanged): null means the contractor blanked it
+// out and the update should actually clear the column.
+export const updateProjectSchema = createProjectSchema.partial().extend({
+  addressLine: projectFieldRules.addressLine.nullable().optional(),
+  town: projectFieldRules.town.nullable().optional(),
+  parish: projectFieldRules.parish.nullable().optional(),
+});
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;

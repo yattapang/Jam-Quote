@@ -2,7 +2,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import ClientForm, { emptyClientForm } from "./ClientForm";
+import ClientForm, {
+  emptyClientForm,
+  clientPayloadFromValues,
+  clientEditPayloadFromValues,
+} from "./ClientForm";
 
 /**
  * What a contractor actually experiences typing into the client form.
@@ -111,5 +115,27 @@ describe("ClientForm — what reaches the API", () => {
     await user.click(screen.getByRole("button", { name: /save client/i }));
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+describe("clientPayloadFromValues (create) vs clientEditPayloadFromValues (edit)", () => {
+  it("create omits blank optional fields rather than sending null", () => {
+    const payload = clientPayloadFromValues({ ...emptyClientForm, firstName: "Errol" });
+    expect(payload.lastName).toBeUndefined();
+    expect(payload.phone).toBeUndefined();
+    expect(payload.email).toBeUndefined();
+    expect(payload.town).toBeUndefined();
+    expect(payload.parish).toBeUndefined();
+    expect(payload.addressLine).toBeUndefined();
+  });
+
+  it("edit sends null for blank optional fields so a PATCH clears them", () => {
+    const payload = clientEditPayloadFromValues({ ...emptyClientForm, firstName: "Errol" });
+    expect(payload.lastName).toBeNull();
+    expect(payload.phone).toBeNull();
+    expect(payload.email).toBeNull();
+    expect(payload.town).toBeNull();
+    expect(payload.parish).toBeNull();
+    expect(payload.addressLine).toBeNull();
   });
 });

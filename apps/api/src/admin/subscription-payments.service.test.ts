@@ -371,7 +371,9 @@ describe("recording a payment after a lapse", () => {
  * refillable, because the tenant was on the free tier through it.
  */
 describe("the lapse rule across intervals and gap sizes", () => {
-  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+  // Jamaica-local midnight: `nextTermEnd` steps the Jamaica calendar date, and a UTC
+  // midnight is 19:00 on the PREVIOUS Jamaica day. The expected dates are unchanged.
+  const at = (iso: string) => new Date(iso + "T05:00:00.000Z");
 
   it("gives an ANNUAL tenant a full year after a lapse, not the remainder of an old one", async () => {
     // The worst case the review found. Annual from Jan 2025, lapsed, paid again in
@@ -463,7 +465,9 @@ describe("the lapse rule across intervals and gap sizes", () => {
  * misses, which is why neither alone was enough.
  */
 describe("voiding an old payment leaves a current tenant current", () => {
-  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+  // Jamaica-local midnight: `nextTermEnd` steps the Jamaica calendar date, and a UTC
+  // midnight is 19:00 on the PREVIOUS Jamaica day. The expected dates are unchanged.
+  const at = (iso: string) => new Date(iso + "T05:00:00.000Z");
 
   it("does not strand a paid-up tenant when a stale payment is voided", async () => {
     // The regression, exactly. January voided, nothing paid Feb–Jun, paid again in
@@ -618,7 +622,9 @@ describe("voiding an old payment leaves a current tenant current", () => {
  * payment cost an annual tenant **eight months of the year they had just paid for**.
  */
 describe("a void only refills the period it actually emptied", () => {
-  const at = (iso: string) => new Date(iso + "T00:00:00.000Z");
+  // Jamaica-local midnight: `nextTermEnd` steps the Jamaica calendar date, and a UTC
+  // midnight is 19:00 on the PREVIOUS Jamaica day. The expected dates are unchanged.
+  const at = (iso: string) => new Date(iso + "T05:00:00.000Z");
 
   it("does not rewind an ANNUAL term into a one-month vacated window", async () => {
     const { svc, subscriptionWrites } = build({

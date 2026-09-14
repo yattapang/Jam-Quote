@@ -7,7 +7,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
 import ClientSelectField from "./ClientSelectField";
-import type { NewProjectInput } from "@/lib/api-client";
+import type { NewProjectInput, UpdateProjectInput } from "@/lib/api-client";
 import type { ProjectDetail } from "@/lib/mock-data";
 import { errorMessage } from "@/lib/error-message";
 import type { ClientOption } from "./types";
@@ -79,6 +79,24 @@ export function projectPayloadFromValues(values: ProjectFormValues): NewProjectI
     progressPct: progressFromInput(values.progressPct),
     // Explicit null when cleared, so removing retention from a job actually
     // removes it rather than leaving the old percentage in place.
+    retentionPct: values.retentionPct.trim() === "" ? null : Number(values.retentionPct),
+  };
+}
+
+/**
+ * Same shape, for a PATCH (EditProjectButton). A PATCH treats an omitted
+ * field as "unchanged", so blanking town/parish/address must send `null` to
+ * actually clear them — unlike create, where omitting means "never set".
+ */
+export function projectEditPayloadFromValues(values: ProjectFormValues): UpdateProjectInput {
+  return {
+    name: values.name.trim(),
+    clientId: values.clientId || undefined,
+    town: values.town.trim() || null,
+    parish: values.parish || null,
+    addressLine: values.address.trim() || null,
+    stage: values.stage,
+    progressPct: progressFromInput(values.progressPct),
     retentionPct: values.retentionPct.trim() === "" ? null : Number(values.retentionPct),
   };
 }

@@ -40,13 +40,14 @@ export const updateRulePackSchema = z
     /**
      * ISO date (YYYY-MM-DD); null clears the verified date.
      *
-     * `.date()` and `isIsoDate` are spent together rather than one replacing
-     * the other: `.date()` is Zod's own calendar check, and `isIsoDate` is the
-     * SAME rule the web client runs before submitting — see date.ts for why a
-     * naive `Date.UTC`-based check used to disagree with `.date()` on years
-     * below 100. Both must agree, so both are asserted here.
+     * ONE rule, `isIsoDate` — the same function the web client runs before
+     * submitting. It used to be chained after Zod's `.date()`, and both fired on
+     * `"2026-02-31"`: two issues ("Invalid date" and this message) for one
+     * mistake. Two rules for one fact is also two things that can disagree.
+     * `.max(10)` is the length bound every string input carries (input-bounds guard);
+     * a real date is exactly 10 characters, so it never adds a second issue to one.
      */
-    verifiedAsOf: z.string().date().refine(isIsoDate, {
+    verifiedAsOf: z.string().max(10).refine(isIsoDate, {
       message: "Must be a real calendar date (YYYY-MM-DD)",
     }).nullable().optional(),
     /** Primary provenance link; null or "" clears it. */

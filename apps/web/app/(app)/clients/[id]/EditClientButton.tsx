@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 import { updateClient } from "@/lib/api-client";
 import ClientForm, {
   clientFormValuesFromClient,
-  clientPayloadFromValues,
+  clientEditPayloadFromValues,
   type ClientFormValues,
 } from "@/components/forms/ClientForm";
 import type { Client } from "@/lib/types";
@@ -20,7 +20,7 @@ export default function EditClientButton({ client }: { client: Client }) {
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: ClientFormValues) {
-    await updateClient(client.id, clientPayloadFromValues(values));
+    await updateClient(client.id, clientEditPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }

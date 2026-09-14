@@ -6,7 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
-import type { NewClientInput } from "@/lib/api-client";
+import type { NewClientInput, UpdateClientInput } from "@/lib/api-client";
 import type { Client } from "@/lib/types";
 
 import { errorMessage } from "@/lib/error-message";
@@ -62,6 +62,25 @@ export function clientPayloadFromValues(values: ClientFormValues): NewClientInpu
     town: values.town.trim() || undefined,
     parish: values.parish || undefined,
     addressLine: values.address.trim() || undefined,
+  };
+}
+
+/**
+ * Same shape, for a PATCH (EditClientButton). A PATCH treats an omitted field
+ * as "unchanged", so blanking lastName/phone/email/town/parish/address must
+ * send `null` to actually clear them — unlike create, where omitting means
+ * "never set".
+ */
+export function clientEditPayloadFromValues(values: ClientFormValues): UpdateClientInput {
+  return {
+    firstName: values.firstName.trim(),
+    lastName: values.lastName.trim() || null,
+    phone: values.phone.trim() || null,
+    email: values.email.trim() || null,
+    trn: values.trn.trim(),
+    town: values.town.trim() || null,
+    parish: values.parish || null,
+    addressLine: values.address.trim() || null,
   };
 }
 

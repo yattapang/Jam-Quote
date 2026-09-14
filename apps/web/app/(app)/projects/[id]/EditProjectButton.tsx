@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 import { updateProject } from "@/lib/api-client";
 import ProjectForm, {
   projectFormValuesFromProject,
-  projectPayloadFromValues,
+  projectEditPayloadFromValues,
   type ProjectFormValues,
 } from "@/components/forms/ProjectForm";
 import type { ClientOption } from "@/components/forms/types";
@@ -22,7 +22,7 @@ export default function EditProjectButton({ project, clients }: { project: Proje
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: ProjectFormValues) {
-    await updateProject(project.id, projectPayloadFromValues(values));
+    await updateProject(project.id, projectEditPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }

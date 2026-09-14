@@ -8,6 +8,7 @@ function build(opts: {
   purchases?: unknown[];
   labour?: unknown[];
   trn?: string | null;
+  supplier?: unknown;
 } = {}) {
   const prisma = {
     project: {
@@ -15,7 +16,7 @@ function build(opts: {
     },
     purchase: {
       findMany: vi.fn().mockResolvedValue(opts.purchases ?? []),
-      findFirst: vi.fn().mockResolvedValue({ id: "pu-1", businessId: "biz-1" }),
+      findFirst: vi.fn().mockResolvedValue({ id: "pu-1", businessId: "biz-1", supplierId: null }),
       create: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
       update: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
     },
@@ -27,6 +28,9 @@ function build(opts: {
       update: vi.fn().mockImplementation((args: { data: unknown }) => args.data),
     },
     labourRate: { findFirst: vi.fn().mockResolvedValue({ id: "lr-1" }) },
+    supplier: {
+      findFirst: vi.fn().mockResolvedValue("supplier" in opts ? opts.supplier : { id: "sup-1" }),
+    },
     business: {
       findUnique: vi.fn().mockResolvedValue({ trn: "trn" in opts ? opts.trn : "102-458-963" }),
     },
@@ -65,6 +69,46 @@ describe("recording a purchase", () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it("refuses a supplier belonging to another business (S7)", async () => {
+    // Ids are not capabilities: a caller-supplied supplierId must be checked
+    // exactly like projectId, or a tenant could attach spend to another
+    // business's supplier by guessing an id.
+    const { svc } = build({ supplier: null });
+    await expect(
+      svc.create("biz-1", {
+        description: "Rebar",
+        amountCents: 10_000,
+        purchasedAt: new Date().toISOString(),
+        supplierId: "someone-elses-supplier",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a soft-deleted supplier (S7)", async () => {
+    const { svc } = build({ supplier: null }); // findFirst excludes deletedAt, so a
+    // soft-deleted row also resolves to null — same shape as "foreign".
+    await expect(
+      svc.create("biz-1", {
+        description: "Rebar",
+        amountCents: 10_000,
+        purchasedAt: new Date().toISOString(),
+        supplierId: "soft-deleted-supplier",
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a made-up supplier id, with the identical 404 (S7)", async () => {
+    const { svc } = build({ supplier: null });
+    await expect(
+      svc.create("biz-1", {
+        description: "Rebar",
+        amountCents: 10_000,
+        purchasedAt: new Date().toISOString(),
+        supplierId: "not-a-real-id",
+      }),
+    ).rejects.toThrow("Supplier not found");
+  });
+
   it("defaults GCT to zero — plenty of suppliers are not registered", async () => {
     const { svc, prisma } = build();
     await svc.create("biz-1", {
@@ -93,6 +137,50 @@ describe("editing a purchase", () => {
     expect(prisma.purchase.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: { projectId: null } }),
     );
+  });
+
+  it("refuses reassigning to a supplier this business does not own (S7)", async () => {
+    const { svc } = build({ supplier: null });
+    await expect(
+      svc.update("biz-1", "pu-1", { supplierId: "someone-elses-supplier" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a made-up supplier id on update, with the identical 404 (S7)", async () => {
+    const { svc } = build({ supplier: null });
+    await expect(
+      svc.update("biz-1", "pu-1", { supplierId: "not-a-real-id" }),
+    ).rejects.toThrow("Supplier not found");
+  });
+
+  it("keeps an UNCHANGED supplierId even if it has since been soft-deleted (S7)", async () => {
+    // Old purchases must stay editable. supplier.findFirst returning null here
+    // would represent the supplier being soft-deleted since the purchase was
+    // made — the check must not even ask, because the value isn't changing.
+    const { svc, prisma } = build({ supplier: null });
+    prisma.purchase.findFirst.mockResolvedValue({
+      id: "pu-1",
+      businessId: "biz-1",
+      supplierId: "sup-1",
+    });
+    await svc.update("biz-1", "pu-1", { supplierId: "sup-1", note: "still same supplier" });
+    expect(prisma.supplier.findFirst).not.toHaveBeenCalled();
+    expect(prisma.purchase.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ supplierId: "sup-1" }) }),
+    );
+  });
+
+  it("still checks a NEWLY introduced supplierId, even when it replaces a soft-deleted one", async () => {
+    const { svc, prisma } = build({ supplier: null });
+    prisma.purchase.findFirst.mockResolvedValue({
+      id: "pu-1",
+      businessId: "biz-1",
+      supplierId: "sup-old",
+    });
+    await expect(
+      svc.update("biz-1", "pu-1", { supplierId: "sup-new-but-foreign" }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.supplier.findFirst).toHaveBeenCalled();
   });
 });
 
@@ -238,6 +326,46 @@ describe("labour is part of the cost, and it is the biggest part", () => {
         labourRateId: "someone-elses",
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a made-up labour rate id, with the identical 404", async () => {
+    const { svc, prisma } = build();
+    prisma.labourRate.findFirst.mockResolvedValue(null);
+    await expect(
+      svc.createLabour("biz-1", {
+        description: "Mason",
+        quantity: 1,
+        rateCents: 400_000,
+        workedOn: new Date().toISOString(),
+        labourRateId: "not-a-real-id",
+      }),
+    ).rejects.toThrow("Labour rate not found");
+  });
+
+  it("accepts a labour rate this business owns even after it was soft-deleted — an offline replay must still land", async () => {
+    // createLabour pins its own rateCents; the FK is a label, not a live price
+    // lookup, so refusing a rate the contractor themselves deleted since would
+    // break an ordinary replay or a late edit. The check must ask ownership
+    // only, without deletedAt — unlike the shared assertLabourRateOwned other
+    // callers use for a check-then-price lookup.
+    const { svc, prisma } = build();
+    // Ownership check queries WITHOUT deletedAt, so a soft-deleted-but-owned
+    // rate still resolves here — simulate that directly.
+    prisma.labourRate.findFirst.mockResolvedValue({ id: "lr-1" });
+    await svc.createLabour("biz-1", {
+      description: "Mason",
+      quantity: 1,
+      rateCents: 400_000,
+      workedOn: new Date().toISOString(),
+      labourRateId: "lr-1",
+    });
+    expect(prisma.labourRate.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "lr-1", businessId: "biz-1" } }),
+    );
+    // Deliberately no deletedAt key in that where — the assertion above is the
+    // guard: a rewrite that reintroduces `deletedAt: null` here would fail it.
+    const where = prisma.labourRate.findFirst.mock.calls[0]![0].where;
+    expect(where).not.toHaveProperty("deletedAt");
   });
 
   it("defaults the unit to days — how construction labour is usually bought", async () => {

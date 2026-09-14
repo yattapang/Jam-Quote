@@ -6,13 +6,19 @@ import AdminConsole from "./AdminConsole";
 import type { AdminData, AdminTenant } from "@/lib/api-client";
 
 /**
- * Suspend fired on one click, and the plan `<select>` saved on every change
- * (choosing "Free" downgrades a paying tenant immediately) — neither
- * confirmed, unlike void-payment and delete-regulatory-entry which both use
- * `window.confirm`. This renders the real tenants table and drives it with
- * `userEvent`, asserting: cancelling the browser confirm fires no API call
- * and (for the select) leaves the displayed value unchanged; confirming
- * fires it.
+ * Suspend fired on one click, and the plan `<select>` used to save on every
+ * `change` event (choosing "Free" downgrades a paying tenant immediately) —
+ * neither confirmed, unlike void-payment and delete-regulatory-entry which
+ * both use `window.confirm`. Worse, a `change` event fires once per
+ * arrow-key step while a `<select>` is focused, so browsing the options with
+ * the keyboard alone used to pop a confirm dialog per step.
+ *
+ * The plan select now only STAGES a choice; an explicit "Apply" button next
+ * to it fires the single confirmed request. This renders the real tenants
+ * table and drives it with `userEvent`, asserting: cancelling the browser
+ * confirm (from Apply) fires no API call and reverts the displayed value;
+ * confirming fires it; and a keyboard-driven change with no Apply click
+ * fires neither the confirm dialog nor the request.
  */
 
 vi.mock("next/navigation", () => ({
@@ -126,8 +132,8 @@ describe("suspend confirmation", () => {
 describe("plan-change confirmation", () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it("cancelling restores the select's displayed value and fires no request", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("changing the select alone (no Apply click) stages the choice but fires no confirm and no request — this is what a keyboard step through the options also does", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm");
     const { setTenantPlan } = await import("@/lib/api-client");
     renderConsole([tenant({ plan: "pro", interval: "monthly" })]);
     await goToTenants();
@@ -135,14 +141,32 @@ describe("plan-change confirmation", () => {
     const select = (await screen.findByLabelText(/Plan for Blackwood Construction/i)) as HTMLSelectElement;
     expect(select.value).toBe("pro-monthly");
 
+    // userEvent.selectOptions dispatches the same `change` event a keyboard
+    // arrow-step through the options produces — exactly the case that used
+    // to fire one window.confirm per step.
     await userEvent.selectOptions(select, "free");
+
+    expect(select.value).toBe("free");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(setTenantPlan).not.toHaveBeenCalled();
+  });
+
+  it("cancelling the Apply confirmation reverts the select's displayed value and fires no request", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { setTenantPlan } = await import("@/lib/api-client");
+    renderConsole([tenant({ plan: "pro", interval: "monthly" })]);
+    await goToTenants();
+
+    const select = (await screen.findByLabelText(/Plan for Blackwood Construction/i)) as HTMLSelectElement;
+    await userEvent.selectOptions(select, "free");
+    await userEvent.click(await screen.findByRole("button", { name: /^apply$/i }));
 
     expect(window.confirm).toHaveBeenCalled();
     expect(setTenantPlan).not.toHaveBeenCalled();
     expect(select.value).toBe("pro-monthly");
   });
 
-  it("confirming fires the plan-change request", async () => {
+  it("confirming the Apply click fires the plan-change request exactly once", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { setTenantPlan } = await import("@/lib/api-client");
     renderConsole([tenant({ plan: "pro", interval: "monthly" })]);
@@ -150,7 +174,17 @@ describe("plan-change confirmation", () => {
 
     const select = (await screen.findByLabelText(/Plan for Blackwood Construction/i)) as HTMLSelectElement;
     await userEvent.selectOptions(select, "free");
+    await userEvent.click(await screen.findByRole("button", { name: /^apply$/i }));
 
+    expect(setTenantPlan).toHaveBeenCalledTimes(1);
     expect(setTenantPlan).toHaveBeenCalledWith("biz-1", { plan: "free", interval: "monthly" });
+  });
+
+  it("no Apply button is shown while the staged choice matches the committed plan", async () => {
+    renderConsole([tenant({ plan: "pro", interval: "monthly" })]);
+    await goToTenants();
+    await screen.findByLabelText(/Plan for Blackwood Construction/i);
+
+    expect(screen.queryByRole("button", { name: /^apply$/i })).not.toBeInTheDocument();
   });
 });

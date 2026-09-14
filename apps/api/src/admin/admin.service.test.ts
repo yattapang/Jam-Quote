@@ -25,6 +25,55 @@ describe("AdminService.overview", () => {
   });
 });
 
+describe("AdminService.setTenantPlan keeps paid time", () => {
+  const DAY = 86_400_000;
+  const NOW = new Date("2026-09-13T15:00:00.000Z");
+  const run = async (
+    current: { plan: string; interval: string; renewsAt: Date | null } | null,
+    input: object,
+  ) => {
+    vi.useFakeTimers({ now: NOW });
+    try {
+      const upsert = vi.fn().mockImplementation(({ update }) => update);
+      const prisma = {
+        business: { findUnique: vi.fn().mockResolvedValue({ id: "b" }) },
+        subscription: { findUnique: vi.fn().mockResolvedValue(current), upsert },
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sub = await svc.setTenantPlan("b", input as any, "actor");
+      return (sub.renewsAt as Date).toISOString();
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+  const left20 = new Date(NOW.getTime() + 20 * DAY);
+
+  it("same interval: 20 days left extends from renewsAt, not from today", async () => {
+    // Executed before the fix: 2026-10-13T15:00Z — one month from today, 20 paid days gone.
+    expect(await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "monthly" }))
+      .toBe("2026-11-03T15:00:00.000Z");
+  });
+
+  it("monthly -> annual keeps the 20 days too", async () => {
+    expect(await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "annual" }))
+      .toBe("2027-10-03T15:00:00.000Z");
+  });
+
+  it("free -> pro starts today, ignoring a leftover renewsAt", async () => {
+    expect(await run({ plan: "free", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "monthly" }))
+      .toBe("2026-10-13T15:00:00.000Z");
+  });
+
+  it("a lapsed pro term, or no subscription row, starts today", async () => {
+    const lapsed = new Date(NOW.getTime() - 10 * DAY);
+    expect(await run({ plan: "pro", interval: "monthly", renewsAt: lapsed }, { plan: "pro", interval: "monthly" }))
+      .toBe("2026-10-13T15:00:00.000Z");
+    expect(await run(null, { plan: "pro", interval: "monthly" })).toBe("2026-10-13T15:00:00.000Z");
+  });
+});
+
 describe("AdminService.tenants", () => {
   it("maps subscription plan/status with defaults when no subscription exists", async () => {
     const now = new Date("2026-01-01T00:00:00.000Z");

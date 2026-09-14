@@ -108,6 +108,7 @@ function harness(quote = acceptedQuote()) {
     quote: {
       findFirst: vi.fn().mockResolvedValue(quote),
     },
+    supplier: { findMany: vi.fn().mockResolvedValue([]) },
     invoice: {
       findFirst: vi.fn((args: any) => {
         // findOne's read-back after create/update
@@ -287,6 +288,7 @@ function existingInvoiceHarness(invoice: any) {
       ),
     },
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+    supplier: { findMany: vi.fn().mockResolvedValue([]) },
     invoice: {
       findFirst: vi.fn().mockResolvedValue(invoice),
       update: vi.fn().mockResolvedValue({}),
@@ -389,6 +391,124 @@ describe("InvoicesService.update", () => {
       BadRequestException,
     );
     expect(tx.invoice.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * S7: a caller-supplied `supplierId` on an invoice line item was written
+ * with no ownership check at all — unlike `clientId` beside it. See
+ * REVIEW-FINDINGS.md. `convertFromQuote` is deliberately untouched: it
+ * copies an already-owned quote's persisted supplierId, which is safe.
+ */
+describe("InvoicesService — supplierId on line items is not a capability (S7)", () => {
+  it("refuses a supplier belonging to another business on create", async () => {
+    const { svc, prisma } = harness();
+    prisma.supplier.findMany.mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        clientId: "cl1",
+        discountPct: 0,
+        depositCents: 0,
+        sections: [],
+        lineItems: [{ ...line, sort: 0, supplierId: "someone-elses-supplier" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a made-up supplier id on create, with the identical 404", async () => {
+    const { svc, prisma } = harness();
+    prisma.supplier.findMany.mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        clientId: "cl1",
+        discountPct: 0,
+        depositCents: 0,
+        sections: [],
+        lineItems: [{ ...line, sort: 0, supplierId: "not-a-real-id" }],
+      } as any),
+    ).rejects.toThrow("Supplier not found");
+  });
+
+  it("refuses a soft-deleted supplier on create", async () => {
+    // supplier.findMany already excludes deletedAt, so a soft-deleted row
+    // also resolves to "not returned" — same shape as foreign/made-up.
+    const { svc, prisma } = harness();
+    prisma.supplier.findMany.mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        clientId: "cl1",
+        discountPct: 0,
+        depositCents: 0,
+        sections: [],
+        lineItems: [{ ...line, sort: 0, supplierId: "soft-deleted-supplier" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("allows a live supplier of this business on create, checked in one batched query", async () => {
+    const { svc, prisma, tx } = harness();
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-1" }]);
+    await svc.create("b1", {
+      clientId: "cl1",
+      discountPct: 0,
+      depositCents: 0,
+      sections: [],
+      lineItems: [{ ...line, sort: 0, supplierId: "sup-1" }],
+    } as any);
+    expect(tx.invoice.create).toHaveBeenCalled();
+    expect(prisma.supplier.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an UNCHANGED supplierId on update even if it has since been soft-deleted", async () => {
+    // Old invoices must stay editable. supplier.findMany returning nothing
+    // would represent the supplier being soft-deleted since the invoice was
+    // drafted — the check must not even ask, because the value isn't changing.
+    const { svc, prisma } = existingInvoiceHarness(
+      draftInvoice({
+        lineItems: [{ ...line, id: "li1", sectionId: null, markupPct: null, supplierId: "sup-old" }],
+      }),
+    );
+    await svc.update("b1", "inv1", {
+      lineItems: [{ ...line, supplierId: "sup-old" }],
+    } as any);
+    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
+  });
+
+  it("still checks a NEWLY introduced supplierId on update", async () => {
+    const { svc, prisma } = existingInvoiceHarness(
+      draftInvoice({
+        lineItems: [{ ...line, id: "li1", sectionId: null, markupPct: null, supplierId: "sup-old" }],
+      }),
+    );
+    prisma.supplier.findMany.mockResolvedValue([]); // foreign
+    await expect(
+      svc.update("b1", "inv1", {
+        lineItems: [{ ...line, supplierId: "sup-new-foreign" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.supplier.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ["sup-new-foreign"] } }) }),
+    );
+  });
+
+  it("allows a newly introduced supplierId on update once confirmed live", async () => {
+    const { svc, prisma } = existingInvoiceHarness(
+      draftInvoice({
+        lineItems: [{ ...line, id: "li1", sectionId: null, markupPct: null, supplierId: "sup-old" }],
+      }),
+    );
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-new-live" }]);
+    await expect(
+      svc.update("b1", "inv1", {
+        lineItems: [{ ...line, supplierId: "sup-new-live" }],
+      } as any),
+    ).resolves.toBeDefined();
+  });
+
+  it("does not check supplierId at all when the caller isn't replacing lines", async () => {
+    const { svc, prisma } = existingInvoiceHarness(draftInvoice());
+    await svc.update("b1", "inv1", { discountPct: 10 });
+    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
   });
 });
 

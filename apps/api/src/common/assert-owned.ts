@@ -174,6 +174,54 @@ export async function assertSupplierOwned(
  * equipment) with the SAME "not found" message a single-field check would
  * give, so a foreign id and a made-up id are indistinguishable to the caller.
  */
+/**
+ * Ids already persisted on the record being updated. These stay allowed even
+ * if the row they name has since been soft-deleted elsewhere — the record
+ * that already references them is not required to drop that reference just
+ * because the catalog row was later deleted. They must still belong to THIS
+ * business: a foreign id is never grandfathered in.
+ *
+ * Absent (CREATE, or an UPDATE not passing this) every id is treated as new
+ * and must be live.
+ */
+export interface JobComponentRefsAllowedDeleted {
+  materialFavouriteIds?: ReadonlySet<string>;
+  labourRateIds?: ReadonlySet<string>;
+  equipmentItemIds?: ReadonlySet<string>;
+}
+
+/**
+ * Takes a query FUNCTION rather than the Prisma delegate itself: each
+ * delegate's real `findMany` accepts a model-specific args type (not
+ * `unknown`), so a single helper parameter typed to hold any of the three
+ * delegates cannot call it directly without narrowing that TypeScript can't
+ * do here. The caller already has the concretely-typed delegate in scope, so
+ * it does the narrowing simply by writing the call.
+ */
+async function assertRefKindOwned(
+  findMany: (where: Record<string, unknown>) => Promise<Array<{ id: string }>>,
+  businessId: string,
+  ids: readonly string[],
+  allowedDeletedIds: ReadonlySet<string> | undefined,
+  message: string,
+): Promise<void> {
+  if (ids.length === 0) return;
+  const allowed = allowedDeletedIds ?? new Set<string>();
+  const newIds = ids.filter((id) => !allowed.has(id));
+  const grandfatheredIds = ids.filter((id) => allowed.has(id));
+
+  if (newIds.length > 0) {
+    const rows = await findMany({ id: { in: newIds }, businessId, deletedAt: null });
+    if (rows.length !== newIds.length) throw new NotFoundException(message);
+  }
+  if (grandfatheredIds.length > 0) {
+    // No deletedAt filter: already-persisted ids stay allowed once deleted,
+    // as long as they still belong to this business.
+    const rows = await findMany({ id: { in: grandfatheredIds }, businessId });
+    if (rows.length !== grandfatheredIds.length) throw new NotFoundException(message);
+  }
+}
+
 export async function assertJobComponentRefsOwned(
   prisma: CatalogLookup,
   businessId: string,
@@ -182,38 +230,57 @@ export async function assertJobComponentRefsOwned(
     labourRateId?: string | null;
     equipmentItemId?: string | null;
   }>,
+  allowedDeleted?: JobComponentRefsAllowedDeleted,
 ): Promise<void> {
   const materialIds = [...new Set(components.map((c) => c.materialFavouriteId).filter((v): v is string => Boolean(v)))];
   const labourIds = [...new Set(components.map((c) => c.labourRateId).filter((v): v is string => Boolean(v)))];
   const equipmentIds = [...new Set(components.map((c) => c.equipmentItemId).filter((v): v is string => Boolean(v)))];
 
-  if (materialIds.length > 0) {
-    const rows = await prisma.materialFavourite.findMany({
-      where: { id: { in: materialIds }, businessId, deletedAt: null },
+  await assertRefKindOwned(
+    (where) => prisma.materialFavourite.findMany({ where, select: { id: true } }),
+    businessId,
+    materialIds,
+    allowedDeleted?.materialFavouriteIds,
+    "Material favourite not found",
+  );
+  await assertRefKindOwned(
+    (where) => prisma.labourRate.findMany({ where, select: { id: true } }),
+    businessId,
+    labourIds,
+    allowedDeleted?.labourRateIds,
+    "Labour rate not found",
+  );
+  await assertRefKindOwned(
+    (where) => prisma.equipmentItem.findMany({ where, select: { id: true } }),
+    businessId,
+    equipmentIds,
+    allowedDeleted?.equipmentItemIds,
+    "Equipment item not found",
+  );
+}
+
+/**
+ * As above, for a single caller-supplied `supplierId` on UPDATE: the id
+ * already persisted on the record stays allowed even if soft-deleted since,
+ * as long as it still belongs to this business. Pass the record's current
+ * `supplierId` (or undefined/null on CREATE, where every id must be live).
+ */
+export async function assertSupplierOwnedForUpdate(
+  prisma: CatalogLookup,
+  businessId: string,
+  supplierId: string | undefined | null,
+  currentSupplierId: string | undefined | null,
+): Promise<void> {
+  if (!supplierId) return;
+  if (supplierId === currentSupplierId) {
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, businessId },
       select: { id: true },
     });
-    if (rows.length !== materialIds.length) {
-      throw new NotFoundException("Material favourite not found");
-    }
+    if (!supplier) throw new NotFoundException("Supplier not found");
+    return;
   }
-  if (labourIds.length > 0) {
-    const rows = await prisma.labourRate.findMany({
-      where: { id: { in: labourIds }, businessId, deletedAt: null },
-      select: { id: true },
-    });
-    if (rows.length !== labourIds.length) {
-      throw new NotFoundException("Labour rate not found");
-    }
-  }
-  if (equipmentIds.length > 0) {
-    const rows = await prisma.equipmentItem.findMany({
-      where: { id: { in: equipmentIds }, businessId, deletedAt: null },
-      select: { id: true },
-    });
-    if (rows.length !== equipmentIds.length) {
-      throw new NotFoundException("Equipment item not found");
-    }
-  }
+  await assertSupplierOwned(prisma, businessId, supplierId);
 }
 
 export type ClientRefState = "owned" | "foreign" | "deleted";

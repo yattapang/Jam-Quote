@@ -49,6 +49,11 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    // The job's CURRENT components, read in update() to grandfather in
+    // already-persisted refs even if since soft-deleted. Default: none.
+    jobComponent: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
     // Ownership lookups for component refs. Default: whatever id is asked
     // for, one row comes back "owned" (findMany count matches the id count),
     // so existing tests that don't care about this pass unmodified.
@@ -233,6 +238,65 @@ describe("JobsService.update — component ownership", () => {
       .mockResolvedValueOnce(tileAssemblyRow({ name: "x" }));
     await svc.update("b1", "a1", { name: "x" } as any);
     expect(prisma.materialFavourite.findMany).not.toHaveBeenCalled();
+  });
+
+  it("allows re-sending a materialFavouriteId already persisted on this job even if it has since been soft-deleted (rename regression)", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(tileAssemblyRow())
+      .mockResolvedValueOnce(tileAssemblyRow({ name: "Renamed" }));
+    // The job currently has a component referencing "m-deleted".
+    prisma.jobComponent.findMany = vi.fn().mockResolvedValue([
+      { materialFavouriteId: "m-deleted", labourRateId: null, equipmentItemId: null },
+    ]);
+    // That material is now soft-deleted: the plain "live" lookup finds nothing,
+    // but the grandfathered (no deletedAt filter) lookup does.
+    prisma.materialFavourite.findMany = vi.fn().mockImplementation(({ where }: any) =>
+      Promise.resolve(
+        "deletedAt" in where ? [] : where.id.in.map((id: string) => ({ id })),
+      ),
+    );
+
+    await expect(
+      svc.update("b1", "a1", {
+        name: "Renamed",
+        components: [{ ...materialComponent, materialFavouriteId: "m-deleted" }],
+      } as any),
+    ).resolves.toBeDefined();
+  });
+
+  it("still refuses a NEWLY introduced materialFavouriteId that has been soft-deleted, even though other ids on the job are grandfathered", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValueOnce(tileAssemblyRow());
+    // Job currently has no components referencing anything.
+    prisma.jobComponent.findMany = vi.fn().mockResolvedValue([]);
+    // "m-deleted" is soft-deleted and was never on this job before.
+    prisma.materialFavourite.findMany = vi.fn().mockImplementation(({ where }: any) =>
+      Promise.resolve("deletedAt" in where ? [] : where.id.in.map((id: string) => ({ id }))),
+    );
+
+    await expect(
+      svc.update("b1", "a1", {
+        components: [{ ...materialComponent, materialFavouriteId: "m-deleted" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("still refuses a foreign materialFavouriteId even if it happens to match an id string already on the job (grandfathering re-checks businessId)", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValueOnce(tileAssemblyRow());
+    prisma.jobComponent.findMany = vi.fn().mockResolvedValue([
+      { materialFavouriteId: "someone-elses", labourRateId: null, equipmentItemId: null },
+    ]);
+    // Even without the deletedAt filter, it belongs to another business.
+    prisma.materialFavourite.findMany = vi.fn().mockResolvedValue([]);
+
+    await expect(
+      svc.update("b1", "a1", {
+        components: [{ ...materialComponent, materialFavouriteId: "someone-elses" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 

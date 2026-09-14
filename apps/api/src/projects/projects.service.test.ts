@@ -62,6 +62,26 @@ describe("job DTOs accept the workflow fields", () => {
   });
 });
 
+describe("updateProjectSchema clearing fields", () => {
+  it("accepts null for addressLine/town/parish, to clear them on a PATCH", () => {
+    const parsed = updateProjectSchema.parse({ addressLine: null, town: null, parish: null });
+    expect(parsed.addressLine).toBeNull();
+    expect(parsed.town).toBeNull();
+    expect(parsed.parish).toBeNull();
+  });
+});
+
+describe("ProjectsService.update", () => {
+  it("passes null addressLine/town/parish straight through to Prisma, clearing them", async () => {
+    const { svc, prisma } = withPrisma();
+    await svc.update("biz-1", "job-1", { addressLine: null, town: null, parish: null });
+    expect(prisma.project.update).toHaveBeenCalledWith({
+      where: { id: "job-1" },
+      data: { addressLine: null, town: null, parish: null },
+    });
+  });
+});
+
 describe("ProjectsService tenant scoping", () => {
   it("writes the stage and progress straight through on create, under the caller's businessId", async () => {
     const { svc, prisma } = withPrisma();

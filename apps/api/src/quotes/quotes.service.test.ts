@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BadRequestException, HttpException } from "@nestjs/common";
+import { BadRequestException, HttpException, NotFoundException } from "@nestjs/common";
 import {
   JobComponentKind,
   computeTotals,
@@ -1229,5 +1229,164 @@ describe("the allowance gate covers every path that mints a quote", () => {
     await expect(harnessAtCap("ACCEPTED").createVariation("b1", "q1")).rejects.toMatchObject({
       response: expect.objectContaining({ code: "FREE_LIMIT_REACHED" }),
     });
+  });
+});
+
+/**
+ * S7: a caller-supplied `supplierId` on a quote line item was written with no
+ * ownership check at all — unlike `projectId`/`clientId` beside it. See
+ * REVIEW-FINDINGS.md.
+ */
+describe("QuotesService — supplierId on line items is not a capability (S7)", () => {
+  function createHarness() {
+    const businessService = {
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
+    };
+    const tx = {
+      quote: { create: vi.fn().mockResolvedValue({ id: "q1" }) },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: { create: vi.fn() },
+    };
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue({ id: "q1", lineItems: [], sections: [] }),
+      },
+      supplier: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+    return { svc, prisma, tx };
+  }
+
+  it("refuses a supplier belonging to another business", async () => {
+    const { svc, prisma } = createHarness();
+    prisma.supplier.findMany.mockResolvedValue([]); // none of the requested ids come back
+    await expect(
+      svc.create("b1", {
+        sections: [],
+        lineItems: [{ ...line, supplierId: "someone-elses-supplier" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("refuses a made-up supplier id, with the identical 404", async () => {
+    const { svc, prisma } = createHarness();
+    prisma.supplier.findMany.mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        sections: [],
+        lineItems: [{ ...line, supplierId: "not-a-real-id" }],
+      } as any),
+    ).rejects.toThrow("Supplier not found");
+  });
+
+  it("refuses a soft-deleted supplier", async () => {
+    // supplier.findMany already excludes deletedAt, so a soft-deleted row also
+    // resolves to "not returned" — same shape as foreign/made-up.
+    const { svc, prisma } = createHarness();
+    prisma.supplier.findMany.mockResolvedValue([]);
+    await expect(
+      svc.create("b1", {
+        sections: [],
+        lineItems: [{ ...line, supplierId: "soft-deleted-supplier" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("allows a live supplier of this business, checked in one batched query", async () => {
+    const { svc, prisma, tx } = createHarness();
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-1" }]);
+    await svc.create("b1", {
+      sections: [],
+      lineItems: [{ ...line, supplierId: "sup-1" }],
+    } as any);
+    expect(tx.quote.create).toHaveBeenCalled();
+    expect(prisma.supplier.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  const existingLine = {
+    id: "li-1",
+    sectionId: null,
+    supplierId: "sup-old",
+  };
+
+  function updateHarness(existing: Record<string, unknown>) {
+    const txLineCreate = vi.fn();
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quoteLineItem: { deleteMany: vi.fn(), create: txLineCreate },
+          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
+          quote: { update: vi.fn().mockResolvedValue({}) },
+        }),
+      ),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue(existing),
+        count: vi.fn().mockResolvedValue(0),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      supplier: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    return { svc, prisma, txLineCreate };
+  }
+
+  const draftWithSupplierLine = {
+    id: "q2",
+    businessId: "b1",
+    status: "DRAFT",
+    clientId: null,
+    projectId: null,
+    parentQuoteId: null,
+    variationOfQuoteId: null,
+    version: 1,
+    gctRate: 15,
+    discountPct: 0,
+    depositCents: 0,
+    detailLevel: "SUMMARY",
+    lineItems: [existingLine],
+    sections: [],
+  };
+
+  it("keeps an UNCHANGED supplierId even if it has since been soft-deleted", async () => {
+    // Old quotes must stay editable — the check must not even ask about an id
+    // that is already persisted on this same quote.
+    const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    await svc.update("b1", "q2", {
+      lineItems: [{ ...line, supplierId: "sup-old" }],
+    } as never);
+    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
+  });
+
+  it("still checks a NEWLY introduced supplierId, even on a quote that already has an unrelated one persisted", async () => {
+    const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    prisma.supplier.findMany.mockResolvedValue([]); // foreign
+    await expect(
+      svc.update("b1", "q2", {
+        lineItems: [{ ...line, supplierId: "sup-new-foreign" }],
+      } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.supplier.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: { in: ["sup-new-foreign"] } }) }),
+    );
+  });
+
+  it("allows a newly introduced supplierId once it is confirmed live", async () => {
+    const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-new-live" }]);
+    await expect(
+      svc.update("b1", "q2", {
+        lineItems: [{ ...line, supplierId: "sup-new-live" }],
+      } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it("does not check supplierId at all when the caller isn't replacing lines", async () => {
+    const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    await svc.update("b1", "q2", { discountPct: 10 } as never);
+    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
   });
 });

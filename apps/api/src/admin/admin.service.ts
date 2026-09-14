@@ -141,8 +141,25 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 // with local setMonth/setFullYear — both the Jamaica-timezone bug and the
 // month-end overflow bug that `nextTermEnd` in core now fixes in one shared
 // place. Spend that instead of keeping a second copy here.
-function nextRenewal(interval: string, from: Date = new Date()): Date {
-  return nextTermEnd(interval, null, from);
+//
+// Paid time already on the account is carried, not discarded. The rule:
+// - on a paid plan now, whatever the interval -> the new term runs from the LATER of
+//   now and the current `renewsAt`, exactly as an early payment does. That includes
+//   monthly -> annual: the days were paid for whatever the cadence, and there is no
+//   proration ledger to turn them into credit, so keeping them on the clock is the
+//   only lossless option.
+// - on free now -> the term runs from now. A free row's `renewsAt` is a leftover of a
+//   term that already ended (the revert sweep changes the plan only), so it holds no
+//   paid time to carry.
+function nextRenewal(
+  interval: string,
+  current: { plan: string; interval: string; renewsAt: Date | null } | null,
+  from: Date = new Date(),
+): Date {
+  const renewsAt = current?.renewsAt ? current.renewsAt.toISOString() : null;
+  const paidNow =
+    !!current && subscriptionStanding({ ...current, renewsAt }, from) !== SubscriptionStanding.FREE;
+  return nextTermEnd(interval, paidNow ? renewsAt : null, from);
 }
 
 /**
@@ -546,7 +563,10 @@ export class AdminService {
       ? new Date(input.renewsAt)
       : input.plan === "free"
         ? null
-        : nextRenewal(interval);
+        : nextRenewal(
+            interval,
+            await this.prisma.subscription.findUnique({ where: { businessId } }),
+          );
 
     const subscription = await this.prisma.subscription.upsert({
       where: { businessId },

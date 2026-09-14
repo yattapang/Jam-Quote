@@ -856,13 +856,29 @@ export async function createQuote(input: NewQuoteInput): Promise<{ id: string }>
 // --- Update (write path) -----------------------------------------------------
 
 /** PATCH /api/clients/:id — same shape as create, all fields optional. */
-export type UpdateClientInput = Partial<NewClientInput>;
+/** PATCH /api/clients/:id — lastName/phone/email/town/parish/addressLine also
+ * accept `null` to clear them, distinct from omitting the field, which leaves
+ * it unchanged. */
+export type UpdateClientInput = Partial<Omit<NewClientInput, "lastName" | "phone" | "email" | "town" | "parish" | "addressLine">> & {
+  lastName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  town?: string | null;
+  parish?: string | null;
+  addressLine?: string | null;
+};
 export async function updateClient(id: string, input: UpdateClientInput): Promise<Client> {
   return mapClient(await apiClient.patch<ApiClientRow>(`/clients/${id}`, input));
 }
 
 /** PATCH /api/projects/:id — same shape as create, all fields optional. */
-export type UpdateProjectInput = Partial<NewProjectInput>;
+/** PATCH /api/projects/:id — addressLine/town/parish also accept `null` to
+ * clear them, distinct from omitting the field, which leaves it unchanged. */
+export type UpdateProjectInput = Partial<Omit<NewProjectInput, "addressLine" | "town" | "parish">> & {
+  addressLine?: string | null;
+  town?: string | null;
+  parish?: string | null;
+};
 export async function updateProject(id: string, input: UpdateProjectInput): Promise<{ id: string }> {
   return apiClient.patch<{ id: string }>(`/projects/${id}`, input);
 }
@@ -878,8 +894,14 @@ export async function updateMaterialFavourite(
   );
 }
 
-/** PATCH /api/catalogs/labour-rates/:id — same shape as create, all fields optional. */
-export type UpdateLabourRateInput = Partial<NewLabourRateInput>;
+/** PATCH /api/catalogs/labour-rates/:id — same shape as create, all fields
+ * optional; skillTier/unitLabel also accept `null` to clear a custom value
+ * back to "use the rateUnit's own label" (or no skill tier), distinct from
+ * omitting the field, which leaves it unchanged. */
+export type UpdateLabourRateInput = Partial<Omit<NewLabourRateInput, "skillTier" | "unitLabel">> & {
+  skillTier?: string | null;
+  unitLabel?: string | null;
+};
 export async function updateLabourRate(
   id: string,
   input: UpdateLabourRateInput,
@@ -1034,7 +1056,16 @@ export interface NewEquipmentItemInput {
   rateUnit: RateUnit;
   unitLabel?: string;
 }
-export type UpdateEquipmentItemInput = Partial<NewEquipmentItemInput>;
+/** vendor/vendorPhone/unitLabel also accept `null` to clear them (hired ->
+ * owned; or a custom unit label back to the rateUnit's own), distinct from
+ * omitting the field, which leaves it unchanged. */
+export type UpdateEquipmentItemInput = Partial<
+  Omit<NewEquipmentItemInput, "vendor" | "vendorPhone" | "unitLabel">
+> & {
+  vendor?: string | null;
+  vendorPhone?: string | null;
+  unitLabel?: string | null;
+};
 
 export async function createEquipmentItem(input: NewEquipmentItemInput): Promise<EquipmentItem> {
   return mapEquipmentItem(await apiClient.post<ApiEquipmentItem>("/catalogs/equipment", input));

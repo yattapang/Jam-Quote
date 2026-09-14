@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 import { updateLabourRate, type Trade } from "@/lib/api-client";
 import LabourRateForm, {
   labourRateFormValuesFromLabourRate,
-  labourRatePayloadFromValues,
+  labourRateEditPayloadFromValues,
   type LabourRateFormValues,
 } from "@/components/forms/LabourRateForm";
 import type { LabourRate } from "@/lib/types";
@@ -26,7 +26,7 @@ export default function EditLabourRateButton({
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: LabourRateFormValues) {
-    await updateLabourRate(rate.id, labourRatePayloadFromValues(values));
+    await updateLabourRate(rate.id, labourRateEditPayloadFromValues(values));
     setOpen(false);
     router.refresh();
   }

@@ -12,7 +12,14 @@ export const createLabourRateSchema = z.object({
   unitLabel: z.string().trim().min(1).max(40).optional(),
 });
 export type CreateLabourRateInput = z.infer<typeof createLabourRateSchema>;
-export const updateLabourRateSchema = createLabourRateSchema.partial();
+// A PATCH sends `null` to clear a custom skillTier/unitLabel back to "use the
+// rateUnit's own label" (or no skill tier) — distinct from the field being
+// omitted, which means "leave unchanged". Both columns are nullable in the
+// schema, so null passes straight through to Prisma.
+export const updateLabourRateSchema = createLabourRateSchema.partial().extend({
+  skillTier: z.string().max(40).nullable().optional(),
+  unitLabel: z.string().trim().min(1).max(40).nullable().optional(),
+});
 export type UpdateLabourRateInput = z.infer<typeof updateLabourRateSchema>;
 
 export const createMaterialFavouriteSchema = z.object({
@@ -105,7 +112,15 @@ export const createEquipmentItemSchema = z.object({
   unitLabel: z.string().trim().min(1).max(40).optional(),
 });
 export type CreateEquipmentItemInput = z.infer<typeof createEquipmentItemSchema>;
-export const updateEquipmentItemSchema = createEquipmentItemSchema.partial();
+// A PATCH sends `null` to clear unitLabel (back to the rateUnit's own label)
+// or vendor/vendorPhone (when switching hired -> owned) — distinct from the
+// field being omitted, which means "leave unchanged". All three columns are
+// nullable in the schema, so null passes straight through to Prisma.
+export const updateEquipmentItemSchema = createEquipmentItemSchema.partial().extend({
+  vendor: z.string().max(120).nullable().optional(),
+  vendorPhone: z.string().max(40).nullable().optional(),
+  unitLabel: z.string().trim().min(1).max(40).nullable().optional(),
+});
 export type UpdateEquipmentItemInput = z.infer<typeof updateEquipmentItemSchema>;
 
 /**

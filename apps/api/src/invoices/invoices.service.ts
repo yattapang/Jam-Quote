@@ -20,6 +20,7 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
 import { assertClientOwned } from "../common/assert-owned.js";
+import { assertSuppliersOwned } from "../common/assert-suppliers-owned.js";
 import { assertPublicShape } from "../common/public-view.js";
 import { resolveWebBase } from "../common/web-base.util.js";
 import type {
@@ -310,6 +311,15 @@ export class InvoicesService {
     await assertClientOwned(this.prisma, businessId, input.clientId);
     // No projectId check: the invoice DTO carries none. An invoice inherits its
     // project from the quote it was converted from, which is already scoped.
+    // Same principle, batched over the line array: nothing is persisted yet,
+    // so every supplierId must name a live supplier of this business.
+    await assertSuppliersOwned(
+      this.prisma,
+      businessId,
+      [...input.lineItems, ...input.sections.flatMap((sec) => sec.lineItems)].map(
+        (li) => li.supplierId,
+      ),
+    );
 
     const business = await this.businessService.findById(businessId);
 
@@ -507,6 +517,25 @@ export class InvoicesService {
     await assertClientOwned(this.prisma, businessId, input.clientId);
 
     const replacingLines = input.sections !== undefined || input.lineItems !== undefined;
+    if (replacingLines) {
+      // A supplierId already persisted somewhere on THIS invoice stays
+      // allowed even if that supplier has since been soft-deleted, so an old
+      // invoice remains editable. Only a NEWLY introduced id has to name a
+      // live supplier of this business — batched over the whole replacement.
+      const persistedSupplierIds = new Set(
+        [...existing.lineItems, ...existing.sections.flatMap((s) => s.lineItems)]
+          .map((li) => li.supplierId)
+          .filter((v): v is string => Boolean(v)),
+      );
+      await assertSuppliersOwned(
+        this.prisma,
+        businessId,
+        collectLines({ sections: input.sections ?? [], lineItems: input.lineItems ?? [] }).map(
+          (li) => li.supplierId,
+        ),
+        persistedSupplierIds,
+      );
+    }
     const gctRatePct = input.gctRatePct ?? Number(existing.gctRate);
     const discountPct = input.discountPct ?? Number(existing.discountPct);
     const depositCents = input.depositCents ?? existing.depositCents;

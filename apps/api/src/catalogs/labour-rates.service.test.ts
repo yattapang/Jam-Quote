@@ -62,6 +62,20 @@ describe("LabourRatesService.remove", () => {
   });
 });
 
+describe("LabourRatesService.update", () => {
+  it("passes a null unitLabel/skillTier straight through to Prisma, clearing them", async () => {
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue({ id: "rate-1", businessId: "biz-1" }),
+      update: vi.fn().mockResolvedValue({ id: "rate-1" }),
+    });
+    await svc.update("biz-1", "rate-1", { unitLabel: null, skillTier: null });
+    expect(prisma.labourRate.update).toHaveBeenCalledWith({
+      where: { id: "rate-1" },
+      data: { unitLabel: null, skillTier: null },
+    });
+  });
+});
+
 describe("LabourRatesService.findAll — hiding", () => {
   it("omits rates this business has hidden", async () => {
     // The reported symptom: hiding the TRADE "Tiler" left the saved rate

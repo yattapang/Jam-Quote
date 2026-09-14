@@ -47,6 +47,20 @@ const clientContactFields = {
   notes: clientFieldRules.notes.optional(),
 };
 
+// Same fields, but also accepting `null` on a PATCH — distinct from omitting
+// the field (leave unchanged): null means the contractor blanked it out and
+// the update should actually clear the column. lastName is included here too
+// (not part of clientContactFields, which create also uses).
+const clientClearableUpdateFields = {
+  lastName: z.string().max(80).nullable().optional(),
+  phone: clientFieldRules.phone.nullable().optional(),
+  whatsapp: clientFieldRules.whatsapp.nullable().optional(),
+  email: clientFieldRules.email.nullable().optional(),
+  addressLine: clientFieldRules.addressLine.nullable().optional(),
+  town: clientFieldRules.town.nullable().optional(),
+  parish: clientFieldRules.parish.nullable().optional(),
+};
+
 export const createClientSchema = z
   .object({
     firstName: z.string().trim().min(1).max(80).optional(),
@@ -67,9 +81,9 @@ export type CreateClientInput = z.infer<typeof createClientSchema>;
 
 export const updateClientSchema = z.object({
   firstName: z.string().trim().min(1).max(80).optional(),
-  lastName: z.string().max(80).optional(),
   name: z.string().trim().min(1).max(200).optional(),
   ...clientContactFields,
+  ...clientClearableUpdateFields,
 });
 export type UpdateClientInput = z.infer<typeof updateClientSchema>;
 
@@ -82,7 +96,7 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
  */
 export function resolveClientName(input: {
   firstName?: string;
-  lastName?: string;
+  lastName?: string | null;
   name?: string;
 }): { firstName?: string; lastName?: string } {
   if (input.firstName !== undefined) {

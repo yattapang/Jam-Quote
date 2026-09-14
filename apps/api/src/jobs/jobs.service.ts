@@ -117,7 +117,25 @@ export class JobsService {
     const existing = await this.assertExists(businessId, id);
     const replacingComponents = input.components !== undefined;
     if (replacingComponents) {
-      await assertJobComponentRefsOwned(this.prisma, businessId, input.components ?? []);
+      // Ids already persisted on this job stay allowed even if the catalog
+      // row they name has since been soft-deleted — renaming a job must not
+      // 404 because a material it already used was deleted afterwards. A
+      // NEWLY introduced id must still be live. See assert-owned.ts.
+      const currentComponents = await this.prisma.jobComponent.findMany({
+        where: { jobId: id },
+        select: { materialFavouriteId: true, labourRateId: true, equipmentItemId: true },
+      });
+      await assertJobComponentRefsOwned(this.prisma, businessId, input.components ?? [], {
+        materialFavouriteIds: new Set(
+          currentComponents.map((c) => c.materialFavouriteId).filter((v): v is string => Boolean(v)),
+        ),
+        labourRateIds: new Set(
+          currentComponents.map((c) => c.labourRateId).filter((v): v is string => Boolean(v)),
+        ),
+        equipmentItemIds: new Set(
+          currentComponents.map((c) => c.equipmentItemId).filter((v): v is string => Boolean(v)),
+        ),
+      });
     }
 
     await this.prisma.$transaction(async (tx) => {

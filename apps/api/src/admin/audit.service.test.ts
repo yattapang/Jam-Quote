@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AuditService, FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
+import { AuditService, NON_FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
 
 describe("AuditService.record", () => {
   it("resolves the actor's email from actorUserId and writes an AuditLog row", async () => {
@@ -118,9 +118,46 @@ describe("AuditService.recent", () => {
     expect(rows[0]?.details).toEqual(row.details);
   });
 
-  it("FINANCIAL_AUDIT_ACTIONS names the three known money-carrying actions", () => {
-    expect([...FINANCIAL_AUDIT_ACTIONS].sort()).toEqual(
-      ["subscription.payment.record", "subscription.payment.void", "tenant.setPlan"].sort(),
-    );
+  it("redacts an UNREGISTERED action's details when includeFinancials is false — the safe default for anything not explicitly allow-listed", async () => {
+    const row = {
+      id: "log-4",
+      action: "some.new.action.nobody.registered.yet",
+      details: { anything: "at all", couldBe: 123 },
+    };
+    const prisma = { auditLog: { findMany: vi.fn().mockResolvedValue([row]) } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AuditService(prisma as any);
+
+    const rows = await svc.recent(false);
+
+    expect(rows[0]?.details).toEqual({
+      redacted: "financial details — requires VIEW_FINANCIALS or MANAGE_TENANTS",
+    });
+  });
+
+  it("redacts pricing.update — a financial action deliberately left off the allow-list", async () => {
+    const row = {
+      id: "log-5",
+      action: "pricing.update",
+      details: { proMonthlyPriceCents: 250000 },
+    };
+    const prisma = { auditLog: { findMany: vi.fn().mockResolvedValue([row]) } };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AuditService(prisma as any);
+
+    const rows = await svc.recent(false);
+
+    expect(JSON.stringify(rows[0]?.details)).not.toMatch(/proMonthlyPriceCents|250000/);
+  });
+
+  it("NON_FINANCIAL_AUDIT_ACTIONS excludes every known money-carrying action", () => {
+    for (const financial of [
+      "tenant.setPlan",
+      "pricing.update",
+      "subscription.payment.record",
+      "subscription.payment.void",
+    ]) {
+      expect(NON_FINANCIAL_AUDIT_ACTIONS.has(financial)).toBe(false);
+    }
   });
 });

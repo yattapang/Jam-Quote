@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { ClientsService } from "./clients.service.js";
+import { updateClientSchema } from "./clients.dto.js";
 
 const OWN = {
   id: "cli-1",
@@ -54,6 +55,52 @@ describe("ClientsService.remove", () => {
     const { svc, prisma } = harness();
     await svc.remove("biz-1", "cli-1");
     expect(prisma.client.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateClientSchema clearing fields", () => {
+  it("accepts null for lastName/phone/email/town/parish/addressLine, to clear them on a PATCH", () => {
+    const parsed = updateClientSchema.parse({
+      lastName: null,
+      phone: null,
+      email: null,
+      addressLine: null,
+      town: null,
+      parish: null,
+    });
+    expect(parsed.lastName).toBeNull();
+    expect(parsed.phone).toBeNull();
+    expect(parsed.email).toBeNull();
+    expect(parsed.addressLine).toBeNull();
+    expect(parsed.town).toBeNull();
+    expect(parsed.parish).toBeNull();
+  });
+});
+
+describe("ClientsService.update", () => {
+  it("passes null phone/email/town/parish/addressLine/lastName straight through, clearing them", async () => {
+    const { svc, prisma } = harness();
+    await svc.update("biz-1", "cli-1", {
+      firstName: "Errol",
+      lastName: null,
+      phone: null,
+      email: null,
+      addressLine: null,
+      town: null,
+      parish: null,
+    });
+    expect(prisma.client.update).toHaveBeenCalledWith({
+      where: { id: "cli-1" },
+      data: expect.objectContaining({
+        firstName: "Errol",
+        lastName: "",
+        phone: null,
+        email: null,
+        addressLine: null,
+        town: null,
+        parish: null,
+      }),
+    });
   });
 });
 

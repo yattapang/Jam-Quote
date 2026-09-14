@@ -255,6 +255,49 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Sound (by reading): migration valid, idempotent and sorted; seed migration unchanged;
   trims cause no sync duplicates or login breakage; exports test listener does not leak.
 
+### Executed, 2026-09-13 - five CONFIRMED and fixed, one DROPPED
+
+- **Jamaica evening renewals - CONFIRMED, fixed.** Executed `nextTermEnd` at Jan 30 23:30
+  local (`2026-01-31T04:30Z`): Feb 27 23:30 local. The calendar step now runs on the
+  Jamaica-local date and converts back (`addJamaicaMonthsClamped`); now Feb 28 23:30. Month-end
+  cases tested at 23:30 local (29/30/31 Jan, leap 2028, Mar 31, Aug 31, Dec 31). The clamp
+  tests keep their expected dates but their fixtures are now Jamaica midnight (05:00Z): a UTC
+  midnight is 19:00 the PREVIOUS local day and legitimately steps as that day. The same
+  fixture move was needed in three `subscription-payments.service.test.ts` blocks (4 failures
+  otherwise); production `paidAt` is `.datetime()`, a real instant, so this is a fixture
+  convention, not stored date-only data. Revert injection: 5 core failures.
+- **Admin plan change discards paid time - CONFIRMED, fixed.** Executed: 20 days left, same
+  interval -> `renewsAt` one month from TODAY (2026-10-13 from 2026-09-13), 20 days gone.
+  Rule: if the tenant is on a paid plan now, the new term runs from the later of now and
+  `renewsAt`, for ANY interval (monthly -> annual keeps the 20 days: no proration ledger
+  exists to convert them to credit, so keeping them on the clock is the only lossless
+  option). Free now -> from today, because a free row's `renewsAt` is a leftover of an ended
+  term (the revert sweep changes the plan only). Lapsed pro -> from today (already the
+  `nextTermEnd` max). Revert injection: 2 failures.
+- **Anchoring loss - CONFIRMED, recorded as a DESIGN DECISION, no schema change.** Executed 12
+  monthly renewals from local midnight vs the same date a year later: start on the 29th
+  loses 1 day, 30th loses 2, 31st loses 3 (0/1/2 when the first February is a leap Feb).
+  The loss is ONE-TIME: the chain settles on the 28th and years 2 and 3 lose nothing more
+  (cumulative 1/2/3 after three years). Worst first-year loss over every 2026 start month:
+  3 days. Accepted rather than adding an anchor-day column; the "362 days a year" wording
+  above overstated it as recurring.
+- **`verifiedAsOf` double error - CONFIRMED, fixed.** `"2026-02-31"` gave 2 issues ("Invalid
+  date" + the refine message). `.date()` removed; one rule (`isIsoDate`), one message.
+  Revert injection: 1 failure.
+- **`" NIS"` -> `"_NIS"` - DROPPED.** Executed: `"NIS"`. The trim runs first. Pinned by a test.
+- **Retention guard bypasses - CONFIRMED (all six), fixed.** Executed against the old
+  `findOffenders`: `!`, `as`, `Number()`, `-paid + total` and `{ totalCents: t }` each
+  produced zero offenders; name-keyed aliasing MISSED `q - t` when a later function
+  re-declared `t` as a total, and falsely reported a parameter `t`. Rebuilt on a one-file
+  `ts.Program`: identifiers resolve through `getSymbolAtLocation` to their own declaration;
+  operands unwrap parens, `!`, `as`, `satisfies`, `<T>`, unary `+`, global `Number()`;
+  `a + -b` is a subtraction; a file that does not parse throws. Every bypass is a probe
+  test; the `file#function` exact-count allow-list is unchanged and still matches. Not
+  reusing `apps/web/lib/test/source-ast.ts`: core must not depend on a web test helper
+  (`rootDir: src`, dependency direction), and its `followAlias` does not follow renamed
+  destructuring anyway. Plant (`Number(t!) - inv.paidCents` via `{ totalCents: t }` in a
+  scratch file under `apps/api/src`) failed the guard; scratch file deleted, guard green.
+
 ## Sweep fixes landed, 2026-09-13
 
 - **Admin:** `GET /admin/audit` strips money details (plan changes, payments, voids) for
@@ -276,6 +319,39 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
   check and re-applied. Rule: plant and restore with a backup copy, never `git
   checkout`, on a file with uncommitted work.
 
+## Review of fdf67ad, 2026-09-13 - one regression, fixes in progress
+
+- **HIGH, CONFIRMED regression - editing a job 404s once a referenced catalog item is
+  soft-deleted:** the new ownership check refuses deleted rows, and JobForm re-sends the
+  existing ids, so renaming such a job fails (it worked before - the FK is SetNull and the
+  component keeps its own price). Same for a favourite whose supplier was deleted, and
+  purchases' `createLabour` now refuses a deleted rate its private copy accepted (offline
+  replay). Rule: an id already on the record stays allowed if owned; a new id must be live.
+- **MEDIUM, CONFIRMED - the audit coverage guard is a regex text scan**, defeated by a
+  spread variable or a money key not ending in `Cents`, and blind to `admin.controller.ts`.
+  Replacing with redact-by-default (allow-list of non-financial actions).
+- LOW - redaction message names only VIEW_FINANCIALS; the plan select confirms on every
+  arrow-key step (moving to an explicit Apply).
+- Sound: capability set matches `tenants()`; no other money in audit details today;
+  identical 404 for foreign and made-up ids; Button default safe (every form submit is
+  explicit); `validDays` checked at save so a restored draft cannot bypass it.
+- **Lesson:** the ownership fix answered "who owns this id" but not "what about ids the
+  record already holds" - a check on write must distinguish introduced from retained
+  references, or it breaks editing of historical data.
+
+## Batch landed 2026-09-13 (after fdf67ad review)
+
+- fdf67ad regression fixed: retained ids stay allowed on update (jobs, favourites,
+  purchases labour); audit details are redact-by-default with an allow-list derived from
+  every writer - this also caught `pricing.update`, which the old deny-list leaked;
+  regex coverage test deleted for a behavioural one; plan select stages, Apply confirms.
+- Clearing optional fields: labour/equipment labels, skill tier, hire vendor, and the
+  sweep's twins - client phone/email/address and project address could not be cleared
+  either. Fixed with nullable update schemas and edit-only payload builders.
+  **Open:** MaterialForm shares one payload builder for create and edit - same bug.
+- Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
+  `rulepack.update` is allow-listed with a spread patch.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape
@@ -296,7 +372,7 @@ brief. Ordered by severity.
 | S4 | **`VIEW_FINANCIALS` gates a screen that an ungated route already serves.** `GET /admin/tenants` requires no capability and returns, per tenant, `plan`, `interval`, `priceCents` — the negotiated price — and `renewsAt`. MRR, pro count, annual count and upcoming renewals are all derivable by summing that payload. The subscription payment ledger is gated on `MANAGE_TENANTS` rather than `VIEW_FINANCIALS`. |
 | S5 | **`promoteAdmin` bypasses "only a super-admin may modify a super-admin."** `updateAdmin` and `revokeAdmin` both refuse a super-admin target to a non-super actor; `promoteAdmin` checks only the incoming flag, so `POST /admin/admins` carrying a super-admin's email clears their capabilities. |
 | S6 | **A 403 where its twin returns 404**, confirming another tenant's row exists. `material-prices.service.ts` reads unscoped then throws Forbidden; `suppliers.service.ts` states the rule and returns 404 "because confirming its existence would leak that they have it". |
-| S7 | **Caller-supplied `supplierId` is never ownership-checked** on purchases or on quote/invoice line items, while `projectId` and `labourRateId` beside it are. `QuoteLineItem.supplier` is a real FK. No disclosure today because no read path includes it — one `include: { supplier: true }` away. |
+| S7 | **FIXED 2026-09-13** - purchases, quote lines and invoice lines check `supplierId` ownership (batched `assertSuppliersOwned`); one 404 for foreign and made-up ids; an id already on the document stays allowed if since soft-deleted, a new id must be live. Executed first, injection-checked (I disabled the quote check: 4 failures). Residue: purchases keeps a local labour-rate ownership copy - consolidate. **Was:** **Caller-supplied `supplierId` is never ownership-checked** on purchases or on quote/invoice line items, while `projectId` and `labourRateId` beside it are. `QuoteLineItem.supplier` is a real FK. No disclosure today because no read path includes it — one `include: { supplier: true }` away. |
 | S8 | **FIXED** (review of e7e5590/9f95ce7 then closed the twins: CSV invoice/line/payment exports hardcoded `"JMD"` - now the business currency, tested and injection-checked; mobile quote editor hand-format removed; S18 guard now rejects `min + step/10`, so an always-true scale check fails it; JobForm Qty/unit gained `BOUNDS.quantity.step`, audited every other number input in a validating `<form>`: none missing. Correction: renewal/revert notices use PricingConfig's platform currency, not the business's - correct source, wrong commit message) - renewal/revert notices and the overdue digest (now selecting `Business.currency`) spend core `formatPlatformMoney`; behavioural tests across USD/TTD/BBD/GYD/XCD, injection-checked (old hand-format fails all 10). No AST guard: a helper would dodge it, the rendered-string test is the real surface. **Was:** **Tenant-facing emails hand-format platform money.** The dunning, renewal and revert notices build `${currency} $${cents / 100}` — printing `USD $1,000.00` where core prints `US$1,000.00` — and the overdue digest keeps a local `money()` with a hardcoded `$`, wrong for every non-JMD jurisdiction the rule pack already supports. The twin of the console money sweep, on the surface a customer actually reads. |
 | S9 | **FIXED** - every DTO field narrower than its Decimal column now refuses extra decimals with a field message (core `boundedNumber()` built from `BOUNDS`, which gained `step` = column scale, `markupPct`, `jmdPerUsd`): line/labour `quantity`, component `quantityPerUnit`, line and job `markupPct` (job had no ceiling), `gctRatePct`, `discountPct`, `defaultGctRate`, `retentionPct`, `wastePct`, `defaultTaxRatePct`, `coveragePerSellUnit`, `jmdPerUsd`. Chose refusal over silent rounding so the contractor's typed value is never changed. **Correction:** executed, the divergence for `1.0005` at $10,000 is **$5** (500 cents), not $50. Web Qty and job Markup inputs spend the new step; injection-checked (loose `quantity` fails). **Residue:** web Discount/GCT/Retention/Waste inputs lack the `step` (API still refuses with a field message). **Was:** **Persisted precision is narrower than validated precision.** `quantity` is `z.number().positive()` against `Decimal(12,3)`, and `markupPct` is unbounded against `Decimal(6,2)`. `subtotalCents` is computed from SUBMITTED values while the public page recomputes from PERSISTED ones, so a quantity of `1.0005` at $10,000 diverges by **$50**. The builder's Qty input carries no `step`, so this is reachable from the UI, and the tenant's own detail page, PDF and emailed total disagree with the stored figure by the same amount. |
 

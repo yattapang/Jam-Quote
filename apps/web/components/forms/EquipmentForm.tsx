@@ -7,7 +7,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import RateUnitField from "@/components/forms/RateUnitField";
 import { modalStyles } from "@/components/ui/Modal";
-import type { NewEquipmentItemInput } from "@/lib/api-client";
+import type { NewEquipmentItemInput, UpdateEquipmentItemInput } from "@/lib/api-client";
 import type { EquipmentItem } from "@/lib/types";
 
 import { errorMessage } from "@/lib/error-message";
@@ -55,14 +55,33 @@ export function equipmentPayloadFromValues(values: EquipmentFormValues): NewEqui
   return {
     name: values.name.trim(),
     owned: values.owned,
-    // Vendor details belong to hired kit. Sending them for owned equipment
-    // would leave a stale hire contact on a machine that has none the moment
-    // someone flips it to owned.
+    // Vendor details belong to hired kit; omitted for owned equipment since
+    // create never sets them in the first place.
     vendor: values.owned ? undefined : values.vendor.trim() || undefined,
     vendorPhone: values.owned ? undefined : values.vendorPhone.trim() || undefined,
     rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
     rateUnit: values.rateUnit,
     unitLabel: values.unitLabel.trim() || undefined,
+  };
+}
+
+/**
+ * Same shape, for a PATCH (EditEquipmentButton). A PATCH treats an omitted
+ * field as "unchanged", so switching hired -> owned must send `null` for
+ * vendor/vendorPhone to actually clear the stale hire contact, and a blank
+ * unitLabel must send `null` to fall back to the rateUnit's own label.
+ */
+export function equipmentEditPayloadFromValues(
+  values: EquipmentFormValues,
+): UpdateEquipmentItemInput {
+  return {
+    name: values.name.trim(),
+    owned: values.owned,
+    vendor: values.owned ? null : values.vendor.trim() || null,
+    vendorPhone: values.owned ? null : values.vendorPhone.trim() || null,
+    rateCents: Math.round((Number(values.rateDollars) || 0) * 100),
+    rateUnit: values.rateUnit,
+    unitLabel: values.unitLabel.trim() || null,
   };
 }
 
