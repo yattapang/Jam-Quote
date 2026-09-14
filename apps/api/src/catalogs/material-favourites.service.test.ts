@@ -200,6 +200,50 @@ describe("MaterialFavouritesService.update", () => {
     );
   });
 
+  it("clears supplierId/measureUnit/coveragePerSellUnit/wastePct when the PATCH sends null", async () => {
+    const existingConfigured = {
+      ...existing,
+      supplierId: "sup-old",
+      measureUnit: "m²",
+      coveragePerSellUnit: 4,
+      wastePct: 10,
+    };
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue(existingConfigured),
+      update: vi.fn().mockResolvedValue({}),
+    });
+    await svc.update("biz-1", "mat-1", {
+      supplierId: null,
+      measureUnit: null,
+      coveragePerSellUnit: null,
+      wastePct: null,
+    });
+    expect(prisma.materialFavourite.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "mat-1" },
+        data: expect.objectContaining({
+          supplierId: null,
+          measureUnit: null,
+          coveragePerSellUnit: null,
+          wastePct: null,
+        }),
+      }),
+    );
+  });
+
+  it("clearing supplierId with null skips the supplier ownership check entirely", async () => {
+    const existingWithSupplier = { ...existing, supplierId: "sup-old" };
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue(existingWithSupplier),
+      update: vi.fn().mockResolvedValue({}),
+    });
+    await svc.update("biz-1", "mat-1", { supplierId: null });
+    expect(prisma.supplier.findFirst).not.toHaveBeenCalled();
+    expect(prisma.materialFavourite.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ supplierId: null }) }),
+    );
+  });
+
   it("refuses to update a row belonging to another business", async () => {
     const { svc, prisma } = withPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
     await expect(svc.update("biz-1", "mat-1", { priceCents: 1 })).rejects.toBeInstanceOf(NotFoundException);

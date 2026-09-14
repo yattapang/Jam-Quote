@@ -1351,14 +1351,35 @@ describe("QuotesService — supplierId on line items is not a capability (S7)", 
     sections: [],
   };
 
-  it("keeps an UNCHANGED supplierId even if it has since been soft-deleted", async () => {
-    // Old quotes must stay editable — the check must not even ask about an id
-    // that is already persisted on this same quote.
+  it("keeps an UNCHANGED supplierId even if it has since been soft-deleted, but still checks it belongs to this business", async () => {
+    // Old quotes must stay editable even past a soft-delete — but an id
+    // already on the quote is no longer exempt from the ownership query
+    // entirely (S-review fix for the grandfathering gap: a pre-S7 foreign id
+    // must not be checked exactly zero times, forever). No `deletedAt`
+    // filter on this query, which is what lets the soft-deleted case through.
     const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-old" }]); // still belongs to b1
     await svc.update("b1", "q2", {
       lineItems: [{ ...line, supplierId: "sup-old" }],
     } as never);
-    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
+    expect(prisma.supplier.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ["sup-old"] }, businessId: "b1" },
+      }),
+    );
+  });
+
+  it("refuses a legacy foreign supplierId already on the quote, unchanged, instead of grandfathering it forever", async () => {
+    // Pre-S7 data: a supplierId belonging to ANOTHER business, written before
+    // tenant checks existed. Previously this was filtered out of the query
+    // before it ran and so was never validated at all. It must now be caught.
+    const { svc, prisma } = updateHarness(draftWithSupplierLine);
+    prisma.supplier.findMany.mockResolvedValue([]); // does not belong to b1
+    await expect(
+      svc.update("b1", "q2", {
+        lineItems: [{ ...line, supplierId: "sup-old" }],
+      } as never),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("still checks a NEWLY introduced supplierId, even on a quote that already has an unrelated one persisted", async () => {

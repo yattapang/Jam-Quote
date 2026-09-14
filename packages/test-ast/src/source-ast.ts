@@ -2,7 +2,13 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 
 /**
- * ONE parser for every source guard in apps/web.
+ * ONE parser for every source guard in every workspace (`@jamquote/test-ast`).
+ *
+ * It lived at `apps/web/lib/test/source-ast.ts` until core's retention guard needed the
+ * same binder-based resolution and, unable to import a web test helper, grew a second
+ * resolver of its own - the drift rule 2 of `.claude/agents/README.md` forbids. It is now
+ * a private workspace package that emits `dist` like core, is a devDependency only, and
+ * is never imported by runtime code.
  *
  * ## Why this file exists
  *
@@ -1194,4 +1200,278 @@ function bindingElementIsStatic(el: ts.BindingElement, ctx: Ctx): boolean {
     node = node.parent.parent;
   }
   return ts.isVariableDeclaration(node) && !!node.initializer && isStatic(node.initializer, ctx);
+}
+
+// ──────────────────────────────────────────────────────── value reads (retention guard)
+
+/**
+ * `unwrap`, plus the wrappers that keep a NUMBER's value for arithmetic: unary `+`, a
+ * call to the GLOBAL `Number` (one resolving to no declaration in the file - a local
+ * `Number` is not unwrapped), and `x ?? <static fallback>` (`a?.totalCents ?? 0` is still
+ * the total wherever one exists). A NON-static fallback (`a ?? b`) is not unwrapped: which
+ * side wins is data. Unary minus is not a wrapper - see `additiveTerms`. Optional chaining
+ * needs nothing: `a?.x` is a property read.
+ */
+export function unwrapValue(expr: ts.Expression): ts.Expression {
+  let e = unwrap(expr);
+  for (;;) {
+    if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.PlusToken) {
+      e = unwrap(e.operand);
+      continue;
+    }
+    if (ts.isCallExpression(e) && e.arguments.length === 1 && !ts.isSpreadElement(e.arguments[0]!)) {
+      const callee = unwrap(e.expression);
+      if (ts.isIdentifier(callee) && callee.text === "Number" && resolve(callee, fileContext(callee)) === undefined) {
+        e = unwrap(e.arguments[0]!);
+        continue;
+      }
+    }
+    if (
+      ts.isBinaryExpression(e) &&
+      e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
+      analyseStatic(e.right).static
+    ) {
+      e = unwrap(e.left);
+      continue;
+    }
+    return e;
+  }
+}
+
+/** What an operand reads, once aliases, destructuring and one-level accessors are followed. */
+export type ValueRead =
+  /** `x.p`, `x?.p`, `x["p"]`, `const { p: y } = x`, or `get(x)` where `get = (o) => o.p`. */
+  | { kind: "property"; name: string }
+  /** A parameter, or a name declared nowhere in the file: its spelling is all there is. */
+  | { kind: "name"; name: string }
+  | { kind: "other" };
+
+export interface ResolvedRead {
+  read: ValueRead;
+  /** The local names followed on the way, outermost first (`const t = ...`). */
+  aliases: string[];
+}
+
+/** The key of `x.p` / `x?.p` / `x["p"]`, or undefined. */
+function propertyKeyOf(e: ts.Expression): string | undefined {
+  if (ts.isPropertyAccessExpression(e)) return e.name.text;
+  if (ts.isElementAccessExpression(e)) {
+    const key = unwrap(e.argumentExpression);
+    if (ts.isStringLiteral(key) || ts.isNoSubstitutionTemplateLiteral(key)) return key.text;
+  }
+  return undefined;
+}
+
+/**
+ * A call to a never-reassigned LOCAL function (a declaration, or a binding to an arrow /
+ * function expression) whose whole body returns one property read of one of its OWN
+ * parameters: `const totalOf = (a) => a.totalCents; totalOf(inv)` reads `totalCents`.
+ * One level only - an accessor calling an accessor, a method, an import, or a body with
+ * any other statement is not followed.
+ */
+function accessorProperty(call: ts.CallExpression): string | undefined {
+  const callee = unwrap(call.expression);
+  if (!ts.isIdentifier(callee)) return undefined;
+  const fc = fileContext(callee);
+  const sym = resolve(callee, fc);
+  if (!sym || isImport(sym) || bindingTainted(sym, fc)) return undefined;
+  const decls = valueDeclarations(sym);
+  if (decls.length !== 1) return undefined;
+  const d = decls[0]!;
+  let fn: ts.FunctionLikeDeclaration | undefined;
+  if (ts.isFunctionDeclaration(d)) fn = d;
+  else if (ts.isVariableDeclaration(d) && d.initializer) {
+    const init = unwrap(d.initializer);
+    if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) fn = init;
+  }
+  if (!fn?.body) return undefined;
+  let returned: ts.Expression | undefined;
+  if (!ts.isBlock(fn.body)) returned = fn.body;
+  else if (fn.body.statements.length === 1) {
+    const only = fn.body.statements[0]!;
+    if (ts.isReturnStatement(only)) returned = only.expression;
+  }
+  if (!returned) return undefined;
+  const read = unwrapValue(returned);
+  const key = propertyKeyOf(read);
+  if (key === undefined) return undefined;
+  const obj = unwrap((read as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression);
+  if (!ts.isIdentifier(obj)) return undefined;
+  const owner = fn;
+  const isOwnParam = (resolve(obj, fc)?.declarations ?? []).some((p) => ts.isParameter(p) && p.parent === owner);
+  return isOwnParam ? key : undefined;
+}
+
+/**
+ * What `expr` reads, resolved through the binder: wrappers via `unwrapValue`, a
+ * never-written local alias to its initializer (any number of hops), a destructured
+ * binding to the property it was taken from, and a one-level accessor call to the
+ * property it returns. A parameter or undeclared name comes back as `name`.
+ */
+export function resolveRead(expr: ts.Expression): ResolvedRead {
+  return resolveReadInner(expr, new Set());
+}
+
+function resolveReadInner(expr: ts.Expression, seen: Set<ts.Node>): ResolvedRead {
+  const other: ResolvedRead = { read: { kind: "other" }, aliases: [] };
+  const e = unwrapValue(expr);
+  if (seen.has(e)) return other;
+  seen.add(e);
+  const key = propertyKeyOf(e);
+  if (key !== undefined) return { read: { kind: "property", name: key }, aliases: [] };
+  if (ts.isCallExpression(e)) {
+    const p = accessorProperty(e);
+    return p === undefined ? other : { read: { kind: "property", name: p }, aliases: [] };
+  }
+  if (!ts.isIdentifier(e)) return other;
+  const byName: ResolvedRead = { read: { kind: "name", name: e.text }, aliases: [] };
+  const fc = fileContext(e);
+  const sym = resolve(e, fc);
+  if (!sym || !sym.declarations || sym.declarations.length === 0) return byName;
+  const decls = valueDeclarations(sym);
+  if (decls.length !== 1) return byName;
+  const d = decls[0]!;
+  if (ts.isVariableDeclaration(d) && ts.isIdentifier(d.name)) {
+    if (!d.initializer || bindingTainted(sym, fc)) return byName;
+    const inner = resolveReadInner(d.initializer, seen);
+    return { read: inner.read, aliases: [d.name.text, ...inner.aliases] };
+  }
+  if (ts.isBindingElement(d)) {
+    const k = d.propertyName ?? d.name;
+    const alias = ts.isIdentifier(d.name) ? [d.name.text] : [];
+    if (ts.isIdentifier(k) || ts.isStringLiteralLike(k)) return { read: { kind: "property", name: k.text }, aliases: alias };
+    return { read: { kind: "other" }, aliases: alias };
+  }
+  if (ts.isParameter(d) && ts.isIdentifier(d.name)) return byName;
+  return other;
+}
+
+/**
+ * An additive chain flattened into signed terms. `s + a.total - a.paid` parses as
+ * `(s + a.total) - a.paid`, which no single binary node pairs; flattened it is
+ * `[+s, +a.total, -a.paid]`. Flattens through parens/`as`/`!`/`satisfies`, unary minus
+ * (flipping the sign) and unary plus. It cannot tell `+` from string concatenation.
+ */
+export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 | -1; expr: ts.Expression }[] {
+  const e = unwrap(expr);
+  const flip = (s: 1 | -1): 1 | -1 => (s === 1 ? -1 : 1);
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    return [...additiveTerms(e.left, sign), ...additiveTerms(e.right, sign)];
+  }
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.MinusToken) {
+    return [...additiveTerms(e.left, sign), ...additiveTerms(e.right, flip(sign))];
+  }
+  if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken) return additiveTerms(e.operand, flip(sign));
+  if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.PlusToken) return additiveTerms(e.operand, sign);
+  return [{ sign, expr: e }];
+}
+
+const isAdditive = (n: ts.Node): n is ts.BinaryExpression =>
+  ts.isBinaryExpression(n) &&
+  (n.operatorToken.kind === ts.SyntaxKind.PlusToken || n.operatorToken.kind === ts.SyntaxKind.MinusToken);
+
+/**
+ * Every MAXIMAL additive chain under `root` - a `+`/`-` expression that is not itself a
+ * term of an enclosing one (looking up through wrappers and unary `+`/`-`) - so each
+ * chain is judged exactly once.
+ */
+export function additiveChains(root: ts.Node): ts.BinaryExpression[] {
+  return collect(root, isAdditive).filter((node) => {
+    let cur: ts.Node = node;
+    for (;;) {
+      const p: ts.Node = cur.parent;
+      if (
+        ts.isParenthesizedExpression(p) ||
+        ts.isAsExpression(p) ||
+        ts.isSatisfiesExpression(p) ||
+        ts.isNonNullExpression(p) ||
+        ts.isTypeAssertionExpression(p) ||
+        (ts.isPrefixUnaryExpression(p) &&
+          (p.operator === ts.SyntaxKind.MinusToken || p.operator === ts.SyntaxKind.PlusToken))
+      ) {
+        cur = p;
+        continue;
+      }
+      return !isAdditive(p);
+    }
+  });
+}
+
+/**
+ * The function a node sits in, as a stable key: a function declaration or method by its
+ * name, `const X = () =>` as `X`, and a class-FIELD arrow or function expression as
+ * `Class#field` (`<anonymous>#field` in an unnamed class). Top-level code is `<module>`.
+ * Methods stay bare names so existing `file#method` allow-list keys keep their meaning.
+ */
+export function enclosingFunctionKey(node: ts.Node): string {
+  const sf = node.getSourceFile();
+  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
+    if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name) {
+      return ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
+    }
+    if (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) {
+      const p: ts.Node = n.parent;
+      if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name)) return p.name.text;
+      if (ts.isPropertyDeclaration(p) && p.initializer === n && ts.isClassLike(p.parent)) {
+        const field = ts.isIdentifier(p.name) || ts.isPrivateIdentifier(p.name) ? p.name.text : p.name.getText(sf);
+        return `${p.parent.name?.text ?? "<anonymous>"}#${field}`;
+      }
+    }
+  }
+  return "<module>";
+}
+
+// ─────────────────────────────────────────────────────────────── declared types
+
+/**
+ * Every string an expression can evaluate to, when that set is closed: a string literal,
+ * a ternary over such, or a never-written local alias of one. `undefined` otherwise - a
+ * guard must read that as "cannot tell", never as "no strings".
+ */
+export function staticStrings(expr: ts.Expression, seen: Set<ts.Node> = new Set()): string[] | undefined {
+  const e = unwrap(expr);
+  if (seen.has(e)) return undefined;
+  seen.add(e);
+  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return [e.text];
+  if (ts.isConditionalExpression(e)) {
+    const a = staticStrings(e.whenTrue, seen);
+    const b = staticStrings(e.whenFalse, seen);
+    return a && b ? [...a, ...b] : undefined;
+  }
+  if (ts.isIdentifier(e)) {
+    const init = followAlias(e);
+    return init ? staticStrings(init, seen) : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The import naming the DECLARED type of `this.x` (a class field or constructor parameter
+ * property) or of an identifier `x` - `private readonly audit: AuditService` with
+ * `import { AuditService } from "./audit.service.js"` gives that specifier and name.
+ * Resolved through the binder, so a local `class AuditService` does not match and an
+ * aliased import reports the exported name. `undefined` when the declared type is not a
+ * plain reference to an import (inferred, generic wrapper, union, ...).
+ */
+export function declaredTypeImport(expr: ts.Expression): { moduleSpecifier: string; exportedName: string } | undefined {
+  const e = unwrap(expr);
+  const fc = fileContext(e);
+  let sym: ts.Symbol | undefined;
+  if (ts.isPropertyAccessExpression(e) && e.expression.kind === ts.SyntaxKind.ThisKeyword) {
+    sym = fc.checker.getSymbolAtLocation(e.name);
+  } else if (ts.isIdentifier(e)) {
+    sym = resolve(e, fc);
+  }
+  const decls = sym?.declarations ?? [];
+  if (decls.length !== 1) return undefined;
+  const d = decls[0]!;
+  const type = ts.isParameter(d) || ts.isPropertyDeclaration(d) || ts.isVariableDeclaration(d) ? d.type : undefined;
+  if (!type || !ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return undefined;
+  for (const td of resolve(type.typeName, fc)?.declarations ?? []) {
+    if (!ts.isImportSpecifier(td)) continue;
+    const decl = enclosingImportDeclaration(td);
+    const spec = decl && moduleSpecifierOf(decl);
+    if (spec !== undefined) return { moduleSpecifier: spec, exportedName: (td.propertyName ?? td.name).text };
+  }
+  return undefined;
 }

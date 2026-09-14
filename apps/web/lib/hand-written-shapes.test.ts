@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
-import { collect, parseFile, parseSource, reachableClosure, unwrap } from "./test/source-ast";
+import { collect, parseFile, parseSource, reachableClosure, unwrap } from "@jamquote/test-ast";
 
 /**
  * The response shapes still written by hand, and whether anything reads them.

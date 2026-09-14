@@ -22,6 +22,7 @@ import {
   type ApiMaterialCategory,
   type ApiMaterialUnit,
   type NewMaterialFavouriteInput,
+  type UpdateMaterialFavouriteInput,
 } from "@/lib/api-client";
 import type { MaterialFavourite } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
@@ -130,6 +131,52 @@ export function materialPayloadFromValues(
     ...(values.wastePct.trim() && Number.isFinite(Number(values.wastePct))
       ? { wastePct: Number(values.wastePct) }
       : {}),
+  };
+}
+
+/**
+ * Edit-only counterpart to materialPayloadFromValues: a PATCH must be able to
+ * CLEAR an optional field, and omission means "unchanged" on this endpoint —
+ * so a blank field here sends explicit `null` rather than being dropped.
+ * Mirrors labourRateEditPayloadFromValues / clientEditPayloadFromValues.
+ * Only the five nullable optional fields differ from the create payload;
+ * name/categoryDefId/unitId/priceCents/specs behave the same as create
+ * because clearing them isn't a supported edit (name/price are required,
+ * categoryDefId/unitId go through the "+ Add new…" picker instead).
+ */
+export function materialEditPayloadFromValues(
+  values: MaterialFormValues,
+  category: ApiMaterialCategory | undefined,
+): UpdateMaterialFavouriteInput {
+  const specs: Record<string, string> = {};
+  for (const attribute of category?.attributes ?? []) {
+    const value = values.specs[attribute.key]?.trim();
+    if (value) specs[attribute.key] = value;
+  }
+  return {
+    ...(values.nameCustom && values.name.trim()
+      ? { name: values.name.trim(), nameCustom: true }
+      : {}),
+    ...(persistableOptionValue(values.categoryDefId)
+      ? { categoryDefId: values.categoryDefId }
+      : {}),
+    ...(persistableOptionValue(values.unitId) ? { unitId: values.unitId } : {}),
+    // Explicit null, not omitted: clearing "my usual supplier" must skip the
+    // ownership check (MaterialFavouritesService.update guards on
+    // truthiness), not fail to look like a change at all.
+    supplierId: values.supplierId || null,
+    priceCents: Math.round((Number(values.priceDollars) || 0) * 100),
+    specs: Object.keys(specs).length ? specs : undefined,
+    description: values.description.trim() || null,
+    measureUnit: values.measureUnit.trim() || null,
+    coveragePerSellUnit:
+      values.coveragePerSellUnit.trim() && Number(values.coveragePerSellUnit) > 0
+        ? Number(values.coveragePerSellUnit)
+        : null,
+    wastePct:
+      values.wastePct.trim() && Number.isFinite(Number(values.wastePct))
+        ? Number(values.wastePct)
+        : null,
   };
 }
 

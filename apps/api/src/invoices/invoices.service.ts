@@ -450,6 +450,19 @@ export class InvoicesService {
         ...quote.lineItems,
         ...quote.sections.flatMap((s) => s.lineItems),
       ];
+
+      // Copying supplierId forward from the quote must not propagate a
+      // legacy foreign id silently — validate against the same
+      // grandfathered-but-checked rule a normal update applies, rather than
+      // trusting an id because it was already on a quote this business owns.
+      const quoteSupplierIds = allOriginalLines.map((li) => li.supplierId);
+      await assertSuppliersOwned(
+        tx,
+        businessId,
+        quoteSupplierIds,
+        new Set(quoteSupplierIds.filter((v): v is string => Boolean(v))),
+      );
+
       for (const li of allOriginalLines) {
         await tx.invoiceLineItem.create({
           data: {

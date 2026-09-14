@@ -12,7 +12,7 @@ import {
   renderedText,
   unwrap,
   walk,
-} from "../../lib/test/source-ast";
+} from "@jamquote/test-ast";
 
 /**
  * A source guard over the staff console.

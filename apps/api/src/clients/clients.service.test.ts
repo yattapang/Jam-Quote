@@ -102,6 +102,19 @@ describe("ClientsService.update", () => {
       }),
     });
   });
+
+  // Bug: `{ lastName: null }` sent alone (no firstName, no name) passed
+  // validation but `resolveClientName` returned `{}` for it, so the update
+  // silently left the old lastName in place — the caller sees a 200 with no
+  // indication the clear did nothing. Fixed: it now clears lastName.
+  it("clears lastName when it is sent as null on its own, with no firstName", async () => {
+    const { svc, prisma } = harness();
+    await svc.update("biz-1", "cli-1", { lastName: null });
+    expect(prisma.client.update).toHaveBeenCalledWith({
+      where: { id: "cli-1" },
+      data: expect.objectContaining({ lastName: "" }),
+    });
+  });
 });
 
 describe("ClientsService.findAll", () => {

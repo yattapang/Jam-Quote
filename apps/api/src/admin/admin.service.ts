@@ -151,15 +151,40 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 // - on free now -> the term runs from now. A free row's `renewsAt` is a leftover of a
 //   term that already ended (the revert sweep changes the plan only), so it holds no
 //   paid time to carry.
+// Fix (S-review, admin-service): the plan/interval-unchanged case used to
+// fall straight into the "carry paid time" branch below, which extends from
+// max(now, current.renewsAt) on EVERY call regardless of whether anything
+// actually changed. Re-saving the same plan, or alternating annual<->monthly
+// back and forth, kept adding a fresh term on top of the one already paid
+// for, with no new SubscriptionPayment ever recorded. Two rules close that:
+//
+// 1. Same plan AND same interval as what is already on the row -> true
+//    no-op. Nothing about the commercial term changed, so renewsAt must not
+//    move at all (this is what a "re-save" must do).
+// 2. Paid -> paid with a DIFFERENT plan or interval -> the remaining paid
+//    time is carried, but only ONCE: from the most recent real (non-voided)
+//    SubscriptionPayment's `coversUntil`, not from `current.renewsAt`. Using
+//    `renewsAt` as the base is exactly what stacked, because after the first
+//    switch renewsAt already includes the carried time from the switch
+//    before it — chaining off it compounds. `coversUntil` reflects what was
+//    actually paid for and does not move just because the interval flipped.
+//    Manual admin-set subscriptions may have no payment row at all (never
+//    actually paid), so this falls back to `from` (today) rather than any
+//    stored date.
 function nextRenewal(
   interval: string,
   current: { plan: string; interval: string; renewsAt: Date | null } | null,
+  latestPaymentCoversUntil: Date | null,
+  samePlanAndInterval: boolean,
   from: Date = new Date(),
-): Date {
+): Date | null {
+  if (samePlanAndInterval) return current?.renewsAt ?? null;
+
   const renewsAt = current?.renewsAt ? current.renewsAt.toISOString() : null;
   const paidNow =
     !!current && subscriptionStanding({ ...current, renewsAt }, from) !== SubscriptionStanding.FREE;
-  return nextTermEnd(interval, paidNow ? renewsAt : null, from);
+  const base = paidNow ? (latestPaymentCoversUntil ?? from) : from;
+  return nextTermEnd(interval, null, base);
 }
 
 /**
@@ -557,16 +582,43 @@ export class AdminService {
     // ended.
     const priceCents = input.plan === "free" ? null : (input.priceCents ?? null);
 
+    const currentSub = await this.prisma.subscription.findUnique({ where: { businessId } });
+    // A same-plan-same-interval re-save is a no-op ONLY while the current
+    // term is genuinely still live (CURRENT/DUE_SOON, or a manual paid row
+    // with no renewsAt at all). A PAST_DUE row saved with the same plan is
+    // the admin's "reactivate" action — that must still start a fresh term
+    // from today, exactly as it always has, rather than freezing renewsAt in
+    // the past forever.
+    const currentStanding = currentSub
+      ? subscriptionStanding(
+          { ...currentSub, renewsAt: currentSub.renewsAt ? currentSub.renewsAt.toISOString() : null },
+          new Date(),
+        )
+      : SubscriptionStanding.FREE;
+    const samePlanAndInterval =
+      !!currentSub &&
+      currentSub.plan === input.plan &&
+      currentSub.interval === interval &&
+      currentStanding !== SubscriptionStanding.PAST_DUE;
+
     // An explicit date wins; otherwise a paid plan renews one term out, which
-    // is what makes "annual" mean anything. Free plans do not renew.
+    // is what makes "annual" mean anything. Free plans do not renew. A
+    // re-save of the SAME plan+interval is a no-op (see `nextRenewal`) so it
+    // never needs the payment lookup below.
+    let latestPaymentCoversUntil: Date | null = null;
+    if (!input.renewsAt && input.plan !== "free" && !samePlanAndInterval) {
+      const latestPayment = await this.prisma.subscriptionPayment.findFirst({
+        where: { businessId, voidedAt: null },
+        orderBy: { coversUntil: "desc" },
+      });
+      latestPaymentCoversUntil = latestPayment?.coversUntil ?? null;
+    }
+
     const renewsAt = input.renewsAt
       ? new Date(input.renewsAt)
       : input.plan === "free"
         ? null
-        : nextRenewal(
-            interval,
-            await this.prisma.subscription.findUnique({ where: { businessId } }),
-          );
+        : nextRenewal(interval, currentSub, latestPaymentCoversUntil, samePlanAndInterval);
 
     const subscription = await this.prisma.subscription.upsert({
       where: { businessId },

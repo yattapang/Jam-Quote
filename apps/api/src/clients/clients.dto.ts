@@ -92,7 +92,17 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
  * {firstName, lastName}. Prefers firstName/lastName when present; otherwise
  * splits `name` on the first space (first token -> firstName, remainder ->
  * lastName, empty string when there's no space). Returns an empty object
- * when neither is present (a partial update that doesn't touch the name).
+ * when neither firstName, name, NOR an explicit lastName is present (a
+ * partial update that doesn't touch the name at all).
+ *
+ * Bug fixed here: `{ lastName: null }` sent alone (no firstName, no name) used
+ * to fall through both branches and return `{}`, which the caller
+ * (`ClientsService.update`) reads as "lastName wasn't mentioned" — so an
+ * explicit clear passed validation and then silently did nothing, leaving the
+ * old lastName in place with no error. Since a `firstName` present already
+ * clears lastName the same way (`lastName ?? ""` above), the consistent fix
+ * is to honour a standalone `lastName: null` the same way: it clears
+ * lastName without touching firstName.
  */
 export function resolveClientName(input: {
   firstName?: string;
@@ -105,6 +115,9 @@ export function resolveClientName(input: {
   if (input.name !== undefined) {
     const [firstName, ...rest] = input.name.trim().split(/\s+/);
     return { firstName: firstName ?? "", lastName: rest.join(" ") };
+  }
+  if (input.lastName === null) {
+    return { lastName: "" };
   }
   return {};
 }

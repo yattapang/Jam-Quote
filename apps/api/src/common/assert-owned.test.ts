@@ -2,7 +2,12 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
 import { NotFoundException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import { assertClientOwned, assertProjectOwned, clientReferenceState } from "./assert-owned.js";
+import {
+  assertClientOwned,
+  assertLabourRateOwned,
+  assertProjectOwned,
+  clientReferenceState,
+} from "./assert-owned.js";
 
 /**
  * An id in a request BODY is not a capability.
@@ -88,6 +93,63 @@ describe("assertProjectOwned", () => {
     await expect(
       assertProjectOwned(fakeDb([{ id: "pr_1", businessId: "biz_2" }]), "biz_1", "pr_1"),
     ).rejects.toThrow("Project not found");
+  });
+});
+
+/**
+ * `allowDeleted` is what PurchasesService.createLabour uses in place of its
+ * old private `assertLabourRateBelongsToBusiness` — see the comment on
+ * `assertLabourRateOwned`. Consolidated here so the two behaviours (default
+ * liveness check vs. ownership-only) cannot drift back apart the way the
+ * private copy once did.
+ */
+function fakeLabourDb(rows: { id: string; businessId: string; deletedAt?: Date | null }[]) {
+  const findFirst = vi.fn(({ where }: { where: Record<string, unknown> }) =>
+    Promise.resolve(
+      rows.find(
+        (r) =>
+          r.id === where.id &&
+          r.businessId === where.businessId &&
+          (!("deletedAt" in where) || (r.deletedAt ?? null) === (where.deletedAt ?? null)),
+      ) ?? null,
+    ),
+  );
+  return { labourRate: { findFirst } } as never;
+}
+
+describe("assertLabourRateOwned", () => {
+  const OWNED_DELETED = { id: "lr_gone", businessId: "biz_1", deletedAt: new Date() };
+  const THEIRS = { id: "lr_theirs", businessId: "biz_2" };
+
+  it("by default refuses a soft-deleted rate this business owns (live check-then-price lookup)", async () => {
+    await expect(
+      assertLabourRateOwned(fakeLabourDb([OWNED_DELETED]), "biz_1", "lr_gone"),
+    ).rejects.toThrow("Labour rate not found");
+  });
+
+  it("with allowDeleted, accepts a soft-deleted rate this business owns (offline replay)", async () => {
+    await expect(
+      assertLabourRateOwned(fakeLabourDb([OWNED_DELETED]), "biz_1", "lr_gone", { allowDeleted: true }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("with allowDeleted, still refuses a foreign or made-up id with the same 404", async () => {
+    const foreign = assertLabourRateOwned(fakeLabourDb([THEIRS]), "biz_1", "lr_theirs", {
+      allowDeleted: true,
+    });
+    const madeUp = assertLabourRateOwned(fakeLabourDb([]), "biz_1", "lr_nonexistent", {
+      allowDeleted: true,
+    });
+    await expect(foreign).rejects.toThrow("Labour rate not found");
+    await expect(madeUp).rejects.toThrow("Labour rate not found");
+  });
+
+  it("with allowDeleted, queries without a deletedAt filter at all", async () => {
+    const db = fakeLabourDb([OWNED_DELETED]);
+    await assertLabourRateOwned(db, "biz_1", "lr_gone", { allowDeleted: true });
+    const args = (db as unknown as { labourRate: { findFirst: { mock: { calls: unknown[][] } } } })
+      .labourRate.findFirst.mock.calls[0]![0] as { where: Record<string, unknown> };
+    expect(args.where).toEqual({ id: "lr_gone", businessId: "biz_1" });
   });
 });
 

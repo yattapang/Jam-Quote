@@ -1,95 +1,226 @@
+import { existsSync, readdirSync } from "node:fs";
+import { dirname, join, resolve as resolvePath, sep } from "node:path";
+import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
+import { collect, declaredTypeImport, parseFile, staticStrings, unwrap } from "@jamquote/test-ast";
 import { AdminService } from "./admin.service.js";
 import { AdminController } from "./admin.controller.js";
 import { NON_FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
 import { RulePackService } from "../rulepack/rulepack.service.js";
 
 /**
- * Approach: BEHAVIOURAL, against mocked Prisma — not a source scan.
+ * `NON_FINANCIAL_AUDIT_ACTIONS` (audit.service.ts) is an allow-list: registering an action
+ * claims its `details`, as actually written, carries no money. This file makes good on it.
  *
- * `NON_FINANCIAL_AUDIT_ACTIONS` (audit.service.ts) is an allow-list: an
- * action registered there claims its `details`, as actually written, carries
- * no money. This file makes good on that claim by calling every real writer
- * that records one of those actions, capturing the EXACT object it passes to
- * `audit.record`, and asserting — recursively, over the real runtime value,
- * not the source text — that no key looks like a money amount (matches
- * `/Cents$/i`, this codebase's own convention for one, since Jamaican prices
- * are cents-denominated integers) and that no value is one of the specific
- * known money amounts used in each test's fixture data.
+ * ## Why not a type (rung 1 of the guard doctrine)
  *
- * A text/regex scan of the source is exactly what the doctrine here forbids:
- * it is defeated by spreading a variable (`details: { ...patch }`) instead of
- * writing a literal key, which several of these writers do. Calling the real
- * method with mocked Prisma and inspecting the value actually produced does
- * not have that hole — a `Cents` field arriving via a spread is exactly as
- * visible to `containsMoney` below as one written as a literal.
+ * The compiler cannot hold "no money" here without changes this file cannot make.
+ * `Cents` is `type Cents = number` (packages/core/src/tax/money.ts), unbranded, so a money
+ * amount and a count (`noticesSent`) are the same type and no `AuditDetails` can exclude
+ * one but not the other; branding it touches every money producer across core, api and
+ * web. A `financial`-field split of `RecordAuditInput` would have to rewrite the call
+ * sites in admin.service.ts, which another agent owns. Until one lands, it is enforced here.
+ *
+ * ## What is enforced, and how
+ *
+ * 1. DISCOVERY, not a list. Every `x.record(...)` in apps/api/src whose receiver's
+ *    DECLARED type resolves (through `@jamquote/test-ast`) to the `AuditService` import of
+ *    `admin/audit.service.ts` is an audit call site. Its `action` must be a closed set of
+ *    strings (`staticStrings`) or the guard fails: an action it cannot read is an action it
+ *    cannot check. Every registered action must have a call site, and the behavioural tests
+ *    below must exercise every registered action. The set exercised is captured from the
+ *    mocked `record`; the registered set is the export. Neither is typed out here.
+ * 2. MONEY BY VALUE, not by key spelling. Every Prisma row a writer reads is a `row()`
+ *    proxy: a field the fixture did not define reads as a unique SENTINEL number. A
+ *    `details` carrying any sentinel, under any key, through any spread or rename, copied a
+ *    column this test never vouched for, and fails. The old check matched `/Cents$/` on
+ *    keys, which `{ amount: payment.amountCents }` walked straight past.
+ *
+ * ## What it does not prove
+ *
+ * An amount taken from the request DTO rather than a row is not a sentinel. A writer path
+ * these fixtures do not reach is not inspected. A receiver typed other than by a plain
+ * `AuditService` reference (inferred, `any`) is not discovered; the per-file assertion
+ * fails if one of today's recording files stops resolving.
  */
 
-function containsMoney(value: unknown, path = "$"): string[] {
-  const hits: string[] = [];
-  if (value === null || value === undefined) return hits;
-  if (Array.isArray(value)) {
-    value.forEach((v, i) => hits.push(...containsMoney(v, `${path}[${i}]`)));
-    return hits;
-  }
-  if (typeof value === "object") {
-    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      if (/Cents$/i.test(key)) hits.push(`${path}.${key}`);
-      hits.push(...containsMoney(v, `${path}.${key}`));
-    }
-  }
-  return hits;
+// ─────────────────────────────────────────────────────────── money by value
+
+const SENTINELS = new Set<number>();
+let nextSentinel = 7_310_000_001;
+
+/** A Prisma row whose undefined fields read as sentinels. */
+function row<T extends object>(fields: T): T {
+  return new Proxy(fields, {
+    get(target, key, receiver) {
+      if (typeof key === "symbol" || key in target || key === "then" || key === "toJSON") {
+        return Reflect.get(target, key, receiver);
+      }
+      const v = nextSentinel++;
+      SENTINELS.add(v);
+      Reflect.set(target, key, v);
+      return v;
+    },
+  });
 }
+
+function sentinelsIn(value: unknown, path = "$"): string[] {
+  if (value === null || value === undefined) return [];
+  if (typeof value === "number" || typeof value === "bigint") {
+    return SENTINELS.has(Number(value)) ? [path] : [];
+  }
+  if (typeof value === "string") {
+    return [...SENTINELS].some((s) => value.includes(String(s))) ? [path] : [];
+  }
+  if (Array.isArray(value)) return value.flatMap((v, i) => sentinelsIn(v, `${path}[${i}]`));
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>).flatMap(([k, v]) => sentinelsIn(v, `${path}.${k}`));
+  }
+  return [];
+}
+
+/** Actions every mocked `record` below actually received, across the whole file. */
+const exercised = new Set<string>();
+function recorder() {
+  return vi.fn(async (input: { action: string; details?: unknown }) => {
+    exercised.add(input.action);
+  });
+}
+function expectNoMoney(record: ReturnType<typeof recorder>) {
+  expect(record.mock.calls.length).toBeGreaterThan(0);
+  for (const [input] of record.mock.calls) {
+    expect(sentinelsIn(input.details), input.action).toEqual([]);
+  }
+}
+
+// ───────────────────────────────────────────────────────────── discovery
+
+const API_SRC = join(process.cwd(), "src");
+const AUDIT_SERVICE = join(API_SRC, "admin", "audit.service.ts");
+
+function sourceFiles(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) sourceFiles(full, out);
+    else if (/\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
+
+interface Site {
+  file: string;
+  where: string;
+  actions: string[] | undefined;
+}
+
+function auditSites(file: string): Site[] {
+  const sf = parseFile(file);
+  if (!sf.text.includes("record")) return [];
+  const rel = file.slice(API_SRC.length + 1).split(sep).join("/");
+  const sites: Site[] = [];
+  for (const call of collect(sf, ts.isCallExpression)) {
+    const callee = unwrap(call.expression);
+    if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "record") continue;
+    const type = declaredTypeImport(callee.expression);
+    if (!type || type.exportedName !== "AuditService") continue;
+    if (resolvePath(dirname(file), type.moduleSpecifier.replace(/\.js$/, ".ts")) !== AUDIT_SERVICE) continue;
+    const line = sf.getLineAndCharacterOfPosition(call.getStart(sf)).line + 1;
+    const arg = call.arguments[0] && unwrap(call.arguments[0]);
+    let actions: string[] | undefined;
+    if (arg && ts.isObjectLiteralExpression(arg)) {
+      const prop = arg.properties.find((p) => p.name && ts.isIdentifier(p.name) && p.name.text === "action");
+      if (prop && ts.isPropertyAssignment(prop)) actions = staticStrings(prop.initializer);
+      else if (prop && ts.isShorthandPropertyAssignment(prop)) actions = staticStrings(prop.name);
+    }
+    sites.push({ file: rel, where: `${rel}:${line}`, actions });
+  }
+  return sites;
+}
+
+const sites = sourceFiles(API_SRC).flatMap(auditSites);
+const discovered = new Set(sites.flatMap((s) => s.actions ?? []));
+
+describe("audit call sites are discovered, not listed", () => {
+  it("finds call sites in every file that records today, so a rename cannot empty the guard", () => {
+    const files = new Set(sites.map((s) => s.file));
+    for (const f of [
+      "admin/admin.service.ts",
+      "admin/admin.controller.ts",
+      "admin/subscription-payments.service.ts",
+      "rulepack/rulepack.service.ts",
+    ]) {
+      expect(files.has(f), `no audit call site discovered in ${f}`).toBe(true);
+    }
+    expect(sites.length).toBeGreaterThanOrEqual(NON_FINANCIAL_AUDIT_ACTIONS.size);
+  });
+
+  it("every call site's action is a closed set of strings the guard can read", () => {
+    expect(sites.filter((s) => !s.actions).map((s) => s.where)).toEqual([]);
+  });
+
+  it("every registered action has a real call site (no stale registration)", () => {
+    expect([...NON_FINANCIAL_AUDIT_ACTIONS].filter((a) => !discovered.has(a))).toEqual([]);
+  });
+
+  it("discovery also sees the REDACTED actions, so it is not merely echoing the allow-list", () => {
+    expect([...discovered].filter((a) => !NON_FINANCIAL_AUDIT_ACTIONS.has(a)).length).toBeGreaterThan(0);
+  });
+
+  it("the sentinel detector fires on a copied column under any key, and not on a fixtured value", () => {
+    const r = row({ id: "b1", name: "Biz" }) as { id: string; name: string } & Record<string, unknown>;
+    expect(sentinelsIn({ anything: r.proMonthlyPriceCents })).toEqual(["$.anything"]);
+    expect(sentinelsIn({ nested: [{ v: `${r.amount}` }] })).toEqual(["$.nested[0].v"]);
+    expect(sentinelsIn({ id: r.id, name: r.name, noticesSent: 2 })).toEqual([]);
+  });
+});
 
 describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no money", () => {
   it("tenant.impersonate (AdminService.impersonateTenant)", async () => {
-    const record = vi.fn();
+    const record = recorder();
     const prisma = {
-      business: { findUnique: vi.fn().mockResolvedValue({ id: "b1", name: "Biz", deletedAt: null }) },
-      user: { findUnique: vi.fn().mockResolvedValue({ id: "admin-1", role: "ADMIN" }) },
+      business: { findUnique: vi.fn().mockResolvedValue(row({ id: "b1", name: "Biz", deletedAt: null })) },
+      user: { findUnique: vi.fn().mockResolvedValue(row({ id: "admin-1", role: "ADMIN" })) },
     };
     const auth = { mintToken: vi.fn().mockReturnValue("tok") };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new AdminService(prisma as any, {} as any, { record } as any, auth as any);
     await svc.impersonateTenant("b1", "admin-1").catch(() => undefined);
-    expect(record).toHaveBeenCalled();
-    const details = record.mock.calls[0]![0].details;
-    expect(containsMoney(details)).toEqual([]);
+    expectNoMoney(record);
   });
 
   it("tenant.suspend / tenant.restore (AdminService)", async () => {
-    const record = vi.fn();
-    const business = { id: "b1", name: "Biz", deletedAt: null };
+    const record = recorder();
     const prisma = {
       business: {
-        findUnique: vi.fn().mockResolvedValue(business),
-        update: vi.fn().mockResolvedValue(business),
+        findUnique: vi.fn().mockResolvedValue(row({ id: "b1", name: "Biz", deletedAt: null as Date | null })),
+        update: vi.fn().mockResolvedValue(row({ id: "b1", name: "Biz", deletedAt: new Date() as Date | null })),
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
     await svc.suspendTenant("b1", "admin-1");
-    for (const call of record.mock.calls) {
-      expect(containsMoney(call[0].details)).toEqual([]);
-    }
+    prisma.business.findUnique.mockResolvedValue(row({ id: "b1", name: "Biz", deletedAt: new Date() }));
+    prisma.business.update.mockResolvedValue(row({ id: "b1", name: "Biz", deletedAt: null }));
+    await svc.restoreTenant("b1", "admin-1");
+    expectNoMoney(record);
   });
 
   it("tenant.delete (AdminService.hardDeleteTenant)", async () => {
-    const record = vi.fn();
-    const business = { id: "b1", name: "Biz" };
+    const record = recorder();
     const prisma = {
-      business: { findUnique: vi.fn().mockResolvedValue(business) },
+      business: { findUnique: vi.fn().mockResolvedValue(row({ id: "b1", name: "Biz" })) },
       $transaction: vi.fn().mockResolvedValue(undefined),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new AdminService(prisma as any, {} as any, { record } as any, {} as any);
     await svc.hardDeleteTenant("b1", "Biz", "admin-1");
-    expect(containsMoney(record.mock.calls[0]![0].details)).toEqual([]);
+    expectNoMoney(record);
   });
 
   it("regulatory.create / regulatory.update / regulatory.review / regulatory.reopen / regulatory.delete (AdminService)", async () => {
-    const record = vi.fn();
-    const row = {
+    const record = recorder();
+    const fields = () => ({
       id: "r1",
       title: "New GCT threshold",
       category: "TAX",
@@ -100,13 +231,13 @@ describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no mo
       publishedAt: null,
       reviewedAt: null,
       reviewedByUserId: null,
-    };
+    });
     const prisma = {
       regulatoryUpdate: {
-        create: vi.fn().mockResolvedValue(row),
-        update: vi.fn().mockResolvedValue(row),
-        delete: vi.fn().mockResolvedValue(row),
-        findUnique: vi.fn().mockResolvedValue(row),
+        create: vi.fn().mockResolvedValue(row(fields())),
+        update: vi.fn().mockResolvedValue(row(fields())),
+        delete: vi.fn().mockResolvedValue(row(fields())),
+        findUnique: vi.fn().mockResolvedValue(row(fields())),
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,20 +250,18 @@ describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no mo
     await svc.deleteRegulatory("r1", "admin-1");
 
     expect(record.mock.calls.length).toBeGreaterThanOrEqual(5);
-    for (const call of record.mock.calls) {
-      expect(containsMoney(call[0].details)).toEqual([]);
-    }
+    expectNoMoney(record);
   });
 
   it("admin.promote / admin.update / admin.revoke (AdminService)", async () => {
-    const record = vi.fn();
-    const user = { id: "u1", role: "OWNER", isSuperAdmin: false, adminCapabilities: [] };
-    const adminUser = { ...user, role: "ADMIN", email: "a@b.com" };
+    const record = recorder();
+    const user = () => ({ id: "u1", role: "OWNER", isSuperAdmin: false, adminCapabilities: [] as string[] });
+    const adminUser = () => ({ ...user(), role: "ADMIN", email: "a@b.com" });
     const prisma = {
       user: {
-        findFirst: vi.fn().mockResolvedValue(user),
-        findUnique: vi.fn().mockResolvedValue(adminUser),
-        update: vi.fn().mockResolvedValue(adminUser),
+        findFirst: vi.fn().mockResolvedValue(row(user())),
+        findUnique: vi.fn().mockResolvedValue(row(adminUser())),
+        update: vi.fn().mockResolvedValue(row(adminUser())),
         count: vi.fn().mockResolvedValue(2),
       },
     };
@@ -145,74 +274,54 @@ describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no mo
     await svc.revokeAdmin("u1", { ...actor, userId: "other-admin" } as never);
 
     expect(record.mock.calls.length).toBeGreaterThanOrEqual(3);
-    for (const call of record.mock.calls) {
-      expect(containsMoney(call[0].details)).toEqual([]);
-    }
+    expectNoMoney(record);
   });
 
   it("rulepack.update (RulePackService.update)", async () => {
-    const record = vi.fn();
+    const record = recorder();
     const prisma = {
       rulePackConfig: {
         findUnique: vi.fn().mockResolvedValue(null),
-        upsert: vi
-          .fn()
-          .mockResolvedValue({ countryCode: "JM", statutoryRates: {}, updatedAt: new Date() }),
+        // Every column toOverride/toEffective reads is fixtured: an unfixtured nullable
+        // Date would otherwise read as a sentinel NUMBER and break the path under test.
+        upsert: vi.fn().mockResolvedValue(
+          row({
+            countryCode: "JM",
+            statutoryRates: {},
+            statutoryCustom: null,
+            statutoryRetired: [],
+            taxLabel: null,
+            defaultTaxRatePct: null,
+            verifiedAsOf: null,
+            sources: null,
+            sourceUrl: null,
+            updatedAt: new Date(),
+          }),
+        ),
       },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new RulePackService(prisma as any, { record } as any);
     await svc.update("JM", { statutoryRetired: ["OLD_LEVY"] }, "admin-1");
-    expect(record).toHaveBeenCalled();
-    expect(containsMoney(record.mock.calls[0]![0].details)).toEqual([]);
+    expectNoMoney(record);
   });
 
   it("subscription.sweep.manual / subscription.sweep.manual.failed (AdminController.runSweep)", async () => {
-    const record = vi.fn();
+    const record = recorder();
     const sweep = { run: vi.fn().mockResolvedValue({ noticesSent: 2, reverted: 1, failures: 0 }) };
-    const controller = new AdminController(
-      {} as never,
-      { record } as never,
-      {} as never,
-      {} as never,
-      sweep as never,
-    );
+    const controller = new AdminController({} as never, { record } as never, {} as never, {} as never, sweep as never);
     const req = { user: { sub: "admin-1" } } as never;
     await controller.runSweep(req);
-    expect(record).toHaveBeenCalled();
-    expect(containsMoney(record.mock.calls[0]![0].details)).toEqual([]);
-
-    record.mockClear();
     sweep.run = vi.fn().mockRejectedValue(new Error("boom"));
     await controller.runSweep(req).catch(() => undefined);
-    expect(record).toHaveBeenCalled();
-    expect(containsMoney(record.mock.calls[0]![0].details)).toEqual([]);
+    expectNoMoney(record);
   });
 
-  it("every action exercised above is actually registered in NON_FINANCIAL_AUDIT_ACTIONS — this test file is the thing that makes registering one an enforced claim", () => {
-    const exercised = [
-      "tenant.impersonate",
-      "tenant.suspend",
-      "tenant.restore",
-      "tenant.delete",
-      "regulatory.create",
-      "regulatory.update",
-      "regulatory.review",
-      "regulatory.reopen",
-      "regulatory.delete",
-      "admin.promote",
-      "admin.update",
-      "admin.revoke",
-      "rulepack.update",
-      "subscription.sweep.manual",
-      "subscription.sweep.manual.failed",
-    ];
-    for (const action of exercised) {
-      expect(NON_FINANCIAL_AUDIT_ACTIONS.has(action)).toBe(true);
-    }
-    // And nothing is registered that this file didn't actually exercise —
-    // an addition to the allow-list with no covering call above is a claim
-    // nothing here backs up.
-    expect([...NON_FINANCIAL_AUDIT_ACTIONS].sort()).toEqual([...exercised].sort());
+  // Last in the file (vitest runs a file's tests in order): what was exercised is
+  // captured from the mocks above, what is registered is the export.
+  it("every registered action was exercised above, and nothing exercised is unregistered or undiscovered", () => {
+    expect([...NON_FINANCIAL_AUDIT_ACTIONS].filter((a) => !exercised.has(a))).toEqual([]);
+    expect([...exercised].filter((a) => !NON_FINANCIAL_AUDIT_ACTIONS.has(a))).toEqual([]);
+    expect([...exercised].filter((a) => !discovered.has(a))).toEqual([]);
   });
 });

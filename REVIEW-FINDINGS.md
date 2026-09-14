@@ -369,6 +369,70 @@ Next: `git diff` each area, run build core + typecheck + lint + test, plant one 
 per fix yourself (backup copy, never git checkout), commit per area, then an
 independent review. Nothing from 1-3 is proven until then.
 
+## Cross-tenant supplier reference audit (read-only SQL, for the owner to run on production)
+
+# Cross-tenant supplier reference audit (S-review, admin-service / assert-suppliers-owned)
+
+Read-only audit queries to find EXISTING rows where a `supplierId` points at a
+`Supplier` belonging to a different business than the row itself — the shape
+the pre-fix grandfathering gap in `assert-suppliers-owned.ts` would have let
+through silently. Not run against any real database; text only.
+
+```sql
+-- Quote lines whose supplierId belongs to another business
+SELECT ql.id AS quote_line_id, q."businessId" AS quote_business_id,
+       ql."supplierId", s."businessId" AS supplier_business_id
+FROM "QuoteLineItem" ql
+JOIN "Quote" q ON q.id = ql."quoteId"
+JOIN "Supplier" s ON s.id = ql."supplierId"
+WHERE ql."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM q."businessId";
+
+-- Invoice lines whose supplierId belongs to another business
+SELECT il.id AS invoice_line_id, i."businessId" AS invoice_business_id,
+       il."supplierId", s."businessId" AS supplier_business_id
+FROM "InvoiceLineItem" il
+JOIN "Invoice" i ON i.id = il."invoiceId"
+JOIN "Supplier" s ON s.id = il."supplierId"
+WHERE il."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM i."businessId";
+
+-- Purchases whose supplierId belongs to another business
+SELECT p.id AS purchase_id, p."businessId" AS purchase_business_id,
+       p."supplierId", s."businessId" AS supplier_business_id
+FROM "Purchase" p
+JOIN "Supplier" s ON s.id = p."supplierId"
+WHERE p."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM p."businessId";
+
+-- Material favourites whose supplierId belongs to another business
+SELECT mf.id AS material_favourite_id, mf."businessId" AS favourite_business_id,
+       mf."supplierId", s."businessId" AS supplier_business_id
+FROM "MaterialFavourite" mf
+JOIN "Supplier" s ON s.id = mf."supplierId"
+WHERE mf."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM mf."businessId";
+```
+
+## Fix summary
+
+- `apps/api/src/common/assert-suppliers-owned.ts` — ids in `allowIds` (already
+  persisted on the document) are now CHECKED against `{ id: { in: allowIds },
+  businessId }` with no `deletedAt` filter (mirrors `assertRefKindOwned`'s
+  grandfathered-id handling in `assert-owned.ts`), instead of being filtered
+  out of the query before it ran. A grandfathered id that does not belong to
+  this business now throws `NotFoundException` — Option A (refuse), not
+  Option B (silently null it out): a supplier id is a financial reference on
+  a real quote/invoice line, and silently rewriting or dropping it without
+  the contractor's knowledge is worse than requiring them to fix the
+  document once.
+- `apps/api/src/quotes/quotes.service.ts` `revise` (~line 1195) and
+  `apps/api/src/invoices/invoices.service.ts` `convertFromQuote` (~line 452)
+  both now call `assertSuppliersOwned` on the supplierIds being copied
+  forward from the original document, using the copied ids themselves as
+  `allowIds` — so a legacy foreign id cannot propagate onto the new
+  quote/invoice unchecked.
+
 ## Review of 3ee4577, 2026-09-13
 
 - **HIGH, CONFIRMED - admin plan switches stack unpaid time:** my "keep paid time" fix

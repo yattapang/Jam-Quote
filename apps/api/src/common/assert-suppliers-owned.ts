@@ -25,20 +25,38 @@ export async function assertSuppliersOwned(
   supplierIds: ReadonlyArray<string | null | undefined>,
   allowIds: ReadonlySet<string> = new Set(),
 ): Promise<void> {
-  const ids = [
-    ...new Set(
-      supplierIds
-        .filter((v): v is string => Boolean(v))
-        .filter((v) => !allowIds.has(v)),
-    ),
-  ];
-  if (ids.length === 0) return;
+  const distinct = [...new Set(supplierIds.filter((v): v is string => Boolean(v)))];
+  const newIds = distinct.filter((v) => !allowIds.has(v));
+  const grandfatheredIds = distinct.filter((v) => allowIds.has(v));
 
-  const rows = await prisma.supplier.findMany({
-    where: { id: { in: ids }, businessId, deletedAt: null },
-    select: { id: true },
-  });
-  if (rows.length !== ids.length) {
-    throw new NotFoundException("Supplier not found");
+  if (newIds.length > 0) {
+    const rows = await prisma.supplier.findMany({
+      where: { id: { in: newIds }, businessId, deletedAt: null },
+      select: { id: true },
+    });
+    if (rows.length !== newIds.length) {
+      throw new NotFoundException("Supplier not found");
+    }
+  }
+
+  if (grandfatheredIds.length > 0) {
+    // Mirrors assertRefKindOwned's treatment of grandfathered ids (see
+    // assert-owned.ts): no `deletedAt` filter, so an id already on the
+    // document stays allowed even if the supplier has since been
+    // soft-deleted. But it is STILL checked against `businessId` — a
+    // pre-S7 id, written before tenant checks existed, that belongs to a
+    // DIFFERENT business is not silently grandfathered forever. Found
+    // belonging to another tenant (or not existing at all), the update is
+    // refused rather than silently dropping the id to null: this data is a
+    // financial reference on a real quote/invoice, and changing what it
+    // points at (or discarding it) without the contractor's knowledge is a
+    // worse outcome than making them fix the document once.
+    const rows = await prisma.supplier.findMany({
+      where: { id: { in: grandfatheredIds }, businessId },
+      select: { id: true },
+    });
+    if (rows.length !== grandfatheredIds.length) {
+      throw new NotFoundException("Supplier not found");
+    }
   }
 }

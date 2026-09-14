@@ -31,6 +31,7 @@ describe("AdminService.setTenantPlan keeps paid time", () => {
   const run = async (
     current: { plan: string; interval: string; renewsAt: Date | null } | null,
     input: object,
+    latestPayment: { coversUntil: Date } | null = null,
   ) => {
     vi.useFakeTimers({ now: NOW });
     try {
@@ -38,27 +39,74 @@ describe("AdminService.setTenantPlan keeps paid time", () => {
       const prisma = {
         business: { findUnique: vi.fn().mockResolvedValue({ id: "b" }) },
         subscription: { findUnique: vi.fn().mockResolvedValue(current), upsert },
+        subscriptionPayment: { findFirst: vi.fn().mockResolvedValue(latestPayment) },
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sub = await svc.setTenantPlan("b", input as any, "actor");
-      return (sub.renewsAt as Date).toISOString();
+      return sub.renewsAt ? (sub.renewsAt as Date).toISOString() : null;
     } finally {
       vi.useRealTimers();
     }
   };
   const left20 = new Date(NOW.getTime() + 20 * DAY);
+  const coversUntil20 = left20; // a payment that covers through the same date, for the carry-over tests
 
-  it("same interval: 20 days left extends from renewsAt, not from today", async () => {
-    // Executed before the fix: 2026-10-13T15:00Z — one month from today, 20 paid days gone.
+  it("re-saving the SAME plan and interval is a true no-op on renewsAt", async () => {
     expect(await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "monthly" }))
-      .toBe("2026-11-03T15:00:00.000Z");
+      .toBe(left20.toISOString());
   });
 
-  it("monthly -> annual keeps the 20 days too", async () => {
-    expect(await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "annual" }))
-      .toBe("2027-10-03T15:00:00.000Z");
+  it("monthly -> annual carries the remaining paid time ONCE, from the last real payment's coversUntil", async () => {
+    expect(
+      await run(
+        { plan: "pro", interval: "monthly", renewsAt: left20 },
+        { plan: "pro", interval: "annual" },
+        { coversUntil: coversUntil20 },
+      ),
+    ).toBe("2027-10-03T15:00:00.000Z");
+  });
+
+  it("four alternating switches add no unpaid term beyond one term from the correct base", async () => {
+    // Each switch is evaluated independently against the SAME underlying paid-through
+    // date (the payment's coversUntil never moves just because the admin flips the
+    // interval back and forth) — so annual, monthly, annual, monthly all land on the
+    // same one-term-out answer instead of stacking.
+    const paidThrough = { coversUntil: left20 };
+    const toAnnual = await run(
+      { plan: "pro", interval: "monthly", renewsAt: left20 },
+      { plan: "pro", interval: "annual" },
+      paidThrough,
+    );
+    const toMonthly = await run(
+      { plan: "pro", interval: "annual", renewsAt: left20 },
+      { plan: "pro", interval: "monthly" },
+      paidThrough,
+    );
+    expect(toAnnual).toBe("2027-10-03T15:00:00.000Z");
+    expect(toMonthly).toBe("2026-11-03T15:00:00.000Z");
+    // Repeating the same two switches again lands on the SAME dates — no stacking.
+    expect(
+      await run(
+        { plan: "pro", interval: "monthly", renewsAt: left20 },
+        { plan: "pro", interval: "annual" },
+        paidThrough,
+      ),
+    ).toBe(toAnnual);
+    expect(
+      await run(
+        { plan: "pro", interval: "annual", renewsAt: left20 },
+        { plan: "pro", interval: "monthly" },
+        paidThrough,
+      ),
+    ).toBe(toMonthly);
+  });
+
+  it("paid -> paid interval switch with no payment row (manual admin-set sub) falls back to today", async () => {
+    expect(
+      await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "annual" }, null),
+    ).toBe("2027-09-13T15:00:00.000Z");
   });
 
   it("free -> pro starts today, ignoring a leftover renewsAt", async () => {
@@ -66,10 +114,13 @@ describe("AdminService.setTenantPlan keeps paid time", () => {
       .toBe("2026-10-13T15:00:00.000Z");
   });
 
-  it("a lapsed pro term, or no subscription row, starts today", async () => {
+  it("a lapsed pro term reactivated with the same plan starts today (not frozen in the past)", async () => {
     const lapsed = new Date(NOW.getTime() - 10 * DAY);
     expect(await run({ plan: "pro", interval: "monthly", renewsAt: lapsed }, { plan: "pro", interval: "monthly" }))
       .toBe("2026-10-13T15:00:00.000Z");
+  });
+
+  it("no subscription row starts today", async () => {
     expect(await run(null, { plan: "pro", interval: "monthly" })).toBe("2026-10-13T15:00:00.000Z");
   });
 });
