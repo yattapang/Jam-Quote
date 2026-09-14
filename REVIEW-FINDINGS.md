@@ -352,6 +352,42 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## START HERE next session (weekly limit at 96%, 2026-09-13)
+
+Last pushed commit: 3ee4577, gate green. Three agents were in flight and may have died;
+their edits are UNCOMMITTED and UNVERIFIED in the working tree:
+1. Materials can clear optional fields + fold purchases' local labour-rate check into
+   `common/assert-owned.ts` (MaterialForm, EditMaterialButton, catalogs, api-client,
+   purchases.service, assert-owned).
+2. Admin plan-switch stacking (HIGH), retained supplier ids tenant-checked incl.
+   revise/convert, `{lastName:null}` clear, plus a read-only SQL audit of cross-tenant
+   supplier refs for the owner (admin.service, assert-suppliers-owned, quotes/invoices
+   services, clients.dto).
+3. One shared AST parser for every workspace (retention guard's second binder removed,
+   `??`/reduce/accessor spellings), audit money check by type or discovery.
+Next: `git diff` each area, run build core + typecheck + lint + test, plant one defect
+per fix yourself (backup copy, never git checkout), commit per area, then an
+independent review. Nothing from 1-3 is proven until then.
+
+## Review of 3ee4577, 2026-09-13
+
+- **HIGH, CONFIRMED - admin plan switches stack unpaid time:** my "keep paid time" fix
+  extends from max(now, renewsAt) on every change, so annual/monthly/annual/monthly from
+  13 Sep 2026 reaches 3 Dec 2028 unpaid; redaction hides it from non-financial admins.
+  Fix in progress (attack test first).
+- **MEDIUM, CONFIRMED - retained supplier ids are never tenant-checked:** they are
+  removed before the query, unlike `assertRefKindOwned`. Pre-S7 rows may already hold
+  foreign ids; revise/convert copy them on. Fix in progress, plus a read-only SQL audit
+  for the owner to run against production.
+- **MEDIUM, CONFIRMED guard weakness - retention guard** misses `??`, `reduce` accumulator
+  subtraction, and a cross-function accessor helper; and it builds a second binder
+  beside `apps/web/lib/test/source-ast.ts`, breaking doctrine rule 2 (one parser).
+  Queued: one shared parser both workspaces spend.
+- LOW - `{ lastName: null }` alone is accepted and ignored (fix in progress); the audit
+  money check matches key spelling and a hand-kept action list (queued with the parser).
+- **Lesson:** "keep what was paid" without "only once" is a new way to give away time.
+  A fix to a money rule needs its repeat-application case tested, not just its first.
+
 ## The three remaining sweeps — 28 findings, and my newest fix is one of them
 
 `tenancy-auth`, `quote-flow` and `wiring-contract`, re-run against the eight-shape
