@@ -501,50 +501,77 @@ Next: `git diff` each area, run build core + typecheck + lint + test, plant one 
 per fix yourself (backup copy, never git checkout), commit per area, then an
 independent review. Nothing from 1-3 is proven until then.
 
-## Cross-tenant supplier reference audit (read-only SQL, for the owner to run on production)
+## Cross-tenant supplier reference audit (read-only, for the owner to run on production)
 
-# Cross-tenant supplier reference audit (S-review, admin-service / assert-suppliers-owned)
+One query, one result table. Read-only: it contains no INSERT, UPDATE or DELETE. It finds
+rows whose `supplierId` points at a `Supplier` that does NOT belong to the same business as
+the row, across all four places a supplier id is stored. Column names checked against
+`apps/api/prisma/schema.prisma` (quote and invoice lines hold no `businessId` of their own,
+so each joins to its parent document).
 
-Read-only audit queries to find EXISTING rows where a `supplierId` points at a
-`Supplier` belonging to a different business than the row itself — the shape
-the pre-fix grandfathering gap in `assert-suppliers-owned.ts` would have let
-through silently. Not run against any real database; text only.
+Read the `verdict` column:
+- `LEGACY_NO_OWNER` - the supplier row predates tenancy and has no owner. EXPECTED, no
+  action: `assert-suppliers-owned.ts` deliberately still accepts one already on a document,
+  because `LineItemsEditor` has no supplier control, so refusing would make the document
+  unsavable. The count is useful to know.
+- `CROSS_TENANT` - the supplier belongs to a DIFFERENT business. This needs a decision:
+  such a document is now refused on edit, revise and convert.
+- `MISSING_SUPPLIER` - the id points at no supplier row at all (only possible where no
+  foreign key enforces it, i.e. `MaterialFavourite`).
 
 ```sql
--- Quote lines whose supplierId belongs to another business
-SELECT ql.id AS quote_line_id, q."businessId" AS quote_business_id,
-       ql."supplierId", s."businessId" AS supplier_business_id
-FROM "QuoteLineItem" ql
-JOIN "Quote" q ON q.id = ql."quoteId"
-JOIN "Supplier" s ON s.id = ql."supplierId"
-WHERE ql."supplierId" IS NOT NULL
-  AND s."businessId" IS DISTINCT FROM q."businessId";
-
--- Invoice lines whose supplierId belongs to another business
-SELECT il.id AS invoice_line_id, i."businessId" AS invoice_business_id,
-       il."supplierId", s."businessId" AS supplier_business_id
-FROM "InvoiceLineItem" il
-JOIN "Invoice" i ON i.id = il."invoiceId"
-JOIN "Supplier" s ON s.id = il."supplierId"
-WHERE il."supplierId" IS NOT NULL
-  AND s."businessId" IS DISTINCT FROM i."businessId";
-
--- Purchases whose supplierId belongs to another business
-SELECT p.id AS purchase_id, p."businessId" AS purchase_business_id,
-       p."supplierId", s."businessId" AS supplier_business_id
-FROM "Purchase" p
-JOIN "Supplier" s ON s.id = p."supplierId"
-WHERE p."supplierId" IS NOT NULL
-  AND s."businessId" IS DISTINCT FROM p."businessId";
-
--- Material favourites whose supplierId belongs to another business
-SELECT mf.id AS material_favourite_id, mf."businessId" AS favourite_business_id,
-       mf."supplierId", s."businessId" AS supplier_business_id
-FROM "MaterialFavourite" mf
-JOIN "Supplier" s ON s.id = mf."supplierId"
-WHERE mf."supplierId" IS NOT NULL
-  AND s."businessId" IS DISTINCT FROM mf."businessId";
+WITH refs AS (
+  SELECT 'QuoteLineItem'      AS source, ql.id AS row_id, q."businessId"  AS owner_business_id, ql."supplierId", ql."deletedAt"
+    FROM "QuoteLineItem"   ql JOIN "Quote"   q ON q.id = ql."quoteId"    WHERE ql."supplierId" IS NOT NULL
+  UNION ALL
+  SELECT 'InvoiceLineItem'    AS source, il.id, i."businessId", il."supplierId", il."deletedAt"
+    FROM "InvoiceLineItem" il JOIN "Invoice" i ON i.id = il."invoiceId"  WHERE il."supplierId" IS NOT NULL
+  UNION ALL
+  SELECT 'Purchase'           AS source, p.id, p."businessId", p."supplierId", p."deletedAt"
+    FROM "Purchase" p                                                    WHERE p."supplierId" IS NOT NULL
+  UNION ALL
+  SELECT 'MaterialFavourite'  AS source, mf.id, mf."businessId", mf."supplierId", mf."deletedAt"
+    FROM "MaterialFavourite" mf                                          WHERE mf."supplierId" IS NOT NULL
+)
+SELECT
+  r.source,
+  CASE
+    WHEN s.id IS NULL              THEN 'MISSING_SUPPLIER'
+    WHEN s."businessId" IS NULL    THEN 'LEGACY_NO_OWNER'
+    ELSE                                'CROSS_TENANT'
+  END                                AS verdict,
+  r.row_id,
+  r.owner_business_id,
+  r."supplierId",
+  s."businessId"                     AS supplier_business_id,
+  (r."deletedAt" IS NOT NULL)        AS row_deleted,
+  (s."deletedAt" IS NOT NULL)        AS supplier_deleted
+FROM refs r
+LEFT JOIN "Supplier" s ON s.id = r."supplierId"
+WHERE s.id IS NULL
+   OR s."businessId" IS NULL
+   OR s."businessId" <> r.owner_business_id
+ORDER BY verdict, source, r.row_id;
 ```
+
+Counts only, if the list is long:
+
+```sql
+-- same WITH refs AS (...) block as above, then:
+SELECT r.source,
+       CASE WHEN s.id IS NULL THEN 'MISSING_SUPPLIER'
+            WHEN s."businessId" IS NULL THEN 'LEGACY_NO_OWNER'
+            ELSE 'CROSS_TENANT' END AS verdict,
+       COUNT(*) AS rows
+FROM refs r LEFT JOIN "Supplier" s ON s.id = r."supplierId"
+WHERE s.id IS NULL OR s."businessId" IS NULL OR s."businessId" <> r.owner_business_id
+GROUP BY 1, 2 ORDER BY 2, 1;
+```
+
+**Status: NOT RUN.** No one here has touched a real database. Record the date and the
+verdict counts when it is run. If any `CROSS_TENANT` row appears, do not edit that document
+until the owner decides between clearing the line's supplier, repointing it at the correct
+business's supplier, or leaving it read-only.
 
 ## Fix summary
 
