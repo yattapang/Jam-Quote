@@ -83,6 +83,22 @@ describe("AdminService.setTenantPlan — renewsAt follows the LEDGER", () => {
     ).toBe(paidThrough40.toISOString());
   });
 
+  it("a NEARER ledger date cannot shorten a FURTHER granted term", async () => {
+    // The merge-gate attack: renewsAt 2028-01-01 from a term granted by hand, one
+    // surviving payment covering 18 days out. Returning the first future candidate
+    // (the ledger) deleted 15 months the tenant was entitled to, and `recordPayment`
+    // then took `coversFrom` from the reduced date, so no later payment restored it.
+    const granted = new Date(NOW.getTime() + 840 * DAY);
+    const nearLedger = new Date(NOW.getTime() + 18 * DAY);
+    expect(
+      await run(
+        { plan: "pro", interval: "annual", renewsAt: granted },
+        { plan: "pro", interval: "monthly" },
+        { coversUntil: nearLedger },
+      ),
+    ).toBe(granted.toISOString());
+  });
+
   it("looks up the latest SURVIVING payment by coversUntil, not the latest paidAt", async () => {
     const { paymentQuery } = await runFull(
       { plan: "pro", interval: "monthly", renewsAt: left20 },

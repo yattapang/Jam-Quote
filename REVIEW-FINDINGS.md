@@ -352,6 +352,40 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Merge gate on 6b36976: DO NOT MERGE -> fixed (2026-09-17)
+
+The gate found my "only moves forward" comment was FALSE. Checking `coversUntil` first
+and returning it let a NEARER ledger date overwrite a FURTHER `renewsAt`: `renewsAt
+2028-01-01` with one surviving payment 18 days out, switched to monthly, deleted 15
+months of hand-granted term - and it compounded, because `recordPayment` takes
+`coversFrom` from the reduced date. 967 tests passed over it, because the only test
+covered a PAST `coversUntil`.
+- Fixed myself: the FURTHEST future of the two wins, both floored at now. Test added
+  ("a NEARER ledger date cannot shorten a FURTHER granted term"); planting the old
+  first-future-wins rule fails it.
+- **Audit call sites are now keyed `file#function`, not `file:line`.** The gate showed
+  line-pinning broke on any edit above a writer - my own six-line renewal fix shifted
+  eleven pinned entries at once, and that diff is indistinguishable from a real new
+  writer, so the guard would be re-baselined by reflex. Proven both ways: a planted
+  second `tenant.suspend` writer fails it (`zz-second-writer.ts#go`), a line shift
+  does not.
+- Comment overclaims corrected (`clients.dto.ts` claimed the web client sends
+  `{lastName}` alone - it does not; the admin comment now states the furthest-wins rule).
+- Gate confirmed sound by the reviewer independently: 2124 tests, typecheck 8/8, lint,
+  `next build` exit 0; supplier tenancy has no escape (no writer of
+  `Supplier.businessId` is reachable from a tenant); all five edit-button wiring tests
+  fail when reverted.
+
+**STILL OPEN (guard weaknesses, code-level, not user-visible):** seven more spellings get
+past the retention guard - `b = b - a.paidCents` as a plain reassignment (while `b -=`
+is caught), `Object.is`, `switch(paid){case total:}`, `Math.max(paid,total) === paid`, a
+ternary on the pair, `total + paid * -1`, `[total,-paid].reduce(...)`; and an audit
+receiver declared `any` is not discovered.
+
+**Lesson:** "first candidate that satisfies the floor" is not the same as "the best
+candidate" - when two records both grant entitlement, order of checks silently picks a
+winner. And a guard keyed on a LINE number teaches its owner to re-baseline it.
+
 ## Both review halves fixed (2026-09-17) - gate 2124 tests, 0 failures
 
 - **Renewal rule restated:** a plan/interval switch RE-PRICES; it never buys or destroys

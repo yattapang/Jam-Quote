@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve as resolvePath, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import { collect, declaredTypeImport, parseFile, staticStrings, unwrap } from "@jamquote/test-ast";
+import { collect, declaredTypeImport, enclosingFunctionKey, parseFile, staticStrings, unwrap } from "@jamquote/test-ast";
 import { AdminService } from "./admin.service.js";
 import { AdminController } from "./admin.controller.js";
 import { NON_FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
@@ -125,7 +125,6 @@ function auditSites(file: string): Site[] {
     const type = declaredTypeImport(callee.expression);
     if (!type || type.exportedName !== "AuditService") continue;
     if (resolvePath(dirname(file), type.moduleSpecifier.replace(/\.js$/, ".ts")) !== AUDIT_SERVICE) continue;
-    const line = sf.getLineAndCharacterOfPosition(call.getStart(sf)).line + 1;
     const arg = call.arguments[0] && unwrap(call.arguments[0]);
     let actions: string[] | undefined;
     if (arg && ts.isObjectLiteralExpression(arg)) {
@@ -133,7 +132,12 @@ function auditSites(file: string): Site[] {
       if (prop && ts.isPropertyAssignment(prop)) actions = staticStrings(prop.initializer);
       else if (prop && ts.isShorthandPropertyAssignment(prop)) actions = staticStrings(prop.name);
     }
-    sites.push({ file: rel, where: `${rel}:${line}`, actions });
+    // Keyed by the ENCLOSING FUNCTION, not a line number. A line-keyed baseline broke
+    // on any edit above a call site: adding six lines to `nextRenewal` shifted eleven
+    // pinned entries at once, and that diff is indistinguishable from a real new
+    // writer — the safe edit and the dangerous one look identical, so the guard would
+    // be re-baselined by reflex. A function key moves only when the writer really moves.
+    sites.push({ file: rel, where: `${rel}#${enclosingFunctionKey(call)}`, actions });
   }
   return sites;
 }
@@ -142,7 +146,7 @@ const sites = sourceFiles(API_SRC).flatMap(auditSites);
 const discovered = new Set(sites.flatMap((s) => s.actions ?? []));
 
 /**
- * `file:line` call sites per REGISTERED action, so a second writer of an already-covered
+ * Call sites per REGISTERED action, keyed `file#function`, so a second writer of an already-covered
  * action cannot ship unexamined. Keying the guard by action alone (as this file used to)
  * meant a NEW call site writing `details` under an EXISTING action — e.g. a second place
  * that writes `tenant.suspend` with `details: { negotiatedPrice: dto.amountCents }` —
@@ -162,25 +166,27 @@ function sitesByAction(): Map<string, string[]> {
   return byAction;
 }
 
-/** Baseline captured when this guard was written — one call site per registered action,
+/** Baseline captured when this guard was written — the call sites per registered action,
+ * keyed `file#function`. Duplicates are significant: two writers of one action inside one
+ * function appear twice, so a second one still changes this list.
  * each covered by a behavioural test below. Update this ONLY alongside a new behavioural
  * test that exercises the added or moved site. */
 const KNOWN_AUDIT_SITES: Record<string, string[]> = {
-  "admin.promote": ["admin/admin.service.ts:855"],
-  "admin.revoke": ["admin/admin.service.ts:957"],
-  "admin.update": ["admin/admin.service.ts:915"],
-  "regulatory.create": ["admin/admin.service.ts:477"],
-  "regulatory.delete": ["admin/admin.service.ts:554"],
-  "regulatory.reopen": ["admin/admin.service.ts:534"],
-  "regulatory.review": ["admin/admin.service.ts:534"],
-  "regulatory.update": ["admin/admin.service.ts:508"],
-  "rulepack.update": ["rulepack/rulepack.service.ts:305"],
-  "subscription.sweep.manual": ["admin/admin.controller.ts:296"],
-  "subscription.sweep.manual.failed": ["admin/admin.controller.ts:305"],
-  "tenant.delete": ["admin/admin.service.ts:428"],
-  "tenant.impersonate": ["admin/admin.service.ts:282"],
-  "tenant.restore": ["admin/admin.service.ts:396"],
-  "tenant.suspend": ["admin/admin.service.ts:374"],
+  "admin.promote": ["admin/admin.service.ts#promoteAdmin"],
+  "admin.revoke": ["admin/admin.service.ts#revokeAdmin"],
+  "admin.update": ["admin/admin.service.ts#updateAdmin"],
+  "regulatory.create": ["admin/admin.service.ts#createRegulatory"],
+  "regulatory.delete": ["admin/admin.service.ts#deleteRegulatory"],
+  "regulatory.reopen": ["admin/admin.service.ts#reviewRegulatory"],
+  "regulatory.review": ["admin/admin.service.ts#reviewRegulatory"],
+  "regulatory.update": ["admin/admin.service.ts#updateRegulatory"],
+  "rulepack.update": ["rulepack/rulepack.service.ts#update"],
+  "subscription.sweep.manual": ["admin/admin.controller.ts#runSweep"],
+  "subscription.sweep.manual.failed": ["admin/admin.controller.ts#runSweep"],
+  "tenant.delete": ["admin/admin.service.ts#hardDeleteTenant"],
+  "tenant.impersonate": ["admin/admin.service.ts#impersonateTenant"],
+  "tenant.restore": ["admin/admin.service.ts#restoreTenant"],
+  "tenant.suspend": ["admin/admin.service.ts#suspendTenant"],
 };
 
 describe("audit call sites are discovered, not listed", () => {

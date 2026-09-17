@@ -99,11 +99,13 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
  * through both branches and return `{}`, which the caller
  * (`ClientsService.update`) reads as "lastName wasn't mentioned" — so the write
  * passed validation and then silently did nothing, leaving the old lastName in
- * place with a 200 back. The first fix handled only `null`, which left the
- * commonest case of all still broken: `api-client.ts` sends exactly
- * `{ lastName }` for a surname-only rename, and `{ lastName: "Brown" }`,
- * `{ lastName: "" }` and `{ lastName: "   " }` were all accepted by the schema
- * and discarded.
+ * place with a 200 back. The first fix handled only `null`, so
+ * `{ lastName: "Brown" }`, `{ lastName: "" }` and `{ lastName: "   " }` were all
+ * still accepted by the schema and discarded. The web edit form always sends
+ * `firstName` alongside, so it does not reach that shape today — but
+ * `updateClientSchema` accepts it, the mobile and API clients can send it, and a
+ * schema that accepts a field must honour it. (An earlier version of this comment
+ * claimed `api-client.ts` sends `{ lastName }` alone; it does not.)
  *
  * So the rule is presence, not value: EVERY `lastName !== undefined` is a
  * decision the caller made and is honoured. A blank or whitespace-only surname

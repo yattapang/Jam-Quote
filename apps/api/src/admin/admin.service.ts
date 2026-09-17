@@ -180,7 +180,9 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 //    covering to 2026-03-01 switched to monthly gave 2026-03-29, which reads as
 //    PAST_DUE, so the revert sweep downgraded a live paying tenant to free and
 //    emailed them. Steps 2 and 3 are both gated on being in the future for that
-//    reason: this function can only ever move `renewsAt` forwards, or leave it.
+//    reason, and the FURTHEST of the two wins, so this function can only ever move
+//    `renewsAt` forwards, or leave it — proven by the test that a nearer ledger date
+//    cannot shorten a further granted term.
 //
 // A FUTURE `coversUntil` wins whatever the current plan says, including `free`.
 // Setting a tenant free nulls `renewsAt`, so after paid -> free -> paid the ledger
@@ -195,11 +197,18 @@ function nextRenewal(
 ): Date | null {
   if (samePlanAndInterval) return current?.renewsAt ?? null;
 
-  if (latestPaymentCoversUntil && latestPaymentCoversUntil.getTime() > from.getTime()) {
-    return latestPaymentCoversUntil;
-  }
-  if (current?.renewsAt && current.renewsAt.getTime() > from.getTime()) {
-    return current.renewsAt;
+  // The FURTHEST future of the two, not the first one that happens to be future.
+  // Checking `coversUntil` first and returning it let a NEARER ledger date overwrite
+  // a further `renewsAt`: `{renewsAt 2028-01-01}` with one surviving payment covering
+  // 18 days out switched to monthly gave that ledger date and silently deleted 15
+  // months of hand-granted term. It also compounded, because `recordPayment` takes
+  // `coversFrom` from the reduced `renewsAt`, so the next payment did not restore it.
+  // Whichever record says the tenant is entitled to more time is the one that stands.
+  const entitled = [latestPaymentCoversUntil, current?.renewsAt ?? null].filter(
+    (d): d is Date => d !== null && d.getTime() > from.getTime(),
+  );
+  if (entitled.length > 0) {
+    return entitled.reduce((furthest, d) => (d.getTime() > furthest.getTime() ? d : furthest));
   }
   return nextTermEnd(interval, null, from);
 }
