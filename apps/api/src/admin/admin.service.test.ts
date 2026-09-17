@@ -25,10 +25,12 @@ describe("AdminService.overview", () => {
   });
 });
 
-describe("AdminService.setTenantPlan keeps paid time", () => {
+describe("AdminService.setTenantPlan — renewsAt follows the LEDGER", () => {
   const DAY = 86_400_000;
   const NOW = new Date("2026-09-13T15:00:00.000Z");
-  const run = async (
+  /** Returns both the resulting renewsAt and the payment query that produced it,
+   * so the `voidedAt`/`orderBy` half of the rule is pinned too. */
+  const runFull = async (
     current: { plan: string; interval: string; renewsAt: Date | null } | null,
     input: object,
     latestPayment: { coversUntil: Date } | null = null,
@@ -36,81 +38,116 @@ describe("AdminService.setTenantPlan keeps paid time", () => {
     vi.useFakeTimers({ now: NOW });
     try {
       const upsert = vi.fn().mockImplementation(({ update }) => update);
+      const findFirst = vi.fn().mockResolvedValue(latestPayment);
       const prisma = {
         business: { findUnique: vi.fn().mockResolvedValue({ id: "b" }) },
         subscription: { findUnique: vi.fn().mockResolvedValue(current), upsert },
-        subscriptionPayment: { findFirst: vi.fn().mockResolvedValue(latestPayment) },
+        subscriptionPayment: { findFirst },
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sub = await svc.setTenantPlan("b", input as any, "actor");
-      return sub.renewsAt ? (sub.renewsAt as Date).toISOString() : null;
+      return {
+        iso: sub.renewsAt ? (sub.renewsAt as Date).toISOString() : null,
+        paymentQuery: findFirst.mock.calls[0]?.[0] as
+          | { where: Record<string, unknown>; orderBy: Record<string, unknown> }
+          | undefined,
+      };
     } finally {
       vi.useRealTimers();
     }
   };
-  const left20 = new Date(NOW.getTime() + 20 * DAY);
-  const coversUntil20 = left20; // a payment that covers through the same date, for the carry-over tests
+  const run = async (...args: Parameters<typeof runFull>) => (await runFull(...args)).iso;
+
+  const left20 = new Date(NOW.getTime() + 20 * DAY); // 2026-10-03, a live term
+  // Deliberately NOT equal to `left20`. Both earlier tests here set
+  // `coversUntil === renewsAt`, which made them pass with `base = current.renewsAt`
+  // — i.e. with the defect this rule exists to prevent — so the fixtures differ now.
+  const paidThrough40 = new Date(NOW.getTime() + 40 * DAY); // 2026-10-23
 
   it("re-saving the SAME plan and interval is a true no-op on renewsAt", async () => {
     expect(await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "monthly" }))
       .toBe(left20.toISOString());
   });
 
-  it("monthly -> annual carries the remaining paid time ONCE, from the last real payment's coversUntil", async () => {
+  it("a switch sets renewsAt to what the LEDGER is paid through, granting no term", async () => {
+    // The base is the payment's coversUntil, which is 40 days out while renewsAt is
+    // 20 days out: `base = current.renewsAt` gives a different (wrong) answer here.
     expect(
       await run(
         { plan: "pro", interval: "monthly", renewsAt: left20 },
         { plan: "pro", interval: "annual" },
-        { coversUntil: coversUntil20 },
+        { coversUntil: paidThrough40 },
       ),
-    ).toBe("2027-10-03T15:00:00.000Z");
+    ).toBe(paidThrough40.toISOString());
   });
 
-  it("four alternating switches add no unpaid term beyond one term from the correct base", async () => {
-    // Each switch is evaluated independently against the SAME underlying paid-through
-    // date (the payment's coversUntil never moves just because the admin flips the
-    // interval back and forth) — so annual, monthly, annual, monthly all land on the
-    // same one-term-out answer instead of stacking.
-    const paidThrough = { coversUntil: left20 };
+  it("looks up the latest SURVIVING payment by coversUntil, not the latest paidAt", async () => {
+    const { paymentQuery } = await runFull(
+      { plan: "pro", interval: "monthly", renewsAt: left20 },
+      { plan: "pro", interval: "annual" },
+      { coversUntil: paidThrough40 },
+    );
+    // A voided payment is money that was taken back; ordering by `paidAt` picks the
+    // most RECENTLY PAID row, which after a backdated catch-up payment is not the one
+    // that reaches furthest into the future. Both substitutions left 145 tests green.
+    expect(paymentQuery?.where).toEqual({ businessId: "b", voidedAt: null });
+    expect(paymentQuery?.orderBy).toEqual({ coversUntil: "desc" });
+  });
+
+  it("alternating switches never stack a term", async () => {
+    const ledger = { coversUntil: paidThrough40 };
     const toAnnual = await run(
       { plan: "pro", interval: "monthly", renewsAt: left20 },
       { plan: "pro", interval: "annual" },
-      paidThrough,
+      ledger,
     );
     const toMonthly = await run(
-      { plan: "pro", interval: "annual", renewsAt: left20 },
+      { plan: "pro", interval: "annual", renewsAt: paidThrough40 },
       { plan: "pro", interval: "monthly" },
-      paidThrough,
+      ledger,
     );
-    expect(toAnnual).toBe("2027-10-03T15:00:00.000Z");
-    expect(toMonthly).toBe("2026-11-03T15:00:00.000Z");
-    // Repeating the same two switches again lands on the SAME dates — no stacking.
-    expect(
-      await run(
-        { plan: "pro", interval: "monthly", renewsAt: left20 },
-        { plan: "pro", interval: "annual" },
-        paidThrough,
-      ),
-    ).toBe(toAnnual);
-    expect(
-      await run(
-        { plan: "pro", interval: "annual", renewsAt: left20 },
-        { plan: "pro", interval: "monthly" },
-        paidThrough,
-      ),
-    ).toBe(toMonthly);
+    expect(toAnnual).toBe(paidThrough40.toISOString());
+    expect(toMonthly).toBe(paidThrough40.toISOString());
   });
 
-  it("paid -> paid interval switch with no payment row (manual admin-set sub) falls back to today", async () => {
+  it("HIGH: a switch never moves renewsAt into the PAST, whatever the ledger says", async () => {
+    // Sub {pro, annual, renewsAt 2027-01-01} with one surviving payment covering only
+    // through 2026-03-01 (the others voided, or the term granted by hand). Basing the
+    // new term on that stale coversUntil produced 2026-03-29 — PAST_DUE — and the next
+    // revert sweep downgraded a live, paying tenant to free.
+    const granted = new Date("2027-01-01T00:00:00.000Z");
+    expect(
+      await run(
+        { plan: "pro", interval: "annual", renewsAt: granted },
+        { plan: "pro", interval: "monthly" },
+        { coversUntil: new Date("2026-03-01T00:00:00.000Z") },
+      ),
+    ).toBe(granted.toISOString());
+  });
+
+  it("MEDIUM: paid -> free -> paid keeps the paid time the ledger still shows", async () => {
+    // Setting free nulls renewsAt, so the only surviving record of the paid term is the
+    // ledger. Reading it only for a currently-PAID row destroyed it.
+    const annualPaidThrough = new Date("2027-06-01T00:00:00.000Z");
+    expect(
+      await run(
+        { plan: "free", interval: "annual", renewsAt: null },
+        { plan: "pro", interval: "monthly" },
+        { coversUntil: annualPaidThrough },
+      ),
+    ).toBe(annualPaidThrough.toISOString());
+  });
+
+  it("a switch on a manual sub with no payment row keeps its granted term", async () => {
     expect(
       await run({ plan: "pro", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "annual" }, null),
-    ).toBe("2027-09-13T15:00:00.000Z");
+    ).toBe(left20.toISOString());
   });
 
-  it("free -> pro starts today, ignoring a leftover renewsAt", async () => {
-    expect(await run({ plan: "free", interval: "monthly", renewsAt: left20 }, { plan: "pro", interval: "monthly" }))
+  it("free -> pro with nothing paid or granted ahead starts today", async () => {
+    expect(await run({ plan: "free", interval: "monthly", renewsAt: null }, { plan: "pro", interval: "monthly" }))
       .toBe("2026-10-13T15:00:00.000Z");
   });
 
@@ -118,6 +155,16 @@ describe("AdminService.setTenantPlan keeps paid time", () => {
     const lapsed = new Date(NOW.getTime() - 10 * DAY);
     expect(await run({ plan: "pro", interval: "monthly", renewsAt: lapsed }, { plan: "pro", interval: "monthly" }))
       .toBe("2026-10-13T15:00:00.000Z");
+  });
+
+  it("a lapsed ledger and a lapsed renewsAt start today, one term out", async () => {
+    expect(
+      await run(
+        { plan: "pro", interval: "annual", renewsAt: new Date(NOW.getTime() - 10 * DAY) },
+        { plan: "pro", interval: "annual" },
+        { coversUntil: new Date(NOW.getTime() - 5 * DAY) },
+      ),
+    ).toBe("2027-09-13T15:00:00.000Z");
   });
 
   it("no subscription row starts today", async () => {

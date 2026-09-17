@@ -309,6 +309,96 @@ describe("QuotesService.updateStatus", () => {
   });
 });
 
+/**
+ * `revise` copies every line of the original forward, `supplierId` included, and it
+ * is the ONLY write path that does so without the contractor naming the ids — so the
+ * check on them is invisible in the result. Deleting the `assertSuppliersOwned` call
+ * in `revise` left all 104 quote tests green, because every other fixture here has
+ * `lineItems: []`, which makes the call a no-op.
+ */
+describe("QuotesService.revise validates the supplier ids it copies forward", () => {
+  function serviceForReviseWithSupplier(supplierRows: { id: string }[]) {
+    const originalQuote = {
+      id: "q1",
+      businessId: "b1",
+      clientId: "cl1",
+      projectId: "job1",
+      status: QuoteStatus.ACCEPTED,
+      number: "QT-0100",
+      version: 1,
+      gctRate: 15,
+      discountPct: 0,
+      depositCents: 0,
+      validUntil: null,
+      terms: null,
+      subtotalCents: 1000,
+      gctCents: 150,
+      totalCents: 1150,
+      lineItems: [
+        {
+          id: "li1",
+          sectionId: null,
+          category: "MATERIAL",
+          description: "Cement",
+          quantity: 10,
+          rateUnit: "EACH",
+          unitLabel: null,
+          unitPriceCents: 100,
+          priceSource: "MANUAL",
+          supplierId: "sup_x",
+          gctTreatment: "STANDARD",
+          markupPct: null,
+          overrideNote: null,
+          jobId: null,
+          jobName: null,
+          jobUnit: null,
+          jobComponents: null,
+          sort: 0,
+        },
+      ],
+      sections: [],
+    };
+    const supplierFindMany = vi.fn().mockResolvedValue(supplierRows);
+    const tx = {
+      quote: { create: vi.fn().mockResolvedValue({ id: "q2" }), aggregate: vi.fn() },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: { create: vi.fn() },
+      supplier: { findMany: supplierFindMany },
+    };
+    const businessService = { reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0200") };
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce(originalQuote)
+          .mockResolvedValueOnce({ ...originalQuote, id: "q2" }),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+    return { svc, tx, supplierFindMany };
+  }
+
+  it("REFUSES to revise when a copied supplierId belongs to no visible supplier", async () => {
+    // A legacy id written before tenant checks existed, now resolving to another
+    // contractor's merchant: the revision must not silently carry it forward.
+    const { svc, tx } = serviceForReviseWithSupplier([]);
+    await expect(svc.revise("b1", "q1")).rejects.toThrow("Supplier not found");
+    expect(tx.quoteLineItem.create).not.toHaveBeenCalled();
+  });
+
+  it("checks the copied ids as grandfathered — owner or legacy NULL, deleted allowed", async () => {
+    const { svc, supplierFindMany } = serviceForReviseWithSupplier([{ id: "sup_x" }]);
+    await svc.revise("b1", "q1");
+    expect(supplierFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ["sup_x"] }, OR: [{ businessId: "b1" }, { businessId: null }] },
+      select: { id: true },
+    });
+  });
+});
+
 describe("QuotesService.revise", () => {
   function serviceForRevise(original: {
     status: QuoteStatus;
@@ -1357,6 +1447,10 @@ describe("QuotesService — supplierId on line items is not a capability (S7)", 
     // entirely (S-review fix for the grandfathering gap: a pre-S7 foreign id
     // must not be checked exactly zero times, forever). No `deletedAt`
     // filter on this query, which is what lets the soft-deleted case through.
+    // The owner test is `businessId in [b1, null]`: a legacy row with NO owner is
+    // unreachable platform data that no tenant can see, and refusing one bricked a
+    // quote that already referenced it (LineItemsEditor has no supplier control to
+    // fix the line with). Another TENANT's id is still refused — see the next test.
     const { svc, prisma } = updateHarness(draftWithSupplierLine);
     prisma.supplier.findMany.mockResolvedValue([{ id: "sup-old" }]); // still belongs to b1
     await svc.update("b1", "q2", {
@@ -1364,7 +1458,7 @@ describe("QuotesService — supplierId on line items is not a capability (S7)", 
     } as never);
     expect(prisma.supplier.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: { in: ["sup-old"] }, businessId: "b1" },
+        where: { id: { in: ["sup-old"] }, OR: [{ businessId: "b1" }, { businessId: null }] },
       }),
     );
   });

@@ -352,6 +352,79 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Both review halves fixed (2026-09-17) - gate 2124 tests, 0 failures
+
+- **Renewal rule restated:** a plan/interval switch RE-PRICES; it never buys or destroys
+  time. `renewsAt` becomes, in order: unchanged on a same-plan re-save; the ledger's
+  latest non-voided `coversUntil` if future; the current `renewsAt` if future (a
+  hand-granted term is kept, not shortened); else one term from today. Both carried
+  branches are gated `> from`, so the function can only move forwards - that closes the
+  past-dating regression structurally rather than by case. It matches `reallocateTerms`,
+  the only other writer, which recomputes from the ledger alone, so the console and the
+  sweep now agree and the next payment visibly extends the term.
+- **Legacy NULL-owner suppliers are accepted when already on the document** (Prisma `OR`,
+  not a cast over the tenant boundary); another tenant's id is still refused.
+- `resolveClientName` honours every `lastName !== undefined`, trimmed, blank clears.
+- **Guards:** `||`/`&&`, two-statement accessors, `-=`/`+=` and `===`/`!==`/`==`/`!=` all
+  close; five edit buttons gained WIRING tests, so reverting a button to its create
+  builder now fails; audit call sites are pinned by `file:line`, so a second writer of an
+  already-registered action fails until someone tests it.
+- Every fix was watched failing first, and the previously vacuous tests were rewritten
+  (fixtures where `coversUntil === renewsAt`, and a fake that answered the tenant question
+  itself). I re-planted the forward-only floor removal myself: 3 failures.
+
+## Branch review, money/tenancy half (2026-09-17)
+
+Verdict: NOT mergeable. My own "keep paid time" fix caused three of these. All executed:
+- **HIGH - a plan switch can set `renewsAt` in the PAST**, because the base is the last
+  surviving payment's `coversUntil` with no floor at now: an annual sub paid through
+  2026-03-01 but renewing 2027-01-01 lands on 2026-03-29, reads PAST_DUE, and the next
+  sweep downgrades a LIVE paying tenant to free and emails REVERTED. The old
+  max(now, renewsAt) could never go backwards - this is a regression I introduced.
+- **HIGH - a legacy NULL-owner supplier bricks a quote:** the grandfather check demands a
+  matching businessId, but the schema documents legacy `Supplier.businessId = NULL` rows
+  that quote lines still reference; update, revise and convert all 404, and
+  `LineItemsEditor` has NO supplier control, so the contractor cannot fix the line. The
+  "refuse rather than silently change a financial reference" decision assumed a recovery
+  path that does not exist.
+- **MEDIUM - paid -> free -> paid destroys paid time** (7.5 months in the probe);
+  **the console and the sweep disagree after a switch** (one unpaid term granted, and the
+  next real payment then moves nothing because `reallocateTerms` recomputes from the
+  ledger); **`resolveClientName` handles only `null`**, so a surname-only rename or a
+  `""`/whitespace clear is accepted and silently discarded with a 200.
+- **Four claims had no test that fails without them:** the headline `coversUntil` base
+  (both fixtures set coversUntil === renewsAt), `voidedAt: null` + `orderBy coversUntil
+  desc`, the `revise` supplier check, and a vacuous foreign-id test.
+Sound: no-op re-save, alternation no longer compounds, identical 404 bodies, empty/null id
+lists issue no queries, `allowIds` always from the persisted document.
+
+**Lessons:** (1) a "carry what was paid" rule needs a floor at now AND a ceiling at the
+ledger, or it moves time in both directions; (2) refusing to save is only acceptable if a
+UI path exists to fix the refused data - check the screen, not just the endpoint; (3) a
+fixture where two fields are equal cannot prove which one the code read.
+
+## Branch review, guards/forms half (2026-09-17)
+
+Verdict: NOT mergeable yet. Three confirmed, all fixes in progress:
+- **The material-clearing fix has no test at the wiring:** reverting `EditMaterialButton`
+  to the CREATE builder left all 624 web tests green - taxonomy shape 2, a correct helper
+  no screen calls, which is the very bug being fixed. Render tests being added for it and
+  for the labour/equipment/client/project edit buttons.
+- **Four spellings defeat the retention guard** (executed): `|| 0` instead of `?? 0` (one
+  character past the last fix), `paid === total` (equality ops were never in the compare
+  set), `b -= inv.paidCents` (compound assignment), and a two-statement accessor.
+- **A second writer of an already-registered audit action is never inspected**, so
+  `details: { negotiatedPrice: dto.amountCents }` under `tenant.suspend` would ship
+  unredacted. Pinning discovered call sites by file:line.
+Sound: the parser package is dev-only and reaches no web bundle; all 16 exports survived
+the move; a clean `npm ci && npm test` needs no manual build (turbo orders test-ast#build
+first, verified by deleting dist and the cache); redaction is default-deny; clearing
+coverage/waste cannot change a saved quote, because those are snapshotted at pick time.
+
+**Lesson (recurring, now three times):** a guard fixed for one spelling gets defeated by
+the next spelling of the same class - `??` closed, `||` open; `<`/`>` closed, `===` open.
+Enumerate the whole operator/wrapper family when touching the parser, not the instance.
+
 ## START HERE next session (weekly limit at 96%, 2026-09-13)
 
 Last pushed commit: 3ee4577, gate green. Three agents were in flight and may have died;

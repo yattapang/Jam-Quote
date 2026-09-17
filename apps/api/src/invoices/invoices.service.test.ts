@@ -500,7 +500,12 @@ describe("InvoicesService — supplierId on line items is not a capability (S7)"
       lineItems: [{ ...line, supplierId: "sup-old" }],
     } as any);
     expect(prisma.supplier.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: { in: ["sup-old"] }, businessId: "b1" } }),
+      // `businessId in [b1, null]`: an OWNERLESS legacy row is unreachable platform
+      // data that must not brick an invoice already referencing it; another tenant's
+      // id is still refused (next test).
+      expect.objectContaining({
+        where: { id: { in: ["sup-old"] }, OR: [{ businessId: "b1" }, { businessId: null }] },
+      }),
     );
   });
 

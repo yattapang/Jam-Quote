@@ -141,6 +141,48 @@ function auditSites(file: string): Site[] {
 const sites = sourceFiles(API_SRC).flatMap(auditSites);
 const discovered = new Set(sites.flatMap((s) => s.actions ?? []));
 
+/**
+ * `file:line` call sites per REGISTERED action, so a second writer of an already-covered
+ * action cannot ship unexamined. Keying the guard by action alone (as this file used to)
+ * meant a NEW call site writing `details` under an EXISTING action — e.g. a second place
+ * that writes `tenant.suspend` with `details: { negotiatedPrice: dto.amountCents }` —
+ * changed nothing the guard looked at, because the first call site for that action was
+ * already exercised above. Pinning the exact site SET means a new site changes the set
+ * and fails here until a behavioural test (in the describe block below) exercises it too.
+ */
+function sitesByAction(): Map<string, string[]> {
+  const byAction = new Map<string, string[]>();
+  for (const s of sites) {
+    for (const a of s.actions ?? []) {
+      if (!NON_FINANCIAL_AUDIT_ACTIONS.has(a)) continue;
+      byAction.set(a, [...(byAction.get(a) ?? []), s.where]);
+    }
+  }
+  for (const list of byAction.values()) list.sort();
+  return byAction;
+}
+
+/** Baseline captured when this guard was written — one call site per registered action,
+ * each covered by a behavioural test below. Update this ONLY alongside a new behavioural
+ * test that exercises the added or moved site. */
+const KNOWN_AUDIT_SITES: Record<string, string[]> = {
+  "admin.promote": ["admin/admin.service.ts:855"],
+  "admin.revoke": ["admin/admin.service.ts:957"],
+  "admin.update": ["admin/admin.service.ts:915"],
+  "regulatory.create": ["admin/admin.service.ts:477"],
+  "regulatory.delete": ["admin/admin.service.ts:554"],
+  "regulatory.reopen": ["admin/admin.service.ts:534"],
+  "regulatory.review": ["admin/admin.service.ts:534"],
+  "regulatory.update": ["admin/admin.service.ts:508"],
+  "rulepack.update": ["rulepack/rulepack.service.ts:305"],
+  "subscription.sweep.manual": ["admin/admin.controller.ts:296"],
+  "subscription.sweep.manual.failed": ["admin/admin.controller.ts:305"],
+  "tenant.delete": ["admin/admin.service.ts:428"],
+  "tenant.impersonate": ["admin/admin.service.ts:282"],
+  "tenant.restore": ["admin/admin.service.ts:396"],
+  "tenant.suspend": ["admin/admin.service.ts:374"],
+};
+
 describe("audit call sites are discovered, not listed", () => {
   it("finds call sites in every file that records today, so a rename cannot empty the guard", () => {
     const files = new Set(sites.map((s) => s.file));
@@ -165,6 +207,15 @@ describe("audit call sites are discovered, not listed", () => {
 
   it("discovery also sees the REDACTED actions, so it is not merely echoing the allow-list", () => {
     expect([...discovered].filter((a) => !NON_FINANCIAL_AUDIT_ACTIONS.has(a)).length).toBeGreaterThan(0);
+  });
+
+  it("every registered action's call-site SET matches the pinned baseline — a new or moved site fails until a behavioural test covers it", () => {
+    const actual = sitesByAction();
+    const actualObj = Object.fromEntries([...actual].map(([a, ws]) => [a, [...ws].sort()]));
+    const knownObj = Object.fromEntries(
+      Object.entries(KNOWN_AUDIT_SITES).map(([a, ws]) => [a, [...ws].sort()]),
+    );
+    expect(actualObj).toEqual(knownObj);
   });
 
   it("the sentinel detector fires on a copied column under any key, and not on a fixtured value", () => {

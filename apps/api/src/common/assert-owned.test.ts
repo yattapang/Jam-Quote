@@ -103,14 +103,24 @@ describe("assertProjectOwned", () => {
  * liveness check vs. ownership-only) cannot drift back apart the way the
  * private copy once did.
  */
+/**
+ * Applies ONLY the filters the query asks for, resolved key by key.
+ *
+ * The earlier version of this fake hard-coded `r.businessId === where.businessId`, so
+ * it answered the tenant question itself and the foreign-id test below was vacuous:
+ * with `businessId` deleted from the real query, `where.businessId` became
+ * `undefined`, matched no row, and the foreign id was still "refused" — by the fake,
+ * not by the code. Driving the match off `where` means dropping a filter shows up as
+ * a row that should not have matched.
+ */
 function fakeLabourDb(rows: { id: string; businessId: string; deletedAt?: Date | null }[]) {
   const findFirst = vi.fn(({ where }: { where: Record<string, unknown> }) =>
     Promise.resolve(
-      rows.find(
-        (r) =>
-          r.id === where.id &&
-          r.businessId === where.businessId &&
-          (!("deletedAt" in where) || (r.deletedAt ?? null) === (where.deletedAt ?? null)),
+      rows.find((r) =>
+        Object.entries(where).every(
+          ([key, expected]) =>
+            ((r as unknown as Record<string, unknown>)[key] ?? null) === (expected ?? null),
+        ),
       ) ?? null,
     ),
   );
@@ -142,6 +152,15 @@ describe("assertLabourRateOwned", () => {
     });
     await expect(foreign).rejects.toThrow("Labour rate not found");
     await expect(madeUp).rejects.toThrow("Labour rate not found");
+    // The fake above matches on whatever `where` contains, so this refusal comes from
+    // the query's own `businessId`, not from the fake pre-filtering by tenant.
+    const db = fakeLabourDb([THEIRS]);
+    await expect(
+      assertLabourRateOwned(db, "biz_1", "lr_theirs", { allowDeleted: true }),
+    ).rejects.toThrow("Labour rate not found");
+    const where = (db as unknown as { labourRate: { findFirst: { mock: { calls: unknown[][] } } } })
+      .labourRate.findFirst.mock.calls[0]![0] as { where: Record<string, unknown> };
+    expect(where.where).toHaveProperty("businessId", "biz_1");
   });
 
   it("with allowDeleted, queries without a deletedAt filter at all", async () => {

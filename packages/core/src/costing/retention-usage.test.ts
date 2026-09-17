@@ -130,6 +130,13 @@ const COMPARE_OPS = new Set([
   ts.SyntaxKind.GreaterThanEqualsToken,
   ts.SyntaxKind.LessThanToken,
   ts.SyntaxKind.LessThanEqualsToken,
+  // Equality reads the retention state just as much as ordering does:
+  // "settled when paid equals total" (inv.paidCents === inv.totalCents) is the
+  // defect this guard exists for, and === / !== / == / != all express it.
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
 ]);
 
 /**

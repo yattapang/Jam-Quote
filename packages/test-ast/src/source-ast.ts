@@ -1208,9 +1208,12 @@ function bindingElementIsStatic(el: ts.BindingElement, ctx: Ctx): boolean {
  * `unwrap`, plus the wrappers that keep a NUMBER's value for arithmetic: unary `+`, a
  * call to the GLOBAL `Number` (one resolving to no declaration in the file - a local
  * `Number` is not unwrapped), and `x ?? <static fallback>` (`a?.totalCents ?? 0` is still
- * the total wherever one exists). A NON-static fallback (`a ?? b`) is not unwrapped: which
- * side wins is data. Unary minus is not a wrapper - see `additiveTerms`. Optional chaining
- * needs nothing: `a?.x` is a property read.
+ * the total wherever one exists). `x || <static fallback>` and `x && <static fallback>`
+ * are unwrapped the same way (`(a.totalCents || 0) - (a.paidCents || 0)` is still the
+ * total minus the paid), and so is the mirror-image `<static fallback> || x` /
+ * `<static fallback> && x` for a static LEFT side. A NON-static fallback (`a ?? b`) is
+ * not unwrapped: which side wins is data. Unary minus is not a wrapper - see
+ * `additiveTerms`. Optional chaining needs nothing: `a?.x` is a property read.
  */
 export function unwrapValue(expr: ts.Expression): ts.Expression {
   let e = unwrap(expr);
@@ -1228,11 +1231,18 @@ export function unwrapValue(expr: ts.Expression): ts.Expression {
     }
     if (
       ts.isBinaryExpression(e) &&
-      e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
-      analyseStatic(e.right).static
+      (e.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken ||
+        e.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
     ) {
-      e = unwrap(e.left);
-      continue;
+      if (analyseStatic(e.right).static) {
+        e = unwrap(e.left);
+        continue;
+      }
+      if (analyseStatic(e.left).static) {
+        e = unwrap(e.right);
+        continue;
+      }
     }
     return e;
   }
@@ -1290,6 +1300,28 @@ function accessorProperty(call: ts.CallExpression): string | undefined {
   else if (fn.body.statements.length === 1) {
     const only = fn.body.statements[0]!;
     if (ts.isReturnStatement(only)) returned = only.expression;
+  } else if (fn.body.statements.length === 2) {
+    // `const x = a.totalCents; return x;` - a single-assignment-then-return body reads
+    // exactly what the single-return body above reads; only the split across two
+    // statements differs, so it is followed the same way.
+    const first = fn.body.statements[0]!;
+    const second = fn.body.statements[1]!;
+    if (
+      ts.isVariableStatement(first) &&
+      first.declarationList.declarations.length === 1 &&
+      ts.isReturnStatement(second)
+    ) {
+      const decl = first.declarationList.declarations[0]!;
+      if (
+        ts.isIdentifier(decl.name) &&
+        decl.initializer &&
+        second.expression &&
+        ts.isIdentifier(second.expression) &&
+        second.expression.text === decl.name.text
+      ) {
+        returned = decl.initializer;
+      }
+    }
   }
   if (!returned) return undefined;
   const read = unwrapValue(returned);
@@ -1346,11 +1378,31 @@ function resolveReadInner(expr: ts.Expression, seen: Set<ts.Node>): ResolvedRead
   return other;
 }
 
+/** The single initializer of a local declared exactly once, ignoring whether it is later
+ * written elsewhere. Used only to read `x`'s value going INTO a compound assignment
+ * `x -= e` / `x += e` - the write the assignment itself performs is not a reason to
+ * refuse reading the value it started from. */
+function soleDeclarationInitializer(id: ts.Identifier): ts.Expression | undefined {
+  const fc = fileContext(id);
+  const sym = resolve(id, fc);
+  if (!sym || isImport(sym)) return undefined;
+  const decls = valueDeclarations(sym);
+  if (decls.length !== 1) return undefined;
+  const d = decls[0]!;
+  return ts.isVariableDeclaration(d) && ts.isIdentifier(d.name) ? d.initializer : undefined;
+}
+
 /**
  * An additive chain flattened into signed terms. `s + a.total - a.paid` parses as
  * `(s + a.total) - a.paid`, which no single binary node pairs; flattened it is
  * `[+s, +a.total, -a.paid]`. Flattens through parens/`as`/`!`/`satisfies`, unary minus
  * (flipping the sign) and unary plus. It cannot tell `+` from string concatenation.
+ *
+ * `x -= e` / `x += e` is a chain over `x` and `e` too: `let b = a.total; b -= a.paid;`
+ * reads the same as `a.total - a.paid`, just split across two statements. `x`'s term is
+ * its own declaration's initializer when it has exactly one (see
+ * `soleDeclarationInitializer`) - not a generic alias read, since the compound
+ * assignment IS a write to `x` and would otherwise taint it against itself.
  */
 export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 | -1; expr: ts.Expression }[] {
   const e = unwrap(expr);
@@ -1361,6 +1413,17 @@ export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 
   if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.MinusToken) {
     return [...additiveTerms(e.left, sign), ...additiveTerms(e.right, flip(sign))];
   }
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) {
+    const leftInit = ts.isIdentifier(e.left) ? soleDeclarationInitializer(e.left) : undefined;
+    return [...(leftInit ? additiveTerms(leftInit, sign) : [{ sign, expr: e.left }]), ...additiveTerms(e.right, sign)];
+  }
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken) {
+    const leftInit = ts.isIdentifier(e.left) ? soleDeclarationInitializer(e.left) : undefined;
+    return [
+      ...(leftInit ? additiveTerms(leftInit, sign) : [{ sign, expr: e.left }]),
+      ...additiveTerms(e.right, flip(sign)),
+    ];
+  }
   if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken) return additiveTerms(e.operand, flip(sign));
   if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.PlusToken) return additiveTerms(e.operand, sign);
   return [{ sign, expr: e }];
@@ -1368,7 +1431,10 @@ export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 
 
 const isAdditive = (n: ts.Node): n is ts.BinaryExpression =>
   ts.isBinaryExpression(n) &&
-  (n.operatorToken.kind === ts.SyntaxKind.PlusToken || n.operatorToken.kind === ts.SyntaxKind.MinusToken);
+  (n.operatorToken.kind === ts.SyntaxKind.PlusToken ||
+    n.operatorToken.kind === ts.SyntaxKind.MinusToken ||
+    n.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken ||
+    n.operatorToken.kind === ts.SyntaxKind.MinusEqualsToken);
 
 /**
  * Every MAXIMAL additive chain under `root` - a `+`/`-` expression that is not itself a

@@ -142,35 +142,50 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 // month-end overflow bug that `nextTermEnd` in core now fixes in one shared
 // place. Spend that instead of keeping a second copy here.
 //
-// Paid time already on the account is carried, not discarded. The rule:
-// - on a paid plan now, whatever the interval -> the new term runs from the LATER of
-//   now and the current `renewsAt`, exactly as an early payment does. That includes
-//   monthly -> annual: the days were paid for whatever the cadence, and there is no
-//   proration ledger to turn them into credit, so keeping them on the clock is the
-//   only lossless option.
-// - on free now -> the term runs from now. A free row's `renewsAt` is a leftover of a
-//   term that already ended (the revert sweep changes the plan only), so it holds no
-//   paid time to carry.
-// Fix (S-review, admin-service): the plan/interval-unchanged case used to
-// fall straight into the "carry paid time" branch below, which extends from
-// max(now, current.renewsAt) on EVERY call regardless of whether anything
-// actually changed. Re-saving the same plan, or alternating annual<->monthly
-// back and forth, kept adding a fresh term on top of the one already paid
-// for, with no new SubscriptionPayment ever recorded. Two rules close that:
+// THE RULE, in one sentence: a plan/interval switch RE-PRICES the subscription;
+// it never buys or destroys time, so `renewsAt` afterwards is the furthest date
+// the tenant has already been paid up to or granted — and never a date in the
+// past.
 //
-// 1. Same plan AND same interval as what is already on the row -> true
-//    no-op. Nothing about the commercial term changed, so renewsAt must not
-//    move at all (this is what a "re-save" must do).
-// 2. Paid -> paid with a DIFFERENT plan or interval -> the remaining paid
-//    time is carried, but only ONCE: from the most recent real (non-voided)
-//    SubscriptionPayment's `coversUntil`, not from `current.renewsAt`. Using
-//    `renewsAt` as the base is exactly what stacked, because after the first
-//    switch renewsAt already includes the carried time from the switch
-//    before it — chaining off it compounds. `coversUntil` reflects what was
-//    actually paid for and does not move just because the interval flipped.
-//    Manual admin-set subscriptions may have no payment row at all (never
-//    actually paid), so this falls back to `from` (today) rather than any
-//    stored date.
+// In precedence order:
+//  1. Same plan AND same interval on a live term -> a true no-op. Nothing about
+//     the commercial term changed, so `renewsAt` must not move at all. (This is
+//     what a re-save must do; without it, alternating annual<->monthly stacked a
+//     fresh term on every call with no payment ever recorded.)
+//  2. The LEDGER's paid-through (the latest non-voided `coversUntil`), when it is
+//     still in the future. This is the authoritative figure and no term is added.
+//  3. Otherwise the current `renewsAt`, when THAT is still in the future — a term
+//     an admin granted by hand, with no payment behind it. Kept, not shortened.
+//  4. Otherwise one term from today: nothing is paid or granted ahead, so this is
+//     the admin putting a lapsed or brand-new tenant back on the clock.
+//
+// ## Why the ledger and not `renewsAt`, and why no new term
+//
+// This has to match `SubscriptionPaymentsService.reallocateTerms`, which is the
+// only other writer of `renewsAt` and which recomputes it from the ledger alone
+// on every payment recorded and every payment voided. Any date a switch invents
+// that the ledger does not back is therefore temporary: the next real payment
+// silently overwrites it. That produced two visible defects.
+//
+//  - Granting a term on a switch made the console and the sweep disagree:
+//    monthly -> annual read `renewsAt` a year out while the ledger said one month,
+//    so an unpaid year was on the clock. Recording the real annual payment then
+//    moved nothing, because `reallocateTerms` recomputed from the ledger and
+//    landed on the same date the switch had already claimed — a payment that
+//    visibly did nothing. With the rule above, the switch leaves paid-through
+//    alone and that payment extends it by a full term, which is what it bought.
+//  - Basing the new term on `coversUntil` UNCONDITIONALLY put `renewsAt` in the
+//    PAST whenever the surviving ledger lagged the row (payments voided, or a term
+//    granted by hand): `{pro, annual, renewsAt 2027-01-01}` with one payment
+//    covering to 2026-03-01 switched to monthly gave 2026-03-29, which reads as
+//    PAST_DUE, so the revert sweep downgraded a live paying tenant to free and
+//    emailed them. Steps 2 and 3 are both gated on being in the future for that
+//    reason: this function can only ever move `renewsAt` forwards, or leave it.
+//
+// A FUTURE `coversUntil` wins whatever the current plan says, including `free`.
+// Setting a tenant free nulls `renewsAt`, so after paid -> free -> paid the ledger
+// is the only surviving record of the term they bought; reading it only for a
+// currently-paid row destroyed that paid time.
 function nextRenewal(
   interval: string,
   current: { plan: string; interval: string; renewsAt: Date | null } | null,
@@ -180,11 +195,13 @@ function nextRenewal(
 ): Date | null {
   if (samePlanAndInterval) return current?.renewsAt ?? null;
 
-  const renewsAt = current?.renewsAt ? current.renewsAt.toISOString() : null;
-  const paidNow =
-    !!current && subscriptionStanding({ ...current, renewsAt }, from) !== SubscriptionStanding.FREE;
-  const base = paidNow ? (latestPaymentCoversUntil ?? from) : from;
-  return nextTermEnd(interval, null, base);
+  if (latestPaymentCoversUntil && latestPaymentCoversUntil.getTime() > from.getTime()) {
+    return latestPaymentCoversUntil;
+  }
+  if (current?.renewsAt && current.renewsAt.getTime() > from.getTime()) {
+    return current.renewsAt;
+  }
+  return nextTermEnd(interval, null, from);
 }
 
 /**

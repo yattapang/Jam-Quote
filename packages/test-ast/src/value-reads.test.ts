@@ -33,10 +33,22 @@ describe("resolveRead", () => {
     ["optional chaining", "a?.totalCents"],
     ["?? with a static fallback", "(a?.totalCents ?? 0)"],
     ["?? with a static fallback behind a cast", "((a?.totalCents as number) ?? 0)"],
+    ["|| with a static fallback — an independent review's bypass", "(a.totalCents || 0)"],
+    ["&& with a static fallback", "(a.totalCents && 1)"],
     ["global Number", "Number(a.totalCents)"],
     ["unary plus", "+a.totalCents"],
   ])("%s", (_l, expr) => {
     expect(resolveRead(probe(expr, "declare const a: any;")).read).toEqual(prop("totalCents"));
+  });
+
+  it("does not unwrap || over a NON-static fallback — which side wins is data", () => {
+    expect(resolveRead(probe("a.totalCents || b.taxCents", "declare const a: any, b: any;")).read.kind).toBe("other");
+  });
+
+  it("a single-assignment-then-return accessor body — an independent review's bypass", () => {
+    expect(
+      resolveRead(probe("totalOf(inv)", "const totalOf = (a) => { const x = a.totalCents; return x; };")).read,
+    ).toEqual(prop("totalCents"));
   });
 
   it("does not unwrap ?? over a NON-static fallback — which side wins is data", () => {
@@ -94,6 +106,19 @@ describe("additiveTerms and additiveChains", () => {
   it("returns one maximal chain per expression, including one inside a reduce callback", () => {
     const sf = parseSource("r.ts", "xs.reduce((s, a) => s + a.totalCents - a.paidCents, 0); const y = -(p + q) + r;");
     expect(additiveChains(sf).map((c) => c.getText())).toEqual(["s + a.totalCents - a.paidCents", "-(p + q) + r"]);
+  });
+
+  it("treats `x -= e` as a chain over x's own initializer and e — an independent review's bypass", () => {
+    const sf = parseSource("c.ts", "let b = a.totalCents; b -= a.paidCents;");
+    const [chain] = additiveChains(sf);
+    expect(chain?.getText()).toBe("b -= a.paidCents");
+    expect(signed(chain!)).toEqual(["+a.totalCents", "-a.paidCents"]);
+  });
+
+  it("treats `x += e` as a chain over x's own initializer and e", () => {
+    const sf = parseSource("c.ts", "let b = a.totalCents; b += a.paidCents;");
+    const [chain] = additiveChains(sf);
+    expect(signed(chain!)).toEqual(["+a.totalCents", "+a.paidCents"]);
   });
 });
 
