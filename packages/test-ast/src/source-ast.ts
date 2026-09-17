@@ -1392,6 +1392,92 @@ function soleDeclarationInitializer(id: ts.Identifier): ts.Expression | undefine
   return ts.isVariableDeclaration(d) && ts.isIdentifier(d.name) ? d.initializer : undefined;
 }
 
+/** `-1` behind any number of parens/`as`/`!`/`satisfies` — a literal sign flip. */
+function isNegativeOneLiteral(expr: ts.Expression): boolean {
+  const e = unwrap(expr);
+  return ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(e.operand) && e.operand.text === "1";
+}
+
+/**
+ * When `id` is read as a term of an additive chain that is exactly the right-hand side of
+ * `id = <that chain>` (a PLAIN reassignment, not `+=`/`-=`), the value `id` held going IN
+ * is its own declaration's initializer — the same fact `x -= e` reads via
+ * `soleDeclarationInitializer`, just spelled as ordinary assignment instead of a compound
+ * operator: `let b = a.totalCents; b = b - a.paidCents;` is exactly `b -= a.paidCents` one
+ * keystroke away. Climbs through the same wrappers `additiveChains` does, so the chain need
+ * not be the assignment's immediate child. Returns `undefined` for every other identifier,
+ * including one merely read (not reassigned) nearby — this is not general dataflow, only
+ * the self-referential shape a compound assignment already covers.
+ */
+function selfReassignmentInitializer(id: ts.Identifier): ts.Expression | undefined {
+  let cur: ts.Node = id;
+  for (;;) {
+    const p: ts.Node = cur.parent;
+    if (
+      ts.isParenthesizedExpression(p) ||
+      ts.isAsExpression(p) ||
+      ts.isSatisfiesExpression(p) ||
+      ts.isNonNullExpression(p) ||
+      ts.isTypeAssertionExpression(p) ||
+      (ts.isPrefixUnaryExpression(p) && (p.operator === ts.SyntaxKind.MinusToken || p.operator === ts.SyntaxKind.PlusToken)) ||
+      isAdditive(p)
+    ) {
+      cur = p;
+      continue;
+    }
+    break;
+  }
+  const assign = cur.parent;
+  if (
+    assign &&
+    ts.isBinaryExpression(assign) &&
+    assign.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+    assign.right === cur &&
+    ts.isIdentifier(assign.left) &&
+    assign.left.text === id.text
+  ) {
+    return soleDeclarationInitializer(assign.left);
+  }
+  return undefined;
+}
+
+/**
+ * True for `x.reduce((a, b) => a + b, 0)` (or without the seed): a reduce whose callback
+ * merely adds its two parameters, over an array LITERAL — `[total, -paid].reduce(...)` is
+ * an additive chain over the literal's own elements, each already signed the ordinary way
+ * (a unary `-` on an element is a term of negative sign). Refuses a block body with more
+ * than a bare return, parameters that are not both plain identifiers, or an accumulator
+ * array built any way other than a literal (a variable, a `.map` result, a spread) — those
+ * stay unfollowed on purpose, see the file-level comment on `additiveTerms`.
+ */
+function reduceSumArrayLiteral(node: ts.Node): ts.ArrayLiteralExpression | undefined {
+  if (!ts.isCallExpression(node)) return undefined;
+  const callee = unwrap(node.expression);
+  if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "reduce") return undefined;
+  const arr = unwrap(callee.expression);
+  if (!ts.isArrayLiteralExpression(arr)) return undefined;
+  const fn = node.arguments[0] && unwrap(node.arguments[0]);
+  if (!fn || (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn))) return undefined;
+  if (fn.parameters.length < 2) return undefined;
+  const [pa, pb] = fn.parameters;
+  if (!ts.isIdentifier(pa!.name) || !ts.isIdentifier(pb!.name)) return undefined;
+  let body: ts.Expression | undefined = ts.isBlock(fn.body) ? undefined : fn.body;
+  if (ts.isBlock(fn.body)) {
+    if (fn.body.statements.length !== 1) return undefined;
+    const only = fn.body.statements[0]!;
+    if (!ts.isReturnStatement(only) || !only.expression) return undefined;
+    body = only.expression;
+  }
+  const sum = unwrap(body!);
+  if (!ts.isBinaryExpression(sum) || sum.operatorToken.kind !== ts.SyntaxKind.PlusToken) return undefined;
+  const l = unwrap(sum.left);
+  const r = unwrap(sum.right);
+  const aName = (pa!.name as ts.Identifier).text;
+  const bName = (pb!.name as ts.Identifier).text;
+  if (ts.isIdentifier(l) && l.text === aName && ts.isIdentifier(r) && r.text === bName) return arr;
+  return undefined;
+}
+
 /**
  * An additive chain flattened into signed terms. `s + a.total - a.paid` parses as
  * `(s + a.total) - a.paid`, which no single binary node pairs; flattened it is
@@ -1402,16 +1488,32 @@ function soleDeclarationInitializer(id: ts.Identifier): ts.Expression | undefine
  * reads the same as `a.total - a.paid`, just split across two statements. `x`'s term is
  * its own declaration's initializer when it has exactly one (see
  * `soleDeclarationInitializer`) - not a generic alias read, since the compound
- * assignment IS a write to `x` and would otherwise taint it against itself.
+ * assignment IS a write to `x` and would otherwise taint it against itself. A plain
+ * `x = <chain containing x>` reads the same way, via `selfReassignmentInitializer`.
+ *
+ * A sign flip is not only unary minus: `* -1` and `-1 *` and `/ -1` are the same flip
+ * spelled as multiplication or division by a negative-one literal, and are unwrapped the
+ * same way. `[a, -b].reduce((x, y) => x + y, 0)` is a chain over the array's own elements
+ * (see `reduceSumArrayLiteral`) — a multiplication by any OTHER factor, or a reducer that
+ * does anything but add its two parameters, is data and stops the flattening there.
  */
 export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 | -1; expr: ts.Expression }[] {
   const e = unwrap(expr);
   const flip = (s: 1 | -1): 1 | -1 => (s === 1 ? -1 : 1);
+  const reduceArr = reduceSumArrayLiteral(e);
+  if (reduceArr) return reduceArr.elements.flatMap((el) => additiveTerms(el as ts.Expression, sign));
   if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusToken) {
     return [...additiveTerms(e.left, sign), ...additiveTerms(e.right, sign)];
   }
   if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.MinusToken) {
     return [...additiveTerms(e.left, sign), ...additiveTerms(e.right, flip(sign))];
+  }
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.AsteriskToken) {
+    if (isNegativeOneLiteral(e.right)) return additiveTerms(e.left, flip(sign));
+    if (isNegativeOneLiteral(e.left)) return additiveTerms(e.right, flip(sign));
+  }
+  if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.SlashToken && isNegativeOneLiteral(e.right)) {
+    return additiveTerms(e.left, flip(sign));
   }
   if (ts.isBinaryExpression(e) && e.operatorToken.kind === ts.SyntaxKind.PlusEqualsToken) {
     const leftInit = ts.isIdentifier(e.left) ? soleDeclarationInitializer(e.left) : undefined;
@@ -1426,6 +1528,10 @@ export function additiveTerms(expr: ts.Expression, sign: 1 | -1 = 1): { sign: 1 
   }
   if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken) return additiveTerms(e.operand, flip(sign));
   if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.PlusToken) return additiveTerms(e.operand, sign);
+  if (ts.isIdentifier(e)) {
+    const selfInit = selfReassignmentInitializer(e);
+    if (selfInit) return additiveTerms(selfInit, sign);
+  }
   return [{ sign, expr: e }];
 }
 
@@ -1439,10 +1545,12 @@ const isAdditive = (n: ts.Node): n is ts.BinaryExpression =>
 /**
  * Every MAXIMAL additive chain under `root` - a `+`/`-` expression that is not itself a
  * term of an enclosing one (looking up through wrappers and unary `+`/`-`) - so each
- * chain is judged exactly once.
+ * chain is judged exactly once. Also every `[...].reduce((a, b) => a + b, 0)` whose array
+ * is a literal (see `reduceSumArrayLiteral`) - a different node shape holding the same
+ * fact, so it is reported alongside rather than folded into `isAdditive`.
  */
-export function additiveChains(root: ts.Node): ts.BinaryExpression[] {
-  return collect(root, isAdditive).filter((node) => {
+export function additiveChains(root: ts.Node): ts.Expression[] {
+  const plus = collect(root, isAdditive).filter((node) => {
     let cur: ts.Node = node;
     for (;;) {
       const p: ts.Node = cur.parent;
@@ -1461,6 +1569,78 @@ export function additiveChains(root: ts.Node): ts.BinaryExpression[] {
       return !isAdditive(p);
     }
   });
+  const reduces = collect(root, ts.isCallExpression).filter((n) => reduceSumArrayLiteral(n) !== undefined);
+  return [...plus, ...reduces];
+}
+
+const COMPARE_OPS = new Set([
+  ts.SyntaxKind.GreaterThanToken,
+  ts.SyntaxKind.GreaterThanEqualsToken,
+  ts.SyntaxKind.LessThanToken,
+  ts.SyntaxKind.LessThanEqualsToken,
+  ts.SyntaxKind.EqualsEqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsEqualsToken,
+  ts.SyntaxKind.EqualsEqualsToken,
+  ts.SyntaxKind.ExclamationEqualsToken,
+]);
+
+/** Is `expr` a bare read of the global `name` — not a local shadowing it? */
+function isGlobalIdentifier(expr: ts.Expression, name: string): expr is ts.Identifier {
+  const e = unwrap(expr);
+  return ts.isIdentifier(e) && e.text === name && !resolve(e, fileContext(e));
+}
+
+export interface ComparedPair {
+  node: ts.Node;
+  a: ts.Expression;
+  b: ts.Expression;
+}
+
+/**
+ * Every place two expressions are read against each other for order or equality, beyond a
+ * plain `<`/`<=`/`>`/`>=`/`===`/`!==`/`==`/`!=` between them:
+ *
+ * - `Object.is(a, b)` — the same equality question spelled without an operator.
+ * - `switch (a) { case b: ... }` — every `case`, paired with the discriminant; a defect
+ *   found live in this repo (a settlement `switch` on `paidCents` with `totalCents` as a
+ *   `case`).
+ * - Every pairwise combination of arguments to `Math.max`/`Math.min`/`Math.abs` — deciding
+ *   an order or a magnitude over a pair is deciding the same fact a `>`/`<` would, whether
+ *   or not the result is then compared to anything.
+ *
+ * `Object`/`Math` are matched only when nothing in the file shadows the name (through the
+ * binder, not text), so a local `const Math = { max: () => 0 }` does not fire this.
+ *
+ * What it does not follow: `Math.max`/`.is` reached through `.call`/`.apply`, a spread
+ * argument list, a user-defined `min`/`max`/`compare` helper, or a comparator passed to
+ * `Array.prototype.sort` — `[paidCents, totalCents].sort((a, b) => a - b)[1]` orders the
+ * pair without this function, or `additiveChains`, ever seeing `paidCents`/`totalCents`
+ * appear in the same expression as the comparison itself.
+ */
+export function comparedPairs(root: ts.Node): ComparedPair[] {
+  const out: ComparedPair[] = [];
+  for (const node of collect(root, ts.isBinaryExpression)) {
+    if (COMPARE_OPS.has(node.operatorToken.kind)) out.push({ node, a: node.left, b: node.right });
+  }
+  for (const call of collect(root, ts.isCallExpression)) {
+    const callee = unwrap(call.expression);
+    if (!ts.isPropertyAccessExpression(callee)) continue;
+    if (isGlobalIdentifier(callee.expression, "Object") && callee.name.text === "is" && call.arguments.length === 2) {
+      out.push({ node: call, a: call.arguments[0]!, b: call.arguments[1]! });
+    }
+    if (isGlobalIdentifier(callee.expression, "Math") && ["max", "min", "abs"].includes(callee.name.text)) {
+      const args = call.arguments;
+      for (let i = 0; i < args.length; i++) {
+        for (let j = i + 1; j < args.length; j++) out.push({ node: call, a: args[i]!, b: args[j]! });
+      }
+    }
+  }
+  for (const sw of collect(root, ts.isSwitchStatement)) {
+    for (const clause of sw.caseBlock.clauses) {
+      if (ts.isCaseClause(clause)) out.push({ node: clause, a: sw.expression, b: clause.expression });
+    }
+  }
+  return out;
 }
 
 /**
@@ -1539,5 +1719,33 @@ export function declaredTypeImport(expr: ts.Expression): { moduleSpecifier: stri
     const spec = decl && moduleSpecifierOf(decl);
     if (spec !== undefined) return { moduleSpecifier: spec, exportedName: (td.propertyName ?? td.name).text };
   }
+  return undefined;
+}
+
+/**
+ * The plain TEXT of the declared type of `expr` (an identifier, or `this.x`) when it is a
+ * simple type reference or the keyword `any` — without resolving it to an import the way
+ * `declaredTypeImport` does. A receiver typed `AuditService` from a same-file class, or
+ * one a reviewer widened to `any`, has no import to resolve to and so is invisible to
+ * `declaredTypeImport`; this is the cruder, wider net a guard falls back to when it must
+ * also catch those. Returns `undefined` for anything else: a generic instantiation, a
+ * union, an inferred type, an unresolved binding.
+ */
+export function declaredTypeText(expr: ts.Expression): string | undefined {
+  const e = unwrap(expr);
+  const fc = fileContext(e);
+  let sym: ts.Symbol | undefined;
+  if (ts.isPropertyAccessExpression(e) && e.expression.kind === ts.SyntaxKind.ThisKeyword) {
+    sym = fc.checker.getSymbolAtLocation(e.name);
+  } else if (ts.isIdentifier(e)) {
+    sym = resolve(e, fc);
+  }
+  const decls = sym?.declarations ?? [];
+  if (decls.length !== 1) return undefined;
+  const d = decls[0]!;
+  const type = ts.isParameter(d) || ts.isPropertyDeclaration(d) || ts.isVariableDeclaration(d) ? d.type : undefined;
+  if (!type) return undefined;
+  if (type.kind === ts.SyntaxKind.AnyKeyword) return "any";
+  if (ts.isTypeReferenceNode(type) && ts.isIdentifier(type.typeName)) return type.typeName.text;
   return undefined;
 }

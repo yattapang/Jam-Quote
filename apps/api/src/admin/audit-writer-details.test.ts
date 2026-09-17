@@ -2,7 +2,15 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve as resolvePath, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import { collect, declaredTypeImport, enclosingFunctionKey, parseFile, staticStrings, unwrap } from "@jamquote/test-ast";
+import {
+  collect,
+  declaredTypeImport,
+  declaredTypeText,
+  enclosingFunctionKey,
+  parseFile,
+  staticStrings,
+  unwrap,
+} from "@jamquote/test-ast";
 import { AdminService } from "./admin.service.js";
 import { AdminController } from "./admin.controller.js";
 import { NON_FINANCIAL_AUDIT_ACTIONS } from "./audit.service.js";
@@ -35,13 +43,22 @@ import { RulePackService } from "../rulepack/rulepack.service.js";
  *    `details` carrying any sentinel, under any key, through any spread or rename, copied a
  *    column this test never vouched for, and fails. The old check matched `/Cents$/` on
  *    keys, which `{ amount: payment.amountCents }` walked straight past.
+ * 3. DISCOVERY does not stop at a resolved import. A receiver named `record` on something
+ *    typed `AuditService` from a same-file class, or one a reviewer widened to `any` (an
+ *    `AuditService` field cast away, or a constructor parameter left untyped) has no
+ *    import for `declaredTypeImport` to resolve to and used to slip past silently. A site
+ *    is now also discovered when the receiver is a bare `audit` (`this.audit.record(...)`,
+ *    `audit.record(...)`) or its declared type TEXT reads `AuditService` even when that
+ *    text does not resolve to an import — `declaredTypeText`, which returns a name (or
+ *    `"any"`) without needing one.
  *
  * ## What it does not prove
  *
  * An amount taken from the request DTO rather than a row is not a sentinel. A writer path
- * these fixtures do not reach is not inspected. A receiver typed other than by a plain
- * `AuditService` reference (inferred, `any`) is not discovered; the per-file assertion
- * fails if one of today's recording files stops resolving.
+ * these fixtures do not reach is not inspected. A receiver named something other than
+ * `audit` AND typed neither `AuditService` nor `any`-with-that-name (a renamed field
+ * inferred from something else entirely) is not discovered; the per-file assertion fails
+ * if one of today's recording files stops resolving.
  */
 
 // ─────────────────────────────────────────────────────────── money by value
@@ -114,6 +131,22 @@ interface Site {
   actions: string[] | undefined;
 }
 
+/**
+ * Does this `record`'s receiver look like the audit service even when
+ * `declaredTypeImport` cannot resolve it to the real import — a receiver named `audit`
+ * (`this.audit`, a bare local `audit`), or one whose declared type TEXT is `AuditService`
+ * (a same-file class, or something the guard cannot otherwise place)? Catches a second
+ * writer whose field was typed or cast to `any`: `declaredTypeImport` sees no import at
+ * all for `any`, but a receiver still named `audit` is exactly the shape a reviewer would
+ * recognise as the audit service, so it must not be able to opt out by widening its type.
+ */
+function looksLikeAuditReceiver(expr: ts.Expression): boolean {
+  const e = unwrap(expr);
+  const name = ts.isIdentifier(e) ? e.text : ts.isPropertyAccessExpression(e) ? e.name.text : undefined;
+  if (name === "audit") return true;
+  return declaredTypeText(e) === "AuditService";
+}
+
 function auditSites(file: string): Site[] {
   const sf = parseFile(file);
   if (!sf.text.includes("record")) return [];
@@ -123,8 +156,11 @@ function auditSites(file: string): Site[] {
     const callee = unwrap(call.expression);
     if (!ts.isPropertyAccessExpression(callee) || callee.name.text !== "record") continue;
     const type = declaredTypeImport(callee.expression);
-    if (!type || type.exportedName !== "AuditService") continue;
-    if (resolvePath(dirname(file), type.moduleSpecifier.replace(/\.js$/, ".ts")) !== AUDIT_SERVICE) continue;
+    const resolvedToAuditService =
+      !!type &&
+      type.exportedName === "AuditService" &&
+      resolvePath(dirname(file), type.moduleSpecifier.replace(/\.js$/, ".ts")) === AUDIT_SERVICE;
+    if (!resolvedToAuditService && !looksLikeAuditReceiver(callee.expression)) continue;
     const arg = call.arguments[0] && unwrap(call.arguments[0]);
     let actions: string[] | undefined;
     if (arg && ts.isObjectLiteralExpression(arg)) {

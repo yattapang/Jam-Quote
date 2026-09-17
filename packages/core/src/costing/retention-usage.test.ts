@@ -6,6 +6,7 @@ import {
   additiveChains,
   additiveTerms,
   collect,
+  comparedPairs,
   enclosingFunctionKey,
   parseSource,
   resolveRead,
@@ -58,12 +59,47 @@ import {
  * paid of OPPOSITE sign anywhere in one additive chain"; `enclosingFunctionKey` keys a
  * class-field arrow `Class#field`. Each spelling is a probe below and in that package.
  *
+ * ## Why a merge gate found seven more (generation 5)
+ *
+ * A gate confirmed seven spellings past the generation-4 guard, all closing a CLASS rather
+ * than the one instance found:
+ *
+ * - `let b = a.totalCents; b = b - a.paidCents;` — a plain reassignment reads the same as
+ *   `b -= a.paidCents`, which was already caught; `additiveTerms` now treats `x = <chain
+ *   containing x>` the same as the compound form, via `selfReassignmentInitializer`.
+ * - `Object.is(paid, total)`, `switch (paid) { case total: }`, and
+ *   `Math.max(paid, total) === paid` are all "the two values are read against each other",
+ *   the same fact a `>=` expresses. `comparedPairs` folds a binary comparison, `Object.is`,
+ *   every `switch`/`case` pair, and every pairwise combination of `Math.max`/`Math.min`/
+ *   `Math.abs` arguments into one detector, so a guard need not special-case each spelling.
+ * - `total + paid * -1` and `[total, -paid].reduce((a, b) => a + b, 0)` are a sign flip and
+ *   an additive chain spelled without `+`/`-` at the top: `additiveTerms` now unwraps
+ *   `* -1` / `-1 *` / `/ -1` as a flip, and `additiveChains` also collects a `.reduce` of
+ *   two identifiers added together over an array LITERAL, reading the literal's own
+ *   elements (already signed the ordinary way) as the chain.
+ * - `paid >= total ? x : y` inside a larger expression was suspected as a sixth gap, but
+ *   `collect(sf, ts.isBinaryExpression)` already walks the WHOLE tree regardless of
+ *   nesting, so the ternary's condition was already found; the probe below confirms it
+ *   rather than re-fixing something that was not broken.
+ *
  * ## What it does not prove
  *
  * A parameter is known only by its name; an accessor is followed one level, within the
  * file; a value crossing a module boundary, a method, or an object passed to a function
  * is not followed; a column renamed on purpose defeats it. Every file must PARSE: a syntax
  * error throws.
+ *
+ * Two more spellings, found attacking this generation and NOT fixed:
+ *
+ * - `[inv.paidCents, inv.totalCents].sort((a, b) => a - b)[1] === inv.paidCents` — a
+ *   hand-rolled max via `Array.prototype.sort`. The comparator `(a, b) => a - b` never
+ *   mentions `paidCents`/`totalCents` by name (its parameters are generic sort-callback
+ *   names), so neither `additiveTerms` nor `comparedPairs` ever sees the two fields
+ *   appear together in one expression — `comparedPairs`'s own doc comment names this gap.
+ * - `inv.paidCents.toFixed(2) === inv.totalCents.toFixed(2)` — a method call ON the field
+ *   (not a one-level accessor RETURNING it, the shape `resolveRead` follows) defeats
+ *   `fieldOf`: `.toFixed(2)` is read as an opaque call, so this comparison scores as
+ *   neither `paid` nor `total` and the pair is silently dropped.
  *
  * Core itself is exempt — it is where the right answer is allowed to be computed — and
  * specific functions elsewhere are exempt only with a stated reason and an exact count.
@@ -125,20 +161,6 @@ interface Offenders {
   byFunction: Map<string, FunctionOffenders>;
 }
 
-const COMPARE_OPS = new Set([
-  ts.SyntaxKind.GreaterThanToken,
-  ts.SyntaxKind.GreaterThanEqualsToken,
-  ts.SyntaxKind.LessThanToken,
-  ts.SyntaxKind.LessThanEqualsToken,
-  // Equality reads the retention state just as much as ordering does:
-  // "settled when paid equals total" (inv.paidCents === inv.totalCents) is the
-  // defect this guard exists for, and === / !== / == / != all express it.
-  ts.SyntaxKind.EqualsEqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsEqualsToken,
-  ts.SyntaxKind.EqualsEqualsToken,
-  ts.SyntaxKind.ExclamationEqualsToken,
-]);
-
 /**
  * One subtraction per additive chain holding a `totalCents` read and a `paidCents` read
  * of opposite sign, and one comparison per `<`/`<=`/`>`/`>=` between the two.
@@ -167,10 +189,9 @@ function findOffenders(sourceText: string, fileName: string): Offenders {
     if ([...signs.total].some((s) => signs.paid.has(-s))) record(chain, "subtract");
   }
 
-  for (const node of collect(sf, ts.isBinaryExpression)) {
-    if (!COMPARE_OPS.has(node.operatorToken.kind)) continue;
-    const a = fieldOf(node.left);
-    const b = fieldOf(node.right);
+  for (const { node, a: ax, b: bx } of comparedPairs(sf)) {
+    const a = fieldOf(ax);
+    const b = fieldOf(bx);
     if (a && b && a !== b) record(node, "compare");
   }
 
@@ -346,6 +367,54 @@ describe("invoice settlement is decided in core, nowhere else", () => {
 
     it("?? over a NON-static fallback is not unwrapped", () => {
       expect(counts("function f(a, b) { return (a.totalCents ?? b.x) - a.paidCents; }")).toBeUndefined();
+    });
+  });
+
+  describe("generation-5 bypasses, confirmed against a merge gate", () => {
+    const counts = (src: string, fn = "f") => findOffenders(src, "probe.ts").byFunction.get(`probe.ts#${fn}`);
+
+    it.each([
+      ["a plain reassignment one keystroke from `-=`", "function f(a) { let b = a.totalCents; b = b - a.paidCents; return b; }"],
+      ["Object.is", "function f(a) { return Object.is(a.paidCents, a.totalCents); }"],
+      ["a switch discriminant against a case", "function f(a) { switch (a.paidCents) { case a.totalCents: return 1; default: return 0; } }"],
+      ["Math.max compared to one of its own arguments", "function f(a) { return Math.max(a.paidCents, a.totalCents) === a.paidCents; }"],
+      ["Math.min compared to one of its own arguments", "function f(a) { return Math.min(a.paidCents, a.totalCents) === a.totalCents; }"],
+      ["a ternary comparison nested inside a larger expression", "function f(a) { return `${a.paidCents >= a.totalCents ? 'x' : 'y'}`; }"],
+      ["sign flip by multiplying by negative one", "function f(a) { return a.totalCents + a.paidCents * -1; }"],
+      ["sign flip with the negative literal first", "function f(a) { return a.totalCents + -1 * a.paidCents; }"],
+      ["sign flip by dividing by negative one", "function f(a) { return a.totalCents + a.paidCents / -1; }"],
+      ["an array-literal reduce over the pair", "function f(a) { return [a.totalCents, -a.paidCents].reduce((x, y) => x + y, 0); }"],
+    ])("catches %s", (_name, src) => {
+      const c = counts(src);
+      expect((c?.subtract ?? 0) + (c?.compare ?? 0), src).toBe(1);
+    });
+
+    it("still refuses a multiplication by anything other than a negative-one literal", () => {
+      expect(counts("function f(a) { return a.totalCents + a.paidCents * -2; }")).toBeUndefined();
+    });
+
+    it("still refuses a reduce whose callback does not simply add its two parameters", () => {
+      expect(counts("function f(a) { return [a.totalCents, a.paidCents].reduce((x, y) => x - y, 0); }")).toBeUndefined();
+    });
+
+    it("still refuses a reduce over an array that is not a literal", () => {
+      expect(
+        counts("function f(a, xs) { return xs.reduce((x, y) => x + y, 0) - a.paidCents; }"),
+      ).toBeUndefined();
+    });
+
+    // Attacking this generation's own fix found two more spellings, reported here and left
+    // OPEN — see "Two more spellings" in the file header for why each one defeats it.
+    it("does NOT catch a hand-rolled max via Array.prototype.sort (open)", () => {
+      expect(
+        counts("function f(a) { return [a.paidCents, a.totalCents].sort((x, y) => x - y)[1] === a.paidCents; }"),
+      ).toBeUndefined();
+    });
+
+    it("does NOT catch a comparison of a method call ON each field, e.g. .toFixed (open)", () => {
+      expect(
+        counts("function f(a) { return a.paidCents.toFixed(2) === a.totalCents.toFixed(2); }"),
+      ).toBeUndefined();
     });
   });
 

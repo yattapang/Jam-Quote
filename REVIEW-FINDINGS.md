@@ -352,6 +352,31 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Guard generation 5, then MERGED to main (2026-09-17)
+
+The seven remaining spellings are closed by CLASS, not instance, and the shared parser
+gained: an assignment whose right side is an additive chain (so `b = b - a.paidCents`
+counts exactly as `b -=` does), one `comparedPairs` detector folding binary comparisons,
+`Object.is`, `switch`/`case` and every pairwise `Math.max`/`min`/`abs` combination (all
+resolved through the binder, so a shadowed `Math` or `Object` cannot fire it), sign flips
+by `* -1` / `-1 *` / `/ -1`, and a `reduce` over an array literal. The guard's own
+binary-only comparison loop is deleted in favour of the shared detector. An audit `record`
+call is now discovered when its receiver is named `audit` or its declared type TEXT is
+`AuditService`, which closes the `any`-typed receiver.
+
+Verified by me, not on the agent's report: full gate twice (test-ast 140, core 371, api
+968, web 629, mobile 32; typecheck 8/8; lint clean), diff limited to the three guard
+files, and the exemption list still holds exactly one entry
+(`exports.service.ts#invoicesIssued`, subtract 1 / compare 0). I planted five spellings in
+a real file - reassignment, `Object.is`, `switch`, `* -1`, reduce - and each failed naming
+its function; and an `any`-typed second writer of `tenant.restore` carrying money failed
+the audit baseline.
+
+**Open, stated in the guard's own header** (found by the agent attacking its own work):
+`[paid, total].sort((a,b) => a-b)[1] === paid` (a hand-rolled max whose comparator never
+names the fields) and `paid.toFixed(2) === total.toFixed(2)` (a method call ON the field).
+Both are adversarial-only. Next reviewer to attack the guard files post-merge.
+
 ## Merge gate on 6b36976: DO NOT MERGE -> fixed (2026-09-17)
 
 The gate found my "only moves forward" comment was FALSE. Checking `coversUntil` first
