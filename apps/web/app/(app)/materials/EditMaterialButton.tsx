@@ -7,7 +7,7 @@ import Modal from "@/components/ui/Modal";
 import { updateMaterialFavourite, type ApiMaterialCategory } from "@/lib/api-client";
 import MaterialForm, {
   materialFormValuesFromMaterial,
-  materialPayloadFromValues,
+  materialEditPayloadFromValues,
   type AppliedPrice,
   type MaterialFormValues,
 } from "@/components/forms/MaterialForm";
@@ -35,7 +35,7 @@ export default function EditMaterialButton({ material }: { material: MaterialFav
   }
 
   async function handleSubmit(values: MaterialFormValues, category: ApiMaterialCategory | undefined) {
-    await updateMaterialFavourite(material.id, materialPayloadFromValues(values, category));
+    await updateMaterialFavourite(material.id, materialEditPayloadFromValues(values, category));
     invalidateMaterialSchema();
     close();
     router.refresh();

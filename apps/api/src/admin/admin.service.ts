@@ -142,24 +142,75 @@ const SIXTY_DAYS_MS = 60 * 24 * 60 * 60 * 1000;
 // month-end overflow bug that `nextTermEnd` in core now fixes in one shared
 // place. Spend that instead of keeping a second copy here.
 //
-// Paid time already on the account is carried, not discarded. The rule:
-// - on a paid plan now, whatever the interval -> the new term runs from the LATER of
-//   now and the current `renewsAt`, exactly as an early payment does. That includes
-//   monthly -> annual: the days were paid for whatever the cadence, and there is no
-//   proration ledger to turn them into credit, so keeping them on the clock is the
-//   only lossless option.
-// - on free now -> the term runs from now. A free row's `renewsAt` is a leftover of a
-//   term that already ended (the revert sweep changes the plan only), so it holds no
-//   paid time to carry.
+// THE RULE, in one sentence: a plan/interval switch RE-PRICES the subscription;
+// it never buys or destroys time, so `renewsAt` afterwards is the furthest date
+// the tenant has already been paid up to or granted — and never a date in the
+// past.
+//
+// In precedence order:
+//  1. Same plan AND same interval on a live term -> a true no-op. Nothing about
+//     the commercial term changed, so `renewsAt` must not move at all. (This is
+//     what a re-save must do; without it, alternating annual<->monthly stacked a
+//     fresh term on every call with no payment ever recorded.)
+//  2. The LEDGER's paid-through (the latest non-voided `coversUntil`), when it is
+//     still in the future. This is the authoritative figure and no term is added.
+//  3. Otherwise the current `renewsAt`, when THAT is still in the future — a term
+//     an admin granted by hand, with no payment behind it. Kept, not shortened.
+//  4. Otherwise one term from today: nothing is paid or granted ahead, so this is
+//     the admin putting a lapsed or brand-new tenant back on the clock.
+//
+// ## Why the ledger and not `renewsAt`, and why no new term
+//
+// This has to match `SubscriptionPaymentsService.reallocateTerms`, which is the
+// only other writer of `renewsAt` and which recomputes it from the ledger alone
+// on every payment recorded and every payment voided. Any date a switch invents
+// that the ledger does not back is therefore temporary: the next real payment
+// silently overwrites it. That produced two visible defects.
+//
+//  - Granting a term on a switch made the console and the sweep disagree:
+//    monthly -> annual read `renewsAt` a year out while the ledger said one month,
+//    so an unpaid year was on the clock. Recording the real annual payment then
+//    moved nothing, because `reallocateTerms` recomputed from the ledger and
+//    landed on the same date the switch had already claimed — a payment that
+//    visibly did nothing. With the rule above, the switch leaves paid-through
+//    alone and that payment extends it by a full term, which is what it bought.
+//  - Basing the new term on `coversUntil` UNCONDITIONALLY put `renewsAt` in the
+//    PAST whenever the surviving ledger lagged the row (payments voided, or a term
+//    granted by hand): `{pro, annual, renewsAt 2027-01-01}` with one payment
+//    covering to 2026-03-01 switched to monthly gave 2026-03-29, which reads as
+//    PAST_DUE, so the revert sweep downgraded a live paying tenant to free and
+//    emailed them. Steps 2 and 3 are both gated on being in the future for that
+//    reason, and the FURTHEST of the two wins, so this function can only ever move
+//    `renewsAt` forwards, or leave it — proven by the test that a nearer ledger date
+//    cannot shorten a further granted term.
+//
+// A FUTURE `coversUntil` wins whatever the current plan says, including `free`.
+// Setting a tenant free nulls `renewsAt`, so after paid -> free -> paid the ledger
+// is the only surviving record of the term they bought; reading it only for a
+// currently-paid row destroyed that paid time.
 function nextRenewal(
   interval: string,
   current: { plan: string; interval: string; renewsAt: Date | null } | null,
+  latestPaymentCoversUntil: Date | null,
+  samePlanAndInterval: boolean,
   from: Date = new Date(),
-): Date {
-  const renewsAt = current?.renewsAt ? current.renewsAt.toISOString() : null;
-  const paidNow =
-    !!current && subscriptionStanding({ ...current, renewsAt }, from) !== SubscriptionStanding.FREE;
-  return nextTermEnd(interval, paidNow ? renewsAt : null, from);
+): Date | null {
+  if (samePlanAndInterval) return current?.renewsAt ?? null;
+
+  // The FURTHEST future of the two, not the first one that happens to be future.
+  // Checking `coversUntil` first and returning it let a NEARER ledger date overwrite
+  // a further `renewsAt`: `{renewsAt 2028-01-01}` with one surviving payment covering
+  // 18 days out switched to monthly gave that ledger date and silently deleted 15
+  // months of hand-granted term. It also compounded, because `recordPayment` takes
+  // `coversFrom` from the reduced `renewsAt`, so the next payment did not restore it.
+  // Whichever record says the tenant is entitled to more time is the one that stands.
+  const entitled = [latestPaymentCoversUntil, current?.renewsAt ?? null].filter(
+    (d): d is Date => d !== null && d.getTime() > from.getTime(),
+  );
+  if (entitled.length > 0) {
+    return entitled.reduce((furthest, d) => (d.getTime() > furthest.getTime() ? d : furthest));
+  }
+  return nextTermEnd(interval, null, from);
 }
 
 /**
@@ -557,16 +608,43 @@ export class AdminService {
     // ended.
     const priceCents = input.plan === "free" ? null : (input.priceCents ?? null);
 
+    const currentSub = await this.prisma.subscription.findUnique({ where: { businessId } });
+    // A same-plan-same-interval re-save is a no-op ONLY while the current
+    // term is genuinely still live (CURRENT/DUE_SOON, or a manual paid row
+    // with no renewsAt at all). A PAST_DUE row saved with the same plan is
+    // the admin's "reactivate" action — that must still start a fresh term
+    // from today, exactly as it always has, rather than freezing renewsAt in
+    // the past forever.
+    const currentStanding = currentSub
+      ? subscriptionStanding(
+          { ...currentSub, renewsAt: currentSub.renewsAt ? currentSub.renewsAt.toISOString() : null },
+          new Date(),
+        )
+      : SubscriptionStanding.FREE;
+    const samePlanAndInterval =
+      !!currentSub &&
+      currentSub.plan === input.plan &&
+      currentSub.interval === interval &&
+      currentStanding !== SubscriptionStanding.PAST_DUE;
+
     // An explicit date wins; otherwise a paid plan renews one term out, which
-    // is what makes "annual" mean anything. Free plans do not renew.
+    // is what makes "annual" mean anything. Free plans do not renew. A
+    // re-save of the SAME plan+interval is a no-op (see `nextRenewal`) so it
+    // never needs the payment lookup below.
+    let latestPaymentCoversUntil: Date | null = null;
+    if (!input.renewsAt && input.plan !== "free" && !samePlanAndInterval) {
+      const latestPayment = await this.prisma.subscriptionPayment.findFirst({
+        where: { businessId, voidedAt: null },
+        orderBy: { coversUntil: "desc" },
+      });
+      latestPaymentCoversUntil = latestPayment?.coversUntil ?? null;
+    }
+
     const renewsAt = input.renewsAt
       ? new Date(input.renewsAt)
       : input.plan === "free"
         ? null
-        : nextRenewal(
-            interval,
-            await this.prisma.subscription.findUnique({ where: { businessId } }),
-          );
+        : nextRenewal(interval, currentSub, latestPaymentCoversUntil, samePlanAndInterval);
 
     const subscription = await this.prisma.subscription.upsert({
       where: { businessId },

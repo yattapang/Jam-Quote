@@ -352,6 +352,138 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Guard generation 5, then MERGED to main (2026-09-17)
+
+The seven remaining spellings are closed by CLASS, not instance, and the shared parser
+gained: an assignment whose right side is an additive chain (so `b = b - a.paidCents`
+counts exactly as `b -=` does), one `comparedPairs` detector folding binary comparisons,
+`Object.is`, `switch`/`case` and every pairwise `Math.max`/`min`/`abs` combination (all
+resolved through the binder, so a shadowed `Math` or `Object` cannot fire it), sign flips
+by `* -1` / `-1 *` / `/ -1`, and a `reduce` over an array literal. The guard's own
+binary-only comparison loop is deleted in favour of the shared detector. An audit `record`
+call is now discovered when its receiver is named `audit` or its declared type TEXT is
+`AuditService`, which closes the `any`-typed receiver.
+
+Verified by me, not on the agent's report: full gate twice (test-ast 140, core 371, api
+968, web 629, mobile 32; typecheck 8/8; lint clean), diff limited to the three guard
+files, and the exemption list still holds exactly one entry
+(`exports.service.ts#invoicesIssued`, subtract 1 / compare 0). I planted five spellings in
+a real file - reassignment, `Object.is`, `switch`, `* -1`, reduce - and each failed naming
+its function; and an `any`-typed second writer of `tenant.restore` carrying money failed
+the audit baseline.
+
+**Open, stated in the guard's own header** (found by the agent attacking its own work):
+`[paid, total].sort((a,b) => a-b)[1] === paid` (a hand-rolled max whose comparator never
+names the fields) and `paid.toFixed(2) === total.toFixed(2)` (a method call ON the field).
+Both are adversarial-only. Next reviewer to attack the guard files post-merge.
+
+## Merge gate on 6b36976: DO NOT MERGE -> fixed (2026-09-17)
+
+The gate found my "only moves forward" comment was FALSE. Checking `coversUntil` first
+and returning it let a NEARER ledger date overwrite a FURTHER `renewsAt`: `renewsAt
+2028-01-01` with one surviving payment 18 days out, switched to monthly, deleted 15
+months of hand-granted term - and it compounded, because `recordPayment` takes
+`coversFrom` from the reduced date. 967 tests passed over it, because the only test
+covered a PAST `coversUntil`.
+- Fixed myself: the FURTHEST future of the two wins, both floored at now. Test added
+  ("a NEARER ledger date cannot shorten a FURTHER granted term"); planting the old
+  first-future-wins rule fails it.
+- **Audit call sites are now keyed `file#function`, not `file:line`.** The gate showed
+  line-pinning broke on any edit above a writer - my own six-line renewal fix shifted
+  eleven pinned entries at once, and that diff is indistinguishable from a real new
+  writer, so the guard would be re-baselined by reflex. Proven both ways: a planted
+  second `tenant.suspend` writer fails it (`zz-second-writer.ts#go`), a line shift
+  does not.
+- Comment overclaims corrected (`clients.dto.ts` claimed the web client sends
+  `{lastName}` alone - it does not; the admin comment now states the furthest-wins rule).
+- Gate confirmed sound by the reviewer independently: 2124 tests, typecheck 8/8, lint,
+  `next build` exit 0; supplier tenancy has no escape (no writer of
+  `Supplier.businessId` is reachable from a tenant); all five edit-button wiring tests
+  fail when reverted.
+
+**STILL OPEN (guard weaknesses, code-level, not user-visible):** seven more spellings get
+past the retention guard - `b = b - a.paidCents` as a plain reassignment (while `b -=`
+is caught), `Object.is`, `switch(paid){case total:}`, `Math.max(paid,total) === paid`, a
+ternary on the pair, `total + paid * -1`, `[total,-paid].reduce(...)`; and an audit
+receiver declared `any` is not discovered.
+
+**Lesson:** "first candidate that satisfies the floor" is not the same as "the best
+candidate" - when two records both grant entitlement, order of checks silently picks a
+winner. And a guard keyed on a LINE number teaches its owner to re-baseline it.
+
+## Both review halves fixed (2026-09-17) - gate 2124 tests, 0 failures
+
+- **Renewal rule restated:** a plan/interval switch RE-PRICES; it never buys or destroys
+  time. `renewsAt` becomes, in order: unchanged on a same-plan re-save; the ledger's
+  latest non-voided `coversUntil` if future; the current `renewsAt` if future (a
+  hand-granted term is kept, not shortened); else one term from today. Both carried
+  branches are gated `> from`, so the function can only move forwards - that closes the
+  past-dating regression structurally rather than by case. It matches `reallocateTerms`,
+  the only other writer, which recomputes from the ledger alone, so the console and the
+  sweep now agree and the next payment visibly extends the term.
+- **Legacy NULL-owner suppliers are accepted when already on the document** (Prisma `OR`,
+  not a cast over the tenant boundary); another tenant's id is still refused.
+- `resolveClientName` honours every `lastName !== undefined`, trimmed, blank clears.
+- **Guards:** `||`/`&&`, two-statement accessors, `-=`/`+=` and `===`/`!==`/`==`/`!=` all
+  close; five edit buttons gained WIRING tests, so reverting a button to its create
+  builder now fails; audit call sites are pinned by `file:line`, so a second writer of an
+  already-registered action fails until someone tests it.
+- Every fix was watched failing first, and the previously vacuous tests were rewritten
+  (fixtures where `coversUntil === renewsAt`, and a fake that answered the tenant question
+  itself). I re-planted the forward-only floor removal myself: 3 failures.
+
+## Branch review, money/tenancy half (2026-09-17)
+
+Verdict: NOT mergeable. My own "keep paid time" fix caused three of these. All executed:
+- **HIGH - a plan switch can set `renewsAt` in the PAST**, because the base is the last
+  surviving payment's `coversUntil` with no floor at now: an annual sub paid through
+  2026-03-01 but renewing 2027-01-01 lands on 2026-03-29, reads PAST_DUE, and the next
+  sweep downgrades a LIVE paying tenant to free and emails REVERTED. The old
+  max(now, renewsAt) could never go backwards - this is a regression I introduced.
+- **HIGH - a legacy NULL-owner supplier bricks a quote:** the grandfather check demands a
+  matching businessId, but the schema documents legacy `Supplier.businessId = NULL` rows
+  that quote lines still reference; update, revise and convert all 404, and
+  `LineItemsEditor` has NO supplier control, so the contractor cannot fix the line. The
+  "refuse rather than silently change a financial reference" decision assumed a recovery
+  path that does not exist.
+- **MEDIUM - paid -> free -> paid destroys paid time** (7.5 months in the probe);
+  **the console and the sweep disagree after a switch** (one unpaid term granted, and the
+  next real payment then moves nothing because `reallocateTerms` recomputes from the
+  ledger); **`resolveClientName` handles only `null`**, so a surname-only rename or a
+  `""`/whitespace clear is accepted and silently discarded with a 200.
+- **Four claims had no test that fails without them:** the headline `coversUntil` base
+  (both fixtures set coversUntil === renewsAt), `voidedAt: null` + `orderBy coversUntil
+  desc`, the `revise` supplier check, and a vacuous foreign-id test.
+Sound: no-op re-save, alternation no longer compounds, identical 404 bodies, empty/null id
+lists issue no queries, `allowIds` always from the persisted document.
+
+**Lessons:** (1) a "carry what was paid" rule needs a floor at now AND a ceiling at the
+ledger, or it moves time in both directions; (2) refusing to save is only acceptable if a
+UI path exists to fix the refused data - check the screen, not just the endpoint; (3) a
+fixture where two fields are equal cannot prove which one the code read.
+
+## Branch review, guards/forms half (2026-09-17)
+
+Verdict: NOT mergeable yet. Three confirmed, all fixes in progress:
+- **The material-clearing fix has no test at the wiring:** reverting `EditMaterialButton`
+  to the CREATE builder left all 624 web tests green - taxonomy shape 2, a correct helper
+  no screen calls, which is the very bug being fixed. Render tests being added for it and
+  for the labour/equipment/client/project edit buttons.
+- **Four spellings defeat the retention guard** (executed): `|| 0` instead of `?? 0` (one
+  character past the last fix), `paid === total` (equality ops were never in the compare
+  set), `b -= inv.paidCents` (compound assignment), and a two-statement accessor.
+- **A second writer of an already-registered audit action is never inspected**, so
+  `details: { negotiatedPrice: dto.amountCents }` under `tenant.suspend` would ship
+  unredacted. Pinning discovered call sites by file:line.
+Sound: the parser package is dev-only and reaches no web bundle; all 16 exports survived
+the move; a clean `npm ci && npm test` needs no manual build (turbo orders test-ast#build
+first, verified by deleting dist and the cache); redaction is default-deny; clearing
+coverage/waste cannot change a saved quote, because those are snapshotted at pick time.
+
+**Lesson (recurring, now three times):** a guard fixed for one spelling gets defeated by
+the next spelling of the same class - `??` closed, `||` open; `<`/`>` closed, `===` open.
+Enumerate the whole operator/wrapper family when touching the parser, not the instance.
+
 ## START HERE next session (weekly limit at 96%, 2026-09-13)
 
 Last pushed commit: 3ee4577, gate green. Three agents were in flight and may have died;
@@ -368,6 +500,70 @@ their edits are UNCOMMITTED and UNVERIFIED in the working tree:
 Next: `git diff` each area, run build core + typecheck + lint + test, plant one defect
 per fix yourself (backup copy, never git checkout), commit per area, then an
 independent review. Nothing from 1-3 is proven until then.
+
+## Cross-tenant supplier reference audit (read-only SQL, for the owner to run on production)
+
+# Cross-tenant supplier reference audit (S-review, admin-service / assert-suppliers-owned)
+
+Read-only audit queries to find EXISTING rows where a `supplierId` points at a
+`Supplier` belonging to a different business than the row itself — the shape
+the pre-fix grandfathering gap in `assert-suppliers-owned.ts` would have let
+through silently. Not run against any real database; text only.
+
+```sql
+-- Quote lines whose supplierId belongs to another business
+SELECT ql.id AS quote_line_id, q."businessId" AS quote_business_id,
+       ql."supplierId", s."businessId" AS supplier_business_id
+FROM "QuoteLineItem" ql
+JOIN "Quote" q ON q.id = ql."quoteId"
+JOIN "Supplier" s ON s.id = ql."supplierId"
+WHERE ql."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM q."businessId";
+
+-- Invoice lines whose supplierId belongs to another business
+SELECT il.id AS invoice_line_id, i."businessId" AS invoice_business_id,
+       il."supplierId", s."businessId" AS supplier_business_id
+FROM "InvoiceLineItem" il
+JOIN "Invoice" i ON i.id = il."invoiceId"
+JOIN "Supplier" s ON s.id = il."supplierId"
+WHERE il."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM i."businessId";
+
+-- Purchases whose supplierId belongs to another business
+SELECT p.id AS purchase_id, p."businessId" AS purchase_business_id,
+       p."supplierId", s."businessId" AS supplier_business_id
+FROM "Purchase" p
+JOIN "Supplier" s ON s.id = p."supplierId"
+WHERE p."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM p."businessId";
+
+-- Material favourites whose supplierId belongs to another business
+SELECT mf.id AS material_favourite_id, mf."businessId" AS favourite_business_id,
+       mf."supplierId", s."businessId" AS supplier_business_id
+FROM "MaterialFavourite" mf
+JOIN "Supplier" s ON s.id = mf."supplierId"
+WHERE mf."supplierId" IS NOT NULL
+  AND s."businessId" IS DISTINCT FROM mf."businessId";
+```
+
+## Fix summary
+
+- `apps/api/src/common/assert-suppliers-owned.ts` — ids in `allowIds` (already
+  persisted on the document) are now CHECKED against `{ id: { in: allowIds },
+  businessId }` with no `deletedAt` filter (mirrors `assertRefKindOwned`'s
+  grandfathered-id handling in `assert-owned.ts`), instead of being filtered
+  out of the query before it ran. A grandfathered id that does not belong to
+  this business now throws `NotFoundException` — Option A (refuse), not
+  Option B (silently null it out): a supplier id is a financial reference on
+  a real quote/invoice line, and silently rewriting or dropping it without
+  the contractor's knowledge is worse than requiring them to fix the
+  document once.
+- `apps/api/src/quotes/quotes.service.ts` `revise` (~line 1195) and
+  `apps/api/src/invoices/invoices.service.ts` `convertFromQuote` (~line 452)
+  both now call `assertSuppliersOwned` on the supplierIds being copied
+  forward from the original document, using the copied ids themselves as
+  `allowIds` — so a legacy foreign id cannot propagate onto the new
+  quote/invoice unchecked.
 
 ## Review of 3ee4577, 2026-09-13
 

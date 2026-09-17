@@ -97,7 +97,8 @@ the survivors share every property below. Anyone writing or reviewing a guard fo
    the real code path; a parse of the AST; and never a text regex. Reach for the next
    rung only when the one above cannot hold the fact — and say in the guard's comment
    why it could not.
-2. **One parser, shared and tested.** In `apps/web` that is `lib/test/source-ast.ts`.
+2. **One parser, shared and tested.** For every workspace that is the private package
+   `@jamquote/test-ast` (`packages/test-ast/src/source-ast.ts`), a devDependency only.
    Every defeated guard had written its own matcher, and the matcher was where the
    defect lived; one returned an empty list for every input and asserted nothing for
    three rewrites. Do not write a second parser. If the shared one cannot answer the

@@ -883,8 +883,22 @@ export async function updateProject(id: string, input: UpdateProjectInput): Prom
   return apiClient.patch<{ id: string }>(`/projects/${id}`, input);
 }
 
-/** PATCH /api/catalogs/material-favourites/:id — same shape as create, all fields optional. */
-export type UpdateMaterialFavouriteInput = Partial<NewMaterialFavouriteInput>;
+/** PATCH /api/catalogs/material-favourites/:id — same shape as create, all
+ * fields optional; supplierId/description/measureUnit/coveragePerSellUnit/
+ * wastePct also accept `null` to clear a previously set value, distinct from
+ * omitting the field, which leaves it unchanged. */
+export type UpdateMaterialFavouriteInput = Partial<
+  Omit<
+    NewMaterialFavouriteInput,
+    "supplierId" | "description" | "measureUnit" | "coveragePerSellUnit" | "wastePct"
+  >
+> & {
+  supplierId?: string | null;
+  description?: string | null;
+  measureUnit?: string | null;
+  coveragePerSellUnit?: number | null;
+  wastePct?: number | null;
+};
 export async function updateMaterialFavourite(
   id: string,
   input: UpdateMaterialFavouriteInput,

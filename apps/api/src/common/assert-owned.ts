@@ -102,14 +102,28 @@ export async function assertProjectOwned(
  * rather than growing a second copy that drifts, as `assertProjectOwned` once
  * did between purchases and quotes.
  */
+/**
+ * `allowDeleted` drops the `deletedAt: null` filter entirely, for a caller
+ * that pins its own price at record time rather than doing a live lookup —
+ * `PurchasesService.createLabour`'s labour entry stores a snapshot
+ * (rateCents, description) and routinely arrives as an offline replay well
+ * after the contractor deleted the rate. Refusing that replay would be wrong;
+ * a rate this business never owned (foreign or made-up) must still be
+ * refused either way, which is the ownership half this shares with every
+ * other caller. Absent, behaviour is unchanged: a soft-deleted rate is
+ * treated as gone, as it is for a live check-then-price lookup.
+ */
 export async function assertLabourRateOwned(
   prisma: CatalogLookup,
   businessId: string,
   rateId?: string | null,
+  options?: { allowDeleted?: boolean },
 ): Promise<void> {
   if (!rateId) return;
   const rate = await prisma.labourRate.findFirst({
-    where: { id: rateId, businessId, deletedAt: null },
+    where: options?.allowDeleted
+      ? { id: rateId, businessId }
+      : { id: rateId, businessId, deletedAt: null },
     select: { id: true },
   });
   if (!rate) throw new NotFoundException("Labour rate not found");

@@ -2,6 +2,15 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, sep } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  additiveChains,
+  additiveTerms,
+  collect,
+  comparedPairs,
+  enclosingFunctionKey,
+  parseSource,
+  resolveRead,
+} from "@jamquote/test-ast";
 
 /**
  * Nothing outside core decides an invoice balance, or whether one is settled.
@@ -28,33 +37,69 @@ import { describe, expect, it } from "vitest";
  *
  * ## Why names are resolved by the binder (generation 3)
  *
- * The parsing version still tracked aliases in a file-wide map keyed by a local's
- * NAME — the "compare a name's spelling" shape from `.claude/agents/README.md`. A
- * review executed six rewrites through it, none changing behaviour:
+ * A file-wide map keyed by a local's NAME was defeated six ways (a same-named local in a
+ * later function, `!`, `as`, `Number()`, `-paid + total`, a renamed destructuring). Names
+ * are resolved through the binder.
  *
- * - `const t = b.paidCents` in one function and `const t = a.totalCents` in a later one:
- *   the later write won the map, so the first function's real `q - t` was MISSED — and
- *   an unrelated parameter `t` elsewhere was reported.
- * - `inv.totalCents! - inv.paidCents`, `(inv.totalCents as number) - …`,
- *   `Number(inv.totalCents) - …`, `-inv.paidCents + inv.totalCents`, and
- *   `const { totalCents: t } = inv; t - inv.paidCents` — none were unwrapped.
+ * ## Why the resolver is `@jamquote/test-ast` (generation 4)
  *
- * Each file now gets a one-file `ts.Program` (no lib, no resolution) and every identifier
- * operand is resolved through `checker.getSymbolAtLocation` to its own declaration: a
- * variable follows its initializer (any number of hops), a destructured binding reads the
- * property it was taken from, a parameter is known only by its name. Operands are unwrapped
- * through parens, `!`, `as`, `satisfies`, `<T>`, unary `+` and a call to the global
- * `Number` (recognised as global because it resolves to NO declaration in the file — a
- * local `Number` is not unwrapped). `a + -b` is a subtraction.
+ * Generation 3 built its own binder-based resolver here, because core cannot import a web
+ * test helper: a second parser, which rule 2 of `.claude/agents/README.md` forbids. An
+ * independent review then confirmed three spellings it missed:
  *
- * Why not `apps/web/lib/test/source-ast.ts`: core is the package every app depends on and
- * builds from its own `src` only (`rootDir: src`), so a core test importing a web test
- * helper inverts the dependency and couples core's suite to the web workspace's layout. It
- * would not have been enough anyway — its `followAlias` follows only a plain
- * `const x = …`, not a renamed destructuring. The resolver here is the same technique
- * (one-file Program, binder symbols), sized to one question.
+ * - `(a?.totalCents ?? 0) - (a?.paidCents ?? 0)`: `??` with a static fallback was opaque;
+ * - `xs.reduce((s, a) => s + a.totalCents - a.paidCents, 0)`: parses as
+ *   `(s + total) - paid`, and no single binary node holds the pair;
+ * - `const totalOf = (a) => a.totalCents; totalOf(a) - a.paidCents`: a one-level accessor.
  *
- * Every file must PARSE: a syntax error throws rather than scanning a best-effort tree.
+ * It also keyed a class-field arrow as `<module>`, so one could not be exempted precisely.
+ * The parser is now the private workspace package `@jamquote/test-ast`, shared with every
+ * web guard. `resolveRead` follows aliases, destructuring, `??`, `Number`, unary `+` and
+ * one-level accessors; `additiveChains`/`additiveTerms` make a subtraction "a total and a
+ * paid of OPPOSITE sign anywhere in one additive chain"; `enclosingFunctionKey` keys a
+ * class-field arrow `Class#field`. Each spelling is a probe below and in that package.
+ *
+ * ## Why a merge gate found seven more (generation 5)
+ *
+ * A gate confirmed seven spellings past the generation-4 guard, all closing a CLASS rather
+ * than the one instance found:
+ *
+ * - `let b = a.totalCents; b = b - a.paidCents;` — a plain reassignment reads the same as
+ *   `b -= a.paidCents`, which was already caught; `additiveTerms` now treats `x = <chain
+ *   containing x>` the same as the compound form, via `selfReassignmentInitializer`.
+ * - `Object.is(paid, total)`, `switch (paid) { case total: }`, and
+ *   `Math.max(paid, total) === paid` are all "the two values are read against each other",
+ *   the same fact a `>=` expresses. `comparedPairs` folds a binary comparison, `Object.is`,
+ *   every `switch`/`case` pair, and every pairwise combination of `Math.max`/`Math.min`/
+ *   `Math.abs` arguments into one detector, so a guard need not special-case each spelling.
+ * - `total + paid * -1` and `[total, -paid].reduce((a, b) => a + b, 0)` are a sign flip and
+ *   an additive chain spelled without `+`/`-` at the top: `additiveTerms` now unwraps
+ *   `* -1` / `-1 *` / `/ -1` as a flip, and `additiveChains` also collects a `.reduce` of
+ *   two identifiers added together over an array LITERAL, reading the literal's own
+ *   elements (already signed the ordinary way) as the chain.
+ * - `paid >= total ? x : y` inside a larger expression was suspected as a sixth gap, but
+ *   `collect(sf, ts.isBinaryExpression)` already walks the WHOLE tree regardless of
+ *   nesting, so the ternary's condition was already found; the probe below confirms it
+ *   rather than re-fixing something that was not broken.
+ *
+ * ## What it does not prove
+ *
+ * A parameter is known only by its name; an accessor is followed one level, within the
+ * file; a value crossing a module boundary, a method, or an object passed to a function
+ * is not followed; a column renamed on purpose defeats it. Every file must PARSE: a syntax
+ * error throws.
+ *
+ * Two more spellings, found attacking this generation and NOT fixed:
+ *
+ * - `[inv.paidCents, inv.totalCents].sort((a, b) => a - b)[1] === inv.paidCents` — a
+ *   hand-rolled max via `Array.prototype.sort`. The comparator `(a, b) => a - b` never
+ *   mentions `paidCents`/`totalCents` by name (its parameters are generic sort-callback
+ *   names), so neither `additiveTerms` nor `comparedPairs` ever sees the two fields
+ *   appear together in one expression — `comparedPairs`'s own doc comment names this gap.
+ * - `inv.paidCents.toFixed(2) === inv.totalCents.toFixed(2)` — a method call ON the field
+ *   (not a one-level accessor RETURNING it, the shape `resolveRead` follows) defeats
+ *   `fieldOf`: `.toFixed(2)` is read as an opaque call, so this comparison scores as
+ *   neither `paid` nor `total` and the pair is silently dropped.
  *
  * Core itself is exempt — it is where the right answer is allowed to be computed — and
  * specific functions elsewhere are exempt only with a stated reason and an exact count.
@@ -84,7 +129,6 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** What a property read (dot OR bracket notation) refers to, if it's one of the two we care about. */
 type Field = "total" | "paid";
 
 /** The two FIELD names. Property keys are the data model's spelling, not a local's. */
@@ -94,13 +138,21 @@ function fieldOfName(name: string): Field | null {
   return null;
 }
 
-/** The field a property-access-shaped node reads, covering `.totalCents` and `["totalCents"]`. */
-function fieldOfPropertyRead(node: ts.Node): Field | null {
-  if (ts.isPropertyAccessExpression(node)) return fieldOfName(node.name.text);
-  if (ts.isElementAccessExpression(node) && ts.isStringLiteralLike(node.argumentExpression)) {
-    return fieldOfName(node.argumentExpression.text);
+/** What an operand reads, through the shared parser; a local's own name is the last resort. */
+function fieldOf(expr: ts.Expression): Field | null {
+  const { read, aliases } = resolveRead(expr);
+  const direct = read.kind === "other" ? null : fieldOfName(read.name);
+  if (direct) return direct;
+  for (const alias of aliases) {
+    const f = fieldOfName(alias);
+    if (f) return f;
   }
   return null;
+}
+
+interface FunctionOffenders {
+  subtract: number;
+  compare: number;
 }
 
 interface Offenders {
@@ -109,188 +161,49 @@ interface Offenders {
   byFunction: Map<string, FunctionOffenders>;
 }
 
-interface FunctionOffenders {
-  subtract: number;
-  compare: number;
-}
-
-/** Parse one file, throwing on a syntax error, and bind it in a one-file Program. */
-function parseAndBind(sourceText: string, fileName: string): { sf: ts.SourceFile; checker: ts.TypeChecker } {
-  const ext = /\.tsx$/.test(fileName) ? ".tsx" : /\.mjs$/.test(fileName) ? ".mjs" : ".ts";
-  const kind = ext === ".tsx" ? ts.ScriptKind.TSX : ext === ".mjs" ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  const rootName = `/guard${ext}`;
-  const sf = ts.createSourceFile(rootName, sourceText, ts.ScriptTarget.Latest, true, kind);
-  const diagnostics = (sf as unknown as { parseDiagnostics?: ts.Diagnostic[] }).parseDiagnostics ?? [];
-  if (diagnostics.length > 0) {
-    const first = diagnostics[0]!;
-    const at = sf.getLineAndCharacterOfPosition(first.start ?? 0);
-    throw new Error(
-      `retention guard: ${fileName}:${at.line + 1} does not parse: ${ts.flattenDiagnosticMessageText(first.messageText, "\n")}`,
-    );
-  }
-  const host: ts.CompilerHost = {
-    getSourceFile: (name) => (name === rootName ? sf : undefined),
-    writeFile: () => undefined,
-    getDefaultLibFileName: () => "/lib.d.ts",
-    useCaseSensitiveFileNames: () => true,
-    getCanonicalFileName: (f) => f,
-    getCurrentDirectory: () => "/",
-    getNewLine: () => "\n",
-    fileExists: (f) => f === rootName,
-    readFile: () => undefined,
-  };
-  const program = ts.createProgram([rootName], { noLib: true, noResolve: true, allowJs: true, types: [] }, host);
-  return { sf, checker: program.getTypeChecker() };
-}
-
 /**
- * Walks one file's AST and reports every subtraction and comparison between a
- * `totalCents` read and a `paidCents` read, however each operand is spelled.
+ * One subtraction per additive chain holding a `totalCents` read and a `paidCents` read
+ * of opposite sign, and one comparison per `<`/`<=`/`>`/`>=` between the two.
  */
 function findOffenders(sourceText: string, fileName: string): Offenders {
-  const { sf, checker } = parseAndBind(sourceText, fileName);
-
-  /** Strip wrappers that do not change the value. Unary MINUS is not one of them. */
-  function unwrapValue(expr: ts.Expression): ts.Expression {
-    let e = expr;
-    for (;;) {
-      if (
-        ts.isParenthesizedExpression(e) ||
-        ts.isAsExpression(e) ||
-        ts.isSatisfiesExpression(e) ||
-        ts.isNonNullExpression(e) ||
-        ts.isTypeAssertionExpression(e)
-      ) {
-        e = e.expression;
-      } else if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.PlusToken) {
-        e = e.operand;
-      } else if (
-        ts.isCallExpression(e) &&
-        e.arguments.length === 1 &&
-        ts.isIdentifier(e.expression) &&
-        e.expression.text === "Number" &&
-        checker.getSymbolAtLocation(e.expression) === undefined // the global, not a local
-      ) {
-        e = e.arguments[0]!;
-      } else {
-        return e;
-      }
-    }
-  }
-
-  /** What a binding's declaration says it holds. */
-  function fieldOfDeclaration(d: ts.Declaration, seen: Set<ts.Node>): Field | null {
-    if (ts.isVariableDeclaration(d) && ts.isIdentifier(d.name)) {
-      return (d.initializer && fieldOf(d.initializer, seen)) || fieldOfName(d.name.text);
-    }
-    if (ts.isBindingElement(d)) {
-      // `{ totalCents: t }` reads the PROPERTY `totalCents`, whatever the local is called.
-      const key = d.propertyName ?? d.name;
-      if (ts.isIdentifier(key) || ts.isStringLiteralLike(key)) {
-        const f = fieldOfName(key.text);
-        if (f) return f;
-      }
-      return ts.isIdentifier(d.name) ? fieldOfName(d.name.text) : null;
-    }
-    // A parameter's value is unknowable here; its name is the only signal there is.
-    if (ts.isParameter(d) && ts.isIdentifier(d.name)) return fieldOfName(d.name.text);
-    return null;
-  }
-
-  function fieldOf(expr: ts.Expression, seen: Set<ts.Node> = new Set()): Field | null {
-    const e = unwrapValue(expr);
-    if (seen.has(e)) return null;
-    seen.add(e);
-    const direct = fieldOfPropertyRead(e);
-    if (direct) return direct;
-    if (!ts.isIdentifier(e)) return null;
-    const sym = checker.getSymbolAtLocation(e);
-    // Undeclared in this file (a probe snippet, or a global): the name is all there is.
-    if (!sym) return fieldOfName(e.text);
-    const decls = sym.declarations ?? [];
-    if (decls.length !== 1) return fieldOfName(e.text);
-    return fieldOfDeclaration(decls[0]!, seen);
-  }
-
-  /** `-x` where x resolves to a field. */
-  function negatedField(expr: ts.Expression): Field | null {
-    let e = expr;
-    while (ts.isParenthesizedExpression(e) || ts.isAsExpression(e) || ts.isNonNullExpression(e) || ts.isSatisfiesExpression(e)) {
-      e = e.expression;
-    }
-    return ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken ? fieldOf(e.operand) : null;
-  }
-
+  const sf = parseSource(fileName, sourceText);
   const subtractLines: number[] = [];
   const compareLines: number[] = [];
   const byFunction = new Map<string, FunctionOffenders>();
-  const COMPARE_OPS = new Set([
-    ts.SyntaxKind.GreaterThanToken,
-    ts.SyntaxKind.GreaterThanEqualsToken,
-    ts.SyntaxKind.LessThanToken,
-    ts.SyntaxKind.LessThanEqualsToken,
-  ]);
 
   function record(node: ts.Node, kind: keyof FunctionOffenders) {
     const line = sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1;
     (kind === "subtract" ? subtractLines : compareLines).push(line);
-    const key = `${fileName}#${enclosingFunctionName(sf, node)}`;
+    const key = `${fileName}#${enclosingFunctionKey(node)}`;
     const cur = byFunction.get(key) ?? { subtract: 0, compare: 0 };
     cur[kind] += 1;
     byFunction.set(key, cur);
   }
 
-  const pair = (a: Field | null, b: Field | null) => !!a && !!b && a !== b;
-
-  function visit(node: ts.Node) {
-    if (ts.isBinaryExpression(node)) {
-      const op = node.operatorToken.kind;
-      if (op === ts.SyntaxKind.MinusToken || COMPARE_OPS.has(op)) {
-        if (pair(fieldOf(node.left), fieldOf(node.right))) {
-          record(node, op === ts.SyntaxKind.MinusToken ? "subtract" : "compare");
-        }
-      } else if (op === ts.SyntaxKind.PlusToken) {
-        if (
-          pair(negatedField(node.left), fieldOf(node.right)) ||
-          pair(fieldOf(node.left), negatedField(node.right))
-        ) {
-          record(node, "subtract");
-        }
-      }
+  for (const chain of additiveChains(sf)) {
+    const signs = { total: new Set<number>(), paid: new Set<number>() };
+    for (const term of additiveTerms(chain)) {
+      const f = fieldOf(term.expr);
+      if (f) signs[f].add(term.sign);
     }
-    ts.forEachChild(node, visit);
+    if ([...signs.total].some((s) => signs.paid.has(-s))) record(chain, "subtract");
   }
-  visit(sf);
+
+  for (const { node, a: ax, b: bx } of comparedPairs(sf)) {
+    const a = fieldOf(ax);
+    const b = fieldOf(bx);
+    if (a && b && a !== b) record(node, "compare");
+  }
 
   return { subtractLines, compareLines, byFunction };
-}
-
-/** The named function, method, or `const X = () =>`/`function X()` a node sits
- * in. Falls back to `<module>` for top-level code, matching the pattern
- * `apps/web/lib/input-bounds-usage.test.ts` uses for the same purpose. */
-function enclosingFunctionName(sf: ts.SourceFile, node: ts.Node): string {
-  for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
-    if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name) {
-      return ts.isIdentifier(n.name) ? n.name.text : n.name.getText(sf);
-    }
-    if (
-      (ts.isArrowFunction(n) || ts.isFunctionExpression(n)) &&
-      ts.isVariableDeclaration(n.parent) &&
-      ts.isIdentifier(n.parent.name)
-    ) {
-      return n.parent.name.text;
-    }
-  }
-  return "<module>";
 }
 
 /**
  * Functions allowed to do it anyway, each with EXACT counts and the reason.
  *
- * Keyed by `file#function`, with an exact `{ subtract, compare }` count — the
- * same design `apps/web/lib/input-bounds-usage.test.ts` uses for S18. A new
- * offender inside an already-exempt function changes its count and fails; so
- * does removing the legitimate one.
+ * Keyed by `file#function` (a class-field arrow is `file#Class#field`), with an exact
+ * `{ subtract, compare }` count. A new offender inside an already-exempt function changes
+ * its count and fails; so does removing the legitimate one.
  */
 const ALLOWED: { key: string; subtract: number; compare: number; reason: string }[] = [
   {
@@ -325,7 +238,6 @@ function allOffenderKeys(): Map<string, FunctionOffenders> {
 describe("invoice settlement is decided in core, nowhere else", () => {
   it("finds source across every workspace, so a move cannot empty this guard", () => {
     expect(files.length).toBeGreaterThan(150);
-    // Each scanned root must contribute, or a path typo silently drops a whole app.
     for (const prefix of ["apps/api/src", "apps/web/lib", "apps/web/app", "apps/mobile/src"]) {
       expect(files.some((f) => f.file.startsWith(prefix)), `no files under ${prefix}`).toBe(true);
     }
@@ -364,39 +276,31 @@ describe("invoice settlement is decided in core, nowhere else", () => {
   });
 
   it("the parser finds the real shapes, so a passing run means something", () => {
-    // Without this, a bug in the walk would make every assertion above vacuously green.
     const subtracts = (src: string) => findOffenders(src, "probe.ts").subtractLines.length > 0;
     const compares = (src: string) => findOffenders(src, "probe.ts").compareLines.length > 0;
 
-    // The three shapes a review used to defeat the previous, regex-based version.
     expect(subtracts("const b = totals.totalCents - invoice.paidCents;")).toBe(true);
-    expect(subtracts('const b = inv["totalCents"] - inv.paidCents;')).toBe(true); // bracket notation
-    expect(
-      subtracts("const t = inv.totalCents; const pd = inv.paidCents; const b = t - pd;"),
-    ).toBe(true); // local-variable indirection
+    expect(subtracts('const b = inv["totalCents"] - inv.paidCents;')).toBe(true);
+    expect(subtracts("const t = inv.totalCents; const pd = inv.paidCents; const b = t - pd;")).toBe(true);
 
-    // Other spellings and operand orders.
     expect(subtracts("x.paidCents - x.totalCents")).toBe(true);
     expect(subtracts("i.totalCents - (i.paidCents)")).toBe(true);
     expect(compares("if (paidCents >= invoice.totalCents) {}")).toBe(true);
     expect(compares("inv.totalCents > inv.paidCents")).toBe(true);
-    expect(compares('inv["totalCents"] <= inv.paidCents')).toBe(true); // bracket notation, comparison
+    expect(compares('inv["totalCents"] <= inv.paidCents')).toBe(true);
 
-    // And it does not fire on legitimate shapes.
     expect(subtracts("settlementOf(invoice).outstandingCents")).toBe(false);
     expect(subtracts("totalCents - discountCents")).toBe(false);
     expect(compares("outstandingCents > 0")).toBe(false);
-    // A local alias of something ELSE must not be mistaken for the tagged fields.
-    expect(subtracts("const t = inv.taxCents; const pd = inv.paidCents; const b = t - pd;")).toBe(
-      false,
-    );
+    expect(subtracts("const t = inv.taxCents; const pd = inv.paidCents; const b = t - pd;")).toBe(false);
+    // Same sign is a sum, not a balance.
+    expect(subtracts("a.totalCents + a.paidCents")).toBe(false);
   });
 
   describe("generation-3 bypasses, each executed against the name-keyed version first", () => {
     const counts = (src: string, fn = "f") => findOffenders(src, "probe.ts").byFunction.get(`probe.ts#${fn}`);
 
     it("aliases resolve per symbol: a same-named local in a LATER function does not overwrite this one", () => {
-      // Name-keyed map: `t` ended up "total" (the last write), so g's real `q - t` was missed.
       const src =
         "function g(b) { const t = b.paidCents; const q = b.totalCents; return q - t; }\n" +
         "function f(a) { const t = a.totalCents; return t; }";
@@ -404,12 +308,10 @@ describe("invoice settlement is decided in core, nowhere else", () => {
     });
 
     it("aliases resolve per symbol: a parameter that shares an alias's name is not that alias", () => {
-      // Name-keyed map reported `h` — a false alarm on a parameter nothing tagged.
       const src =
         "function f(a) { const t = a.totalCents; return t; }\n" +
         "function h(inv, t) { return inv.paidCents - t; }";
       expect(counts(src, "h")).toBeUndefined();
-      // And a block-scoped shadow reads its own declaration.
       expect(
         counts("function f(inv) { const t = inv.totalCents; { const t = inv.taxCents; return t - inv.paidCents; } }"),
       ).toBeUndefined();
@@ -444,32 +346,93 @@ describe("invoice settlement is decided in core, nowhere else", () => {
     });
   });
 
+  describe("generation-4 bypasses, confirmed against the core-local resolver", () => {
+    const counts = (src: string, fn = "f") => findOffenders(src, "probe.ts").byFunction.get(`probe.ts#${fn}`);
+
+    it.each([
+      ["?? with a static fallback and optional chaining", "function f(a) { return (a?.totalCents ?? 0) - (a?.paidCents ?? 0); }"],
+      ["a left-associative chain inside reduce", "function f(xs) { return xs.reduce((s, a) => s + a.totalCents - a.paidCents, 0); }"],
+      ["a one-level cross-function accessor", "const totalOf = (a) => a.totalCents;\nfunction f(a) { return totalOf(a) - a.paidCents; }"],
+      ["an accessor inside a comparison", "function paidOf(a) { return a.paidCents; }\nfunction f(a) { return paidOf(a) >= a.totalCents; }"],
+    ])("catches %s", (_name, src) => {
+      const c = counts(src);
+      expect((c?.subtract ?? 0) + (c?.compare ?? 0)).toBe(1);
+    });
+
+    it("a class-field arrow is keyed Class#field, so it can be exempted precisely", () => {
+      const src = "class Reports { outstanding = (a) => a.totalCents - a.paidCents; other = (a) => a.totalCents; }";
+      expect(counts(src, "Reports#outstanding")).toEqual({ subtract: 1, compare: 0 });
+      expect(counts(src, "<module>")).toBeUndefined();
+    });
+
+    it("?? over a NON-static fallback is not unwrapped", () => {
+      expect(counts("function f(a, b) { return (a.totalCents ?? b.x) - a.paidCents; }")).toBeUndefined();
+    });
+  });
+
+  describe("generation-5 bypasses, confirmed against a merge gate", () => {
+    const counts = (src: string, fn = "f") => findOffenders(src, "probe.ts").byFunction.get(`probe.ts#${fn}`);
+
+    it.each([
+      ["a plain reassignment one keystroke from `-=`", "function f(a) { let b = a.totalCents; b = b - a.paidCents; return b; }"],
+      ["Object.is", "function f(a) { return Object.is(a.paidCents, a.totalCents); }"],
+      ["a switch discriminant against a case", "function f(a) { switch (a.paidCents) { case a.totalCents: return 1; default: return 0; } }"],
+      ["Math.max compared to one of its own arguments", "function f(a) { return Math.max(a.paidCents, a.totalCents) === a.paidCents; }"],
+      ["Math.min compared to one of its own arguments", "function f(a) { return Math.min(a.paidCents, a.totalCents) === a.totalCents; }"],
+      ["a ternary comparison nested inside a larger expression", "function f(a) { return `${a.paidCents >= a.totalCents ? 'x' : 'y'}`; }"],
+      ["sign flip by multiplying by negative one", "function f(a) { return a.totalCents + a.paidCents * -1; }"],
+      ["sign flip with the negative literal first", "function f(a) { return a.totalCents + -1 * a.paidCents; }"],
+      ["sign flip by dividing by negative one", "function f(a) { return a.totalCents + a.paidCents / -1; }"],
+      ["an array-literal reduce over the pair", "function f(a) { return [a.totalCents, -a.paidCents].reduce((x, y) => x + y, 0); }"],
+    ])("catches %s", (_name, src) => {
+      const c = counts(src);
+      expect((c?.subtract ?? 0) + (c?.compare ?? 0), src).toBe(1);
+    });
+
+    it("still refuses a multiplication by anything other than a negative-one literal", () => {
+      expect(counts("function f(a) { return a.totalCents + a.paidCents * -2; }")).toBeUndefined();
+    });
+
+    it("still refuses a reduce whose callback does not simply add its two parameters", () => {
+      expect(counts("function f(a) { return [a.totalCents, a.paidCents].reduce((x, y) => x - y, 0); }")).toBeUndefined();
+    });
+
+    it("still refuses a reduce over an array that is not a literal", () => {
+      expect(
+        counts("function f(a, xs) { return xs.reduce((x, y) => x + y, 0) - a.paidCents; }"),
+      ).toBeUndefined();
+    });
+
+    // Attacking this generation's own fix found two more spellings, reported here and left
+    // OPEN — see "Two more spellings" in the file header for why each one defeats it.
+    it("does NOT catch a hand-rolled max via Array.prototype.sort (open)", () => {
+      expect(
+        counts("function f(a) { return [a.paidCents, a.totalCents].sort((x, y) => x - y)[1] === a.paidCents; }"),
+      ).toBeUndefined();
+    });
+
+    it("does NOT catch a comparison of a method call ON each field, e.g. .toFixed (open)", () => {
+      expect(
+        counts("function f(a) { return a.paidCents.toFixed(2) === a.totalCents.toFixed(2); }"),
+      ).toBeUndefined();
+    });
+  });
+
   it("strips comments and does not fire on prose that merely mentions the fields", () => {
-    // Real parsing means comments never need separate stripping: they parse as
-    // trivia, not expressions.
     const src = 'const u = "https://x.test"; const b = a.totalCents - a.paidCents;';
     expect(findOffenders(src, "probe.ts").subtractLines.length).toBeGreaterThan(0);
-    expect(
-      findOffenders("// a.totalCents - a.paidCents\nconst x = 1;", "probe.ts").subtractLines,
-    ).toEqual([]);
-    expect(
-      findOffenders("/* a.totalCents - a.paidCents */\nconst x = 1;", "probe.ts").subtractLines,
-    ).toEqual([]);
+    expect(findOffenders("// a.totalCents - a.paidCents\nconst x = 1;", "probe.ts").subtractLines).toEqual([]);
+    expect(findOffenders("/* a.totalCents - a.paidCents */\nconst x = 1;", "probe.ts").subtractLines).toEqual([]);
   });
 
   it("a second offender ON THE SAME LINE as an exempt one is still caught (the exact review defeat)", () => {
-    // A ternary's COMPARE planted on the same line as the allowed subtraction makes
-    // that function's compare count 1 against an exemption of 0 — a failure.
     const src = [
       "function invoicesIssued(i) {",
       "  const a = i.totalCents - i.paidCents; i.totalCents > i.paidCents ? 1 : 0;",
       "}",
     ].join("\n");
-    const byFunction = findOffenders(src, "probe.ts").byFunction;
-    const counts = byFunction.get("probe.ts#invoicesIssued");
+    const counts = findOffenders(src, "probe.ts").byFunction.get("probe.ts#invoicesIssued");
     expect(counts).toEqual({ subtract: 1, compare: 1 });
-    const allowed = { subtract: 1, compare: 0 };
-    expect(counts?.compare !== allowed.compare).toBe(true);
   });
 
   it("an unrelated line shift inside the exempt function still passes", () => {

@@ -11,7 +11,7 @@ import {
   jsxAttributes,
   parseFile,
   parseSource,
-} from "./test/source-ast";
+} from "@jamquote/test-ast";
 
 /**
  * A numeric input a contractor types into is bounded, and bounded from `BOUNDS`.

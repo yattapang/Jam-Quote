@@ -10,7 +10,7 @@ import {
   followAlias,
   renderedExpressions,
   unwrap,
-} from "./test/source-ast";
+} from "@jamquote/test-ast";
 
 /**
  * A source-scanning guard, not a behaviour test.

@@ -89,6 +89,7 @@ function harness(quote = acceptedQuote()) {
       deleteMany: vi.fn(),
     },
     quote: { update: vi.fn().mockResolvedValue({}) },
+    supplier: { findMany: vi.fn().mockResolvedValue([]) },
   };
   const prisma = {
     // A client the caller owns. create/update now prove a caller-supplied
@@ -262,6 +263,28 @@ describe("InvoicesService.convertFromQuote", () => {
     });
     expect(businessService.reserveInvoiceNumber).not.toHaveBeenCalled();
   });
+
+  // S-review fix: a supplierId copied forward from the quote is no longer
+  // trusted just because the quote belongs to this business — it is
+  // validated the same grandfathered-but-checked way a normal update would,
+  // so a legacy foreign id on the source quote cannot propagate onto the
+  // new invoice silently.
+  it("refuses to convert a quote whose line carries a legacy foreign supplierId", async () => {
+    const quote: any = acceptedQuote();
+    quote.lineItems[0].supplierId = "legacy-foreign-supplier";
+    const { svc, tx } = harness(quote);
+    tx.supplier.findMany.mockResolvedValue([]); // does not belong to b1
+    await expect(svc.convertFromQuote("b1", "q1")).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("copies a supplierId forward once it is confirmed to belong to this business", async () => {
+    const quote: any = acceptedQuote();
+    quote.lineItems[0].supplierId = "sup-1";
+    const { svc, tx, createdLineItems } = harness(quote);
+    tx.supplier.findMany.mockResolvedValue([{ id: "sup-1" }]);
+    await svc.convertFromQuote("b1", "q1");
+    expect(createdLineItems.map((li: any) => li.supplierId)).toContain("sup-1");
+  });
 });
 
 /** Harness for an already-DRAFT (or otherwise-statused) invoice, for
@@ -397,8 +420,11 @@ describe("InvoicesService.update", () => {
 /**
  * S7: a caller-supplied `supplierId` on an invoice line item was written
  * with no ownership check at all — unlike `clientId` beside it. See
- * REVIEW-FINDINGS.md. `convertFromQuote` is deliberately untouched: it
- * copies an already-owned quote's persisted supplierId, which is safe.
+ * REVIEW-FINDINGS.md. `convertFromQuote` now ALSO validates the supplierId
+ * it copies forward from the quote (see the tests in the
+ * `InvoicesService.convertFromQuote` block above) — a legacy foreign id on
+ * the source quote is not "safe" just because the quote is owned; it must
+ * not propagate onto the new invoice unchecked.
  */
 describe("InvoicesService — supplierId on line items is not a capability (S7)", () => {
   it("refuses a supplier belonging to another business on create", async () => {
@@ -459,19 +485,42 @@ describe("InvoicesService — supplierId on line items is not a capability (S7)"
     expect(prisma.supplier.findMany).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps an UNCHANGED supplierId on update even if it has since been soft-deleted", async () => {
-    // Old invoices must stay editable. supplier.findMany returning nothing
-    // would represent the supplier being soft-deleted since the invoice was
-    // drafted — the check must not even ask, because the value isn't changing.
+  it("keeps an UNCHANGED supplierId on update even if it has since been soft-deleted, but still checks it belongs to this business", async () => {
+    // Old invoices must stay editable past a soft-delete — but (S-review fix)
+    // an id already on the invoice is no longer exempt from the ownership
+    // query entirely. No `deletedAt` filter, which is what lets the
+    // soft-deleted case through.
     const { svc, prisma } = existingInvoiceHarness(
       draftInvoice({
         lineItems: [{ ...line, id: "li1", sectionId: null, markupPct: null, supplierId: "sup-old" }],
       }),
     );
+    prisma.supplier.findMany.mockResolvedValue([{ id: "sup-old" }]); // still belongs to b1
     await svc.update("b1", "inv1", {
       lineItems: [{ ...line, supplierId: "sup-old" }],
     } as any);
-    expect(prisma.supplier.findMany).not.toHaveBeenCalled();
+    expect(prisma.supplier.findMany).toHaveBeenCalledWith(
+      // `businessId in [b1, null]`: an OWNERLESS legacy row is unreachable platform
+      // data that must not brick an invoice already referencing it; another tenant's
+      // id is still refused (next test).
+      expect.objectContaining({
+        where: { id: { in: ["sup-old"] }, OR: [{ businessId: "b1" }, { businessId: null }] },
+      }),
+    );
+  });
+
+  it("refuses a legacy foreign supplierId already on the invoice, unchanged", async () => {
+    const { svc, prisma } = existingInvoiceHarness(
+      draftInvoice({
+        lineItems: [{ ...line, id: "li1", sectionId: null, markupPct: null, supplierId: "sup-old" }],
+      }),
+    );
+    prisma.supplier.findMany.mockResolvedValue([]); // does not belong to b1
+    await expect(
+      svc.update("b1", "inv1", {
+        lineItems: [{ ...line, supplierId: "sup-old" }],
+      } as any),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it("still checks a NEWLY introduced supplierId on update", async () => {

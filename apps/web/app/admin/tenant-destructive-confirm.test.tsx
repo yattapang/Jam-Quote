@@ -5,6 +5,12 @@ import userEvent from "@testing-library/user-event";
 import AdminConsole from "./AdminConsole";
 import type { AdminData, AdminTenant } from "@/lib/api-client";
 
+// Rendering the whole admin console and driving it with userEvent is slow under the
+// full parallel suite: at vitest's 5s default this file timed out intermittently,
+// which is a harness limit, not a behaviour change. Other heavy render/dynamic-import
+// suites in this repo carry the same allowance.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Suspend fired on one click, and the plan `<select>` used to save on every
  * `change` event (choosing "Free" downgrades a paying tenant immediately) —

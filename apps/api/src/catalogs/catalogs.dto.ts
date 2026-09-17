@@ -53,7 +53,20 @@ export const createMaterialFavouriteSchema = z.object({
   unit: z.string().max(40).optional(),
 });
 export type CreateMaterialFavouriteInput = z.infer<typeof createMaterialFavouriteSchema>;
-export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial();
+// A PATCH sends `null` for supplierId/description/measureUnit/
+// coveragePerSellUnit/wastePct to clear a previously set value — distinct
+// from the field being omitted, which means "leave unchanged". All five
+// columns are nullable in the schema, so null passes straight through to
+// Prisma. Clearing supplierId also has to skip the supplier ownership check
+// (MaterialFavouritesService.update guards on truthiness, so null already
+// does).
+export const updateMaterialFavouriteSchema = createMaterialFavouriteSchema.partial().extend({
+  supplierId: z.string().uuid().nullable().optional(),
+  description: z.string().max(500).nullable().optional(),
+  measureUnit: z.string().max(40).nullable().optional(),
+  coveragePerSellUnit: boundedNumber(BOUNDS.coveragePerSellUnit).nullable().optional(),
+  wastePct: boundedNumber(BOUNDS.wastePct).nullable().optional(),
+});
 export type UpdateMaterialFavouriteInput = z.infer<typeof updateMaterialFavouriteSchema>;
 
 /** Max rows GET /catalogs/material-favourites?limit= can return in one call. */

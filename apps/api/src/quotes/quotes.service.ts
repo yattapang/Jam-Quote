@@ -1195,6 +1195,20 @@ export class QuotesService {
         ...original.lineItems,
         ...original.sections.flatMap((s) => s.lineItems),
       ];
+
+      // Copying supplierId forward must not propagate a legacy foreign id
+      // silently: validate the ids already on the original against the same
+      // grandfathered-but-checked rule `assertSuppliersOwned` applies on a
+      // normal update, rather than trusting them because they were already
+      // on a document this business owns.
+      const originalSupplierIds = allOriginalLines.map((li) => li.supplierId);
+      await assertSuppliersOwned(
+        tx,
+        businessId,
+        originalSupplierIds,
+        new Set(originalSupplierIds.filter((v): v is string => Boolean(v))),
+      );
+
       for (const li of allOriginalLines) {
         await tx.quoteLineItem.create({
           data: {

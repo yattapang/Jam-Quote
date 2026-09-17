@@ -92,7 +92,27 @@ export type UpdateClientInput = z.infer<typeof updateClientSchema>;
  * {firstName, lastName}. Prefers firstName/lastName when present; otherwise
  * splits `name` on the first space (first token -> firstName, remainder ->
  * lastName, empty string when there's no space). Returns an empty object
- * when neither is present (a partial update that doesn't touch the name).
+ * when neither firstName, name, NOR an explicit lastName is present (a
+ * partial update that doesn't touch the name at all).
+ *
+ * Bug fixed here: a `lastName` sent ALONE (no firstName, no name) used to fall
+ * through both branches and return `{}`, which the caller
+ * (`ClientsService.update`) reads as "lastName wasn't mentioned" — so the write
+ * passed validation and then silently did nothing, leaving the old lastName in
+ * place with a 200 back. The first fix handled only `null`, so
+ * `{ lastName: "Brown" }`, `{ lastName: "" }` and `{ lastName: "   " }` were all
+ * still accepted by the schema and discarded. The web edit form always sends
+ * `firstName` alongside, so it does not reach that shape today — but
+ * `updateClientSchema` accepts it, the mobile and API clients can send it, and a
+ * schema that accepts a field must honour it. (An earlier version of this comment
+ * claimed `api-client.ts` sends `{ lastName }` alone; it does not.)
+ *
+ * So the rule is presence, not value: EVERY `lastName !== undefined` is a
+ * decision the caller made and is honoured. A blank or whitespace-only surname
+ * means the same thing as `null` — the contractor cleared the field — because
+ * `lastName` is stored as a non-null column whose empty value is `""` (see
+ * `withName`, which joins and trims). Trimmed on both branches so " Brown " and
+ * "Brown" cannot store two spellings of one surname.
  */
 export function resolveClientName(input: {
   firstName?: string;
@@ -100,11 +120,14 @@ export function resolveClientName(input: {
   name?: string;
 }): { firstName?: string; lastName?: string } {
   if (input.firstName !== undefined) {
-    return { firstName: input.firstName, lastName: input.lastName ?? "" };
+    return { firstName: input.firstName.trim(), lastName: input.lastName?.trim() ?? "" };
   }
   if (input.name !== undefined) {
     const [firstName, ...rest] = input.name.trim().split(/\s+/);
     return { firstName: firstName ?? "", lastName: rest.join(" ") };
+  }
+  if (input.lastName !== undefined) {
+    return { lastName: input.lastName?.trim() ?? "" };
   }
   return {};
 }
