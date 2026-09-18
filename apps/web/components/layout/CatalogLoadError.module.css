@@ -1,0 +1,32 @@
+.wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.icon {
+  flex: 0 0 auto;
+  color: var(--jq-accent);
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+.copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 14.5px;
+}
+
+.body {
+  color: var(--jq-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}

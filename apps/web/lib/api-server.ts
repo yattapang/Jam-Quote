@@ -19,6 +19,7 @@ import type { JobProfit } from "@jamquote/core";
 import {
   API_BASE_URL,
   ApiError,
+  checkApiReachable,
   mapJob,
   mapBusiness,
   mapClient,
@@ -154,6 +155,39 @@ function redirectOnAuthError(err: unknown): void {
   }
 }
 
+/**
+ * Shared failure handling for the four catalog getters (material favourites,
+ * labour rates, equipment, jobs). These have no fixture to fall back to, so
+ * historically every failure — API asleep or API up but this one request
+ * failed — returned an empty list. That made a live 500 indistinguishable
+ * from "you have nothing saved," which reads to a contractor as "recreate
+ * your catalog" and produces duplicates.
+ *
+ * The two cases now get different treatment:
+ *  - API unreachable (checkApiReachable(), the SAME probe the app shell's
+ *    layout already runs to decide whether to show DemoDataBanner — not a
+ *    second implementation of that check): still return `empty`. The
+ *    layout's banner already explains why the screen is empty.
+ *  - API reachable, this request failed: rethrow. The catalog route's
+ *    error.tsx boundary (apps/web/app/(app)/{materials,labour,equipment,jobs}/error.tsx)
+ *    catches it and renders "Couldn't load your …" with Retry, instead of
+ *    the page's own "No saved … yet" empty state.
+ *
+ * Auth errors (401/403) are handled first via redirectOnAuthError, same as
+ * every other getter — unaffected by this.
+ *
+ * The reachability probe only runs on the failure path, not on every
+ * success, so normal page loads pay no extra request.
+ */
+async function catalogFailureOrEmpty<T>(err: unknown, label: string, empty: T): Promise<T> {
+  redirectOnAuthError(err);
+  if (await checkApiReachable()) {
+    throw err;
+  }
+  console.warn(`[api-server] ${label}: API unreachable, using empty list`);
+  return empty;
+}
+
 export async function getClients(): Promise<Client[]> {
   try {
     return (await serverRequest<ApiClientRow[]>("/clients")).map(mapClient);
@@ -214,9 +248,7 @@ export async function getMaterialFavourites(params?: {
       await serverRequest<ApiMaterialFavourite[]>(`/catalogs/material-favourites${suffix}`)
     ).map(mapMaterialFavourite);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getMaterialFavourites: API unreachable, using empty list");
-    return [];
+    return catalogFailureOrEmpty(err, "getMaterialFavourites", []);
   }
 }
 
@@ -228,9 +260,7 @@ export async function getLabourRates(includeHidden = false): Promise<LabourRate[
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return (await serverRequest<ApiLabourRate[]>(`/catalogs/labour-rates${suffix}`)).map(mapLabourRate);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getLabourRates: API unreachable, using empty list");
-    return [];
+    return catalogFailureOrEmpty(err, "getLabourRates", []);
   }
 }
 
@@ -242,9 +272,7 @@ export async function getEquipment(includeHidden = false): Promise<EquipmentItem
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return (await serverRequest<ApiEquipmentItem[]>(`/catalogs/equipment${suffix}`)).map(mapEquipmentItem);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getEquipment: API unreachable, using empty list");
-    return [];
+    return catalogFailureOrEmpty(err, "getEquipment", []);
   }
 }
 
@@ -329,9 +357,7 @@ export async function getJobs(): Promise<Job[]> {
   try {
     return (await serverRequest<ApiJob[]>("/jobs")).map(mapJob);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getJobs: API unreachable, using empty list");
-    return [];
+    return catalogFailureOrEmpty(err, "getJobs", []);
   }
 }
 

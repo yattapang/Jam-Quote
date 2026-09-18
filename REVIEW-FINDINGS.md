@@ -380,7 +380,18 @@ fields carry `PASSWORD_MAX_LENGTH` (I added the mobile one myself - the agent st
   real data; `inputMin` no longer blocks anything the server accepts; unit normalising
   touches only new writes and nothing compares labels; JobForm round-trips; the mobile
   demo invoice adds up in the right order; the catalog revert is complete.
-- **Queued (design gap, not a regression):** `DemoDataBanner` shows only when the whole
+- **FIXED 2026-09-18 (was queued):** a catalog request that fails while the API is UP
+  now rethrows (`catalogFailureOrEmpty` in `api-server.ts` re-uses `checkApiReachable`,
+  only on the failure path) and the four catalog routes show "Couldn't load your ..."
+  with Retry, never the misleading "No saved ... yet". An asleep API still returns empty
+  lists under `DemoDataBanner`, unchanged. The agent's version missed that the quote
+  builder, invoice editor, project page and settings call the same getters for their
+  pickers and have no boundary, so a single failed request would have crashed them to
+  Next's generic page; I added an app-wide `app/(app)/error.tsx` fallback. Planted the
+  old swallow-everything behaviour: 4 tests fail. Open: 20 other getters (clients,
+  quotes, invoices, projects, reports...) still return empty on any failure - each needs
+  its own page decision.
+- Was queued (design gap, not a regression): `DemoDataBanner` shows only when the whole
   API is unreachable. If one endpoint returns 500 while the API is up, a catalog list is
   empty with no banner, and a contractor may create duplicate items. Needs its own error
   state.
