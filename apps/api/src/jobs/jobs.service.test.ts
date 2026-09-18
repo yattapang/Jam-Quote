@@ -51,8 +51,11 @@ function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
     },
     // The job's CURRENT components, read in update() to grandfather in
     // already-persisted refs even if since soft-deleted. Default: none.
+    // `count` backs the 200-cap "only refuse a GROWING edit" check — default
+    // 0 so existing tests (all well under the cap) are unaffected.
     jobComponent: {
       findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
     },
     // Ownership lookups for component refs. Default: whatever id is asked
     // for, one row comes back "owned" (findMany count matches the id count),
@@ -350,6 +353,55 @@ describe("JobsService.findOne", () => {
   });
 });
 
+describe("JobsService — withUnitCost degrades instead of throwing on a stored oversize row", () => {
+  // A row saved before the DTO's cost check existed (or planted directly)
+  // can still overflow Number.MAX_SAFE_INTEGER — computeJobUnitCostCents
+  // throws RangeError in that case (correct for a write). On a READ path
+  // that must never happen: one such row used to 500 every findAll for the
+  // whole business, and made its own findOne permanently unopenable.
+  const overflowRow = () =>
+    tileAssemblyRow({
+      components: [
+        {
+          id: "c1",
+          jobId: "a1",
+          sort: 0,
+          kind: JobComponentKind.OTHER,
+          description: "Overflow",
+          quantityPerUnit: 999_999_999,
+          unitPriceCents: 2_147_483_647,
+        },
+      ],
+    });
+
+  it("HIGH: findAll survives a stored oversize row instead of throwing for the whole business", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findMany = vi.fn().mockResolvedValue([overflowRow(), tileAssemblyRow({ id: "a2" })]);
+
+    const result = await svc.findAll("b1");
+
+    expect(result).toHaveLength(2);
+    // Degrades to the Int32 ceiling — visibly wrong, but a number, not a 500.
+    // Flagged, and carries NO usable price: a placeholder here would be copied
+    // into a quote line if the job were picked.
+    expect(result[0]!.costInvalid).toBe(true);
+    expect(result[0]!.unitCostCents).toBe(0);
+    expect(result[1]!.unitCostCents).toBe(
+      computeJobUnitCostCents({ components: [materialComponent, labourComponent], markupPct: 20 }),
+    );
+  });
+
+  it("findOne also degrades rather than throwing for a single oversize job", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(overflowRow());
+
+    const result = await svc.findOne("b1", "a1");
+
+    expect(result.costInvalid).toBe(true);
+    expect(result.unitCostCents).toBe(0);
+  });
+});
+
 describe("JobsService.update", () => {
   it("replaces components (delete old, insert new) when components is provided", async () => {
     const { svc, prisma, tx } = withPrisma();
@@ -417,6 +469,59 @@ describe("JobsService.update", () => {
       NotFoundException,
     );
     expect(tx.job.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("JobsService.update — 200-component cap only blocks GROWING past it", () => {
+  // The DTO's own .max(200) only applies to create (jobs.dto.ts); a job
+  // saved before that cap existed can already be stored over it, and
+  // production can't be queried to find out how many. Blocking every save
+  // of such a job — even a plain rename — would lock it out entirely.
+  function componentsOf(n: number) {
+    return Array.from({ length: n }, (_, i) => ({
+      kind: JobComponentKind.OTHER,
+      description: `Row ${i}`,
+      quantityPerUnit: 1,
+      unitPriceCents: 100,
+    }));
+  }
+
+  it("LOW: a plain rename of an existing 250-component job still succeeds (components re-sent unchanged)", async () => {
+    const { svc, prisma, tx } = withPrisma();
+    prisma.job.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(tileAssemblyRow())
+      .mockResolvedValueOnce(tileAssemblyRow({ name: "Renamed" }));
+    prisma.jobComponent.count = vi.fn().mockResolvedValue(250);
+
+    await expect(
+      svc.update("b1", "a1", { name: "Renamed", components: componentsOf(250) } as any),
+    ).resolves.toBeDefined();
+    expect(tx.jobComponent.createMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("LOW: growing a 200-component job to 201 is refused", async () => {
+    const { svc, prisma, tx } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValueOnce(tileAssemblyRow());
+    prisma.jobComponent.count = vi.fn().mockResolvedValue(200);
+
+    await expect(
+      svc.update("b1", "a1", { components: componentsOf(201) } as any),
+    ).rejects.toMatchObject({ message: expect.stringContaining("200") });
+    expect(tx.job.update).not.toHaveBeenCalled();
+  });
+
+  it("shrinking a 250-component job back under 200 is allowed", async () => {
+    const { svc, prisma } = withPrisma();
+    prisma.job.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(tileAssemblyRow())
+      .mockResolvedValueOnce(tileAssemblyRow({ name: "x" }));
+    prisma.jobComponent.count = vi.fn().mockResolvedValue(250);
+
+    await expect(
+      svc.update("b1", "a1", { components: componentsOf(150) } as any),
+    ).resolves.toBeDefined();
   });
 });
 

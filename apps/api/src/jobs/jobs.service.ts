@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Job, Prisma } from "@prisma/client";
 import { computeJobUnitCostCents, normalizeUnitLabel } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertJobComponentRefsOwned } from "../common/assert-owned.js";
+import { MAX_COMPONENTS, componentsMaxMessage } from "./jobs.dto.js";
 import type {
   JobComponentInput,
   CreateJobInput,
@@ -17,18 +18,42 @@ type AssemblyWithComponents = Prisma.JobGetPayload<{
   include: typeof ASSEMBLY_DETAIL_INCLUDE;
 }>;
 
-export type JobWithCost = AssemblyWithComponents & { unitCostCents: number };
+export type JobWithCost = AssemblyWithComponents & { unitCostCents: number; costInvalid: boolean };
 
-/** Attach the computed unit cost (via @jamquote/core) to an job + its components. */
+/**
+ * Attach the computed unit cost (via @jamquote/core) to a job + its
+ * components — for a READ path, so it must never throw.
+ *
+ * jobs.dto.ts now refuses any new save whose cost would not fit a Postgres
+ * `Int`, but a row written before that check existed (or planted directly)
+ * can still be sitting in the database. computeJobUnitCostCents itself
+ * throws RangeError past Number.MAX_SAFE_INTEGER rather than silently
+ * losing precision — correct for a WRITE, where a wrong-but-plausible price
+ * is worse than a hard error, but fatal for a LIST: one such row inside
+ * `findAll` would 500 every future load of this business's whole jobs list,
+ * and inside `findOne` would make that one job permanently unopenable.
+ *
+ * Degrades instead: the row is returned with `costInvalid: true` and a
+ * `unitCostCents` of 0, so the list still loads and the job can be opened and
+ * fixed. It must NOT carry a placeholder price: an earlier version returned
+ * the Int32 ceiling as a "visibly wrong" number, but the quote builder copies
+ * `unitCostCents` straight into a line's price, so picking such a job would
+ * have quoted $21,474,836.47. The web marks the job as needing a fix and keeps
+ * it out of the quote picker instead.
+ */
 function withUnitCost(job: AssemblyWithComponents): JobWithCost {
-  const unitCostCents = computeJobUnitCostCents({
-    components: job.components.map((c) => ({
-      quantityPerUnit: Number(c.quantityPerUnit),
-      unitPriceCents: c.unitPriceCents,
-    })),
-    markupPct: Number(job.markupPct),
-  });
-  return { ...job, unitCostCents };
+  try {
+    const unitCostCents = computeJobUnitCostCents({
+      components: job.components.map((c) => ({
+        quantityPerUnit: Number(c.quantityPerUnit),
+        unitPriceCents: c.unitPriceCents,
+      })),
+      markupPct: Number(job.markupPct),
+    });
+    return { ...job, unitCostCents, costInvalid: false };
+  } catch {
+    return { ...job, unitCostCents: 0, costInvalid: true };
+  }
 }
 
 function componentCreateData(
@@ -124,6 +149,19 @@ export class JobsService {
     const existing = await this.assertExists(businessId, id);
     const replacingComponents = input.components !== undefined;
     if (replacingComponents) {
+      // The 200-component cap (jobs.dto.ts) applies unconditionally on
+      // create, but a job saved before that cap existed can already be
+      // stored over it — production cannot be queried to know how many
+      // exist. Blocking every save of such a job would lock it: even
+      // renaming it would fail. So update only refuses when this edit would
+      // GROW the count past the cap; shrinking, or resaving the same count
+      // (e.g. a plain rename with `components` echoed back unchanged), is
+      // always allowed regardless of how large the stored recipe already is.
+      const existingCount = await this.prisma.jobComponent.count({ where: { jobId: id } });
+      const newCount = (input.components ?? []).length;
+      if (newCount > MAX_COMPONENTS && newCount > existingCount) {
+        throw new BadRequestException(componentsMaxMessage);
+      }
       // Ids already persisted on this job stay allowed even if the catalog
       // row they name has since been soft-deleted — renaming a job must not
       // 404 because a material it already used was deleted afterwards. A

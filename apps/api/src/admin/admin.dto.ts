@@ -19,7 +19,7 @@ export const setTenantPlanSchema = z.object({
    * returns them to standard. Kept separate from the global pricing config so
    * one tenant's deal never moves everyone else's bill.
    */
-  priceCents: centsSchema("priceCents").nullable().optional(),
+  priceCents: centsSchema("priceCents", { label: "Price" }).nullable().optional(),
   renewsAt: z.string().datetime().optional(),
 });
 export type SetTenantPlanInput = z.infer<typeof setTenantPlanSchema>;
@@ -108,7 +108,7 @@ export type ReviewRegulatoryUpdateInput = z.infer<typeof reviewRegulatoryUpdateS
  * short payment rather than silently redefining the agreed rate.
  */
 export const recordSubscriptionPaymentSchema = z.object({
-  amountCents: centsSchema("amountCents", { positiveOnly: true }).optional(),
+  amountCents: centsSchema("amountCents", { positiveOnly: true, label: "Amount" }).optional(),
   method: z.enum(["CARD", "CASH", "BANK_TRANSFER", "MOBILE_MONEY", "OTHER"]),
   /** Cheque number, bank reference, wallet transaction id — whatever lets this
    * be matched against a bank statement later. */

@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
   BOUNDS,
+  INT32_MAX_CENTS,
   boundedNumber,
   centsSchema,
+  computeTotals,
   JobComponentKind,
   QuoteDetailLevel,
   quoteLineItemSchema,
@@ -20,7 +22,7 @@ export const invoiceLineJobComponentSchema = z.object({
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
   unitLabel: z.string().trim().min(1).max(40).optional(),
-  unitPriceCents: centsSchema("unitPriceCents"),
+  unitPriceCents: centsSchema("unitPriceCents", { label: "Unit price" }),
 });
 export type InvoiceLineJobComponentInput = z.infer<
   typeof invoiceLineJobComponentSchema
@@ -51,29 +53,69 @@ export const invoiceSectionInputSchema = z.object({
 export type InvoiceSectionInput = z.infer<typeof invoiceSectionInputSchema>;
 
 /**
+ * Same overflow risk as a quote (see the matching helper in quotes.dto.ts):
+ * every line's own price/quantity is capped, but the summed
+ * `subtotalCents`/`totalCents` — both a Postgres `Int` column — are not,
+ * and enough large-but-legal lines overflow them into a 500 instead of a
+ * named 400. Reuses core's `computeTotals` so this check and the real
+ * calculation can never disagree. Missing `gctRatePct`/`discountPct` are
+ * treated as 0 — the smallest, most permissive total this payload could
+ * produce — since a business's real default rate only pushes the total
+ * higher, never lower.
+ */
+function invoiceTotalFitsInt32(v: {
+  sections?: InvoiceSectionInput[];
+  lineItems?: InvoiceLineItemInput[];
+  gctRatePct?: number;
+  discountPct?: number;
+  depositCents?: number;
+}): boolean {
+  const lines = [
+    ...(v.lineItems ?? []),
+    ...(v.sections ?? []).flatMap((s) => s.lineItems),
+  ];
+  if (lines.length === 0) return true;
+  const totals = computeTotals({
+    lines: lines.map((l) => ({
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      markupPct: l.markupPct,
+      gctTreatment: l.gctTreatment,
+    })),
+    gctRatePct: v.gctRatePct ?? 0,
+    discountPct: v.discountPct ?? 0,
+    depositCents: v.depositCents,
+  });
+  return totals.subtotalCents <= INT32_MAX_CENTS && totals.totalCents <= INT32_MAX_CENTS;
+}
+const invoiceTotalTooLargeMessage = "This invoice's total is too large";
+
+/**
  * PATCH shape for an invoice. Only legal while the invoice is DRAFT (enforced
  * in the service). Edits header fields; when `sections`/`lineItems` are
  * provided, fully replaces the nested line items — same "simplest correct
  * model" as quotes.dto.ts's updateQuoteSchema.
  */
-export const updateInvoiceSchema = z.object({
-  // Nullable, not merely optional: sending null detaches the client, while
-  // omitting the key leaves whoever is attached alone. The editor's client
-  // picker offers a blank option, and that option has to mean something.
-  clientId: z.string().max(64).min(1).nullable().optional(),
-  dueDate: z.coerce.date().optional(),
-  // The date the invoice bears. Reports attribute revenue to it, so it is a
-  // financial field, not a cosmetic one — see Invoice.issueDate in schema.
-  issueDate: z.coerce.date().optional(),
-  terms: z.string().max(5000).optional(),
-  gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
-  discountPct: boundedNumber(BOUNDS.discountPct).optional(),
-  depositCents: centsSchema("depositCents").optional(),
-  // Display setting only — does not affect totals math.
-  detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
-  sections: z.array(invoiceSectionInputSchema).optional(),
-  lineItems: z.array(invoiceLineItemInputSchema).optional(),
-});
+export const updateInvoiceSchema = z
+  .object({
+    // Nullable, not merely optional: sending null detaches the client, while
+    // omitting the key leaves whoever is attached alone. The editor's client
+    // picker offers a blank option, and that option has to mean something.
+    clientId: z.string().max(64).min(1).nullable().optional(),
+    dueDate: z.coerce.date().optional(),
+    // The date the invoice bears. Reports attribute revenue to it, so it is a
+    // financial field, not a cosmetic one — see Invoice.issueDate in schema.
+    issueDate: z.coerce.date().optional(),
+    terms: z.string().max(5000).optional(),
+    gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
+    discountPct: boundedNumber(BOUNDS.discountPct).optional(),
+    depositCents: centsSchema("depositCents", { label: "Deposit" }).optional(),
+    // Display setting only — does not affect totals math.
+    detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
+    sections: z.array(invoiceSectionInputSchema).optional(),
+    lineItems: z.array(invoiceLineItemInputSchema).optional(),
+  })
+  .refine(invoiceTotalFitsInt32, { message: invoiceTotalTooLargeMessage, path: ["lineItems"] });
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
 
 /**
@@ -89,22 +131,24 @@ export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
  * server-side so it cannot collide or skip, and every invoice starts DRAFT so
  * it can be reviewed before being finalized.
  */
-export const createInvoiceSchema = z.object({
-  clientId: z.string().max(64).min(1).optional(),
-  dueDate: z.coerce.date().optional(),
-  // The date the invoice bears. Reports attribute revenue to it, so it is a
-  // financial field, not a cosmetic one — see Invoice.issueDate in schema.
-  issueDate: z.coerce.date().optional(),
-  terms: z.string().max(5000).optional(),
-  // Defaults are applied from the business's own settings when omitted — see
-  // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
-  gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
-  discountPct: boundedNumber(BOUNDS.discountPct).default(0),
-  depositCents: centsSchema("depositCents").default(0),
-  detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
-  sections: z.array(invoiceSectionInputSchema).default([]),
-  lineItems: z.array(invoiceLineItemInputSchema).default([]),
-});
+export const createInvoiceSchema = z
+  .object({
+    clientId: z.string().max(64).min(1).optional(),
+    dueDate: z.coerce.date().optional(),
+    // The date the invoice bears. Reports attribute revenue to it, so it is a
+    // financial field, not a cosmetic one — see Invoice.issueDate in schema.
+    issueDate: z.coerce.date().optional(),
+    terms: z.string().max(5000).optional(),
+    // Defaults are applied from the business's own settings when omitted — see
+    // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
+    gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
+    discountPct: boundedNumber(BOUNDS.discountPct).default(0),
+    depositCents: centsSchema("depositCents", { label: "Deposit" }).default(0),
+    detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
+    sections: z.array(invoiceSectionInputSchema).default([]),
+    lineItems: z.array(invoiceLineItemInputSchema).default([]),
+  })
+  .refine(invoiceTotalFitsInt32, { message: invoiceTotalTooLargeMessage, path: ["lineItems"] });
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 
 /** Sign-off toggle. Reversible, so it carries the target state rather than

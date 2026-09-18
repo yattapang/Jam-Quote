@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
+import { GctTreatment, LineCategory, RateUnit } from "@jamquote/core";
 import { createQuoteSchema, updateQuoteSchema } from "./quotes.dto.js";
+
+function bigLine(over: Partial<Record<string, unknown>> = {}) {
+  return {
+    category: LineCategory.OTHER,
+    description: "Bulk material",
+    quantity: 999_999_999,
+    rateUnit: RateUnit.UNIT,
+    unitPriceCents: 2_147_483_647,
+    gctTreatment: GctTreatment.STANDARD,
+    ...over,
+  };
+}
 
 /**
  * Register item: the web builder refuses `validDays < BOUNDS.validDays.min`,
@@ -108,5 +121,52 @@ describe("createQuoteSchema / updateQuoteSchema validUntil bound", () => {
       const result = createQuoteSchema.safeParse({ validUntil: justAfter });
       expect(result.success).toBe(true);
     });
+  });
+});
+
+describe("createQuoteSchema / updateQuoteSchema — quote total fits Int32", () => {
+  it("LOW/item 6: refuses a payload whose per-line-legal quantity x price overflows the quote total, with a plain message", () => {
+    // Each line's own quantity and unitPriceCents individually pass their
+    // field caps, but summed across lines the subtotal/total blow past the
+    // Postgres Int column (subtotalCents/totalCents) — previously an
+    // unhandled 500 instead of a named 400.
+    const result = createQuoteSchema.safeParse({ lineItems: [bigLine(), bigLine()] });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toBe("This quote's total is too large");
+    }
+  });
+
+  it("accepts a normal quote total", () => {
+    const result = createQuoteSchema.safeParse({
+      lineItems: [
+        {
+          category: LineCategory.MATERIAL,
+          description: "Cement",
+          quantity: 10,
+          rateUnit: RateUnit.UNIT,
+          unitPriceCents: 5000,
+          gctTreatment: GctTreatment.STANDARD,
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("checks lines nested inside sections too", () => {
+    const result = createQuoteSchema.safeParse({
+      sections: [{ title: "Materials", lineItems: [bigLine(), bigLine()] }],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("updateQuoteSchema refuses the same overflowing payload", () => {
+    const result = updateQuoteSchema.safeParse({ lineItems: [bigLine(), bigLine()] });
+    expect(result.success).toBe(false);
+  });
+
+  it("updateQuoteSchema with no line items skips the check (a header-only edit)", () => {
+    const result = updateQuoteSchema.safeParse({ terms: "Net 30" });
+    expect(result.success).toBe(true);
   });
 });

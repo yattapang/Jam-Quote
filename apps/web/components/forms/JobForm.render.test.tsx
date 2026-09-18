@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { JobComponentKind } from "@jamquote/core";
-import JobForm, { emptyJobForm } from "./JobForm";
+import JobForm, { emptyJobForm, type JobFormValues } from "./JobForm";
 import type { EquipmentItem, LabourRate, MaterialFavourite } from "@/lib/types";
 
 /**
@@ -146,5 +146,115 @@ describe("JobForm — Enter key inside a component row", () => {
     name.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(false);
+  });
+});
+
+describe("JobForm — an oversize component renders an error instead of throwing", () => {
+  // computeJobUnitCostCents throws RangeError past Number.MAX_SAFE_INTEGER.
+  // It used to be called straight inside render (no try/catch), so a row
+  // like this took the whole form down — "the page is lost" while typing.
+  it("HIGH: renders a field-level error instead of crashing", () => {
+    const overflowValues: JobFormValues = {
+      name: "Overflow job",
+      unit: "job",
+      markupPct: "0",
+      components: [
+        {
+          key: "c1",
+          kind: JobComponentKind.OTHER,
+          description: "Overflow",
+          quantityPerUnit: "999999999999999999999999",
+          unitLabel: "",
+          unitPriceDollars: "999999999999999999999999",
+        },
+      ],
+    };
+
+    expect(() =>
+      render(
+        <JobForm
+          initial={overflowValues}
+          materials={[material]}
+          labourRates={[labourRate]}
+          equipment={[] as EquipmentItem[]}
+          onCancel={() => {}}
+          onSubmit={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(screen.getByText(/too large/i)).toBeInTheDocument();
+  });
+});
+
+describe("JobForm — duplicate component messaging", () => {
+  function valuesWith(components: JobFormValues["components"]): JobFormValues {
+    return { name: "Job", unit: "job", markupPct: "0", components };
+  }
+
+  it("MEDIUM/item 3: offers 'Combine them' when the duplicate rows share a price and unit", () => {
+    render(
+      <JobForm
+        initial={valuesWith([
+          {
+            key: "a",
+            kind: JobComponentKind.OTHER,
+            description: "Sand",
+            quantityPerUnit: "1",
+            unitLabel: "bag",
+            unitPriceDollars: "10",
+          },
+          {
+            key: "b",
+            kind: JobComponentKind.OTHER,
+            description: "Sand",
+            quantityPerUnit: "1",
+            unitLabel: "bag",
+            unitPriceDollars: "10",
+          },
+        ])}
+        materials={[material]}
+        labourRates={[labourRate]}
+        equipment={[] as EquipmentItem[]}
+        onCancel={() => {}}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Already in this job.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Combine them" })).toBeInTheDocument();
+  });
+
+  it("MEDIUM/item 3: shows a check-it's-intended warning with no button when the duplicate rows have different prices ($5 and $3 Sand)", () => {
+    render(
+      <JobForm
+        initial={valuesWith([
+          {
+            key: "a",
+            kind: JobComponentKind.OTHER,
+            description: "Sand",
+            quantityPerUnit: "1",
+            unitLabel: "bag",
+            unitPriceDollars: "5",
+          },
+          {
+            key: "b",
+            kind: JobComponentKind.OTHER,
+            description: "Sand",
+            quantityPerUnit: "1",
+            unitLabel: "bag",
+            unitPriceDollars: "3",
+          },
+        ])}
+        materials={[material]}
+        labourRates={[labourRate]}
+        equipment={[] as EquipmentItem[]}
+        onCancel={() => {}}
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/different price or unit/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Combine them" })).not.toBeInTheDocument();
   });
 });

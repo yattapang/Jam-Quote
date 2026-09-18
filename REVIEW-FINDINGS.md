@@ -352,6 +352,41 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Review of 06da235 (2026-09-18) - FIXED
+
+All six fixed: the job DTO refuses a cost outside Int32 using core's own cost function, so
+check and calculation cannot disagree; the form shows a cost error instead of throwing;
+merging requires the rounded cost to be unchanged (both cent-drift cases tested), and a
+pair that cannot merge says so with no button; the 200 cap applies on create and on growth
+only, so an existing larger job stays editable; the cents limit reads in dollars; quote
+and invoice totals are checked against Int32 via `computeTotals`.
+**I changed the agent's read-side fallback before committing:** it returned the Int32
+ceiling as a "visibly wrong" cost for a bad stored job, but the quote builder copies
+`unitCostCents` straight into a line price - picking that job would have quoted
+$21,474,836.47. It now returns `costInvalid: true` with no usable price; the Job Library
+shows "Cost too large - edit this job" and the quote picker leaves it out. Planted the
+picker filter away: its test fails. Gate green, `next build` compiles.
+**Lesson:** a "safe" fallback value is only safe if nothing downstream treats it as data.
+
+
+
+- **HIGH - my "refuse an unsafe total" fix made a new outage:** core now throws on an
+  unsafe job cost, and a payload inside the new DTO caps (quantity 999,999,999 x
+  $21,474,836.47) reaches it. The job commits, then the read throws, and every jobs list
+  for that tenant is a 500 until the row is deleted by hand; the web form throws in render.
+  A fix that throws must be matched by a validator that refuses the input first.
+- **MEDIUM - merging still reprices by a cent:** core rounds each row half-up, so three
+  $0.10 x 0.333 rows are 9c apart and 10c merged. "Cannot change the cost" was tested on
+  whole numbers only.
+- MEDIUM - "Combine them" shows on pairs that cannot merge, and does nothing when clicked.
+- LOW - existing jobs over 200 components would lock; the cents cap message is in code
+  terms; quote/invoice TOTALS can still exceed Int32 (pre-existing).
+- Sound: load then save of an old quote keeps its total (no silent repricing); every cents
+  column is `Int`, so no stored value exceeds the cap; `createMany` keeps normalisation,
+  sort and ownership; Enter handling and row numbers are right.
+- **Lessons:** a throw added for safety needs its reachability traced to the entry point;
+  a money invariant needs fractional inputs in its test, not whole numbers.
+
 ## Job form sweep (2026-09-18) - FIXED
 
 All nine fixed. "Combine them" merges only rows with the same price and unit, and a merge

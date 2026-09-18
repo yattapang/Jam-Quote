@@ -5,8 +5,10 @@ import {
   QuoteStatus,
   quoteLineItemSchema,
   BOUNDS,
+  INT32_MAX_CENTS,
   boundedNumber,
   centsSchema,
+  computeTotals,
   startOfJamaicaDayMs,
 } from "@jamquote/core";
 
@@ -61,7 +63,7 @@ export const quoteLineJobComponentSchema = z.object({
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
   unitLabel: z.string().trim().min(1).max(40).optional(),
-  unitPriceCents: centsSchema("unitPriceCents"),
+  unitPriceCents: centsSchema("unitPriceCents", { label: "Unit price" }),
 });
 export type QuoteLineJobComponentInput = z.infer<
   typeof quoteLineJobComponentSchema
@@ -92,16 +94,53 @@ export const quoteSectionInputSchema = z.object({
 export type QuoteSectionInput = z.infer<typeof quoteSectionInputSchema>;
 
 /**
- * Create/replace shape for a quote. `sections` groups line items under a
- * heading; `lineItems` are ungrouped lines at the quote's top level. Both are
- * optional and may be combined.
+ * Every line's own price/quantity is capped, but a quote sums quantity x
+ * price across every line (plus per-line markup) into `subtotalCents` and
+ * `totalCents` — both a Postgres `Int` column (schema.prisma) — and enough
+ * large-but-individually-legal lines overflow that sum the same way a
+ * single oversize job component overflows a job's cost (see jobs.dto.ts).
+ * Reuses core's own `computeTotals` so this check can never compute a
+ * different number than what actually gets saved. `gctRatePct`/
+ * `discountPct` fall back to 0 when omitted (a create/update may leave the
+ * business default to be filled in by the service) — GCT and discount only
+ * move the total further from, not closer to, the raw line sum, so 0 is the
+ * smallest (most permissive) total this payload could possibly produce; if
+ * even that fits, the real one — computed with whatever rate actually
+ * applies — fits too.
  */
-export const createQuoteSchema = z.object({
+function quoteTotalFitsInt32(v: {
+  sections?: QuoteSectionInput[];
+  lineItems?: QuoteLineItemInput[];
+  gctRatePct?: number;
+  discountPct?: number;
+  depositCents?: number;
+}): boolean {
+  const lines = [
+    ...(v.lineItems ?? []),
+    ...(v.sections ?? []).flatMap((s) => s.lineItems),
+  ];
+  if (lines.length === 0) return true;
+  const totals = computeTotals({
+    lines: lines.map((l) => ({
+      quantity: l.quantity,
+      unitPriceCents: l.unitPriceCents,
+      markupPct: l.markupPct,
+      gctTreatment: l.gctTreatment,
+    })),
+    gctRatePct: v.gctRatePct ?? 0,
+    discountPct: v.discountPct ?? 0,
+    depositCents: v.depositCents,
+  });
+  return totals.subtotalCents <= INT32_MAX_CENTS && totals.totalCents <= INT32_MAX_CENTS;
+}
+const quoteTotalTooLargeMessage = "This quote's total is too large";
+
+const quoteObjectSchema = z.object({
   clientId: z.string().max(64).min(1).optional(),
   projectId: z.string().max(64).min(1).optional(),
   gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
   discountPct: boundedNumber(BOUNDS.discountPct).optional(),
-  depositCents: centsSchema("depositCents").optional(),
+  depositCents: centsSchema("depositCents", { label: "Deposit" }).optional(),
   validUntil: validUntilNotPast.optional(),
   terms: z.string().max(5000).optional(),
   // Display setting only (defaults to SUMMARY in the service): does not
@@ -111,19 +150,32 @@ export const createQuoteSchema = z.object({
   sections: z.array(quoteSectionInputSchema).default([]),
   lineItems: z.array(quoteLineItemInputSchema).default([]),
 });
-export type CreateQuoteInput = z.infer<typeof createQuoteSchema>;
+
+/**
+ * Create/replace shape for a quote. `sections` groups line items under a
+ * heading; `lineItems` are ungrouped lines at the quote's top level. Both are
+ * optional and may be combined.
+ */
+export const createQuoteSchema = quoteObjectSchema.refine(quoteTotalFitsInt32, {
+  message: quoteTotalTooLargeMessage,
+  path: ["lineItems"],
+});
+export type CreateQuoteInput = z.infer<typeof quoteObjectSchema>;
 
 /**
  * Update replaces quote-level fields and — when `sections`/`lineItems` are
  * provided — fully replaces the nested line items (simplest correct model
  * for a scaffold; a future PATCH-by-id-for-lines endpoint can refine this).
  */
-export const updateQuoteSchema = createQuoteSchema.partial().extend({
-  // No "not in the past" refine here — see the comment on `validUntilNotPast`
-  // above. `quotes.service.ts#update` enforces it, only when the value
-  // actually changes from what is stored.
-  validUntil: coerceJamaicaDate.optional(),
-});
+export const updateQuoteSchema = quoteObjectSchema
+  .partial()
+  .extend({
+    // No "not in the past" refine here — see the comment on `validUntilNotPast`
+    // above. `quotes.service.ts#update` enforces it, only when the value
+    // actually changes from what is stored.
+    validUntil: coerceJamaicaDate.optional(),
+  })
+  .refine(quoteTotalFitsInt32, { message: quoteTotalTooLargeMessage, path: ["lineItems"] });
 export type UpdateQuoteInput = z.infer<typeof updateQuoteSchema>;
 
 export const updateQuoteStatusSchema = z.object({

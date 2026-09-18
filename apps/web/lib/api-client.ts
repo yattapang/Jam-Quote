@@ -251,6 +251,9 @@ export interface ApiJob {
   // Attached server-side by JobsService.withUnitCost via
   // computeJobUnitCostCents — never computed here from stale data.
   unitCostCents: number;
+  // True when the server could not compute a safe cost for a stored job (see
+  // JobsService.withUnitCost). unitCostCents is then 0 and must not be used as a price.
+  costInvalid?: boolean;
   components: ApiJobComponent[];
 }
 /**
@@ -412,6 +415,7 @@ export function mapJob(a: ApiJob): Job {
     unit: a.unit,
     markupPct: Number(a.markupPct),
     unitCostCents: a.unitCostCents,
+    costInvalid: a.costInvalid === true,
     components: a.components.map(mapJobComponent),
   };
 }

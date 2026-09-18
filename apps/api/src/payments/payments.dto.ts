@@ -14,7 +14,7 @@ import { centsSchema, PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamqu
 export const recordManualPaymentSchema = z.object({
   // .positive(), not .nonnegative(): a zero-value payment is not a payment,
   // and recording one would add a meaningless row to the customer's history.
-  amountCents: centsSchema("amountCents", { positiveOnly: true }),
+  amountCents: centsSchema("amountCents", { positiveOnly: true, label: "Amount" }),
   method: z.nativeEnum(PaymentMethod),
   /** Cheque number, bank reference, wallet transaction id — whatever the
    * contractor needs to reconcile this against their own records later. */

@@ -40,19 +40,33 @@ export function boundedNumber(b: NumericBound): z.ZodType<number, z.ZodTypeDef, 
  */
 export const INT32_MAX_CENTS = 2_147_483_647;
 
+/** INT32_MAX_CENTS expressed in dollars, for a message a contractor can read
+ * without doing cents-to-dollars math themselves: "$21,474,836.47". */
+const INT32_MAX_DOLLARS = (INT32_MAX_CENTS / 100).toLocaleString("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 /**
  * The one cents validator every money DTO field spends, so a Postgres `Int`
  * overflow is always a 400 naming the field rather than a 500 from the
  * database. Pass `positiveOnly` for a field the server also refuses zero on
  * (a payment or purchase amount), matching the field's own `.positive()`
  * rule; otherwise it is `.nonnegative()`, matching `.int().nonnegative()`.
+ *
+ * `label` is what the message calls the field in plain words — a contractor
+ * typing dollars has no use for "unitPriceCents must be at most 2147483647".
+ * Pass a noun phrase for a price field ("Unit price") or wording that fits a
+ * total ("This job's cost", "The quote total"); it is substituted into
+ * "<label> can't be more than $21,474,836.47".
  */
 export function centsSchema(
   field: string,
-  opts: { positiveOnly?: boolean } = {},
+  opts: { positiveOnly?: boolean; label?: string } = {},
 ): z.ZodType<number, z.ZodTypeDef, number> {
   const base = opts.positiveOnly ? z.number().int().positive() : z.number().int().nonnegative();
-  return base.max(INT32_MAX_CENTS, `${field} must be at most ${INT32_MAX_CENTS}`);
+  const label = opts.label ?? field;
+  return base.max(INT32_MAX_CENTS, `${label} can't be more than $${INT32_MAX_DOLLARS}`);
 }
 
 /** Jamaican TRN: 9 digits, optionally shown grouped as 123-456-789. */
@@ -87,7 +101,7 @@ export const quoteLineItemSchema = z.object({
    * Falls back to rateUnit's label when unset.
    */
   unitLabel: z.string().max(40).optional(),
-  unitPriceCents: centsSchema("unitPriceCents"),
+  unitPriceCents: centsSchema("unitPriceCents", { label: "Unit price" }),
   priceSource: z.nativeEnum(PriceSource).default(PriceSource.MANUAL),
   supplierId: z.string().uuid().optional(),
   gctTreatment: z.nativeEnum(GctTreatment).default(GctTreatment.STANDARD),

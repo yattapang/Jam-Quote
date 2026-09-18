@@ -1230,3 +1230,15 @@ describe("a line survives a load-and-save round trip", () => {
     })).toBe(1_440_000);
   });
 });
+
+describe("jobPickerOptions never offers a job whose cost could not be computed", () => {
+  it("leaves a costInvalid job out, so its placeholder cost cannot become a quote price", () => {
+    const opts = jobPickerOptions({ jobId: undefined, jobName: undefined }, [
+      { id: "ok", name: "Tiling", unit: "m2", unitCostCents: 5000 },
+      { id: "bad", name: "Broken", unit: "m2", unitCostCents: 0, costInvalid: true },
+    ]);
+    const values = opts.map((o) => o.value);
+    expect(values).toContain("ok");
+    expect(values).not.toContain("bad");
+  });
+});

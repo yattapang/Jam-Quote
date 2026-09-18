@@ -464,7 +464,7 @@ export function materialPickPatch(fav: MaterialFavourite): Partial<DraftLine> {
  */
 export function jobPickerOptions(
   line: Pick<DraftLine, "jobId" | "jobName">,
-  jobs: readonly Pick<Job, "id" | "name" | "unit" | "unitCostCents">[],
+  jobs: readonly Pick<Job, "id" | "name" | "unit" | "unitCostCents" | "costInvalid">[],
 ): SelectOption[] {
   const known = jobs.some((j) => j.id === line.jobId);
   const orphan: SelectOption[] =
@@ -474,7 +474,11 @@ export function jobPickerOptions(
   return [
     { value: "", label: jobs.length > 0 ? "Select a job…" : "No saved jobs yet" },
     ...orphan,
-    ...jobs.map((a) => ({ value: a.id, label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}` })),
+    // A job whose cost could not be computed is left out: picking it would copy a
+    // meaningless price into the quote. It stays visible in the Job Library to fix.
+    ...jobs
+      .filter((a) => !a.costInvalid)
+      .map((a) => ({ value: a.id, label: `${a.name} — ${formatJmd(a.unitCostCents)}/${a.unit}` })),
     { value: ADD_NEW_OPTION_VALUE, label: "+ Add new job…" },
   ];
 }

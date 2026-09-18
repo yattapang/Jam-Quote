@@ -4,8 +4,8 @@ import { z } from "zod";
 export const updatePricingSchema = z
   .object({
     freeQuotesPerMonth: z.number().int().positive(),
-    proMonthlyPriceCents: centsSchema("proMonthlyPriceCents", { positiveOnly: true }),
-    proAnnualPriceCents: centsSchema("proAnnualPriceCents", { positiveOnly: true }),
+    proMonthlyPriceCents: centsSchema("proMonthlyPriceCents", { positiveOnly: true, label: "Monthly price" }),
+    proAnnualPriceCents: centsSchema("proAnnualPriceCents", { positiveOnly: true, label: "Annual price" }),
     // An ISO code the platform actually knows, not eight free characters. Money on
     // the staff console renders through a currency descriptor, so an unrecognised
     // code used to put a JMD symbol beside the letters "USD" on every figure.

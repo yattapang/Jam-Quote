@@ -201,6 +201,8 @@ export interface Job {
   unit: string;
   markupPct: number;
   unitCostCents: number;
+  /** The stored job's cost is out of range; never quote it until it is fixed. */
+  costInvalid?: boolean;
   components: JobComponent[];
 }
 

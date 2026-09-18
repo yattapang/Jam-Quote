@@ -59,7 +59,11 @@ export default function JobsListClient({
                 </span>
               </div>
               <div className={shared.rowRight}>
-                <MoneyText cents={a.unitCostCents} />
+                {a.costInvalid ? (
+                  <span role="alert">Cost too large - edit this job</span>
+                ) : (
+                  <MoneyText cents={a.unitCostCents} />
+                )}
                 <div style={{ display: "flex", gap: 8 }}>
                   <EditJobButton job={a} materials={materials} labourRates={labourRates}
             trades={trades}

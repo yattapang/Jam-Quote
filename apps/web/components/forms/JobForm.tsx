@@ -13,7 +13,7 @@ import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/
 import EquipmentForm, { equipmentPayloadFromValues } from "@/components/forms/EquipmentForm";
 import { createEquipmentItem, createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
 import { materialFavouriteLabel, materialLineDescription } from "@/lib/material-display";
-import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
+import { canMerge, duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
 import styles from "./JobForm.module.css";
@@ -165,6 +165,7 @@ function ComponentRow({
   onAddLabourRate,
   onAddEquipment,
   isDuplicate,
+  isMergeable,
   onMergeDuplicates,
 }: {
   draft: JobComponentDraft;
@@ -177,6 +178,11 @@ function ComponentRow({
   onAddLabourRate: () => void;
   onAddEquipment: () => void;
   isDuplicate: boolean;
+  /** Whether this row's duplicate group can be folded together without
+   * changing the job's cost — see canMerge in lib/job-components.ts. False
+   * both when price/unit differ AND when they match but rounding wouldn't
+   * (same-price-and-unit rows whose merged extension differs by a cent). */
+  isMergeable: boolean;
   onMergeDuplicates: () => void;
 }) {
   // "+ Add new…" belongs on these pickers for the same reason it belongs on
@@ -372,18 +378,25 @@ function ComponentRow({
       </div>
       {/* Advisory, not preventive. Adding the same material twice is almost
           always a slip — reported as exactly that — but it is not invalid.
-          "Combine them" is offered, but only actually merges when the two
-          rows share a price AND a unit — mergeDuplicateComponents refuses to
-          fold together rows priced or measured differently, because doing so
-          would change the job's cost (see apps/web/lib/job-components.ts).
-          Only the LATER row is flagged; marking both would leave you unsure
-          which to remove. */}
-      {isDuplicate && (
+          "Combine them" is offered only when canMerge says folding the rows
+          together cannot change the job's cost: same price AND unit, and a
+          merged extension that equals the sum of the separate rows' own
+          (core rounds each row's extension half-up, so even same-price rows
+          can disagree by a cent — see apps/web/lib/job-components.ts). When
+          it can't, a plain warning is shown with no button, rather than a
+          button that would do nothing. Only the LATER row is flagged;
+          marking both would leave you unsure which to remove. */}
+      {isDuplicate && isMergeable && (
         <div className={styles.duplicateNote}>
           <span>Already in this job.</span>
           <button type="button" className={styles.mergeButton} onClick={onMergeDuplicates}>
             Combine them
           </button>
+        </div>
+      )}
+      {isDuplicate && !isMergeable && (
+        <div className={styles.duplicateNote}>
+          <span>Same item at a different price or unit — check it&apos;s intended</span>
         </div>
       )}
     </div>
@@ -474,14 +487,27 @@ export default function JobForm({
     [values.components],
   );
   const markupPct = Number(values.markupPct) || 0;
-  const subtotalCents = useMemo(
-    () => computeJobUnitCostCents({ components: costInputComponents, markupPct: 0 }),
-    [costInputComponents],
-  );
-  const unitCostCents = useMemo(
-    () => computeJobUnitCostCents({ components: costInputComponents, markupPct }),
-    [costInputComponents, markupPct],
-  );
+  // computeJobUnitCostCents throws (RangeError) once a component's
+  // quantity x price pushes the running total past Number.MAX_SAFE_INTEGER
+  // — correct for the DTO's own save-time check, but this runs on every
+  // keystroke while typing, and a thrown error here used to crash the whole
+  // form's render (reported as "the page is lost" while typing a price).
+  // Caught here instead: the live cost readout just shows a dash and
+  // costError renders as a field-level message, so a wildly out-of-range
+  // row degrades to an error message rather than an unmounted form.
+  const { subtotalCents, unitCostCents, costError } = useMemo(() => {
+    try {
+      const subtotal = computeJobUnitCostCents({ components: costInputComponents, markupPct: 0 });
+      const unitCost = computeJobUnitCostCents({ components: costInputComponents, markupPct });
+      return { subtotalCents: subtotal, unitCostCents: unitCost, costError: "" };
+    } catch (err) {
+      return {
+        subtotalCents: 0,
+        unitCostCents: 0,
+        costError: errorMessage(err, "This job's cost is too large"),
+      };
+    }
+  }, [costInputComponents, markupPct]);
   const markupCents = unitCostCents - subtotalCents;
 
   async function submit(e: React.FormEvent) {
@@ -498,6 +524,7 @@ export default function JobForm({
     if (validComponents(values.components).length === 0) {
       return setError("Add at least one component with a description and quantity.");
     }
+    if (costError) return setError(costError);
     setSaving(true);
     onBusyChange?.(true);
     setError("");
@@ -552,6 +579,7 @@ export default function JobForm({
             onAddLabourRate={() => setAdding({ kind: "labour", componentKey: c.key })}
             onAddEquipment={() => setAdding({ kind: "equipment", componentKey: c.key })}
             isDuplicate={duplicateKeys.has(c.key)}
+            isMergeable={canMerge(values.components, c.key)}
             onMergeDuplicates={mergeDuplicates}
           />
         ))}
@@ -560,25 +588,31 @@ export default function JobForm({
         + Add component
       </Button>
 
-      <div className={styles.costBox}>
-        <div className={styles.costRowMuted}>
-          <span>Component subtotal</span>
-          <MoneyText cents={subtotalCents} tone="muted" weight={600} />
+      {costError ? (
+        <div className={styles.costBox}>
+          <span className={modalStyles.error}>{costError}</span>
         </div>
-        <div className={styles.costRowMuted}>
-          <span>Markup ({markupPct}%)</span>
-          <MoneyText cents={markupCents} tone="muted" weight={600} />
+      ) : (
+        <div className={styles.costBox}>
+          <div className={styles.costRowMuted}>
+            <span>Component subtotal</span>
+            <MoneyText cents={subtotalCents} tone="muted" weight={600} />
+          </div>
+          <div className={styles.costRowMuted}>
+            <span>Markup ({markupPct}%)</span>
+            <MoneyText cents={markupCents} tone="muted" weight={600} />
+          </div>
+          <div className={styles.costRowGrand}>
+            {/* Same normalisation the API applies on save (jobs.service.ts
+                calls normalizeUnitLabel on `unit`) — without it here, "m2"
+                typed in the Unit field above showed literally as "/ m2" on
+                this row while the saved job's unit rendered as "m²"
+                everywhere else. */}
+            <span>Unit cost{values.unit.trim() ? ` / ${normalizeUnitLabel(values.unit)}` : ""}</span>
+            <MoneyText cents={unitCostCents} tone="accent" />
+          </div>
         </div>
-        <div className={styles.costRowGrand}>
-          {/* Same normalisation the API applies on save (jobs.service.ts
-              calls normalizeUnitLabel on `unit`) — without it here, "m2"
-              typed in the Unit field above showed literally as "/ m2" on
-              this row while the saved job's unit rendered as "m²"
-              everywhere else. */}
-          <span>Unit cost{values.unit.trim() ? ` / ${normalizeUnitLabel(values.unit)}` : ""}</span>
-          <MoneyText cents={unitCostCents} tone="accent" />
-        </div>
-      </div>
+      )}
 
       {error && <span className={modalStyles.error}>{error}</span>}
       <div className={modalStyles.actions}>

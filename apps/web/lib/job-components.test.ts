@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeJobUnitCostCents } from "@jamquote/core";
 import {
+  canMerge,
   duplicateComponentKeys,
   mergeDuplicateComponents,
   type ComponentLike,
@@ -174,6 +175,84 @@ describe("mergeDuplicateComponents", () => {
       comp({ key: "b", materialFavouriteId: "m1", quantityPerUnit: "0.2" }),
     ]);
     expect(merged[0]?.quantityPerUnit).toBe("0.3");
+  });
+
+  it("MEDIUM: refuses to merge same-price rows when rounding would still change the cost (three Sand rows at $0.10 x 0.333)", () => {
+    // Each row: lineExtension(0.333, 10) rounds to 3c; three of them cost 9c
+    // unmerged. Merged: quantity sums to 0.999, lineExtension(0.999, 10)
+    // rounds to 10c. Same price AND unit is not enough — merging must still
+    // be refused because it changes the total by a cent.
+    const rows = [
+      costedComp({ key: "a", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+      costedComp({ key: "b", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+      costedComp({ key: "c", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+    ];
+
+    const before = jobCost(rows);
+    expect(before).toBe(9);
+
+    const merged = mergeDuplicateComponents(rows);
+    expect(merged).toHaveLength(3);
+    expect(jobCost(merged)).toBe(before);
+  });
+
+  it("MEDIUM: refuses to merge same-price rows when rounding would still change the cost (two rows at $0.01 x 0.5)", () => {
+    // Each row: lineExtension(0.5, 1) rounds half-up to 1c; two of them cost
+    // 2c unmerged. Merged: quantity sums to 1, lineExtension(1, 1) = 1c.
+    const rows = [
+      costedComp({ key: "a", description: "Nail", quantityPerUnit: "0.5", unitPriceDollars: "0.01" }),
+      costedComp({ key: "b", description: "Nail", quantityPerUnit: "0.5", unitPriceDollars: "0.01" }),
+    ];
+
+    const before = jobCost(rows);
+    expect(before).toBe(2);
+
+    const merged = mergeDuplicateComponents(rows);
+    expect(merged).toHaveLength(2);
+    expect(jobCost(merged)).toBe(before);
+  });
+
+  it("still merges same-price, same-unit rows when rounding agrees exactly", () => {
+    const rows = [
+      costedComp({ key: "a", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "10" }),
+      costedComp({ key: "b", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "10" }),
+    ];
+    const merged = mergeDuplicateComponents(rows);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.quantityPerUnit).toBe("2");
+  });
+});
+
+describe("canMerge", () => {
+  it("MEDIUM: false when price and unit match but merging would still change the cost by a cent", () => {
+    const rows = [
+      costedComp({ key: "a", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+      costedComp({ key: "b", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+      costedComp({ key: "c", description: "Sand", quantityPerUnit: "0.333", unitPriceDollars: "0.10" }),
+    ];
+    expect(canMerge(rows, "b")).toBe(false);
+    expect(canMerge(rows, "c")).toBe(false);
+  });
+
+  it("true when price and unit match and merging would not change the cost", () => {
+    const rows = [
+      costedComp({ key: "a", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "10" }),
+      costedComp({ key: "b", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "10" }),
+    ];
+    expect(canMerge(rows, "b")).toBe(true);
+  });
+
+  it("MEDIUM/item 3: false when the duplicate rows have different prices ($5 and $3 Sand)", () => {
+    const rows = [
+      costedComp({ key: "a", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "5" }),
+      costedComp({ key: "b", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "3" }),
+    ];
+    expect(canMerge(rows, "b")).toBe(false);
+  });
+
+  it("false for a row that has no duplicate", () => {
+    const rows = [costedComp({ key: "a", description: "Sand", quantityPerUnit: "1", unitPriceDollars: "5" })];
+    expect(canMerge(rows, "a")).toBe(false);
   });
 });
 
