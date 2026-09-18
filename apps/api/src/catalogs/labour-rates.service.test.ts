@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
+import { RateUnit } from "@jamquote/core";
 import { LabourRatesService } from "./labour-rates.service.js";
 
 function withPrisma(labourRate: Partial<Record<string, unknown>> = {}) {
@@ -62,7 +63,34 @@ describe("LabourRatesService.remove", () => {
   });
 });
 
+describe("LabourRatesService.create", () => {
+  it("normalizes unitLabel (m2 -> m²)", async () => {
+    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({ id: "rate-1" }) });
+    await svc.create("biz-1", {
+      trade: "Tiler",
+      rateCents: 400_000,
+      rateUnit: RateUnit.HOUR,
+      unitLabel: "m2",
+    });
+    expect(prisma.labourRate.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unitLabel: "m²" }),
+    });
+  });
+});
+
 describe("LabourRatesService.update", () => {
+  it("normalizes unitLabel (m2 -> m²) on update", async () => {
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue({ id: "rate-1", businessId: "biz-1" }),
+      update: vi.fn().mockResolvedValue({ id: "rate-1" }),
+    });
+    await svc.update("biz-1", "rate-1", { unitLabel: "m2" });
+    expect(prisma.labourRate.update).toHaveBeenCalledWith({
+      where: { id: "rate-1" },
+      data: expect.objectContaining({ unitLabel: "m²" }),
+    });
+  });
+
   it("passes a null unitLabel/skillTier straight through to Prisma, clearing them", async () => {
     const { svc, prisma } = withPrisma({
       findFirst: vi.fn().mockResolvedValue({ id: "rate-1", businessId: "biz-1" }),

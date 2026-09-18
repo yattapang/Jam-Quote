@@ -50,6 +50,7 @@ export const purchaseQuerySchema = z.object({
    * job. Coerced to null so the service can tell it from "no filter". */
   projectId: z
     .string()
+    .max(64)
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "" ? null : v)),
   from: z.string().datetime().optional(),
@@ -89,6 +90,7 @@ export type CreateLabourEntryInput = z.infer<typeof createLabourEntrySchema>;
 export const labourEntryQuerySchema = z.object({
   projectId: z
     .string()
+    .max(64)
     .optional()
     .transform((v) => (v === undefined ? undefined : v === "" ? null : v)),
   limit: z.coerce.number().int().positive().max(500).optional(),

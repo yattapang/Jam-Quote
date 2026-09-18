@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EquipmentItem, LabourRate } from "@/lib/types";
 import { lineUnitLabel } from "@/lib/quote-totals";
-import { equipmentLabel, keptUnit, labourLabel } from "./job-component-units";
+import { equipmentLabel, keptUnit, labourDescription, labourLabel } from "./job-component-units";
 
 /**
  * The unit a job recipe row carries, and the unit a picker prints.
@@ -65,6 +65,26 @@ describe("labourLabel", () => {
 
   it("includes the skill tier when there is one", () => {
     expect(labourLabel(rate({ skillTier: "Senior" }))).toContain("Mason — Senior");
+  });
+});
+
+describe("labourDescription", () => {
+  // Both ways of adding a labour component — picking a saved rate
+  // (JobForm.pickLabour) and creating one inline (JobForm's "Add labour
+  // rate" modal onSubmit) — must produce the exact same description text.
+  // They used to disagree: "Mason (Senior)" vs "Mason — Senior".
+  it("joins trade and skill tier with an em dash, no price", () => {
+    expect(labourDescription({ trade: "Mason", skillTier: "Senior" })).toBe("Mason — Senior");
+  });
+
+  it("is just the trade when there is no skill tier", () => {
+    expect(labourDescription({ trade: "Mason", skillTier: null })).toBe("Mason");
+    expect(labourDescription({ trade: "Mason" })).toBe("Mason");
+  });
+
+  it("never includes a price, unlike labourLabel", () => {
+    const rate = { trade: "Mason", skillTier: "Senior" };
+    expect(labourDescription(rate)).not.toMatch(/\$/);
   });
 });
 

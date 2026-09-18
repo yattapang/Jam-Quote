@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
+import { RateUnit } from "@jamquote/core";
 import { EquipmentService } from "./equipment.service.js";
 
 function withPrisma(equipmentItem: Partial<Record<string, unknown>> = {}) {
@@ -22,6 +23,22 @@ function withPrisma(equipmentItem: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+describe("EquipmentService.create", () => {
+  it("normalizes unitLabel (m2 -> m²)", async () => {
+    const { svc, prisma } = withPrisma({ create: vi.fn().mockResolvedValue({ id: "item-1" }) });
+    await svc.create("biz-1", {
+      name: "Mixer",
+      owned: true,
+      rateCents: 1500,
+      rateUnit: RateUnit.HOUR,
+      unitLabel: "m2",
+    });
+    expect(prisma.equipmentItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unitLabel: "m²" }),
+    });
+  });
+});
+
 describe("EquipmentService.findOne", () => {
   it("throws NotFoundException when no matching row exists", async () => {
     const { svc, prisma } = withPrisma({ findFirst: vi.fn().mockResolvedValue(null) });
@@ -33,6 +50,18 @@ describe("EquipmentService.findOne", () => {
 });
 
 describe("EquipmentService.update", () => {
+  it("normalizes unitLabel (m2 -> m²) on update", async () => {
+    const { svc, prisma } = withPrisma({
+      findFirst: vi.fn().mockResolvedValue({ id: "item-1", businessId: "biz-1" }),
+      update: vi.fn().mockResolvedValue({ id: "item-1" }),
+    });
+    await svc.update("biz-1", "item-1", { unitLabel: "m2" });
+    expect(prisma.equipmentItem.update).toHaveBeenCalledWith({
+      where: { id: "item-1" },
+      data: expect.objectContaining({ unitLabel: "m²" }),
+    });
+  });
+
   it("passes a null unitLabel straight through to Prisma, clearing it", async () => {
     const { svc, prisma } = withPrisma({
       findFirst: vi.fn().mockResolvedValue({ id: "item-1", businessId: "biz-1" }),

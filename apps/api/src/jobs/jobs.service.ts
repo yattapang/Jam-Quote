@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Job, Prisma } from "@prisma/client";
-import { computeJobUnitCostCents } from "@jamquote/core";
+import { computeJobUnitCostCents, normalizeUnitLabel } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertJobComponentRefsOwned } from "../common/assert-owned.js";
 import type {
@@ -44,7 +44,10 @@ function componentCreateData(
     equipmentItemId: c.equipmentItemId,
     description: c.description,
     quantityPerUnit: c.quantityPerUnit,
-    unitLabel: c.unitLabel,
+    // `m2` -> `m²` etc., same normalisation as material units
+    // (material-schema.service.ts) — applied here so every recipe row gets
+    // it regardless of which client wrote it.
+    unitLabel: c.unitLabel ? normalizeUnitLabel(c.unitLabel) : c.unitLabel,
     unitPriceCents: c.unitPriceCents,
     sort: c.sort ?? idx,
   };
@@ -67,7 +70,7 @@ export class JobsService {
         data: {
           businessId,
           name: input.name,
-          unit: input.unit,
+          unit: normalizeUnitLabel(input.unit),
           markupPct: input.markupPct ?? 0,
         },
       });
@@ -143,7 +146,7 @@ export class JobsService {
         where: { id },
         data: {
           name: input.name ?? existing.name,
-          unit: input.unit ?? existing.unit,
+          unit: input.unit !== undefined ? normalizeUnitLabel(input.unit) : existing.unit,
           markupPct: input.markupPct ?? existing.markupPct,
         },
       });

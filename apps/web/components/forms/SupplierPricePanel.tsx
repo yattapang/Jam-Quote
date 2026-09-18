@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { BOUNDS, PARISHES } from "@jamquote/core";
+import { BOUNDS, formatJmd, PARISHES } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
@@ -223,7 +223,18 @@ export default function SupplierPricePanel({
                   <button
                     type="button"
                     className={styles.remove}
-                    onClick={() => void remove(p.id)}
+                    onClick={() => {
+                      // One click used to delete a price-history row outright,
+                      // with nothing else on this panel confirming a delete.
+                      if (
+                        !window.confirm(
+                          `Remove the ${p.supplierName} price of ${formatJmd(p.priceCents)}? This cannot be undone.`,
+                        )
+                      ) {
+                        return;
+                      }
+                      void remove(p.id);
+                    }}
                     disabled={removingId === p.id}
                   >
                     {removingId === p.id ? "Removing…" : "Remove"}

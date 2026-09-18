@@ -105,9 +105,21 @@ export const PAYMENT_REFERENCE_MAX_LENGTH = 120;
  * The `min` an HTML input should carry.
  *
  * A `positiveOnly` field cannot express "greater than zero" in HTML — `min` is
- * inclusive — so the smallest step above zero is used. It keeps the browser from
- * offering a value the server will refuse, which is the whole point.
+ * inclusive — so the smallest step above zero is used. That smallest step is the
+ * bound's own `step` (defaulting to `0.01` only when the bound has none) — NOT a
+ * hardcoded `0.01`, which used to block a value the server accepted whenever a
+ * field's real step was finer, e.g. `coveragePerSellUnit`'s `0.0001` refusing the
+ * legitimate `0.005`.
  */
 export function inputMin(bound: NumericBound): number {
-  return bound.positiveOnly ? 0.01 : bound.min;
+  return bound.positiveOnly ? bound.step ?? 0.01 : bound.min;
 }
+
+/**
+ * The one password-length ceiling shared by every route that reads a password —
+ * SETTING one (register, reset, change) and CHECKING one (login, current-password).
+ * A weaker max on the set side than the check side locks a contractor out the
+ * moment they set a password the check side will then refuse to accept back.
+ * Spent by `apps/api/src/auth/auth.dto.ts` and the web password fields' `maxLength`.
+ */
+export const PASSWORD_MAX_LENGTH = 256;

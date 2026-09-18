@@ -6,7 +6,27 @@ import {
   quoteLineItemSchema,
   BOUNDS,
   boundedNumber,
+  startOfJamaicaDayMs,
 } from "@jamquote/core";
+
+/**
+ * `validUntil` must not be a date already in the past, Jamaica time (F-register
+ * item: the web builder refused `validDays < BOUNDS.validDays.min`, but the API
+ * took a raw date with no bound at all, so a client could save an
+ * already-expired quote directly). Compared against the START of today in
+ * Jamaica so "today" itself is always valid regardless of time of day.
+ *
+ * This only bounds the SHAPE of a supplied date; `quotes.service.ts` decides
+ * whether the bound applies on update (it does not re-check an unchanged
+ * `validUntil` carried over from an existing quote, so editing an old quote
+ * whose date has since passed does not become impossible).
+ */
+const validUntilNotPast = z
+  .coerce
+  .date()
+  .refine((d) => d.getTime() >= startOfJamaicaDayMs(Date.now()), {
+    message: "validUntil must not be a date in the past",
+  });
 
 /**
  * Display-only snapshot of one job component, captured at the moment
@@ -61,7 +81,7 @@ export const createQuoteSchema = z.object({
   gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
   discountPct: boundedNumber(BOUNDS.discountPct).optional(),
   depositCents: z.number().int().nonnegative().optional(),
-  validUntil: z.coerce.date().optional(),
+  validUntil: validUntilNotPast.optional(),
   terms: z.string().max(5000).optional(),
   // Display setting only (defaults to SUMMARY in the service): does not
   // affect totals math, only whether job lines render collapsed or

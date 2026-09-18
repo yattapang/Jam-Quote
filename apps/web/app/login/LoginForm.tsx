@@ -6,6 +6,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { authenticateAction, type AuthFormState } from "@/lib/auth-actions";
+import { PASSWORD_MAX_LENGTH } from "@jamquote/core";
 import styles from "./login.module.css";
 
 function SubmitButton({ label }: { label: string }) {
@@ -40,6 +41,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
         name="password"
         type="password"
         required
+        maxLength={PASSWORD_MAX_LENGTH}
         autoComplete={isRegister ? "new-password" : "current-password"}
       />
 

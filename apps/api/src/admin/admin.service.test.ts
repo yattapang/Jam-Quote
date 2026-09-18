@@ -268,7 +268,7 @@ describe("AdminService.tenants", () => {
         where: { deletedAt: null },
         include: {
           subscription: true,
-          _count: { select: { quotes: true } },
+          _count: { select: { quotes: { where: { deletedAt: null } } } },
           quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
         },
       }),

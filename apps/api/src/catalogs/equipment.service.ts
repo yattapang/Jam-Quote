@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { EquipmentItem } from "@prisma/client";
+import { normalizeUnitLabel } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type { CreateEquipmentItemInput, UpdateEquipmentItemInput } from "./catalogs.dto.js";
@@ -12,7 +13,14 @@ export class EquipmentService {
   ) {}
 
   create(businessId: string, input: CreateEquipmentItemInput): Promise<EquipmentItem> {
-    return this.prisma.equipmentItem.create({ data: { ...input, businessId } });
+    return this.prisma.equipmentItem.create({
+      data: {
+        ...input,
+        // `m2` -> `m²` etc., same normalisation as material units.
+        unitLabel: input.unitLabel ? normalizeUnitLabel(input.unitLabel) : input.unitLabel,
+        businessId,
+      },
+    });
   }
 
   /** See LabourRatesService.findAll — `includeHidden` is the settings screen's
@@ -42,7 +50,13 @@ export class EquipmentService {
     input: UpdateEquipmentItemInput,
   ): Promise<EquipmentItem> {
     await this.findOne(businessId, id);
-    return this.prisma.equipmentItem.update({ where: { id }, data: input });
+    return this.prisma.equipmentItem.update({
+      where: { id },
+      data: {
+        ...input,
+        unitLabel: input.unitLabel ? normalizeUnitLabel(input.unitLabel) : input.unitLabel,
+      },
+    });
   }
 
   async remove(businessId: string, id: string): Promise<void> {

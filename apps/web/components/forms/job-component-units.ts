@@ -35,6 +35,18 @@ export function equipmentLabel(e: EquipmentItem): string {
   return `${e.name} (${price}/${lineUnitLabel(e)})`;
 }
 
+/**
+ * A labour component's description: the rate's trade and skill tier, with no
+ * price — the description text lives on the component row, not the picker.
+ * Sibling of `labourLabel` below (which is picker-only and includes price);
+ * used by both ways of adding a labour component (picking an existing rate
+ * and creating one inline) so they stop spelling the same rate two ways
+ * ("Mason (Senior)" vs "Mason — Senior").
+ */
+export function labourDescription(r: { trade: string; skillTier?: string | null }): string {
+  return r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade;
+}
+
 export function labourLabel(r: LabourRate): string {
   const price = `$${r.rateDollars.toLocaleString("en-JM", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const trade = r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade;

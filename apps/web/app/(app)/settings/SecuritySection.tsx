@@ -6,6 +6,8 @@ import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { changePassword } from "@/lib/api-client";
+import { errorMessage } from "@/lib/error-message";
+import { PASSWORD_MAX_LENGTH } from "@jamquote/core";
 import styles from "./SecuritySection.module.css";
 
 /**
@@ -65,7 +67,7 @@ export default function SecuritySection() {
       // The API's own message is the useful one ("Current password is
       // incorrect") — a generic failure would leave the user guessing which of
       // the three fields was wrong. It never contains a submitted value.
-      setError(err instanceof Error ? err.message : "Couldn't change your password.");
+      setError(errorMessage(err, "Couldn't change your password."));
     } finally {
       setBusy(false);
     }
@@ -92,6 +94,7 @@ export default function SecuritySection() {
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             disabled={busy}
+            maxLength={PASSWORD_MAX_LENGTH}
           />
           <Input
             id="new-password"
@@ -102,6 +105,7 @@ export default function SecuritySection() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             disabled={busy}
+            maxLength={PASSWORD_MAX_LENGTH}
           />
           <Input
             id="confirm-new-password"
@@ -111,6 +115,7 @@ export default function SecuritySection() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             disabled={busy}
+            maxLength={PASSWORD_MAX_LENGTH}
           />
         </div>
 

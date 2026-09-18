@@ -89,8 +89,10 @@ describe("JobsService.create", () => {
       components: [materialComponent, labourComponent],
     } as any);
 
+    // "sq ft" is itself normalized (-> "ft²") by JobsService.create, same
+    // rule as material units — see the dedicated normalization test below.
     expect(tx.job.create).toHaveBeenCalledWith({
-      data: { businessId: "b1", name: "Tiling — per sq ft", unit: "sq ft", markupPct: 20 },
+      data: { businessId: "b1", name: "Tiling — per sq ft", unit: "ft²", markupPct: 20 },
     });
     expect(tx.jobComponent.create).toHaveBeenCalledTimes(2);
     expect(tx.jobComponent.create).toHaveBeenNthCalledWith(1, {
@@ -108,6 +110,25 @@ describe("JobsService.create", () => {
     expect(result.unitCostCents).toBe(expectedCost);
   });
 
+  it("normalizes the job's unit (m2 -> m²) and a component's unitLabel on create", async () => {
+    const { svc, prisma, tx } = withPrisma();
+    prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow({ unit: "m²" }));
+
+    await svc.create("b1", {
+      name: "Tiling — per m2",
+      unit: "m2",
+      markupPct: 20,
+      components: [{ ...materialComponent, unitLabel: "m2" }],
+    } as any);
+
+    expect(tx.job.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unit: "m²" }),
+    });
+    expect(tx.jobComponent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ unitLabel: "m²" }),
+    });
+  });
+
   it("defaults markupPct to 0 when omitted", async () => {
     const { svc, prisma, tx } = withPrisma();
     prisma.job.findFirst = vi.fn().mockResolvedValue(tileAssemblyRow({ markupPct: 0 }));
@@ -119,7 +140,7 @@ describe("JobsService.create", () => {
     } as any);
 
     expect(tx.job.create).toHaveBeenCalledWith({
-      data: { businessId: "b1", name: "Tiling — per sq ft", unit: "sq ft", markupPct: 0 },
+      data: { businessId: "b1", name: "Tiling — per sq ft", unit: "ft²", markupPct: 0 },
     });
   });
 });
@@ -359,6 +380,21 @@ describe("JobsService.update", () => {
     expect(tx.jobComponent.create).toHaveBeenCalledTimes(1);
     expect(tx.jobComponent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ jobId: "a1", kind: JobComponentKind.OTHER }),
+    });
+  });
+
+  it("normalizes the job's unit on update", async () => {
+    const { svc, prisma, tx } = withPrisma();
+    prisma.job.findFirst = vi
+      .fn()
+      .mockResolvedValueOnce(tileAssemblyRow())
+      .mockResolvedValueOnce(tileAssemblyRow({ unit: "m²" }));
+
+    await svc.update("b1", "a1", { unit: "m2" } as any);
+
+    expect(tx.job.update).toHaveBeenCalledWith({
+      where: { id: "a1" },
+      data: expect.objectContaining({ unit: "m²" }),
     });
   });
 

@@ -118,6 +118,40 @@ describe("ClientForm — what reaches the API", () => {
   });
 });
 
+describe("ClientForm — field lengths agree with the DTO", () => {
+  it("caps first/last name, phone, town and address at the server's limits", () => {
+    renderForm();
+    expect(screen.getByLabelText(/first name/i)).toHaveAttribute("maxLength", "80");
+    expect(screen.getByLabelText(/last name/i)).toHaveAttribute("maxLength", "80");
+    expect(screen.getByLabelText(/phone/i)).toHaveAttribute("maxLength", "40");
+    expect(screen.getByLabelText(/town/i)).toHaveAttribute("maxLength", "80");
+    expect(screen.getByLabelText(/^address$/i)).toHaveAttribute("maxLength", "200");
+  });
+});
+
+describe("ClientForm — TRN length", () => {
+  it("refuses a TRN with fewer than 9 digits, with the server's own wording", async () => {
+    const { onSubmit, user } = renderForm();
+
+    await user.type(screen.getByLabelText(/first name/i), "Marcia");
+    await user.type(screen.getByLabelText(/TRN/i), "12345");
+    await user.click(screen.getByRole("button", { name: /save client/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText(/TRN must be 9 digits/i)).toBeInTheDocument();
+  });
+
+  it("accepts a full 9-digit TRN", async () => {
+    const { onSubmit, user } = renderForm();
+
+    await user.type(screen.getByLabelText(/first name/i), "Marcia");
+    await user.type(screen.getByLabelText(/TRN/i), "102458963");
+    await user.click(screen.getByRole("button", { name: /save client/i }));
+
+    expect(onSubmit).toHaveBeenCalled();
+  });
+});
+
 describe("clientPayloadFromValues (create) vs clientEditPayloadFromValues (edit)", () => {
   it("create omits blank optional fields rather than sending null", () => {
     const payload = clientPayloadFromValues({ ...emptyClientForm, firstName: "Errol" });

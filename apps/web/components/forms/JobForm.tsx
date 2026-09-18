@@ -12,12 +12,12 @@ import MaterialForm, { materialPayloadFromValues } from "@/components/forms/Mate
 import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/LabourRateForm";
 import EquipmentForm, { equipmentPayloadFromValues } from "@/components/forms/EquipmentForm";
 import { createEquipmentItem, createLabourRate, createMaterialFavourite, type NewJobInput, type Trade } from "@/lib/api-client";
-import { materialFavouriteLabel } from "@/lib/material-display";
+import { materialFavouriteLabel, materialLineDescription } from "@/lib/material-display";
 import { duplicateComponentKeys, mergeDuplicateComponents } from "@/lib/job-components";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
 import styles from "./JobForm.module.css";
-import { equipmentLabel, keptUnit, labourLabel } from "./job-component-units";
+import { equipmentLabel, keptUnit, labourDescription, labourLabel } from "./job-component-units";
 
 const kindOptions = [
   { value: JobComponentKind.MATERIAL, label: "Material" },
@@ -85,6 +85,7 @@ export function jobFormValuesFromAssembly(job: Job): JobFormValues {
               kind: c.kind,
               materialFavouriteId: c.materialFavouriteId,
               labourRateId: c.labourRateId,
+              equipmentItemId: c.equipmentItemId,
               description: c.description,
               quantityPerUnit: String(c.quantityPerUnit),
               unitLabel: c.unitLabel ?? "",
@@ -111,6 +112,7 @@ export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
       kind: c.kind,
       materialFavouriteId: c.kind === JobComponentKind.MATERIAL ? c.materialFavouriteId : undefined,
       labourRateId: c.kind === JobComponentKind.LABOUR ? c.labourRateId : undefined,
+      equipmentItemId: c.kind === JobComponentKind.EQUIPMENT ? c.equipmentItemId : undefined,
       description: c.description.trim(),
       quantityPerUnit: Number(c.quantityPerUnit) || 0,
       unitLabel: c.unitLabel.trim() || undefined,
@@ -211,7 +213,7 @@ function ComponentRow({
     if (!m) return onChange({ materialFavouriteId: undefined });
     onChange({
       materialFavouriteId: m.id,
-      description: m.name,
+      description: materialLineDescription(m),
       unitPriceDollars: String(m.priceDollars),
       // A material sold by the bag makes the row read "2 bag".
       ...keepTypedUnit(m.unit),
@@ -234,7 +236,7 @@ function ComponentRow({
     if (!r) return onChange({ labourRateId: undefined });
     onChange({
       labourRateId: r.id,
-      description: r.skillTier ? `${r.trade} (${r.skillTier})` : r.trade,
+      description: labourDescription(r),
       unitPriceDollars: String(r.rateDollars),
       ...keepTypedUnit(r.unitLabel),
     });
@@ -561,11 +563,21 @@ export default function JobForm({
                 materialPayloadFromValues(formValues, category),
               );
               setMaterialList((ms) => [...ms, created]);
-              patchComponent(adding.componentKey, {
-                materialFavouriteId: created.id,
-                description: materialFavouriteLabel(created),
-                unitPriceDollars: String(created.priceCents / 100),
-              });
+              const key = adding.componentKey;
+              setValues((v) => ({
+                ...v,
+                components: v.components.map((c) =>
+                  c.key === key
+                    ? {
+                        ...c,
+                        materialFavouriteId: created.id,
+                        description: materialLineDescription(created),
+                        unitPriceDollars: String(created.priceCents / 100),
+                        ...keptUnit(c.unitLabel, created.unit),
+                      }
+                    : c,
+                ),
+              }));
               setAdding(null);
             }}
           />
@@ -611,13 +623,21 @@ export default function JobForm({
             onSubmit={async (formValues) => {
               const created = await createLabourRate(labourRatePayloadFromValues(formValues));
               setLabourList((rs) => [...rs, created]);
-              patchComponent(adding.componentKey, {
-                labourRateId: created.id,
-                description: created.skillTier
-                  ? `${created.trade} — ${created.skillTier}`
-                  : created.trade,
-                unitPriceDollars: String(created.rateCents / 100),
-              });
+              const key = adding.componentKey;
+              setValues((v) => ({
+                ...v,
+                components: v.components.map((c) =>
+                  c.key === key
+                    ? {
+                        ...c,
+                        labourRateId: created.id,
+                        description: labourDescription(created),
+                        unitPriceDollars: String(created.rateCents / 100),
+                        ...keptUnit(c.unitLabel, created.unitLabel),
+                      }
+                    : c,
+                ),
+              }));
               setAdding(null);
             }}
           />

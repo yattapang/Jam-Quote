@@ -16,6 +16,7 @@ import {
   safeHref,
   BOUNDS,
   inputMin,
+  isHttpUrl,
 } from "@jamquote/core";
 import {
   getAdminPricing,
@@ -257,6 +258,16 @@ export default function AdminConsole({
   const [pricingStatus, setPricingStatus] = useState<"idle" | "saved" | "error">("idle");
   /** The reason a save was refused, so "error" is never the whole message. */
   const [pricingError, setPricingError] = useState<string | null>(null);
+
+  /**
+   * Every pricing field change goes through here so "Saved ✓" cannot outlive
+   * the values it described — without this it stayed lit after further edits,
+   * claiming a price was saved that had since changed on screen.
+   */
+  function updatePricingField<K extends keyof typeof pricingForm>(key: K, value: (typeof pricingForm)[K]) {
+    setPricingForm((f) => ({ ...f, [key]: value }));
+    setPricingStatus("idle");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -667,7 +678,7 @@ export default function AdminConsole({
       router.refresh();
       setRegEditing(null);
     } catch (err) {
-      setRegError(err instanceof Error ? err.message : "That didn't work.");
+      setRegError(errorMessage(err, "That didn't work."));
     } finally {
       setRegBusy((b) => ({ ...b, [key]: false }));
     }
@@ -1468,7 +1479,11 @@ export default function AdminConsole({
                 ))}
               </div>
 
-              {regError && (
+              {/* Not shown while the modal is open: the RegulatoryEditor renders
+                  regError itself, inside the dialog, where it is actually
+                  visible — this copy used to sit behind the modal's overlay
+                  and never be seen. */}
+              {regError && !regEditing && (
                 <div role="alert" style={{ marginBottom: 12, padding: "9px 13px", borderRadius: 9, background: "color-mix(in srgb, var(--critical) 12%, var(--surface))", border: "1px solid var(--critical)", fontSize: 13 }}>{regError}</div>
               )}
 
@@ -1541,6 +1556,7 @@ export default function AdminConsole({
                 <RegulatoryEditor
                   entry={regEditing === "new" ? null : regEditing}
                   busy={regBusy["form"] === true}
+                  error={regError}
                   onCancel={() => setRegEditing(null)}
                   onSave={(values) =>
                     runReg("form", () =>
@@ -1903,7 +1919,7 @@ export default function AdminConsole({
                       min={0}
                       step={1}
                       value={pricingForm.freeQuotesPerMonth}
-                      onChange={(e) => setPricingForm((f) => ({ ...f, freeQuotesPerMonth: e.target.value }))}
+                      onChange={(e) => updatePricingField("freeQuotesPerMonth", e.target.value)}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
                     />
                   </label>
@@ -1916,7 +1932,7 @@ export default function AdminConsole({
                         `z.enum(CURRENCY_CODES)` cannot drift apart. */}
                     <select
                       value={pricingForm.currency}
-                      onChange={(e) => setPricingForm((f) => ({ ...f, currency: e.target.value }))}
+                      onChange={(e) => updatePricingField("currency", e.target.value)}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
                     >
                       {/* The stored value first when it is not a code we know. A
@@ -1944,7 +1960,7 @@ export default function AdminConsole({
                       min={0}
                       step="0.01"
                       value={pricingForm.proMonthlyPriceDollars}
-                      onChange={(e) => setPricingForm((f) => ({ ...f, proMonthlyPriceDollars: e.target.value }))}
+                      onChange={(e) => updatePricingField("proMonthlyPriceDollars", e.target.value)}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
                     />
                   </label>
@@ -1955,7 +1971,7 @@ export default function AdminConsole({
                       min={0}
                       step="0.01"
                       value={pricingForm.proAnnualPriceDollars}
-                      onChange={(e) => setPricingForm((f) => ({ ...f, proAnnualPriceDollars: e.target.value }))}
+                      onChange={(e) => updatePricingField("proAnnualPriceDollars", e.target.value)}
                       style={{ height: 36, padding: "0 11px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 13.5, fontFamily: "inherit" }}
                     />
                   </label>
@@ -2528,14 +2544,19 @@ function TenantDrawer({
  * the console is written. Uncontrolled-ish: local state seeded from `entry`,
  * so editing one row cannot mutate the list until the save round-trips.
  */
-function RegulatoryEditor({
+export function RegulatoryEditor({
   entry,
   busy,
+  error,
   onCancel,
   onSave,
 }: {
   entry: AdminReg | null;
   busy: boolean;
+  /** The server's own rejection, if the last save failed. Rendered INSIDE this
+   * dialog — the console used to render its own copy behind the modal overlay,
+   * where it was never actually visible. */
+  error?: string | null;
   onCancel: () => void;
   onSave: (values: RegulatoryInput) => void;
 }) {
@@ -2545,6 +2566,11 @@ function RegulatoryEditor({
   const [effectiveDate, setEffectiveDate] = useState(entry?.effectiveDate?.slice(0, 10) ?? "");
   const [actionNeeded, setActionNeeded] = useState(entry?.actionNeeded ?? "");
   const [sourceUrl, setSourceUrl] = useState(entry?.sourceUrl ?? "");
+  // Client-side validation, checked before onSave: blank-after-trim and a
+  // non-http(s) URL are both accepted by the inputs above and refused by the
+  // server (createRegulatoryUpdateSchema), so catching them here means a
+  // typo shows up without a round trip.
+  const [localError, setLocalError] = useState("");
 
   const field: React.CSSProperties = {
     width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)",
@@ -2554,18 +2580,35 @@ function RegulatoryEditor({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    setLocalError("");
+    const trimmedTitle = title.trim();
+    const trimmedCategory = category.trim();
+    const trimmedSummary = summary.trim();
+    if (!trimmedTitle) return setLocalError("Title is required.");
+    if (!trimmedCategory) return setLocalError("Category is required.");
+    if (!trimmedSummary) return setLocalError("Summary is required.");
+    const trimmedSource = sourceUrl.trim();
+    // Matches createRegulatoryUpdateSchema in apps/api/src/admin/admin.dto.ts:
+    // any non-empty sourceUrl must be a real http(s) address (isHttpUrl from
+    // core, the same check the server runs), which an ftp:// or bare-host
+    // value fails.
+    if (trimmedSource && !isHttpUrl(trimmedSource)) {
+      return setLocalError("Source URL must be a full web address starting http:// or https://");
+    }
     onSave({
-      title: title.trim(),
-      category: category.trim(),
-      summary: summary.trim(),
+      title: trimmedTitle,
+      category: trimmedCategory,
+      summary: trimmedSummary,
       // Empty means "no value", sent as null so an existing one is CLEARED
       // rather than left behind — omitting the key would leave it alone, which
       // is not what an emptied field means.
       effectiveDate: effectiveDate ? new Date(`${effectiveDate}T12:00:00.000Z`).toISOString() : null,
       actionNeeded: actionNeeded.trim() || null,
-      sourceUrl: sourceUrl.trim() || null,
+      sourceUrl: trimmedSource || null,
     });
   }
+
+  const shownError = localError || error;
 
   return (
     <div
@@ -2585,7 +2628,7 @@ function RegulatoryEditor({
 
         <div>
           <label style={label} htmlFor="reg-title">Title</label>
-          <input id="reg-title" style={field} value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <input id="reg-title" style={field} value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} />
         </div>
 
         <div>
@@ -2593,7 +2636,7 @@ function RegulatoryEditor({
           {/* Free text with a datalist, not a select: the column is a string
               with a documented convention precisely so a new levy does not
               need a migration to be recorded. */}
-          <input id="reg-category" style={field} value={category} onChange={(e) => setCategory(e.target.value)} list="reg-categories" required />
+          <input id="reg-category" style={field} value={category} onChange={(e) => setCategory(e.target.value)} list="reg-categories" required maxLength={80} />
           <datalist id="reg-categories">
             {["GCT", "NHT", "TRN", "MIN_WAGE", "PERMIT", "OTHER"].map((c) => <option key={c} value={c} />)}
           </datalist>
@@ -2601,7 +2644,7 @@ function RegulatoryEditor({
 
         <div>
           <label style={label} htmlFor="reg-summary">Summary</label>
-          <textarea id="reg-summary" style={{ ...field, minHeight: 78, resize: "vertical" }} value={summary} onChange={(e) => setSummary(e.target.value)} required />
+          <textarea id="reg-summary" style={{ ...field, minHeight: 78, resize: "vertical" }} value={summary} onChange={(e) => setSummary(e.target.value)} required maxLength={2000} />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -2611,17 +2654,21 @@ function RegulatoryEditor({
           </div>
           <div>
             <label style={label} htmlFor="reg-source">Source URL</label>
-            <input id="reg-source" type="url" placeholder="https://…" style={field} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
+            <input id="reg-source" type="url" placeholder="https://…" style={field} value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} maxLength={2048} />
           </div>
         </div>
 
         <div>
           <label style={label} htmlFor="reg-action">Action needed</label>
-          <input id="reg-action" style={field} value={actionNeeded} onChange={(e) => setActionNeeded(e.target.value)} placeholder="Leave empty for monitoring only" />
+          <input id="reg-action" style={field} value={actionNeeded} onChange={(e) => setActionNeeded(e.target.value)} placeholder="Leave empty for monitoring only" maxLength={2000} />
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 5 }}>
             Filling this in marks the entry &ldquo;Needs review&rdquo;. Empty means monitoring.
           </div>
         </div>
+
+        {shownError && (
+          <div role="alert" style={{ padding: "9px 13px", borderRadius: 9, background: "color-mix(in srgb, var(--critical) 12%, var(--surface))", border: "1px solid var(--critical)", fontSize: 13 }}>{shownError}</div>
+        )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 9, marginTop: 4 }}>
           <button type="button" onClick={onCancel} disabled={busy} style={{ height: 34, padding: "0 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
@@ -2715,8 +2762,12 @@ export function TenantBilling({
       setOpen(false);
       setReference("");
       setAmount("");
+      // The term choice does not carry meaning once the payment it applied to
+      // has been recorded — left set, it silently pre-selects "switch term
+      // again" the next time this drawer opens for the same tenant.
+      setInterval("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't work.");
+      setError(errorMessage(err, "That didn't work."));
     } finally {
       setBusy(false);
     }
@@ -2783,6 +2834,21 @@ export function TenantBilling({
               if (problem) {
                 // Refused here, and named — not sent to be refused by path.
                 setError(problem);
+                return;
+              }
+              // One click used to record real money with no confirmation at
+              // all, unlike Void beside it — the amount and term named here so
+              // the confirm is actually informative, not just a speed bump.
+              const amountLabel = amount.trim()
+                ? formatPlatformMoney(Math.round(Number(amount) * 100), currency ?? "USD")
+                : "the agreed price";
+              const termLabel =
+                interval === "monthly" ? "monthly" : interval === "annual" ? "annual" : "the current term";
+              if (
+                !window.confirm(
+                  `Record a payment of ${amountLabel} and extend the term (${termLabel})?`,
+                )
+              ) {
                 return;
               }
               void run(() =>
@@ -2908,7 +2974,7 @@ function SweepPanel({ canRun }: { canRun: boolean }) {
                 setJustRan(`${r.noticesSent} sent, ${r.reverted} reverted${r.failures > 0 ? `, ${r.failures} failed` : ""}`);
                 await load();
               } catch (err) {
-                setError(err instanceof Error ? err.message : "That didn't work.");
+                setError(errorMessage(err, "That didn't work."));
               } finally {
                 setBusy(false);
               }

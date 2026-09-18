@@ -114,6 +114,13 @@ export default function ClientForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!values.firstName.trim()) return setError("First name is required.");
+    // Mirrors trnSchema in packages/core/src/types/validators.ts (same digit
+    // count, same wording) — catching it here means a typo shows up while the
+    // contractor is still looking at the field, not after a round trip.
+    const trnDigits = values.trn.replace(/\D/g, "");
+    if (trnDigits.length > 0 && trnDigits.length !== 9) {
+      return setError("TRN must be 9 digits");
+    }
     setSaving(true);
     onBusyChange?.(true);
     setError("");
@@ -129,11 +136,11 @@ export default function ClientForm({
   return (
     <form className={modalStyles.form} onSubmit={submit}>
       <div className={modalStyles.row2}>
-        <Input label="First name" value={values.firstName} onChange={(e) => set("firstName", e.target.value)} autoFocus />
-        <Input label="Last name" value={values.lastName} onChange={(e) => set("lastName", e.target.value)} />
+        <Input label="First name" value={values.firstName} onChange={(e) => set("firstName", e.target.value)} autoFocus maxLength={80} />
+        <Input label="Last name" value={values.lastName} onChange={(e) => set("lastName", e.target.value)} maxLength={80} />
       </div>
       <div className={modalStyles.row2}>
-        <Input label="Phone" value={values.phone} onChange={(e) => set("phone", e.target.value)} placeholder="876 …" />
+        <Input label="Phone" value={values.phone} onChange={(e) => set("phone", e.target.value)} placeholder="876 …" maxLength={40} />
         <Input
           label="Email"
           type="email"
@@ -154,9 +161,9 @@ export default function ClientForm({
         inputMode="numeric"
         hint="9 digits. Appears on the client list you give your accountant."
       />
-      <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" />
+      <Input label="Town / city" value={values.town} onChange={(e) => set("town", e.target.value)} placeholder="e.g. Ocho Rios" maxLength={80} />
       <Select label="Parish" options={parishOptions} value={values.parish} onChange={(e) => set("parish", e.target.value)} />
-      <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} />
+      <Input label="Address" value={values.address} onChange={(e) => set("address", e.target.value)} maxLength={200} />
       {error && <span className={modalStyles.error}>{error}</span>}
       <div className={modalStyles.actions}>
         <Button variant="ghost" type="button" onClick={onCancel} disabled={saving}>

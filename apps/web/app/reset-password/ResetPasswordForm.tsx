@@ -5,6 +5,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { resetPasswordAction, type ResetPasswordState } from "@/lib/auth-actions";
+import { PASSWORD_MAX_LENGTH } from "@jamquote/core";
 import styles from "../login/login.module.css";
 
 function SubmitButton() {
@@ -30,6 +31,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           type="password"
           required
           minLength={8}
+          maxLength={PASSWORD_MAX_LENGTH}
           autoComplete="new-password"
         />
 

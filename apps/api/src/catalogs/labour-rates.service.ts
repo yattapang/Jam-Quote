@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { LabourRate } from "@prisma/client";
+import { normalizeUnitLabel } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { CatalogHiddenService, CatalogKind } from "./catalog-hidden.service.js";
 import type { CreateLabourRateInput, UpdateLabourRateInput } from "./catalogs.dto.js";
@@ -12,7 +13,14 @@ export class LabourRatesService {
   ) {}
 
   create(businessId: string, input: CreateLabourRateInput): Promise<LabourRate> {
-    return this.prisma.labourRate.create({ data: { ...input, businessId } });
+    return this.prisma.labourRate.create({
+      data: {
+        ...input,
+        // `m2` -> `m²` etc., same normalisation as material units.
+        unitLabel: input.unitLabel ? normalizeUnitLabel(input.unitLabel) : input.unitLabel,
+        businessId,
+      },
+    });
   }
 
   /**
@@ -49,7 +57,13 @@ export class LabourRatesService {
     input: UpdateLabourRateInput,
   ): Promise<LabourRate> {
     await this.findOne(businessId, id);
-    return this.prisma.labourRate.update({ where: { id }, data: input });
+    return this.prisma.labourRate.update({
+      where: { id },
+      data: {
+        ...input,
+        unitLabel: input.unitLabel ? normalizeUnitLabel(input.unitLabel) : input.unitLabel,
+      },
+    });
   }
 
   /** Soft-delete: sets deletedAt rather than removing the row, so offline

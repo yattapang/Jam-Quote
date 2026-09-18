@@ -337,7 +337,10 @@ export class AdminService {
       where: includeSuspended ? {} : { deletedAt: null },
       include: {
         subscription: true,
-        _count: { select: { quotes: true } },
+        // Quote is soft-deleted (`deletedAt`), so an unfiltered count includes
+        // tombstones: a tenant who deleted 40 draft quotes still showed
+        // "40 quotes" on the admin console.
+        _count: { select: { quotes: { where: { deletedAt: null } } } },
         // The newest quote touch, as the tenant's last activity.
         //
         // Prisma resolves a `take`-limited include as ONE extra windowed query, not

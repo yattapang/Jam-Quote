@@ -125,6 +125,12 @@ export function materialPayloadFromValues(
     specs: Object.keys(specs).length ? specs : undefined,
     description: values.description.trim() || undefined,
     measureUnit: values.measureUnit.trim() || undefined,
+    // Rule for "Covers 0": 0 means the same thing as blank — "not configured" —
+    // on BOTH create and edit, matching BOUNDS.coveragePerSellUnit.positiveOnly
+    // (zero coverage is not a fact about a material, per input-bounds.ts). Create
+    // simply omits the key for either; materialEditPayloadFromValues below sends
+    // an explicit null for either, which is what an edit PATCH needs to CLEAR a
+    // previously-configured value. Neither path treats 0 as a real value to store.
     ...(values.coveragePerSellUnit.trim() && Number(values.coveragePerSellUnit) > 0
       ? { coveragePerSellUnit: Number(values.coveragePerSellUnit) }
       : {}),
@@ -373,6 +379,13 @@ export default function MaterialForm({
           : "Name is required.",
       );
     }
+    // `Number("") || 0` below (in materialPayloadFromValues) would otherwise
+    // turn a blank field into a saved price of $0 — a real, wrong price,
+    // not an absence of one. Caught here, before the payload is built, so
+    // the typed (blank) input is kept rather than replaced with "0".
+    if (!values.priceDollars.trim()) {
+      return setError("Price is required.");
+    }
     setSaving(true);
     onBusyChange?.(true);
     setError("");
@@ -452,6 +465,7 @@ export default function MaterialForm({
                 <Input
                   label={attribute.required ? `${attribute.label} *` : attribute.label}
                   type={attribute.kind === "NUMBER" ? "number" : "text"}
+                  step={attribute.kind === "NUMBER" ? "any" : undefined}
                   list={isEnum ? `${listId}-${attribute.key}` : undefined}
                   value={value}
                   onChange={(e) => setSpec(attribute.key, e.target.value)}
@@ -516,6 +530,7 @@ export default function MaterialForm({
           label="Price $"
           type="number"
           min={BOUNDS.moneyDollars.min}
+          step="0.01"
           value={values.priceDollars}
           onChange={(e) => set("priceDollars", e.target.value)}
         />

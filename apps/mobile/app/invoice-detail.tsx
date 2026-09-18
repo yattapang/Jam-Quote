@@ -3,16 +3,9 @@ import React, { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, MoneyText, StatusPill } from "../src/components";
+import { demoTotals, DEMO_LINE_BREAKDOWN as LINE_BREAKDOWN } from "../src/state/demo-invoice-totals";
 import { resolveFontFamily } from "../src/theme/fontFamily";
 import { useTheme } from "../src/theme/ThemeProvider";
-
-const LINE_BREAKDOWN = [
-  { label: "Materials", cents: 9600000 },
-  { label: "Labour", cents: 5400000 },
-  { label: "Equipment & rental", cents: 1800000 },
-  { label: "GCT (15%)", cents: 2394000 },
-  { label: "Discount (5%)", cents: -840000 },
-];
 
 /**
  * Invoice detail — amount due, line breakdown, payment history, and a
@@ -73,7 +66,7 @@ export default function InvoiceDetailScreen() {
         >
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text style={{ fontSize: 13, color: colors.textMuted }}>Amount due</Text>
-            <MoneyText cents={18354080} size={18} color={colors.crit} />
+            <MoneyText cents={demoTotals.totalCents} size={18} color={colors.crit} />
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <Text style={{ fontSize: 12, color: colors.textMuted }}>Due date</Text>

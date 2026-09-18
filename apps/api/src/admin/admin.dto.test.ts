@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recordSubscriptionPaymentSchema } from "./admin.dto.js";
+import { createRegulatoryUpdateSchema, recordSubscriptionPaymentSchema } from "./admin.dto.js";
 
 /**
  * Bounds on the admin payment form, which is load-bearing for what a tenant gets.
@@ -55,5 +55,44 @@ describe("recordSubscriptionPaymentSchema.paidAt", () => {
     expect(
       recordSubscriptionPaymentSchema.safeParse({ ...base, paidAt: slightlyAhead }).success,
     ).toBe(true);
+  });
+});
+
+/**
+ * Regulatory entry validation: the "Add entry" console form accepted values
+ * (a title of only spaces, an `ftp://` source) the server then refused with a
+ * message that never named the field — so the contractor saw a rejection with
+ * no way to tell which of six fields was the problem.
+ */
+describe("createRegulatoryUpdateSchema", () => {
+  const base = {
+    title: "New GCT rate",
+    category: "GCT",
+    summary: "The standard rate changes to 16%.",
+  };
+
+  it("refuses ftp:// as a source URL", () => {
+    const result = createRegulatoryUpdateSchema.safeParse({
+      ...base,
+      sourceUrl: "ftp://example.com/notice.pdf",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("names the field in the refusal message", () => {
+    const result = createRegulatoryUpdateSchema.safeParse({
+      ...base,
+      sourceUrl: "ftp://example.com/notice.pdf",
+    });
+    if (result.success) throw new Error("expected failure");
+    expect(result.error.issues[0]?.message).toMatch(/source url/i);
+  });
+
+  it("accepts a real https URL", () => {
+    const result = createRegulatoryUpdateSchema.safeParse({
+      ...base,
+      sourceUrl: "https://www.jamaicatax.gov.jm/gct",
+    });
+    expect(result.success).toBe(true);
   });
 });

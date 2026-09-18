@@ -77,7 +77,8 @@ export const createRegulatoryUpdateSchema = z.object({
   // rendered as an `href` on the contractor dashboard's regulatory feed.
   sourceUrl: z
     .string()
-    .refine(isHttpUrl, { message: "Must be a full web address starting http:// or https://" })
+    .max(2048)
+    .refine(isHttpUrl, { message: "Source URL must be a full web address starting http:// or https://" })
     .nullable()
     .optional(),
   publishedAt: z.coerce.date().optional(),

@@ -352,6 +352,59 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Remaining sweeps, 2026-09-18 - FIXED (see the landing note below)
+
+**Landed:** the three small items (server-side quote validity on Jamaica time; admin
+tenant counts exclude deleted quotes, every other console count checked clean; the DTO
+bounds test rebuilt on the shared parser - 145 fields, and it exposed three unbounded
+fields the regex could not see, now bounded), all five catalog fixes, and all twelve
+forms fixes (one shared `PASSWORD_MAX_LENGTH` in core; blank price refused; cents
+allowed; regulatory errors shown in the dialog; payment recording confirms; `inputMin`
+now honours a bound's own step; the mobile demo invoice derives from `computeTotals`).
+Gate green twice (test-ast 175, core 394, api 989, web 661, mobile 35). I planted one
+defect per batch - a past `validUntil`, a dropped `equipmentItemId`, a blank price, an
+uncapped new password - and each failed its test.
+
+**Rejected, reverted:** the catalog sweep's "outage looks like an empty catalog" fix
+made four catalog getters throw. That contradicts a documented design: when the free-
+tier API is asleep, `DemoDataBanner` tells the user screens may be empty until it wakes,
+and every getter returns an empty list. There is no `error.tsx` in the app, so those four
+pages would have crashed to a generic error while quotes and invoices stayed empty - an
+inconsistency, not a fix. Kept as designed.
+**Lesson:** a sweep finding is a hypothesis; check it against the design the code
+documents before fixing it.
+
+**Open for the next review:** a caller that re-sends an existing past `validUntil` on
+edit (revise, mobile) is now refused - confirm no real path does.
+
+
+
+**Catalog remainder** (web pages, JobForm, unit labels):
+- P1 CONFIRMED - an equipment component saves WITHOUT its equipment link: JobForm drops
+  `equipmentItemId` both when saving and when loading, though the API is fully wired
+  (shape 4). It also hid the retained-ref regression for equipment only.
+- P1 - creating a material inside the job builder writes the PICKER label, price
+  included, into the line description ("Cement (bag) - $1,250.00").
+- P2 - inline-created materials/labour don't carry their unit (equipment does - shape 5);
+  one labour rate prints two ways; `m2 -> m²` only for materials; catalog pages say "No
+  saved ... yet" when the API is down.
+- Sound: hidden/deleted items stay out of pickers, no silent truncation, list-page units
+  consistent (F22 resolved), issued quotes are not repriced by later catalog edits.
+
+**Forms not previously covered:**
+- HIGH CONFIRMED - a material price with cents cannot be saved (no `step`), including the
+  value the app's own "Use this price" fills in.
+- HIGH CONFIRMED - a new password over 256 characters succeeds and then cannot log in
+  (the new-password rule has no max; login caps at 256). Recovery only by emailed reset.
+- HIGH - a blank material price saves as $0 and prices at $0 on every quote.
+- MEDIUM - regulatory editor accepts blank/`ftp:` input the server refuses and shows the
+  error behind the modal; "Record & extend term" has no confirm while Void beside it
+  does; several admin/security errors show "Failed to fetch"; ClientForm has no lengths.
+- LOW - TRN check client-side, Covers 0 inconsistency, one-click price-history delete,
+  a stale "Saved", and the mobile mock invoice total is $0.80 off its own lines.
+- Sound: no password in any URL, log or error; client clearing sends null; pricing and
+  rule pack validate every field by name; void/suspend/plan/delete all confirm.
+
 ## Post-merge guard audit, and generation 6 (2026-09-17/18)
 
 The audit attacked every guard. Eight caught their own target defect. **One did not:
