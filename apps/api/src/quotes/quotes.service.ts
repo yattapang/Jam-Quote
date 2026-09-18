@@ -20,6 +20,7 @@ import {
   type TotalsLineInput,
   publicQuoteWire,
   lineAmountCents,
+  startOfJamaicaDayMs,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
@@ -784,6 +785,19 @@ export class QuotesService {
         persistedSupplierIds,
       );
     }
+    // `updateQuoteSchema` deliberately drops the "not in the past" refine (see
+    // quotes.dto.ts) because it cannot know the stored value. Enforce it here,
+    // and only when the value being SAVED actually changes from what is
+    // already stored — re-sending an unchanged, now-expired `validUntil` on
+    // an old draft must stay editable.
+    if (
+      input.validUntil !== undefined &&
+      input.validUntil.getTime() !== (existing.validUntil?.getTime() ?? null) &&
+      input.validUntil.getTime() < startOfJamaicaDayMs(Date.now())
+    ) {
+      throw new BadRequestException("validUntil must not be a date in the past");
+    }
+
     const gctRatePct = input.gctRatePct ?? Number(existing.gctRate);
     const discountPct = input.discountPct ?? Number(existing.discountPct);
     const depositCents = input.depositCents ?? existing.depositCents;

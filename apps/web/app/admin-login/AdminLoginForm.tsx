@@ -4,6 +4,7 @@ import { useFormState, useFormStatus } from "react-dom";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
 import { adminLogin, type AuthFormState } from "@/lib/auth-actions";
+import { PASSWORD_MAX_LENGTH } from "@jamquote/core";
 import styles from "../login/login.module.css";
 
 function SubmitButton() {
@@ -21,7 +22,7 @@ export default function AdminLoginForm() {
   return (
     <form className={styles.form} action={formAction}>
       <Input label="Email" name="email" type="email" required autoComplete="email" />
-      <Input label="Password" name="password" type="password" required autoComplete="current-password" />
+      <Input label="Password" name="password" type="password" required maxLength={PASSWORD_MAX_LENGTH} autoComplete="current-password" />
       {state?.error && <span className={styles.error}>{state.error}</span>}
       <SubmitButton />
     </form>

@@ -1505,3 +1505,80 @@ describe("QuotesService — supplierId on line items is not a capability (S7)", 
     expect(prisma.supplier.findMany).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The DTO no longer refuses a past `validUntil` on update (see quotes.dto.ts
+ * — option (b) of the review item: the DTO cannot know the stored value).
+ * `quotes.service.ts#update` is where "not in the past" is now enforced, and
+ * only when the value being SAVED actually differs from what is stored.
+ */
+describe("QuotesService.update — validUntil is only re-checked when it changes", () => {
+  const pastDate = new Date("2020-01-01T00:00:00Z");
+  const draftWithPastValidUntil = {
+    id: "q2",
+    businessId: "b1",
+    status: "DRAFT",
+    clientId: null,
+    projectId: null,
+    parentQuoteId: null,
+    variationOfQuoteId: null,
+    version: 1,
+    gctRate: 15,
+    discountPct: 0,
+    depositCents: 0,
+    detailLevel: "SUMMARY",
+    validUntil: pastDate,
+    terms: null,
+    lineItems: [],
+    sections: [],
+  };
+
+  function updateHarness(existing: Record<string, unknown>) {
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
+          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
+          quote: { update: vi.fn().mockResolvedValue({}) },
+        }),
+      ),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue(existing),
+        count: vi.fn().mockResolvedValue(0),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      supplier: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const svc = new QuotesService(prisma as any, {} as any, {} as any);
+    return { svc, prisma };
+  }
+
+  it("saves an already-expired validUntil on update when it is re-sent UNCHANGED", async () => {
+    const { svc } = updateHarness(draftWithPastValidUntil);
+    await expect(
+      svc.update("b1", "q2", { validUntil: pastDate, discountPct: 5 } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it("refuses a validUntil update that CHANGES to a different, still-past date", async () => {
+    const { svc } = updateHarness(draftWithPastValidUntil);
+    const differentPast = new Date("2021-06-15T00:00:00Z");
+    await expect(
+      svc.update("b1", "q2", { validUntil: differentPast } as never),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("allows a validUntil update that changes to a future date", async () => {
+    const { svc } = updateHarness(draftWithPastValidUntil);
+    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await expect(
+      svc.update("b1", "q2", { validUntil: future } as never),
+    ).resolves.toBeDefined();
+  });
+
+  it("omitting validUntil entirely never triggers the past-date check", async () => {
+    const { svc } = updateHarness(draftWithPastValidUntil);
+    await expect(svc.update("b1", "q2", { discountPct: 8 } as never)).resolves.toBeDefined();
+  });
+});

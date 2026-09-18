@@ -1,3 +1,4 @@
+import { PASSWORD_MAX_LENGTH } from "@jamquote/core";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -130,6 +131,7 @@ export default function LoginScreen() {
             placeholderTextColor={colors.textMuted}
             value={password}
             onChangeText={setPassword}
+            maxLength={PASSWORD_MAX_LENGTH}
             secureTextEntry
             autoComplete={isRegister ? "new-password" : "current-password"}
           />

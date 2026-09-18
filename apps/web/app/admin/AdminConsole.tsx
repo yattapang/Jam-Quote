@@ -1489,7 +1489,7 @@ export default function AdminConsole({
 
               {canManageRulepack && (
                 <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-                  <button onClick={() => setRegEditing("new")} style={{ height: 34, padding: "0 15px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff" }}>
+                  <button onClick={() => { setRegError(null); setRegEditing("new"); }} style={{ height: 34, padding: "0 15px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "none", background: "var(--accent)", color: "#fff" }}>
                     Add entry
                   </button>
                 </div>
@@ -1534,7 +1534,7 @@ export default function AdminConsole({
                                 only be undone in the database. */}
                             {r.reviewedAt ? "Reopen" : "Mark reviewed"}
                           </button>
-                          <button disabled={busy} onClick={() => setRegEditing(r)} style={{ height: 32, padding: "0 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>Edit</button>
+                          <button disabled={busy} onClick={() => { setRegError(null); setRegEditing(r); }} style={{ height: 32, padding: "0 11px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>Edit</button>
                           <button
                             disabled={busy}
                             onClick={() => {
@@ -1557,7 +1557,7 @@ export default function AdminConsole({
                   entry={regEditing === "new" ? null : regEditing}
                   busy={regBusy["form"] === true}
                   error={regError}
-                  onCancel={() => setRegEditing(null)}
+                  onCancel={() => { setRegError(null); setRegEditing(null); }}
                   onSave={(values) =>
                     runReg("form", () =>
                       regEditing === "new"

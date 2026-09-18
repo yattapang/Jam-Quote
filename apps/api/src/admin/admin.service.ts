@@ -351,7 +351,12 @@ export class AdminService {
         // comment claimed an index that does not exist; a review caught it. F58
         // covers adding `@@index([businessId, updatedAt])` when this screen starts
         // to feel it.
-        quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
+        quotes: {
+          where: { deletedAt: null },
+          select: { updatedAt: true },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
     });

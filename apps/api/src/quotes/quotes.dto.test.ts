@@ -6,13 +6,18 @@ import { createQuoteSchema, updateQuoteSchema } from "./quotes.dto.js";
  * but the API DTO took `z.coerce.date()` with no lower bound at all, so a
  * client could bypass the form and save a quote that is already expired.
  *
- * Chosen rule: `validUntil`, when present in the payload, must not be a date
- * before the start of today in Jamaica time. `update` is a `.partial()` of
- * `create`, so the same bound applies to both — but only when the field is
- * actually supplied. An update that omits `validUntil` falls back to
- * `existing.validUntil` in `quotes.service.ts`, so editing an old quote whose
- * date has already passed (without touching that field) never becomes
- * impossible.
+ * Chosen rule: `validUntil`, when present in the payload on CREATE, must not
+ * be a date before the start of today in Jamaica time.
+ *
+ * `update` does NOT carry this refine at the DTO level (option (b) from the
+ * review item): the DTO alone has no access to the quote's stored
+ * `validUntil`, so it cannot tell "unchanged, already-expired date carried
+ * over" from "a genuinely new past date" — and the former must stay
+ * editable, or an old draft becomes permanently stuck once its date passes.
+ * `quotes.service.ts#update` enforces "not in the past" itself, comparing
+ * the incoming value against what is already stored, and only refuses when
+ * the value being SAVED actually changes. See quotes.service.test.ts for
+ * that behaviour.
  */
 describe("createQuoteSchema / updateQuoteSchema validUntil bound", () => {
   it("refuses a validUntil already in the past on create", () => {
@@ -25,9 +30,9 @@ describe("createQuoteSchema / updateQuoteSchema validUntil bound", () => {
     }
   });
 
-  it("refuses a validUntil already in the past on update", () => {
+  it("accepts a validUntil already in the past at the DTO level on update (the service enforces it, not the DTO)", () => {
     const result = updateQuoteSchema.safeParse({ validUntil: "2020-01-01" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("accepts a future validUntil on create", () => {
@@ -51,5 +56,57 @@ describe("createQuoteSchema / updateQuoteSchema validUntil bound", () => {
       validUntil: new Date(jamaicaMidnightUtcMs).toISOString(),
     });
     expect(result.success).toBe(true);
+  });
+
+  /**
+   * `new Date("2026-09-17")` parses a bare date as UTC MIDNIGHT — 7pm the
+   * previous evening in Jamaica (UTC-5, no DST). A date-only "today" string
+   * must be read as Jamaica-local midnight instead, or a contractor sending
+   * today's date on the day of gets refused for a "past" date 5 hours early.
+   */
+  describe("date-only (YYYY-MM-DD) strings are read as Jamaica calendar dates", () => {
+    function jamaicaDateOnlyString(offsetDays: number): string {
+      const jamaicaOffsetMs = 5 * 60 * 60 * 1000;
+      const jamaicaNowMs = Date.now() - jamaicaOffsetMs;
+      const jamaicaMs = jamaicaNowMs + offsetDays * 86_400_000;
+      return new Date(jamaicaMs).toISOString().slice(0, 10);
+    }
+
+    it("accepts today's date-only string", () => {
+      const result = createQuoteSchema.safeParse({ validUntil: jamaicaDateOnlyString(0) });
+      expect(result.success).toBe(true);
+    });
+
+    it("refuses yesterday's date-only string", () => {
+      const result = createQuoteSchema.safeParse({ validUntil: jamaicaDateOnlyString(-1) });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts tomorrow's date-only string", () => {
+      const result = createQuoteSchema.safeParse({ validUntil: jamaicaDateOnlyString(1) });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts a full ISO timestamp just before Jamaica midnight for TODAY (still yesterday's calendar date, but a real moment already in the past is refused; this pins the boundary is evaluated in real time, not by string)", () => {
+      // Jamaica midnight today, expressed in UTC, minus 1ms: this instant is
+      // definitely already in the past relative to itself, so it must refuse.
+      const jamaicaOffsetMs = 5 * 60 * 60 * 1000;
+      const nowUtc = Date.now();
+      const jamaicaMidnightUtcMs =
+        Math.floor((nowUtc - jamaicaOffsetMs) / 86_400_000) * 86_400_000 + jamaicaOffsetMs;
+      const justBefore = new Date(jamaicaMidnightUtcMs - 86_400_000).toISOString();
+      const result = createQuoteSchema.safeParse({ validUntil: justBefore });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts a full ISO timestamp just after Jamaica midnight today", () => {
+      const jamaicaOffsetMs = 5 * 60 * 60 * 1000;
+      const nowUtc = Date.now();
+      const jamaicaMidnightUtcMs =
+        Math.floor((nowUtc - jamaicaOffsetMs) / 86_400_000) * 86_400_000 + jamaicaOffsetMs;
+      const justAfter = new Date(jamaicaMidnightUtcMs + 1).toISOString();
+      const result = createQuoteSchema.safeParse({ validUntil: justAfter });
+      expect(result.success).toBe(true);
+    });
   });
 });

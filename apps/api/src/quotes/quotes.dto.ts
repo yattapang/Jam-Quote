@@ -9,6 +9,27 @@ import {
   startOfJamaicaDayMs,
 } from "@jamquote/core";
 
+/** Matches a bare calendar date with no time or zone: `"2026-09-17"`. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `Date.parse`/`new Date(...)` reads a bare `YYYY-MM-DD` string as UTC
+ * midnight, per the ISO-8601 date-only rule — but Jamaica is UTC-5 year
+ * round (no DST), so UTC midnight is 7pm the PREVIOUS evening in Jamaica.
+ * A contractor sending today's date, meaning today in Jamaica, would have it
+ * parsed 5 hours into what is, for `startOfJamaicaDayMs`'s purposes, still
+ * "yesterday" — and get refused for sending an already-past date on the day
+ * of. A date-ONLY string is therefore read as Jamaica-local midnight
+ * (`T00:00:00-05:00`) instead of UTC midnight; a full timestamp (one that
+ * already carries a time or zone) is left alone and parsed as written.
+ */
+const coerceJamaicaDate = z.preprocess((v) => {
+  if (typeof v === "string" && DATE_ONLY.test(v)) {
+    return new Date(`${v}T00:00:00-05:00`);
+  }
+  return v;
+}, z.coerce.date());
+
 /**
  * `validUntil` must not be a date already in the past, Jamaica time (F-register
  * item: the web builder refused `validDays < BOUNDS.validDays.min`, but the API
@@ -16,17 +37,16 @@ import {
  * already-expired quote directly). Compared against the START of today in
  * Jamaica so "today" itself is always valid regardless of time of day.
  *
- * This only bounds the SHAPE of a supplied date; `quotes.service.ts` decides
- * whether the bound applies on update (it does not re-check an unchanged
- * `validUntil` carried over from an existing quote, so editing an old quote
- * whose date has since passed does not become impossible).
+ * This only bounds the SHAPE of a supplied date on CREATE. `updateQuoteSchema`
+ * uses `coerceJamaicaDate` (below) with no refine at all — `quotes.service.ts`
+ * enforces "not in the past" on update, and only when the value being saved
+ * actually CHANGES from what is already stored, so re-saving an untouched,
+ * now-expired `validUntil` on an old draft does not become impossible.
  */
-const validUntilNotPast = z
-  .coerce
-  .date()
-  .refine((d) => d.getTime() >= startOfJamaicaDayMs(Date.now()), {
-    message: "validUntil must not be a date in the past",
-  });
+const validUntilNotPast = coerceJamaicaDate.refine(
+  (d) => d.getTime() >= startOfJamaicaDayMs(Date.now()),
+  { message: "validUntil must not be a date in the past" },
+);
 
 /**
  * Display-only snapshot of one job component, captured at the moment
@@ -97,7 +117,12 @@ export type CreateQuoteInput = z.infer<typeof createQuoteSchema>;
  * provided — fully replaces the nested line items (simplest correct model
  * for a scaffold; a future PATCH-by-id-for-lines endpoint can refine this).
  */
-export const updateQuoteSchema = createQuoteSchema.partial();
+export const updateQuoteSchema = createQuoteSchema.partial().extend({
+  // No "not in the past" refine here — see the comment on `validUntilNotPast`
+  // above. `quotes.service.ts#update` enforces it, only when the value
+  // actually changes from what is stored.
+  validUntil: coerceJamaicaDate.optional(),
+});
 export type UpdateQuoteInput = z.infer<typeof updateQuoteSchema>;
 
 export const updateQuoteStatusSchema = z.object({

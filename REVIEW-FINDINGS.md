@@ -352,7 +352,18 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
-## Review of 0839e19 (2026-09-18) - product code sound, guard not; fixes in progress
+## Review of 0839e19 (2026-09-18) - FIXED
+
+All six fixed. The DTO bounds guard now resolves `z` by symbol, accepts quoted keys and
+follows a one-level helper; I planted all three bypasses in `purchases.dto.ts` and the
+guard named each (`plantA`, `plantB`, `plantC`). `validUntil`: the update schema no
+longer carries the not-past check; the service enforces it only when the value CHANGES,
+so an expired quote re-sent unchanged stays editable - I planted both halves (unchanged
+no longer exempt; check removed) and each failed a test. A date-only `YYYY-MM-DD` is read
+as a Jamaican calendar date; the stale regulatory error clears on cancel and open;
+deleted quotes no longer count as tenant activity; the admin and mobile login password
+fields carry `PASSWORD_MAX_LENGTH` (I added the mobile one myself - the agent stalled).
+
 
 - **HIGH, CONFIRMED - the rebuilt DTO bounds guard is beaten three ways:** an aliased zod
   import (`z as zz`), a helper returning `z.string()`, and a quoted key. It matched `z` by

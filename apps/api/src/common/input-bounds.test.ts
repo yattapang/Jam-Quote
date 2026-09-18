@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { collect, parseFile, unwrap } from "@jamquote/test-ast";
+import { collect, followAlias, isImportedChain, parseFile, unwrap } from "@jamquote/test-ast";
 
 /**
  * Every string a contractor can send should have a bound. This pins the ones
@@ -86,33 +86,95 @@ const KNOWN_UNBOUNDED: Record<string, string[]> = {
 /**
  * Walks a call-chain expression outward (`z.string().trim().max(500)` is the
  * `.max(500)` call at the top) and asks whether it bottoms out at a bare
- * `z.string()` call. `z` is matched by identifier text, the same convention
- * every DTO in this codebase already follows (`import { z } from "zod"`) —
- * sound here because the question is "is this chain built on the string
- * builder this file imports", and every `.dto.ts` module imports it under
- * that name with no local shadow.
+ * `z.string()` call. The receiver `z` is resolved through the shared binder
+ * via `isImportedChain(base, "zod", "z")` — NOT by comparing identifier text
+ * — so an aliased import (`import { z as zz } from "zod"`) still matches,
+ * because `isImportedChain` follows the import specifier's `propertyName`
+ * rather than its local name.
+ *
+ * Two more bypasses this now closes, both required by rule 3/doctrine:
+ * - Helper indirection (`const str = () => z.string(); …str()…`): when the
+ *   callee is a bare identifier, `followAlias` resolves it to its (single,
+ *   never-reassigned) initializer, and — one level deep only, exactly like
+ *   `followAlias`'s own contract — a concise-body arrow or a single-`return`
+ *   function body is unwrapped and walked as if it had been written inline.
+ * - Quoted/computed string keys are handled by `propNameText` at the call
+ *   site below, not here.
  *
  * Returns the ordered list of method names found ABOVE the `z.string()` root
  * (`["trim", "max"]` for the example above) when the chain does bottom out
  * there, or `undefined` when it does not — a `z.number()...` chain, a bare
- * identifier, a non-chain expression, anything else.
+ * identifier, a non-chain expression, a helper whose body is not a single
+ * return of a zod chain, anything else.
+ *
+ * What this still does NOT follow, by design: a field whose value is a
+ * shared schema imported from `@jamquote/core` (e.g. `quoteLineItemSchema`,
+ * spent via `.and(...)` in quotes.dto.ts) rather than an inline `z.string()`
+ * call written in this file. Bounding those fields is `@jamquote/core`'s own
+ * responsibility; this guard only walks chains literally present in each
+ * `<module>.dto.ts` source file.
  */
-function zStringChainMethods(expr: ts.Expression): string[] | undefined {
+function zStringChainMethods(expr: ts.Expression, seen: Set<ts.Node> = new Set()): string[] | undefined {
   const e = unwrap(expr);
   if (!ts.isCallExpression(e)) return undefined;
   const callee = unwrap(e.expression);
+
+  if (ts.isIdentifier(callee)) {
+    if (seen.has(callee)) return undefined; // guard against a self-referencing helper
+    const init = followAlias(callee);
+    if (init === undefined) return undefined;
+    const body = helperBodyExpression(init);
+    if (body === undefined) return undefined;
+    const next = new Set(seen);
+    next.add(callee);
+    return zStringChainMethods(body, next);
+  }
+
   if (!ts.isPropertyAccessExpression(callee)) return undefined;
   const methodName = callee.name.text;
   const base = unwrap(callee.expression);
 
-  // The root of the chain: `z.string()` itself.
-  if (ts.isIdentifier(base) && base.text === "z" && methodName === "string") {
+  // The root of the chain: `z.string()` itself, `z` resolved by symbol.
+  if (methodName === "string" && isImportedChain(base, "zod", "z")) {
     return [];
   }
 
-  const rest = zStringChainMethods(base);
+  const rest = zStringChainMethods(base, seen);
   if (rest === undefined) return undefined;
   return [...rest, methodName];
+}
+
+/**
+ * A never-reassigned local helper's body, one level deep: the concise body of
+ * an arrow function, or the sole expression of a single-`return` block body.
+ * Anything else (multiple statements, no return, a non-function initializer)
+ * is not a shape this guard tries to see through.
+ */
+function helperBodyExpression(init: ts.Expression): ts.Expression | undefined {
+  const fn = unwrap(init);
+  if (!ts.isArrowFunction(fn) && !ts.isFunctionExpression(fn)) return undefined;
+  if (!ts.isBlock(fn.body)) return fn.body;
+  const stmts = fn.body.statements;
+  if (stmts.length !== 1) return undefined;
+  const only = stmts[0]!;
+  return ts.isReturnStatement(only) && only.expression ? only.expression : undefined;
+}
+
+/**
+ * A property name as a static string: a plain identifier key, a quoted
+ * string key (`"plantC": …`), or a computed key whose expression is itself a
+ * string literal (`["plantC"]: …`). Anything else (a computed non-literal
+ * key, a numeric/symbol key) returns `undefined` and the property is skipped
+ * — same as before, just no longer skipping quoted keys too.
+ */
+function propNameText(name: ts.PropertyName): string | undefined {
+  if (ts.isIdentifier(name)) return name.text;
+  if (ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name)) return name.text;
+  if (ts.isComputedPropertyName(name)) {
+    const inner = unwrap(name.expression);
+    if (ts.isStringLiteral(inner) || ts.isNoSubstitutionTemplateLiteral(inner)) return inner.text;
+  }
+  return undefined;
 }
 
 interface StringField {
@@ -129,10 +191,11 @@ interface StringField {
 function stringFields(sf: ts.SourceFile): StringField[] {
   const out: StringField[] = [];
   for (const prop of collect(sf, ts.isPropertyAssignment)) {
-    if (!ts.isIdentifier(prop.name)) continue;
+    const name = propNameText(prop.name);
+    if (name === undefined) continue;
     const methods = zStringChainMethods(prop.initializer);
     if (methods === undefined) continue;
-    out.push({ name: prop.name.text, constrained: methods.some((m) => UPPER_BOUNDS.has(m)) });
+    out.push({ name, constrained: methods.some((m) => UPPER_BOUNDS.has(m)) });
   }
   return out;
 }

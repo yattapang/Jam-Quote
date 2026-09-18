@@ -269,10 +269,78 @@ describe("AdminService.tenants", () => {
         include: {
           subscription: true,
           _count: { select: { quotes: { where: { deletedAt: null } } } },
-          quotes: { select: { updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 1 },
+          quotes: {
+            where: { deletedAt: null },
+            select: { updatedAt: true },
+            orderBy: { updatedAt: "desc" },
+            take: 1,
+          },
         },
       }),
     );
+  });
+
+  it("excludes soft-deleted quotes from the last-activity query, falling back to an earlier non-deleted quote", async () => {
+    // A tenant's only RECENT quote is soft-deleted. The `quotes` include
+    // must filter `deletedAt: null` (asserted above), so a real Prisma
+    // query never returns the deleted one — here that's simulated by the
+    // mock only ever returning what such a filtered query would: the
+    // newest quote that is NOT soft-deleted, not the newer deleted one.
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const earlierNonDeleted = new Date("2026-02-01T00:00:00.000Z");
+    const prisma = {
+      business: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "biz-4",
+            name: "Soft-Deleted Latest Ltd",
+            parish: null,
+            trn: null,
+            createdAt: now,
+            deletedAt: null,
+            subscription: null,
+            _count: { quotes: 1 },
+            // A correctly-filtered query never sees the newer, soft-deleted
+            // quote at all — this IS the filtered result, the earlier live one.
+            quotes: [{ updatedAt: earlierNonDeleted }],
+          },
+        ]),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
+
+    const tenants = await svc.tenants();
+
+    expect(tenants[0]?.lastActiveAt).toEqual(earlierNonDeleted);
+  });
+
+  it("reports no recent activity when a tenant's only quote is soft-deleted", async () => {
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const prisma = {
+      business: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "biz-5",
+            name: "Only Deleted Quote Ltd",
+            parish: null,
+            trn: null,
+            createdAt: now,
+            deletedAt: null,
+            subscription: null,
+            _count: { quotes: 0 },
+            // The filtered query finds nothing to report.
+            quotes: [],
+          },
+        ]),
+      },
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record: vi.fn() } as any, {} as any);
+
+    const tenants = await svc.tenants();
+
+    expect(tenants[0]?.lastActiveAt).toBeNull();
   });
 
   it("includes suspended tenants (flagged) when includeSuspended is true", async () => {
