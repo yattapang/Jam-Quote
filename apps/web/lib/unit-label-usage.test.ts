@@ -6,7 +6,9 @@ import {
   parseFile,
   parseSource,
   callsTo,
+  comparedPairs,
   destructuredPropertyName,
+  enclosingFunctionKey,
   followAlias,
   renderedExpressions,
   unwrap,
@@ -103,14 +105,34 @@ import {
  * so it still does not match — same reasoning `isRoutedThroughLineUnitLabel`
  * already relies on for a `lineUnitLabel` call's own arguments.
  */
-const ALLOWED = new Set([
-  // Defines lineUnitLabel and the map itself — the one place `.rateUnit` is
-  // read to PRODUCE the label, not to render a line.
-  "lib/quote-totals.ts",
-  // Enumerates the cadences to build the unit picker's options; not a row
-  // label, and has no JSX besides (a plain .ts file).
-  "lib/line-editor.ts",
-]);
+/**
+ * Legitimate `.rateUnit` reads that are not a display path at all, keyed `file#function`
+ * (the function a read sits in, via `enclosingFunctionKey`) with an EXACT count and a
+ * reason — never a whole-file skip. A whole-file entry silently covers every function
+ * added to that file afterward, including a real display bug; the executed bypass this
+ * generation replaces was exactly that shape: `export function unitFor(l) { return
+ * l.rateUnit.toLowerCase(); }` added to `lib/line-editor.ts` stayed green because the
+ * old `ALLOWED` was a bare file path, not a function, so ANY read in that file — display
+ * or not — passed unseen. An exact count means a second read added inside an already-
+ * exempt function fails too, rather than silently joining the exemption; a rot check
+ * below fails if either count drifts.
+ */
+const NON_DISPLAY_ALLOWED: { file: string; function: string; count: number; reason: string }[] = [
+  {
+    file: "lib/quote-totals.ts",
+    function: "lineUnitLabel",
+    count: 1,
+    reason:
+      "defines lineUnitLabel and RATE_UNIT_LABEL itself — the one place .rateUnit is read to PRODUCE the label, not to render a line",
+  },
+  {
+    file: "lib/line-editor.ts",
+    function: "unitValue",
+    count: 1,
+    reason:
+      "reads rateUnit only to build the unit picker's internal VALUE key (`rate:${rateUnit}`); the picker's visible LABEL comes from RATE_UNIT_LABEL/unitLabel, never from this read",
+  },
+];
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -316,8 +338,10 @@ function walkRendered(node: ts.Node, visit: (n: ts.Node) => void): void {
 /** Every `.rateUnit` (or destructured equivalent) read inside `root` that is not routed through `lineUnitLabel`. */
 function unroutedRateUnitReads(root: ts.Expression, sf: ts.SourceFile): ts.Node[] {
   const offenders: ts.Node[] = [];
+  const compared = comparedNodes(sf);
   walkRendered(root, (node) => {
     if (!isRateUnitRead(node)) return;
+    if (compared.has(node)) return;
     if (!isInsideLineUnitLabelCall(node, sf, root)) offenders.push(node);
   });
   return offenders;
@@ -337,17 +361,38 @@ function unroutedRateUnitReads(root: ts.Expression, sf: ts.SourceFile): ts.Node[
  *
  * JSX attribute values are still excluded (`walkRendered` skips them at any depth, file-
  * wide) — an `onChange` handler or a control's `value=` computes DATA, not text the page
- * prints, per this file's header. What is NOT excluded, deliberately, is ordinary `.ts`/
- * `.tsx` code outside any JSX at all: a comparison, a payload object, a `useState` call.
+ * prints, per this file's header. Also structurally excluded, because cadence logic
+ * legitimately reads `.rateUnit` this way with nothing to render: a COMPARISON operand
+ * (`l.rateUnit === "METRE"`), and a switch DISCRIMINANT or CASE (`switch (l.rateUnit) {
+ * case RateUnit.METRE: ... }`) — both found through the shared parser's `comparedPairs`,
+ * which already covers exactly these two shapes plus `Object.is`/`Math.max` pairs (not
+ * relevant here). `isMetreLine(l) { return l.rateUnit === "METRE"; }` is this shape: a
+ * boolean answer, not a rendered string, and "fix it with lineUnitLabel" makes no sense
+ * for a comparison. What is NOT excused, deliberately, is ordinary `.ts`/`.tsx` code
+ * outside any JSX, a comparison, or a switch: a payload object, a `useState` call, or a
+ * transform whose RESULT is what a comparison or switch judges (`l.rateUnit.toLowerCase()
+ * === "metre"` still reads and transforms before the comparison ever sees it — only the
+ * read that IS the compared operand itself is excused, per `comparedPairs`' own contract).
  * Those are real reads too, by this guard's letter; where they are legitimate (not a
  * display path at all) they are named in `NON_DISPLAY_ALLOWED` below, per file and
  * function, with an exact count and a reason — never silently excused by position alone.
  */
+function comparedNodes(sf: ts.SourceFile): Set<ts.Node> {
+  const set = new Set<ts.Node>();
+  for (const pair of comparedPairs(sf)) {
+    set.add(unwrap(pair.a));
+    set.add(unwrap(pair.b));
+  }
+  return set;
+}
+
 function unroutedRateUnitReadsInFile(sf: ts.SourceFile): ts.Node[] {
   const offenders: ts.Node[] = [];
+  const compared = comparedNodes(sf);
   walkRendered(sf, (node) => {
     if (!isRateUnitRead(node)) return;
     if (isNonDisplayPassthrough(node)) return;
+    if (compared.has(node)) return;
     if (!isInsideLineUnitLabelCall(node, sf, sf)) offenders.push(node);
   });
   return offenders;
@@ -373,18 +418,33 @@ describe("a line's unit is resolved in one place", () => {
     expect(relFiles.length).toBeGreaterThan(20);
   });
 
-  it("no read of a line's rateUnit, anywhere in the file, escapes lineUnitLabel unexcused", () => {
-    const offenders: string[] = [];
+  function rateUnitReadCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
     for (const f of files) {
-      if (ALLOWED.has(rel(f))) continue;
       const sf = parseFile(f);
       for (const node of unroutedRateUnitReadsInFile(sf)) {
-        offenders.push(`${rel(f)} :: ${node.getText().slice(0, 80)}`);
+        const key = `${rel(f)}#${enclosingFunctionKey(node)}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
       }
     }
-    expect(offenders, "a read outside lineUnitLabel that is not a structurally-excused passthrough — fix it with lineUnitLabel").toEqual(
-      [],
-    );
+    return counts;
+  }
+
+  it("no read of a line's rateUnit, anywhere in the file, escapes lineUnitLabel unexcused", () => {
+    const allowed = new Map(NON_DISPLAY_ALLOWED.map((a) => [`${a.file}#${a.function}`, a.count]));
+    const counts = rateUnitReadCounts();
+    const offenders = [...counts]
+      .filter(([key, n]) => allowed.get(key) !== n)
+      .map(([key, n]) => `${key}: ${n} unrouted read(s) (allowed ${allowed.get(key) ?? 0})`);
+    expect(
+      offenders,
+      "a read outside lineUnitLabel that is not a structurally-excused passthrough — fix it with lineUnitLabel",
+    ).toEqual([]);
+  });
+
+  it("does not let the allow-list rot: every entry still has exactly its count", () => {
+    const counts = rateUnitReadCounts();
+    expect(NON_DISPLAY_ALLOWED.filter((a) => counts.get(`${a.file}#${a.function}`) !== a.count)).toEqual([]);
   });
 
   it("does not excuse a transform of rateUnit merely because it sits inside a lineUnitLabel(...) call", () => {
@@ -506,5 +566,56 @@ describe("a line's unit is resolved in one place", () => {
         expect(unroutedRateUnitReads(expr, sf)).toHaveLength(0);
       }
     }
+  });
+
+  it("a comparison over rateUnit is not this guard's business — cadence logic, not display", () => {
+    // The executed false positive this generation exists to fix: a plain equality
+    // check has nothing to render and cannot be "fixed with lineUnitLabel".
+    const eq = parseSource("probe-cmp.ts", 'function isMetreLine(l) { return l.rateUnit === "METRE"; }');
+    expect(unroutedRateUnitReadsInFile(eq)).toHaveLength(0);
+
+    const sw = parseSource(
+      "probe-switch.ts",
+      'function cadenceOf(l) { switch (l.rateUnit) { case "METRE": return "m"; default: return "u"; } }',
+    );
+    expect(unroutedRateUnitReadsInFile(sw)).toHaveLength(0);
+  });
+
+  it("a transform that FEEDS a comparison is still caught — only the compared operand itself is excused", () => {
+    const transformed = parseSource(
+      "probe-cmp2.ts",
+      'function isMetreLine(l) { return l.rateUnit.toLowerCase() === "metre"; }',
+    );
+    expect(unroutedRateUnitReadsInFile(transformed).length).toBeGreaterThan(0);
+  });
+
+  it("the executed bypass this generation replaces: a helper reading rateUnit for display, added beside the legitimate unitValue, still fails", () => {
+    const probe = parseSource(
+      "probe-unitfor.ts",
+      [
+        'export function unitValue(l) { return l.unitLabel?.trim() || `rate:${l.rateUnit}`; }',
+        "export function unitFor(l) { return l.rateUnit.toLowerCase(); }",
+      ].join("\n"),
+    );
+    const byFn = new Map<string, number>();
+    for (const node of unroutedRateUnitReadsInFile(probe)) {
+      byFn.set(enclosingFunctionKey(node), (byFn.get(enclosingFunctionKey(node)) ?? 0) + 1);
+    }
+    // unitValue's own read is the allow-listed, non-display one (building the picker's
+    // value key); unitFor is a NEW function with its own key, so a per-function,
+    // per-file, exact-count allow-list does not cover it merely because it lives in
+    // the same file as an already-exempt function.
+    expect(byFn.get("unitFor")).toBe(1);
+  });
+
+  it("the original public-page defect — a divergent local re-implementation feeding rendered text — still fails", () => {
+    const probe = parseSource(
+      "probe-public.tsx",
+      'const x = <span>{l.unitLabel?.trim() || l.rateUnit.toLowerCase()}</span>;',
+    );
+    for (const expr of renderedExpressions(probe)) {
+      expect(unroutedRateUnitReads(expr, probe).length).toBeGreaterThan(0);
+    }
+    expect(unroutedRateUnitReadsInFile(probe).length).toBeGreaterThan(0);
   });
 });

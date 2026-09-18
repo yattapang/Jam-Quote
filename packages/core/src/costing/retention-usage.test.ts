@@ -8,6 +8,7 @@ import {
   collect,
   comparedPairs,
   enclosingFunctionKey,
+  mayShareReceiver,
   parseSource,
   resolveRead,
 } from "@jamquote/test-ast";
@@ -82,24 +83,51 @@ import {
  *   nesting, so the ternary's condition was already found; the probe below confirms it
  *   rather than re-fixing something that was not broken.
  *
+ * ## Why a post-merge audit found ten more, and what closed them as classes (generation 6)
+ *
+ * An audit executed ten spellings at a real call site in `invoices.service.ts`. Each was
+ * a member of a class the parser followed for one spelling only, so each is closed in
+ * `@jamquote/test-ast`'s `resolveRead` as the CLASS:
+ *
+ * - **Value-preserving conversions** (E `BigInt`, F `String`, J `fmt.format`, K
+ *   ``Number(`${x}`)``, and generation 5's open `.toFixed(2)`): `String`/`BigInt`/`Number`,
+ *   `parseInt`/`parseFloat` bare or under `Number`, `Math.trunc`/`round`/`floor`/`ceil`/
+ *   `abs`, `.toString()`/`.valueOf()`/`.toFixed()`/`.toPrecision()`/`.toLocaleString()`,
+ *   a single argument to any `.format()`, and a single-substitution template - globals
+ *   resolved through the binder, so a local `String` or `Math` is not unwrapped.
+ * - **A member of a literal container** (B object property, C constant index, D `.at(n)`,
+ *   I single-`return` getter, L array binding pattern): a read of a never-written local
+ *   array/object LITERAL, by constant key, index, `.at()`, getter, or object/array pattern,
+ *   is followed to the element it holds, through nested literals.
+ * - **A field name passed as a string** (A): FOLLOWED, for a never-written LOCAL helper
+ *   whose one-`return` body is `o[k]` of its own two parameters, when the argument for `k`
+ *   is a single closed string. Worth it because it is the same one-level accessor this
+ *   parser already follows, with the key moved into an argument. An IMPORTED helper (a
+ *   lodash `get`/`pick`) is NOT followed: nothing across a module boundary is.
+ *
+ * Two false positives came the other way: `q.totalCents > pay.paidCents` and
+ * `Math.max(planX.totalCents, receiptY.paidCents) === planX.totalCents` failed although the
+ * objects were unrelated. A pair now counts only when `mayShareReceiver` says the two
+ * reads may be off one object: it is `false` only when both receivers root in known,
+ * different bindings and neither was computed from the other (so a clone - `structuredClone`,
+ * a JSON round-trip, a spread - or an alias of the invoice still counts as the invoice).
+ *
  * ## What it does not prove
  *
- * A parameter is known only by its name; an accessor is followed one level, within the
- * file; a value crossing a module boundary, a method, or an object passed to a function
- * is not followed; a column renamed on purpose defeats it. Every file must PARSE: a syntax
- * error throws.
- *
- * Two more spellings, found attacking this generation and NOT fixed:
- *
- * - `[inv.paidCents, inv.totalCents].sort((a, b) => a - b)[1] === inv.paidCents` — a
- *   hand-rolled max via `Array.prototype.sort`. The comparator `(a, b) => a - b` never
- *   mentions `paidCents`/`totalCents` by name (its parameters are generic sort-callback
- *   names), so neither `additiveTerms` nor `comparedPairs` ever sees the two fields
- *   appear together in one expression — `comparedPairs`'s own doc comment names this gap.
- * - `inv.paidCents.toFixed(2) === inv.totalCents.toFixed(2)` — a method call ON the field
- *   (not a one-level accessor RETURNING it, the shape `resolveRead` follows) defeats
- *   `fieldOf`: `.toFixed(2)` is read as an opaque call, so this comparison scores as
- *   neither `paid` nor `total` and the pair is silently dropped.
+ * - **The field passed to any opaque call** is not followed: `round2(a.paidCents) ===
+ *   round2(a.totalCents)`, where `round2` is imported or has more than a single-`return`
+ *   body, reads as neither field. Only the conversions listed above are unwrapped.
+ * - **Two different bindings holding one row** read as unrelated: two loads of one id, or
+ *   one invoice passed as two parameters to a function comparing them. The receiver rule
+ *   trades this for the two false positives above.
+ * - **A hand-rolled max via `Array.prototype.sort`** - `[inv.paidCents, inv.totalCents]
+ *   .sort((a, b) => a - b)[1] === inv.paidCents` - is not caught: the comparator never
+ *   names either field, and `.sort` is not a literal-member read.
+ * - A parameter is known only by its name; an accessor is followed one level, within the
+ *   file; a value crossing a module boundary, a METHOD, or an object passed to a function
+ *   is not followed; a literal container mutated through a function call is read at its
+ *   original value; a column renamed on purpose defeats it. Every file must PARSE: a
+ *   syntax error throws.
  *
  * Core itself is exempt — it is where the right answer is allowed to be computed — and
  * specific functions elsewhere are exempt only with a stated reason and an exact count.
@@ -138,14 +166,20 @@ function fieldOfName(name: string): Field | null {
   return null;
 }
 
+interface FieldRead {
+  field: Field;
+  /** What the field was read off, when known — see `mayShareReceiver`. */
+  receiver: ts.Expression | undefined;
+}
+
 /** What an operand reads, through the shared parser; a local's own name is the last resort. */
-function fieldOf(expr: ts.Expression): Field | null {
-  const { read, aliases } = resolveRead(expr);
+function fieldOf(expr: ts.Expression): FieldRead | null {
+  const { read, aliases, receiver } = resolveRead(expr);
   const direct = read.kind === "other" ? null : fieldOfName(read.name);
-  if (direct) return direct;
+  if (direct) return { field: direct, receiver: read.kind === "property" ? receiver : undefined };
   for (const alias of aliases) {
     const f = fieldOfName(alias);
-    if (f) return f;
+    if (f) return { field: f, receiver: undefined };
   }
   return null;
 }
@@ -163,7 +197,8 @@ interface Offenders {
 
 /**
  * One subtraction per additive chain holding a `totalCents` read and a `paidCents` read
- * of opposite sign, and one comparison per `<`/`<=`/`>`/`>=` between the two.
+ * of opposite sign, and one comparison per compared pair (`comparedPairs`) of the two —
+ * in both cases only where the two reads may be off the SAME object (`mayShareReceiver`).
  */
 function findOffenders(sourceText: string, fileName: string): Offenders {
   const sf = parseSource(fileName, sourceText);
@@ -181,18 +216,21 @@ function findOffenders(sourceText: string, fileName: string): Offenders {
   }
 
   for (const chain of additiveChains(sf)) {
-    const signs = { total: new Set<number>(), paid: new Set<number>() };
-    for (const term of additiveTerms(chain)) {
-      const f = fieldOf(term.expr);
-      if (f) signs[f].add(term.sign);
+    const terms = additiveTerms(chain).flatMap((t) => {
+      const f = fieldOf(t.expr);
+      return f ? [{ ...f, sign: t.sign }] : [];
+    });
+    const totals = terms.filter((t) => t.field === "total");
+    const paids = terms.filter((t) => t.field === "paid");
+    if (totals.some((t) => paids.some((p) => p.sign === -t.sign && mayShareReceiver(t.receiver, p.receiver)))) {
+      record(chain, "subtract");
     }
-    if ([...signs.total].some((s) => signs.paid.has(-s))) record(chain, "subtract");
   }
 
   for (const { node, a: ax, b: bx } of comparedPairs(sf)) {
     const a = fieldOf(ax);
     const b = fieldOf(bx);
-    if (a && b && a !== b) record(node, "compare");
+    if (a && b && a.field !== b.field && mayShareReceiver(a.receiver, b.receiver)) record(node, "compare");
   }
 
   return { subtractLines, compareLines, byFunction };
@@ -403,17 +441,58 @@ describe("invoice settlement is decided in core, nowhere else", () => {
       ).toBeUndefined();
     });
 
-    // Attacking this generation's own fix found two more spellings, reported here and left
-    // OPEN — see "Two more spellings" in the file header for why each one defeats it.
+    // Still OPEN — see "What it does not prove" in the file header. (Generation 5's other
+    // open spelling, `.toFixed` on both fields, is closed and probed under generation 6.)
     it("does NOT catch a hand-rolled max via Array.prototype.sort (open)", () => {
       expect(
         counts("function f(a) { return [a.paidCents, a.totalCents].sort((x, y) => x - y)[1] === a.paidCents; }"),
       ).toBeUndefined();
     });
 
-    it("does NOT catch a comparison of a method call ON each field, e.g. .toFixed (open)", () => {
+  });
+
+  describe("generation-6 bypasses, each executed at a real call site by a post-merge audit", () => {
+    const counts = (src: string, fn = "f") => findOffenders(src, "probe.ts").byFunction.get(`probe.ts#${fn}`);
+
+    it.each([
+      ["A: a field name passed as a string to a local helper", 'const pick = (o, k) => o[k];\nfunction f(i) { return pick(i, "totalCents") - pick(i, "paidCents"); }'],
+      ["B: an object literal through a never-written local", "function f(i) { const m = { due: i.totalCents, got: i.paidCents }; return m.due - m.got; }"],
+      ["C: an array literal by constant index", "function f(i) { const pair = [i.totalCents, i.paidCents]; return pair[0] - pair[1]; }"],
+      ["D: an array literal through .at()", "function f(i) { const pair = [i.totalCents, i.paidCents]; return pair.at(0) - pair.at(1); }"],
+      ["E: BigInt", "function f(i) { return BigInt(i.totalCents) - BigInt(i.paidCents); }"],
+      ["F: String on both sides of ===", "function f(i) { return String(i.paidCents) === String(i.totalCents); }"],
+      ["I: getters on an object literal", "function f(i) { const g = { get a() { return i.totalCents; }, get b() { return i.paidCents; } }; return g.a - g.b; }"],
+      ["J: Intl.NumberFormat#format on both sides", "const fmt = new Intl.NumberFormat();\nfunction f(i) { return fmt.format(i.paidCents) === fmt.format(i.totalCents); }"],
+      ["K: Number over a single-substitution template", "function f(i) { return Number(`${i.totalCents}`) - Number(`${i.paidCents}`); }"],
+      ["L: an array binding pattern", "function f(i) { const [t, pd] = [i.totalCents, i.paidCents]; return t - pd; }"],
+      [".toFixed on both sides (open in generation 5)", "function f(a) { return a.paidCents.toFixed(2) === a.totalCents.toFixed(2); }"],
+      ["Math.trunc", "function f(a) { return Math.trunc(a.totalCents) - Math.trunc(a.paidCents); }"],
+      ["control: a plain subtraction", "function f(i) { return i.totalCents - i.paidCents; }"],
+      ["control: a JSON round-trip copy", "function f(i) { const c = JSON.parse(JSON.stringify(i)); return c.totalCents - i.paidCents; }"],
+      ["control: structuredClone", "function f(i) { const c = structuredClone(i); return c.totalCents - i.paidCents; }"],
+      ["one invoice, read against itself through two aliases", "function f(i) { const x = i; const q = x.totalCents; return q > i.paidCents; }"],
+    ])("catches %s", (_name, src) => {
+      const c = counts(src);
+      expect((c?.subtract ?? 0) + (c?.compare ?? 0), src).toBe(1);
+    });
+
+    it.each([
+      ["a comparison across two unrelated parameters", "function f(q, pay) { return q.totalCents > pay.paidCents; }"],
+      ["Math.max across two unrelated locals", "function f() { const planX = load(1); const receiptY = load(2); return Math.max(planX.totalCents, receiptY.paidCents) === planX.totalCents; }"],
+      ["a subtraction across two unrelated parameters", "function f(q, pay) { return q.totalCents - pay.paidCents; }"],
+    ])("does not fire on %s — the two reads are off different objects", (_name, src) => {
+      expect(counts(src)).toBeUndefined();
+    });
+
+    it("does NOT catch the field passed to an opaque call — a helper it cannot see into (open)", () => {
       expect(
-        counts("function f(a) { return a.paidCents.toFixed(2) === a.totalCents.toFixed(2); }"),
+        counts("function f(a) { return round2(a.paidCents) === round2(a.totalCents); }"),
+      ).toBeUndefined();
+    });
+
+    it("does NOT catch two different bindings loaded from the same row (open)", () => {
+      expect(
+        counts("async function f(id) { const a = await find(id); const b = await find(id); return a.totalCents - b.paidCents; }"),
       ).toBeUndefined();
     });
   });

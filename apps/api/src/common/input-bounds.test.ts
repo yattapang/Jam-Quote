@@ -64,7 +64,11 @@ const KNOWN_UNBOUNDED: Record<string, string[]> = {
 };
 
 function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  // Normalise line endings first. A working copy checked out with CRLF left a trailing
+  // carriage return on every line, `.*$` below cannot match across it, and two whole DTO
+  // modules (catalogs, clients) silently counted zero string fields - the floor failed on
+  // one machine and passed on another. A guard must not depend on how a file is checked out.
+  return src.replace(/\r\n?/g, "\n").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 }
 
 /** Every `field: z.string()...` in a DTO, and whether its value is constrained. */

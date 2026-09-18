@@ -6,6 +6,10 @@ import { ProjectStage } from "@jamquote/core";
 import EditProjectButton from "./EditProjectButton";
 import type { ProjectDetail } from "@/lib/mock-data";
 
+// Rendering a form and driving it with userEvent exceeds vitest's 5s default under the
+// full parallel run; this was intermittently timing out, a harness limit, not behaviour.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Wiring test mirroring EditMaterialButton.test.tsx: EditProjectButton must
  * call projectEditPayloadFromValues (sends explicit null for a blanked

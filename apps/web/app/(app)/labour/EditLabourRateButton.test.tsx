@@ -6,6 +6,10 @@ import { RateUnit } from "@jamquote/core";
 import EditLabourRateButton from "./EditLabourRateButton";
 import type { LabourRate } from "@/lib/types";
 
+// Rendering a form and driving it with userEvent exceeds vitest's 5s default under the
+// full parallel run; this was intermittently timing out, a harness limit, not behaviour.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Wiring test mirroring EditMaterialButton.test.tsx: EditLabourRateButton
  * must call labourRateEditPayloadFromValues (sends explicit null for a

@@ -43,6 +43,13 @@ import { RulePackService } from "../rulepack/rulepack.service.js";
  *    `details` carrying any sentinel, under any key, through any spread or rename, copied a
  *    column this test never vouched for, and fails. The old check matched `/Cents$/` on
  *    keys, which `{ amount: payment.amountCents }` walked straight past.
+ * 2a. MONEY BY READ. The sentinel judges only what reaches `details`, so arithmetic or
+ *    formatting defeated it: `{ priceDollars: business.proMonthlyPriceCents / 100 }` and a
+ *    `$`-prefixed `(cents / 100).toFixed(2)` both passed. The row proxy now also RECORDS
+ *    every unfixtured column a writer reads, and `expectNoMoney` fails on any. A fixture
+ *    may not supply a number (`row()` throws), so the fixtures are the reviewed list of
+ *    non-money columns a writer may read; reading a money column fails whatever the writer
+ *    then does with it - divides it, formats it, compares it, or drops it.
  * 3. DISCOVERY does not stop at a resolved import. A receiver named `record` on something
  *    typed `AuditService` from a same-file class, or one a reviewer widened to `any` (an
  *    `AuditService` field cast away, or a constructor parameter left untyped) has no
@@ -54,8 +61,12 @@ import { RulePackService } from "../rulepack/rulepack.service.js";
  *
  * ## What it does not prove
  *
- * An amount taken from the request DTO rather than a row is not a sentinel. A writer path
- * these fixtures do not reach is not inspected. A receiver named something other than
+ * An amount taken from the request DTO rather than a row is neither a sentinel nor a
+ * recorded read. A writer path these fixtures do not reach is not inspected. A money value
+ * reached other than through a `row()` - a service or mock returning a bare number (as
+ * `sweep.run` does) - is judged by the sentinel only, not by read. A fixtured column that
+ * is not a number but still encodes money (a `Decimal` object, a price in a string) is
+ * not refused by `row()`. A receiver named something other than
  * `audit` AND typed neither `AuditService` nor `any`-with-that-name (a renamed field
  * inferred from something else entirely) is not discovered; the per-file assertion fails
  * if one of today's recording files stops resolving.
@@ -66,13 +77,34 @@ import { RulePackService } from "../rulepack/rulepack.service.js";
 const SENTINELS = new Set<number>();
 let nextSentinel = 7_310_000_001;
 
-/** A Prisma row whose undefined fields read as sentinels. */
+/**
+ * Every column a writer READ that its fixture did not supply, since the last `recorder()`.
+ * The sentinel alone judged what a writer WROTE, and so `details: { priceDollars:
+ * business.proMonthlyPriceCents / 100 }` and a `$`-prefixed `(cents / 100).toFixed(2)`
+ * passed: arithmetic or formatting turned the sentinel into a value it no longer matched.
+ * Recording the READ judges the writer before it does anything with the value.
+ */
+const UNFIXTURED_READS: string[] = [];
+
+/**
+ * A Prisma row. A field the fixture did not define reads as a unique sentinel number AND
+ * is recorded as an unfixtured read. A fixture may not supply a number: the fixture is
+ * the list of columns this file vouches for, and a money column is never one of them, so
+ * a writer cannot be made to pass by fixturing the amount it reads.
+ */
 function row<T extends object>(fields: T): T {
+  for (const [k, v] of Object.entries(fields)) {
+    if (typeof v === "number" || typeof v === "bigint") {
+      throw new Error(`row(): fixture column "${k}" is a number; a fixture vouches for non-money columns only`);
+    }
+  }
+  const snapshot = new Set(Object.keys(fields));
   return new Proxy(fields, {
     get(target, key, receiver) {
       if (typeof key === "symbol" || key in target || key === "then" || key === "toJSON") {
         return Reflect.get(target, key, receiver);
       }
+      if (!snapshot.has(key)) UNFIXTURED_READS.push(key);
       const v = nextSentinel++;
       SENTINELS.add(v);
       Reflect.set(target, key, v);
@@ -99,12 +131,16 @@ function sentinelsIn(value: unknown, path = "$"): string[] {
 /** Actions every mocked `record` below actually received, across the whole file. */
 const exercised = new Set<string>();
 function recorder() {
+  UNFIXTURED_READS.length = 0;
   return vi.fn(async (input: { action: string; details?: unknown }) => {
     exercised.add(input.action);
   });
 }
 function expectNoMoney(record: ReturnType<typeof recorder>) {
   expect(record.mock.calls.length).toBeGreaterThan(0);
+  // A writer that READ a column no fixture supplied fails, whatever it then did with
+  // the value — divided it, formatted it, compared it, or dropped it.
+  expect(UNFIXTURED_READS, "writer read unfixtured columns").toEqual([]);
   for (const [input] of record.mock.calls) {
     expect(sentinelsIn(input.details), input.action).toEqual([]);
   }
@@ -260,6 +296,17 @@ describe("audit call sites are discovered, not listed", () => {
     expect(actualObj).toEqual(knownObj);
   });
 
+  it("the read recorder fires on an unfixtured column however it is used, and refuses a numeric fixture", () => {
+    recorder();
+    const r = row({ id: "b1" }) as { id: string } & Record<string, unknown>;
+    void `$${((r.proMonthlyPriceCents as number) / 100).toFixed(2)}`;
+    void r.id;
+    expect(UNFIXTURED_READS).toEqual(["proMonthlyPriceCents"]);
+    expect(() => row({ id: "b1", proMonthlyPriceCents: 500 })).toThrow(/is a number/);
+    recorder();
+    expect(UNFIXTURED_READS).toEqual([]);
+  });
+
   it("the sentinel detector fires on a copied column under any key, and not on a fixtured value", () => {
     const r = row({ id: "b1", name: "Biz" }) as { id: string; name: string } & Record<string, unknown>;
     expect(sentinelsIn({ anything: r.proMonthlyPriceCents })).toEqual(["$.anything"]);
@@ -348,7 +395,16 @@ describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no mo
 
   it("admin.promote / admin.update / admin.revoke (AdminService)", async () => {
     const record = recorder();
-    const user = () => ({ id: "u1", role: "OWNER", isSuperAdmin: false, adminCapabilities: [] as string[] });
+    // Every column the admin writers read is fixtured (`fullName`, `createdAt` included):
+    // an unfixtured read fails `expectNoMoney` on its own.
+    const user = () => ({
+      id: "u1",
+      role: "OWNER",
+      isSuperAdmin: false,
+      adminCapabilities: [] as string[],
+      fullName: "Ada Admin",
+      createdAt: new Date(),
+    });
     const adminUser = () => ({ ...user(), role: "ADMIN", email: "a@b.com" });
     const prisma = {
       user: {

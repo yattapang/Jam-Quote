@@ -7,6 +7,7 @@ import {
   declaredTypeImport,
   enclosingFunctionKey,
   parseSource,
+  mayShareReceiver,
   resolveRead,
   staticStrings,
 } from "./source-ast";
@@ -56,7 +57,9 @@ describe("resolveRead", () => {
   });
 
   it("follows a never-written alias and reports its name", () => {
-    expect(resolveRead(probe("t", "const t = inv.totalCents;"))).toEqual({ read: prop("totalCents"), aliases: ["t"] });
+    const r = resolveRead(probe("t", "const t = inv.totalCents;"));
+    expect({ read: r.read, aliases: r.aliases }).toEqual({ read: prop("totalCents"), aliases: ["t"] });
+    expect(r.receiver?.getText()).toBe("inv");
   });
 
   it("does not follow a reassigned let", () => {
@@ -84,10 +87,85 @@ describe("resolveRead", () => {
     expect(resolveRead(probe(expr, prelude)).read.kind).toBe("other");
   });
 
+  // Round 6: the value-preserving conversion CLASS, literal containers, getters, and a
+  // field name passed as a string to a local helper. Each is a spelling an audit executed.
+  it.each([
+    ["BigInt", "BigInt(a.totalCents)"],
+    ["String", "String(a.totalCents)"],
+    ["Number.parseFloat", "Number.parseFloat(a.totalCents)"],
+    ["parseInt with a radix", "parseInt(a.totalCents, 10)"],
+    ["Math.trunc", "Math.trunc(a.totalCents)"],
+    ["Math.abs", "Math.abs(a.totalCents)"],
+    [".toString()", "a.totalCents.toString()"],
+    [".valueOf()", "a.totalCents.valueOf()"],
+    [".toFixed(2)", "a.totalCents.toFixed(2)"],
+    ["a formatter's .format(x)", "fmt.format(a.totalCents)"],
+    ["a single-substitution template", "`${a.totalCents}`"],
+    ["Number over a template", "Number(`${a.totalCents}`)"],
+    ["an array-literal element by constant index", "pair[0]", "const pair = [a.totalCents, a.paidCents];"],
+    ["an index held in a const", "pair[I]", "const I = 0; const pair = [a.totalCents, a.paidCents];"],
+    [".at(0)", "pair.at(0)", "const pair = [a.totalCents, a.paidCents];"],
+    [".at(-2)", "pair.at(-2)", "const pair = [a.totalCents, a.paidCents];"],
+    ["an array binding pattern", "t", "const [t, pd] = [a.totalCents, a.paidCents];"],
+    ["an object-literal property", "m.due", "const m = { due: a.totalCents, got: a.paidCents };"],
+    ["an object-literal property by bracket", 'm["due"]', "const m = { due: a.totalCents };"],
+    ["a shorthand property of an alias", "m.t", "const t = a.totalCents; const m = { t };"],
+    ["a single-return getter", "g.a", "const g = { get a() { return a.totalCents; } };"],
+    ["an object pattern over a literal", "due", "const { due } = { due: a.totalCents };"],
+    ["a nested literal path", "m.x[1]", "const m = { x: [0, a.totalCents] };"],
+    ["a field name passed as a string to a local helper", 'pick(a, "totalCents")', "const pick = (o, k) => o[k];"],
+    ["the same through a function declaration", 'pick(a, K)', 'const K = "totalCents"; function pick(o, k) { return o[k]; }'],
+  ])("follows %s", (_l, expr, prelude = "") => {
+    const r = resolveRead(probe(expr, `declare const a: any, fmt: any;
+${prelude}`));
+    expect(r.read).toEqual(prop("totalCents"));
+    expect(r.receiver?.getText()).toBe("a");
+  });
+
+  it.each([
+    ["a LOCAL String", "String(a.totalCents)", "const String = (x) => 'n';"],
+    ["a LOCAL Math", "Math.trunc(a.totalCents)", "const Math = { trunc: (x) => 0 };"],
+    ["a template with text around it", "`$${a.totalCents}`", ""],
+    ["an index behind a spread", "pair[1]", "const pair = [...xs, a.totalCents];"],
+    ["a key behind a later spread", "m.due", "const m = { due: a.totalCents, ...other };"],
+    ["an array whose binding is reassigned", "pair[0]", "let pair = [a.totalCents]; pair = [a.taxCents];"],
+    ["a method, not a getter", "g.a()", "const g = { a() { return a.totalCents; } };"],
+    ["an IMPORTED helper", 'pick(a, "totalCents")', 'import { pick } from "lodash";'],
+  ])("does not follow %s", (_l, expr, prelude) => {
+    const r = resolveRead(probe(expr, `declare const a: any, xs: any, other: any;
+${prelude}`));
+    expect(r.read).not.toEqual(prop("totalCents"));
+  });
+
   it("a parameter is known only by its name", () => {
     const sf = parseSource("p.ts", "function f(paidCents) { return paidCents; }");
     const ret = collect(sf, ts.isReturnStatement)[0]!.expression!;
     expect(resolveRead(ret).read).toEqual({ kind: "name", name: "paidCents" });
+  });
+});
+
+describe("mayShareReceiver", () => {
+  /** The receivers of the two reads in `const __probe = [<a>, <b>]`. */
+  const share = (a: string, b: string, prelude: string) => {
+    const arr = probe(`[${a}, ${b}]`, prelude) as ts.ArrayLiteralExpression;
+    const [ra, rb] = arr.elements.map((el) => resolveRead(el as ts.Expression).receiver);
+    return mayShareReceiver(ra, rb);
+  };
+
+  it("two distinct declared bindings are unrelated", () => {
+    expect(share("q.totalCents", "pay.paidCents", "declare const q: any, pay: any;")).toBe(false);
+    expect(share("q.totalCents", "pay.paidCents", "const q = load(1); const pay = load(2);")).toBe(false);
+  });
+
+  it("one binding, an alias, a clone, a derived sub-object, `this`, or anything unknown may be the same object", () => {
+    expect(share("i.totalCents", "i.paidCents", "declare const i: any;")).toBe(true);
+    expect(share("c.totalCents", "i.paidCents", "declare const i: any; const c = structuredClone(i);")).toBe(true);
+    expect(share("c.totalCents", "i.paidCents", "declare const i: any; const c = JSON.parse(JSON.stringify(i));")).toBe(true);
+    expect(share("c.totalCents", "i.paidCents", "declare const i: any; const c = { ...i };")).toBe(true);
+    expect(share("this.a.totalCents", "this.b.paidCents", "")).toBe(true);
+    expect(share("load().totalCents", "i.paidCents", "declare const i: any;")).toBe(true);
+    expect(share("c.totalCents", "i.paidCents", "declare const i: any; let c = {}; c = i;")).toBe(true);
+    expect(share("totalCents", "i.paidCents", "declare const i: any, totalCents: any;")).toBe(true);
   });
 });
 

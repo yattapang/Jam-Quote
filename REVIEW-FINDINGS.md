@@ -352,6 +352,46 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Post-merge guard audit, and generation 6 (2026-09-17/18)
+
+The audit attacked every guard. Eight caught their own target defect. **One did not:
+`admin-console-honesty` stayed green with the fabricated MRR restored** as `"$2,418,540"`,
+`"J$2.4M"` and as plain JSX text - it matched a figure only when it was bare digits, and
+its own denylist (`"1,284"`, `"1.9%"`) proved it. Fixed by class: any text or tile `value`
+with a digit beside a currency/percent marker, or two or more digits, is a figure; one
+exempt heading ("Upcoming renewals (next 60 days)") with a reason and a rot check.
+
+Also fixed:
+- `unit-label-usage` cited a `NON_DISPLAY_ALLOWED` list that did not exist; its real
+  allow-list was two whole-file skips, so the original defect placed inside one passed.
+  Now keyed `file#function` with counts, reasons and a rot check; a comparison or switch
+  on `rateUnit` is structurally non-display, so ordinary cadence logic needs no exemption.
+- Ten more retention bypasses closed as CLASSES in the shared parser: every
+  value-preserving conversion (`String`, `BigInt`, `parseInt`, `Math.*`, `.toFixed`,
+  `.format`, a one-slot template), any member of a literal array or object (index, `at()`,
+  getter, destructuring), and a field name passed to a local accessor as a string.
+- Two false positives removed: a pair counts only when both reads may be off one object
+  (`mayShareReceiver`), so unrelated records no longer trip it; a clone or alias of the
+  invoice still counts.
+- The audit money check now fails when a writer READS a money column at all, so `/100`
+  and `.toFixed(2)` no longer hide it.
+- `input-bounds.test.ts` failed on this Windows checkout only: two DTO files on disk had
+  CRLF endings, `.*$` stopped at the carriage return, and catalogs and clients counted
+  zero string fields (94 instead of 140). Pre-existing on main, invisible on an LF
+  checkout. It now normalises line endings. That guard is still a regex scan - a
+  doctrine violation, queued.
+- Six edit-button render suites got the 30s allowance after one timed out under load.
+
+Verified by me: gate green twice (test-ast 175, core 391, api 969, web 637, mobile 32).
+I planted the fake MRR as JSX text, a lowercasing unit helper, a `BigInt` subtraction
+and `/100 .toFixed(2)` money in the `tenant.suspend` audit writer - each failed its
+guard, and every file was restored from a backup.
+
+**Still open, stated in the headers:** the field passed to an opaque or imported call;
+two different bindings holding one row (the price of the receiver rule); a hand-rolled
+max via `.sort`; anything across a module boundary; money held as a `Decimal` object or
+string in an audit writer; the `input-bounds` DTO scan still uses regex.
+
 ## Guard generation 5, then MERGED to main (2026-09-17)
 
 The seven remaining spellings are closed by CLASS, not instance, and the shared parser

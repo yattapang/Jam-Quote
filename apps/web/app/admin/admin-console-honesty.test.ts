@@ -6,6 +6,7 @@ import {
   attributeValue,
   callsTo,
   collect,
+  enclosingFunctionKey,
   parseFile,
   parseSource,
   renderedExpressions,
@@ -27,14 +28,16 @@ import {
  * This cannot be caught by a behaviour test — the fake values were valid
  * TypeScript and rendered perfectly — so it is a parse of the AST.
  *
- * ## Why every assertion here goes through `lib/test/source-ast.ts`
+ * ## Why every assertion here goes through `packages/test-ast/src/source-ast.ts`
  *
- * FIVE generations of this file were defeated, and each time the defect lived in a
+ * SIX generations of this file were defeated, and each time the defect lived in a
  * matcher this file had written for itself: a brace counter, an argument splitter, a
  * `const`-name regex, a text-child normaliser. One of them returned an empty list for
- * every input. The final two fell to `CURRENCY_CODES[0]` and `{+3}` with 25 of 25
- * tests green. There is no private parser left in this file; the questions it asks
- * are questions about the TypeScript AST, answered by the shared, tested one.
+ * every input. The final three fell to `CURRENCY_CODES[0]`, `{+3}`, and a JSX text
+ * child spelled as prose around the digits (`Monthly recurring revenue $2,418,540`,
+ * `J$2.4M`) that a bare-digit-only text check never looked at. There is no private
+ * parser left in this file; the questions it asks are questions about the TypeScript
+ * AST, answered by the shared, tested one.
  *
  * ## What it does not prove
  *
@@ -218,10 +221,51 @@ function literalFigure(expr: ts.Expression, imports: Set<string>): boolean {
 }
 
 /**
- * Bare JSX text that is only a number: `<span>3</span>` — the first-generation defect.
- * `renderedText` returns it trimmed, so padding and newlines stop mattering.
+ * A `value:` property of a tile/stat object — the SEVENTH-generation site. The MRR
+ * figure was never a bare rendered literal: it was assigned once, as
+ * `{ label: "MRR", value: "$2,418,540" }`, into the `stats` array, and every render of
+ * it afterward is `{s.value}` over a loop variable — dynamic to `renderedExpressions`
+ * and `literalFigure` alike, however static the string that fed it. "The tiles/stats
+ * array" is detected by SHAPE, not by the variable being spelled `stats`: any object
+ * literal that is itself an element of an array literal, and that carries a sibling
+ * `label` property, is a stat/metric tile, and its `value` property is what a screen
+ * reader (and staff) will read as the figure — independent of what name the file gives
+ * the array. `stats`, the "Needs review" tiles, and the Jamaica tax-facts rows on this
+ * file all match, and are all in scope.
  */
-const digitText = (t: { text: string }): boolean => /^\d+$/.test(t.text);
+function isTileValueProperty(p: ts.PropertyAssignment): boolean {
+  if (!ts.isIdentifier(p.name) || p.name.text !== "value") return false;
+  const obj = p.parent;
+  if (!ts.isObjectLiteralExpression(obj) || !ts.isArrayLiteralExpression(obj.parent)) return false;
+  return obj.properties.some((sib) => {
+    const name = sib.name;
+    return !!name && ts.isIdentifier(name) && name.text === "label";
+  });
+}
+
+function tileValueProperties(root: ts.Node): ts.PropertyAssignment[] {
+  return collect(root, ts.isPropertyAssignment).filter(isTileValueProperty);
+}
+
+/**
+ * Text — bare JSX text, or a static string wherever this file checks one — that reads
+ * as a rendered figure: a digit run on its own (`3`, the first-generation defect,
+ * `renderedText` trims padding and newlines away so this still matches), a run of two
+ * or more digits anywhere (`2418540`, `2.4`, a year, a version), or one digit sitting
+ * next to a currency or percent marker (`$2`, `2%`). This is deliberately broader than
+ * "the whole trimmed text is digits": the SIXTH-generation defect was prose wrapped
+ * around the same fabricated total — `Monthly recurring revenue $2,418,540` — which a
+ * bare-digit-only check (`^\d+$`) never matched because the text is not *only* digits.
+ *
+ * A single digit with no currency/percent marker and no companion digit (`Q1`, a lone
+ * `0`) is not caught here — those are the years/versions/ids/`"0"` cases the guard's
+ * exact-count allow-list names, not a class this regex should swallow silently.
+ */
+function isFabricatedFigureText(text: string): boolean {
+  if (/^\d+$/.test(text)) return true;
+  if (((text.match(/\d/g) ?? []).length) >= 2) return true;
+  return /[$%]\s?\d|\d\s?[$%]/.test(text);
+}
 
 /** Is this expression only `e.preventDefault()`, `stopPropagation()`, `void <static>`? */
 function inert(expr: ts.Expression): boolean {
@@ -418,8 +462,16 @@ const snippet = (code: string) => parseSource("snippet.tsx", code);
 
 describe("the staff console shows no invented data", () => {
   it("has no hardcoded platform figures", () => {
-    // A denylist of the exact past fabrications — kept, because each was rendered
-    // to staff as though it were measured. The classes are policed further down.
+    // A denylist of the exact past fabrications — kept as a tripwire for the literal
+    // text, in ADDITION to the class-level guard below ("no count is a literal in
+    // the markup, or hardcoded into a stat/tile's value"), not instead of it. This
+    // text check alone is not the figure guard: a same-shaped fabrication spelled
+    // differently — a new value, a different currency abbreviation, a digit-bearing
+    // string routed into a tile's `value:` instead of typed straight into JSX — would
+    // sail past a denylist of exact strings. It failed exactly that way once: the same
+    // total re-typed as `"$2,418,540"`, `"J$2.4M"`, and a JSX text child reading
+    // `Monthly recurring revenue $2,418,540` all passed here, and only the class-level
+    // guard below catches all three.
     for (const fabricated of ["2418540", "1,284", "108,420", '"892"', "1.9%"]) {
       expect(CODE).not.toContain(fabricated);
     }
@@ -514,14 +566,63 @@ describe("the console cannot claim a figure it does not have", () => {
     expect(rendered.length, "the badge must render the resolved environment").toBeGreaterThan(0);
   });
 
-  it("no count is a literal in the markup", () => {
+  /**
+   * Legitimate hits — a year, a version string, an id, a literal `"0"` — that a
+   * digit-shaped check cannot tell apart from a fabricated figure by shape alone.
+   * Keyed `file#component` (via `enclosingFunctionKey`, so a rename or a move that
+   * changes the count fails loudly) with an EXACT count and a reason, the same
+   * discipline `input-bounds-usage.test.ts` uses for `BOUNDS`. An entry nothing hits
+   * any more, or a new hit inside an exempt component, is a rot check away from being
+   * caught — see the next `it`.
+   */
+  const FIGURE_TEXT_ALLOWED: { key: string; count: number; reason: string }[] = [
+    {
+      key: "AdminConsole",
+      count: 1,
+      reason:
+        "'Upcoming renewals (next 60 days)' section heading — a static label naming the fixed window the query already applies, not a rendered count; its two digits are a window ('60 days'), not a figure",
+    },
+  ];
+
+  /** Every rendered figure-shaped site: bare text, a rendered expression, or a stat/tile's `value`. */
+  function figureSites(): { key: string; text: string }[] {
+    const sites: { key: string; text: string }[] = [];
+    for (const t of renderedText(SF)) {
+      if (isFabricatedFigureText(t.text)) sites.push({ key: enclosingFunctionKey(t.node), text: t.text });
+    }
+    for (const e of renderedExpressions(SF)) {
+      if (literalFigure(e, imports)) sites.push({ key: enclosingFunctionKey(e), text: `{${e.getText()}}` });
+    }
+    for (const p of tileValueProperties(SF)) {
+      if (literalFigure(p.initializer, imports)) {
+        sites.push({ key: enclosingFunctionKey(p), text: p.getText().slice(0, 80) });
+      }
+    }
+    return sites;
+  }
+
+  function figureCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const { key } of figureSites()) counts.set(key, (counts.get(key) ?? 0) + 1);
+    return counts;
+  }
+
+  it("no count is a literal in the markup, or hardcoded into a stat/tile's value", () => {
     const texts = renderedText(SF);
     expect(texts.length, "no JSX text parsed").toBeGreaterThan(50);
-    const offenders = [
-      ...texts.filter(digitText).map((t) => t.text),
-      ...renderedExpressions(SF).filter((e) => literalFigure(e, imports)).map((e) => `{${e.getText()}}`),
-    ];
+    expect(tileValueProperties(SF).length, "no tile/stat value properties found — has the shape changed?").toBeGreaterThan(3);
+
+    const allowed = new Map(FIGURE_TEXT_ALLOWED.map((a) => [a.key, a.count]));
+    const counts = figureCounts();
+    const offenders = [...counts]
+      .filter(([key, n]) => allowed.get(key) !== n)
+      .map(([key, n]) => `${key}: ${n} (allowed ${allowed.get(key) ?? 0})`);
     expect(offenders, "render a figure from data, or do not render it").toEqual([]);
+  });
+
+  it("does not let the figure allow-list rot: every entry still has exactly its count", () => {
+    const counts = figureCounts();
+    expect(FIGURE_TEXT_ALLOWED.filter((a) => counts.get(a.key) !== a.count)).toEqual([]);
   });
 
   it("no money is rendered in a currency the platform may not be using", () => {
@@ -616,7 +717,9 @@ describe("the guards above cannot be walked past", () => {
     const sf = snippet(`${IMPORTS}\n${prelude}\nfunction Comp({ q, needsReviewCount, regChanges }: any) { return <span>${child}</span>; }`);
     const names = new Set(importBindings(sf).map((b) => b.local));
     return {
-      figure: renderedExpressions(sf).some((e) => literalFigure(e, names)) || renderedText(sf).some(digitText),
+      figure:
+        renderedExpressions(sf).some((e) => literalFigure(e, names)) ||
+        renderedText(sf).some((t) => isFabricatedFigureText(t.text)),
     };
   };
 
@@ -644,6 +747,49 @@ describe("the guards above cannot be walked past", () => {
     for (const child of ["{needsReviewCount}", "{regChanges.length}", "3 waiting", "{String(q)}", "{CURRENCY_CODES.length}", '{" "}', '{"—"}']) {
       expect(rendered("", child).figure, child).toBe(false);
     }
+  });
+
+  it("a figure hidden in prose around it is caught, however the money is abbreviated — the sixth-generation bypass", () => {
+    // The three exact spellings the auditor put back after the guard was written for
+    // this: a bare JSX text child wrapping the fabricated total in prose, and a
+    // shortened form. All three were green under a bare-digit-only text check.
+    for (const child of [
+      "Monthly recurring revenue $2,418,540",
+      "J$2.4M",
+    ]) {
+      expect(rendered("", child).figure, child).toBe(true);
+    }
+    // A single digit, or a digit inside ordinary prose with no currency/percent
+    // marker and no second digit, is not this class — it is the allow-listed
+    // "years/versions/ids/0" territory, not prose hiding a total.
+    expect(isFabricatedFigureText("Q1")).toBe(false);
+    expect(isFabricatedFigureText("Page 3 of reports")).toBe(false);
+    expect(isFabricatedFigureText("$2,418,540")).toBe(true);
+    expect(isFabricatedFigureText("2418540")).toBe(true);
+  });
+
+  it("a fabricated figure assigned into a stat/tile's value is caught even though its render is a loop variable — the seventh-generation bypass", () => {
+    const probe = snippet(
+      [
+        'const stats = [{ label: "MRR", value: "$2,418,540" }];',
+        "function Comp() { return <span>{stats.map((s) => <b key={s.label}>{s.value}</b>)}</span>; }",
+      ].join("\n"),
+    );
+    const names = new Set(importBindings(probe).map((b) => b.local));
+    const hit = tileValueProperties(probe).filter((p) => literalFigure(p.initializer, names));
+    expect(hit.length, "a value: property of an array element carrying a sibling label is a tile figure").toBe(1);
+
+    // A `value:` property that is NOT part of an array-of-tiles shape is out of scope
+    // for this site (it may still be caught as an ordinary rendered expression/text).
+    const notATile = snippet('const config = { value: "$2,418,540" };');
+    expect(tileValueProperties(notATile)).toHaveLength(0);
+
+    // Data-derived and imported-root values in the same shape are not figures.
+    const clean = snippet(
+      'import { CURRENCY_CODES } from "@jamquote/core";\nconst stats = [{ label: "MRR", value: mrr }, { label: "Codes", value: CURRENCY_CODES.length }];',
+    );
+    const cleanNames = new Set(importBindings(clean).map((b) => b.local));
+    expect(tileValueProperties(clean).filter((p) => literalFigure(p.initializer, cleanNames))).toHaveLength(0);
   });
 
   const currencyOf = (prelude: string, call: string) => {

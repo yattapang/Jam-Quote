@@ -1204,14 +1204,69 @@ function bindingElementIsStatic(el: ts.BindingElement, ctx: Ctx): boolean {
 
 // ──────────────────────────────────────────────────────── value reads (retention guard)
 
+/** Global functions that hand back the same VALUE in another representation. */
+const GLOBAL_CONVERSIONS = new Set(["Number", "String", "BigInt", "parseInt", "parseFloat"]);
+
+/** `<global>.<name>` conversions, keyed by the global that must not be shadowed. */
+const NAMESPACE_CONVERSIONS: Record<string, Set<string>> = {
+  Number: new Set(["parseInt", "parseFloat"]),
+  Math: new Set(["trunc", "round", "floor", "ceil", "abs"]),
+};
+
+/** Methods called ON a value that hand the same value back in another representation. */
+const METHOD_CONVERSIONS = new Set(["toString", "valueOf", "toFixed", "toPrecision", "toLocaleString"]);
+
 /**
- * `unwrap`, plus the wrappers that keep a NUMBER's value for arithmetic: unary `+`, a
- * call to the GLOBAL `Number` (one resolving to no declaration in the file - a local
- * `Number` is not unwrapped), and `x ?? <static fallback>` (`a?.totalCents ?? 0` is still
- * the total wherever one exists). `x || <static fallback>` and `x && <static fallback>`
- * are unwrapped the same way (`(a.totalCents || 0) - (a.paidCents || 0)` is still the
- * total minus the paid), and so is the mirror-image `<static fallback> || x` /
- * `<static fallback> && x` for a static LEFT side. A NON-static fallback (`a ?? b`) is
+ * A value-preserving conversion of exactly one operand: the expression it converts, or
+ * `undefined` when `e` is not one. This is a CLASS, not a list of spellings - generation 5
+ * unwrapped `Number()` alone and was reopened three ways in one audit (`BigInt(t) -
+ * BigInt(p)`, `String(p) === String(t)`, ``Number(`${t}`)``).
+ *
+ * The class is "a call or template that turns one value into another representation of
+ * the same value": `String`/`BigInt`/`Number`, `parseInt`/`parseFloat` bare or under
+ * `Number`, `Math.trunc`/`round`/`floor`/`ceil`/`abs`, `.toString()`/`.valueOf()`/
+ * `.toFixed(n)`/`.toPrecision(n)`/`.toLocaleString()` on the value, a single argument to
+ * any `.format(x)` (the `Intl.NumberFormat` shape), and `` `${x}` `` with no text around it.
+ * Rounding, a sign, a string representation: none of them changes WHICH field was read,
+ * and that is what a guard over these reads asks.
+ *
+ * Globals are resolved through the BINDER (`isGlobalIdentifier`): a local `String`, a local
+ * `Math` or an imported `parseInt` is not unwrapped.
+ */
+function conversionArgument(e: ts.Expression): ts.Expression | undefined {
+  if (
+    ts.isTemplateExpression(e) &&
+    e.head.text === "" &&
+    e.templateSpans.length === 1 &&
+    e.templateSpans[0]!.literal.text === ""
+  ) {
+    return e.templateSpans[0]!.expression;
+  }
+  if (!ts.isCallExpression(e)) return undefined;
+  const args = e.arguments;
+  if (args.some((a) => ts.isSpreadElement(a))) return undefined;
+  const callee = unwrap(e.expression);
+  if (ts.isIdentifier(callee) && GLOBAL_CONVERSIONS.has(callee.text) && isGlobalIdentifier(callee, callee.text)) {
+    return args.length >= 1 && args.length <= 2 ? args[0]! : undefined;
+  }
+  if (!ts.isPropertyAccessExpression(callee)) return undefined;
+  const receiver = unwrap(callee.expression);
+  for (const [ns, names] of Object.entries(NAMESPACE_CONVERSIONS)) {
+    if (names.has(callee.name.text) && isGlobalIdentifier(receiver, ns)) {
+      return args.length >= 1 && args.length <= 2 ? args[0]! : undefined;
+    }
+  }
+  if (METHOD_CONVERSIONS.has(callee.name.text) && args.length <= 2) return callee.expression;
+  if (callee.name.text === "format" && args.length === 1) return args[0]!;
+  return undefined;
+}
+
+/**
+ * `unwrap`, plus the wrappers that keep a value for arithmetic or comparison: unary `+`,
+ * every value-preserving conversion (`conversionArgument`), and `x ?? <static fallback>`
+ * (`a?.totalCents ?? 0` is still the total wherever one exists). `x || <static fallback>`
+ * and `x && <static fallback>` are unwrapped the same way, and so is the mirror-image
+ * `<static fallback> || x` / `<static fallback> && x`. A NON-static fallback (`a ?? b`) is
  * not unwrapped: which side wins is data. Unary minus is not a wrapper - see
  * `additiveTerms`. Optional chaining needs nothing: `a?.x` is a property read.
  */
@@ -1222,12 +1277,10 @@ export function unwrapValue(expr: ts.Expression): ts.Expression {
       e = unwrap(e.operand);
       continue;
     }
-    if (ts.isCallExpression(e) && e.arguments.length === 1 && !ts.isSpreadElement(e.arguments[0]!)) {
-      const callee = unwrap(e.expression);
-      if (ts.isIdentifier(callee) && callee.text === "Number" && resolve(callee, fileContext(callee)) === undefined) {
-        e = unwrap(e.arguments[0]!);
-        continue;
-      }
+    const converted = conversionArgument(e);
+    if (converted) {
+      e = unwrap(converted);
+      continue;
     }
     if (
       ts.isBinaryExpression(e) &&
@@ -1248,7 +1301,7 @@ export function unwrapValue(expr: ts.Expression): ts.Expression {
   }
 }
 
-/** What an operand reads, once aliases, destructuring and one-level accessors are followed. */
+/** What an operand reads, once aliases, literals, destructuring and accessors are followed. */
 export type ValueRead =
   /** `x.p`, `x?.p`, `x["p"]`, `const { p: y } = x`, or `get(x)` where `get = (o) => o.p`. */
   | { kind: "property"; name: string }
@@ -1260,6 +1313,30 @@ export interface ResolvedRead {
   read: ValueRead;
   /** The local names followed on the way, outermost first (`const t = ...`). */
   aliases: string[];
+  /**
+   * For a `property` read, the expression the property was read OFF, where it is known -
+   * `inv` in `inv.totalCents`, in `const { totalCents } = inv`, and in `totalOf(inv)`.
+   * Absent when the read came through a parameter pattern or a path that could not be
+   * followed. Compare two with `mayShareReceiver`.
+   */
+  receiver?: ts.Expression;
+}
+
+type MemberKey = string | number;
+
+/** A constant key: a string/number literal, `-n`, or a never-written alias of one. */
+function constantKey(expr: ts.Expression, depth = 0): MemberKey | undefined {
+  const e = unwrap(expr);
+  if (ts.isStringLiteral(e) || ts.isNoSubstitutionTemplateLiteral(e)) return e.text;
+  if (ts.isNumericLiteral(e)) return Number(e.text);
+  if (ts.isPrefixUnaryExpression(e) && e.operator === ts.SyntaxKind.MinusToken && ts.isNumericLiteral(e.operand)) {
+    return -Number(e.operand.text);
+  }
+  if (ts.isIdentifier(e) && depth < 8) {
+    const init = followAlias(e);
+    return init ? constantKey(init, depth + 1) : undefined;
+  }
+  return undefined;
 }
 
 /** The key of `x.p` / `x?.p` / `x["p"]`, or undefined. */
@@ -1272,14 +1349,108 @@ function propertyKeyOf(e: ts.Expression): string | undefined {
   return undefined;
 }
 
+/** The text of a literal member name (`a`, `"a"`, `0`, `["a"]`), or undefined. */
+function memberNameText(name: ts.PropertyName): string | undefined {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  if (ts.isNoSubstitutionTemplateLiteral(name)) return name.text;
+  if (ts.isComputedPropertyName(name)) {
+    const k = constantKey(name.expression);
+    return k === undefined ? undefined : String(k);
+  }
+  return undefined;
+}
+
+/** The expression a single-`return` function-like body returns, or undefined. */
+function singleReturn(body: ts.ConciseBody | undefined): ts.Expression | undefined {
+  if (!body) return undefined;
+  if (!ts.isBlock(body)) return body;
+  if (body.statements.length !== 1) return undefined;
+  const only = body.statements[0]!;
+  return ts.isReturnStatement(only) ? only.expression : undefined;
+}
+
+/**
+ * The expression stored at `key` in the array or object LITERAL `container` evaluates to,
+ * following never-written local aliases to it: `[a, b]` at `0`, `{ due: a }` at `"due"`,
+ * `{ get due() { return a; } }` at `"due"` (a getter whose body is one `return`).
+ * `undefined` when the container is not a literal, the key lies behind a spread, or the
+ * member is a method. A property written after construction (`m.due = x`) is not seen;
+ * that can only make this report the ORIGINAL value, never hide one.
+ */
+function literalMember(container: ts.Expression, key: MemberKey): ts.Expression | undefined {
+  let c = unwrap(container);
+  for (let hops = 0; hops < 16; hops++) {
+    if (ts.isIdentifier(c)) {
+      const init = followAlias(c);
+      if (!init) return undefined;
+      c = unwrap(init);
+      continue;
+    }
+    // `m.x[1]`: the container is itself a member of a literal.
+    const outer = ts.isArrayLiteralExpression(c) || ts.isObjectLiteralExpression(c) ? undefined : memberAccess(c);
+    if (!outer) break;
+    const held = literalMember(outer.container, outer.key);
+    if (!held) return undefined;
+    c = unwrap(held);
+  }
+  if (ts.isArrayLiteralExpression(c)) {
+    const idx = typeof key === "number" ? key : /^-?\d+$/.test(key) ? Number(key) : NaN;
+    if (!Number.isInteger(idx)) return undefined;
+    const els = c.elements;
+    const at = idx < 0 ? els.length + idx : idx;
+    if (at < 0 || at >= els.length) return undefined;
+    // A spread before (or, counting from the end, after) the index moves it.
+    const span = idx < 0 ? els.slice(at) : els.slice(0, at + 1);
+    if (span.some((el) => ts.isSpreadElement(el))) return undefined;
+    const el = els[at]!;
+    return ts.isOmittedExpression(el) ? undefined : el;
+  }
+  if (ts.isObjectLiteralExpression(c)) {
+    const want = String(key);
+    const props = c.properties;
+    for (let i = props.length - 1; i >= 0; i--) {
+      const p = props[i]!;
+      if (ts.isSpreadAssignment(p)) return undefined; // a later spread may hold the key
+      const name = p.name ? memberNameText(p.name) : undefined;
+      if (name !== want) continue;
+      if (ts.isPropertyAssignment(p)) return p.initializer;
+      if (ts.isShorthandPropertyAssignment(p)) return p.name;
+      if (ts.isGetAccessorDeclaration(p)) return singleReturn(p.body);
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** `x.k`, `x[k]` or `x.at(k)` with a constant `k`, as the container and the key. */
+function memberAccess(e: ts.Expression): { container: ts.Expression; key: MemberKey } | undefined {
+  if (ts.isPropertyAccessExpression(e)) return { container: e.expression, key: e.name.text };
+  if (ts.isElementAccessExpression(e)) {
+    const key = constantKey(e.argumentExpression);
+    return key === undefined ? undefined : { container: e.expression, key };
+  }
+  if (ts.isCallExpression(e) && e.arguments.length === 1) {
+    const callee = unwrap(e.expression);
+    if (ts.isPropertyAccessExpression(callee) && callee.name.text === "at") {
+      const key = constantKey(e.arguments[0]!);
+      if (typeof key === "number") return { container: callee.expression, key };
+    }
+  }
+  return undefined;
+}
+
 /**
  * A call to a never-reassigned LOCAL function (a declaration, or a binding to an arrow /
- * function expression) whose whole body returns one property read of one of its OWN
- * parameters: `const totalOf = (a) => a.totalCents; totalOf(inv)` reads `totalCents`.
- * One level only - an accessor calling an accessor, a method, an import, or a body with
- * any other statement is not followed.
+ * function expression) whose whole body returns one read of one of its OWN parameters:
+ *
+ * - `const totalOf = (a) => a.totalCents; totalOf(inv)` reads `totalCents` off `inv`;
+ * - `const pick = (o, k) => o[k]; pick(inv, "totalCents")` reads `totalCents` off `inv`,
+ *   when the argument for `k` is a closed single string (`staticStrings`).
+ *
+ * One level only - an accessor calling an accessor, a method, an IMPORTED helper (a
+ * lodash `get`), or a body with any other statement is not followed.
  */
-function accessorProperty(call: ts.CallExpression): string | undefined {
+function accessorRead(call: ts.CallExpression): { name: string; receiver: ts.Expression | undefined } | undefined {
   const callee = unwrap(call.expression);
   if (!ts.isIdentifier(callee)) return undefined;
   const fc = fileContext(callee);
@@ -1295,18 +1466,13 @@ function accessorProperty(call: ts.CallExpression): string | undefined {
     if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) fn = init;
   }
   if (!fn?.body) return undefined;
-  let returned: ts.Expression | undefined;
-  if (!ts.isBlock(fn.body)) returned = fn.body;
-  else if (fn.body.statements.length === 1) {
-    const only = fn.body.statements[0]!;
-    if (ts.isReturnStatement(only)) returned = only.expression;
-  } else if (fn.body.statements.length === 2) {
-    // `const x = a.totalCents; return x;` - a single-assignment-then-return body reads
-    // exactly what the single-return body above reads; only the split across two
-    // statements differs, so it is followed the same way.
-    const first = fn.body.statements[0]!;
-    const second = fn.body.statements[1]!;
+  let returned = singleReturn(fn.body);
+  if (!returned && ts.isBlock(fn.body) && fn.body.statements.length === 2) {
+    // `const x = a.totalCents; return x;` - the same read split across two statements.
+    const [first, second] = fn.body.statements;
     if (
+      first &&
+      second &&
       ts.isVariableStatement(first) &&
       first.declarationList.declarations.length === 1 &&
       ts.isReturnStatement(second)
@@ -1324,21 +1490,64 @@ function accessorProperty(call: ts.CallExpression): string | undefined {
     }
   }
   if (!returned) return undefined;
-  const read = unwrapValue(returned);
-  const key = propertyKeyOf(read);
-  if (key === undefined) return undefined;
-  const obj = unwrap((read as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression);
-  if (!ts.isIdentifier(obj)) return undefined;
   const owner = fn;
-  const isOwnParam = (resolve(obj, fc)?.declarations ?? []).some((p) => ts.isParameter(p) && p.parent === owner);
-  return isOwnParam ? key : undefined;
+  const paramIndex = (id: ts.Expression): number => {
+    const u = unwrap(id);
+    if (!ts.isIdentifier(u)) return -1;
+    const p = (resolve(u, fc)?.declarations ?? []).find((x) => ts.isParameter(x) && x.parent === owner);
+    return p ? owner.parameters.indexOf(p as ts.ParameterDeclaration) : -1;
+  };
+  const argAt = (i: number): ts.Expression | undefined => {
+    const a = call.arguments[i];
+    return a && !ts.isSpreadElement(a) && !call.arguments.slice(0, i).some(ts.isSpreadElement) ? a : undefined;
+  };
+  const read = unwrapValue(returned);
+  if (!ts.isPropertyAccessExpression(read) && !ts.isElementAccessExpression(read)) return undefined;
+  const objIdx = paramIndex(read.expression);
+  if (objIdx < 0) return undefined;
+  const key = propertyKeyOf(read);
+  if (key !== undefined) return { name: key, receiver: argAt(objIdx) };
+  if (ts.isElementAccessExpression(read)) {
+    const keyIdx = paramIndex(read.argumentExpression);
+    const keyArg = keyIdx < 0 ? undefined : argAt(keyIdx);
+    const names = keyArg ? staticStrings(keyArg) : undefined;
+    if (names && names.length === 1) return { name: names[0]!, receiver: argAt(objIdx) };
+  }
+  return undefined;
 }
 
 /**
- * What `expr` reads, resolved through the binder: wrappers via `unwrapValue`, a
- * never-written local alias to its initializer (any number of hops), a destructured
- * binding to the property it was taken from, and a one-level accessor call to the
- * property it returns. A parameter or undeclared name comes back as `name`.
+ * A destructured binding as the path of keys from its declaration's initializer:
+ * `const { a: { b: [, x] } } = src` is `["a", "b", 1]` from `src`. `undefined` for a rest
+ * element, a computed key that is not constant, or a parameter pattern (whose source is
+ * the caller's argument, which is not followed).
+ */
+function bindingPath(el: ts.BindingElement): { source: ts.Expression; keys: MemberKey[] } | undefined {
+  const keys: MemberKey[] = [];
+  let node: ts.Node = el;
+  while (ts.isBindingElement(node)) {
+    if (node.dotDotDotToken) return undefined;
+    const pattern: ts.BindingPattern = node.parent;
+    if (ts.isArrayBindingPattern(pattern)) {
+      keys.unshift(pattern.elements.indexOf(node));
+    } else {
+      const text = node.propertyName ? memberNameText(node.propertyName) : ts.isIdentifier(node.name) ? node.name.text : undefined;
+      if (text === undefined) return undefined;
+      keys.unshift(text);
+    }
+    node = pattern.parent;
+  }
+  return ts.isVariableDeclaration(node) && node.initializer ? { source: node.initializer, keys } : undefined;
+}
+
+/**
+ * What `expr` reads, resolved through the binder: wrappers and conversions via
+ * `unwrapValue`; a never-written local alias to its initializer (any number of hops); a
+ * member of an array or object LITERAL (by constant index, `.at(n)`, property name, or a
+ * single-`return` getter) to the element it holds; a destructured binding - object or
+ * array pattern - through literals to the element, or to the property it was taken from;
+ * and a one-level accessor call to the property it returns. A parameter or undeclared name
+ * comes back as `name`.
  */
 export function resolveRead(expr: ts.Expression): ResolvedRead {
   return resolveReadInner(expr, new Set());
@@ -1349,11 +1558,19 @@ function resolveReadInner(expr: ts.Expression, seen: Set<ts.Node>): ResolvedRead
   const e = unwrapValue(expr);
   if (seen.has(e)) return other;
   seen.add(e);
+  const member = memberAccess(e);
+  if (member) {
+    const held = literalMember(member.container, member.key);
+    if (held) return resolveReadInner(held, seen);
+  }
   const key = propertyKeyOf(e);
-  if (key !== undefined) return { read: { kind: "property", name: key }, aliases: [] };
+  if (key !== undefined) {
+    const receiver = (e as ts.PropertyAccessExpression | ts.ElementAccessExpression).expression;
+    return { read: { kind: "property", name: key }, aliases: [], receiver };
+  }
   if (ts.isCallExpression(e)) {
-    const p = accessorProperty(e);
-    return p === undefined ? other : { read: { kind: "property", name: p }, aliases: [] };
+    const acc = accessorRead(e);
+    return acc === undefined ? other : { read: { kind: "property", name: acc.name }, aliases: [], receiver: acc.receiver };
   }
   if (!ts.isIdentifier(e)) return other;
   const byName: ResolvedRead = { read: { kind: "name", name: e.text }, aliases: [] };
@@ -1366,16 +1583,105 @@ function resolveReadInner(expr: ts.Expression, seen: Set<ts.Node>): ResolvedRead
   if (ts.isVariableDeclaration(d) && ts.isIdentifier(d.name)) {
     if (!d.initializer || bindingTainted(sym, fc)) return byName;
     const inner = resolveReadInner(d.initializer, seen);
-    return { read: inner.read, aliases: [d.name.text, ...inner.aliases] };
+    return { ...inner, aliases: [d.name.text, ...inner.aliases] };
   }
   if (ts.isBindingElement(d)) {
-    const k = d.propertyName ?? d.name;
     const alias = ts.isIdentifier(d.name) ? [d.name.text] : [];
-    if (ts.isIdentifier(k) || ts.isStringLiteralLike(k)) return { read: { kind: "property", name: k.text }, aliases: alias };
+    if (bindingTainted(sym, fc)) return { read: { kind: "other" }, aliases: alias };
+    const path = bindingPath(d);
+    if (path) {
+      // Walk the keys through literals as far as they go.
+      let cur: ts.Expression = path.source;
+      let i = 0;
+      for (; i < path.keys.length; i++) {
+        const next = literalMember(cur, path.keys[i]!);
+        if (!next) break;
+        cur = next;
+      }
+      if (i === path.keys.length) {
+        const inner = resolveReadInner(cur, seen);
+        return { ...inner, aliases: [...alias, ...inner.aliases] };
+      }
+      const last = path.keys[path.keys.length - 1]!;
+      if (typeof last === "string") {
+        // Only the LAST key missed a literal: a property read off `cur`.
+        const receiver = i === path.keys.length - 1 ? cur : undefined;
+        return { read: { kind: "property", name: last }, aliases: alias, receiver };
+      }
+      return { read: { kind: "other" }, aliases: alias };
+    }
+    const k = d.propertyName ?? d.name;
+    if (ts.isObjectBindingPattern(d.parent) && (ts.isIdentifier(k) || ts.isStringLiteralLike(k))) {
+      return { read: { kind: "property", name: k.text }, aliases: alias };
+    }
     return { read: { kind: "other" }, aliases: alias };
   }
   if (ts.isParameter(d) && ts.isIdentifier(d.name)) return byName;
   return other;
+}
+
+/** The binding (or `this`) a receiver expression is rooted in, or undefined when unknown. */
+function receiverRoot(expr: ts.Expression): ts.Symbol | "this" | undefined {
+  let e = unwrap(expr);
+  while (ts.isPropertyAccessExpression(e) || ts.isElementAccessExpression(e)) e = unwrap(e.expression);
+  if (e.kind === ts.SyntaxKind.ThisKeyword) return "this";
+  if (!ts.isIdentifier(e)) return undefined;
+  const fc = fileContext(e);
+  const sym = resolve(e, fc);
+  if (!sym || !sym.declarations || sym.declarations.length === 0 || isImport(sym)) return undefined;
+  return sym;
+}
+
+/**
+ * Every binding `root`'s value was computed from: the identifiers in its initializer (or,
+ * for a destructured binding, its pattern's initializer), transitively. `undefined` when
+ * the binding is written after its declaration, since its value is then anything.
+ */
+function derivation(root: ts.Symbol | "this", seen = new Set<ts.Symbol | "this">()): Set<ts.Symbol | "this"> | undefined {
+  seen.add(root);
+  if (root === "this") return seen;
+  const decls = valueDeclarations(root);
+  if (decls.length !== 1) return undefined;
+  let d: ts.Node = decls[0]!;
+  const fc = fileContext(d);
+  if ((ts.isVariableDeclaration(d) || ts.isBindingElement(d)) && bindingTainted(root, fc)) return undefined;
+  while (ts.isBindingElement(d)) d = d.parent.parent;
+  if (!ts.isVariableDeclaration(d) || !d.initializer) return seen;
+  const refs: (ts.Symbol | "this")[] = [];
+  walk(d.initializer, (n) => {
+    if (n.kind === ts.SyntaxKind.ThisKeyword) refs.push("this");
+    if (ts.isIdentifier(n)) {
+      const s = resolve(n, fc);
+      if (s && s.declarations && s.declarations.length > 0) refs.push(s);
+    }
+  });
+  for (const r of refs) {
+    if (seen.has(r)) continue;
+    if (!derivation(r, seen)) return undefined;
+  }
+  return seen;
+}
+
+/**
+ * Could the two receivers hold the same object? `false` ONLY when both are rooted in a
+ * known binding (or `this`), the roots differ, and neither root's value was computed from
+ * the other's (`const c = structuredClone(inv)`, `const lines = inv.lines`, `const x =
+ * { ...inv }` are all derived from `inv`). Everything else - an unknown receiver, a
+ * reassigned binding, a call result, a parameter pattern - is `true`.
+ *
+ * What it cannot see: two DIFFERENT bindings holding the same row - two loads of one id
+ * (`const a = await find(id); const b = await find(id)`), or one object passed as two
+ * parameters. Those read as unrelated.
+ */
+export function mayShareReceiver(a: ts.Expression | undefined, b: ts.Expression | undefined): boolean {
+  if (!a || !b) return true;
+  const ra = receiverRoot(a);
+  const rb = receiverRoot(b);
+  if (!ra || !rb || ra === rb) return true;
+  const da = derivation(ra);
+  const db = derivation(rb);
+  if (!da || !db) return true;
+  return da.has(rb) || db.has(ra);
 }
 
 /** The single initializer of a local declared exactly once, ignoring whether it is later

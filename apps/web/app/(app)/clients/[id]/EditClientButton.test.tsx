@@ -5,6 +5,10 @@ import userEvent from "@testing-library/user-event";
 import EditClientButton from "./EditClientButton";
 import type { Client } from "@/lib/types";
 
+// Rendering a form and driving it with userEvent exceeds vitest's 5s default under the
+// full parallel run; this was intermittently timing out, a harness limit, not behaviour.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * Wiring test mirroring EditMaterialButton.test.tsx: EditClientButton must
  * call clientEditPayloadFromValues (sends explicit null for a blanked town),
