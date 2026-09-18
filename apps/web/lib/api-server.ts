@@ -69,7 +69,9 @@ const TOKEN_COOKIE = "jamquote_token";
  * identity a user could mistake for a real business (blank name/TRN/address),
  * it just keeps pages that read `business.*` (dashboard header, quote GCT
  * rate, settings) rendering instead of throwing when the API is briefly
- * unreachable. See DemoDataBanner for the user-facing "can't reach the
+ * unreachable. ONLY then: while the API is up a failed read rethrows, because
+ * settings would pre-fill the edit form with these blanks (saving would wipe
+ * the real profile) and a PDF/email would go out with no business name. See DemoDataBanner for the user-facing "can't reach the
  * server" notice.
  */
 const EMPTY_BUSINESS: Business = {
@@ -137,8 +139,10 @@ async function serverRequest<T>(path: string): Promise<T> {
  *   API's TenantAuthGuard, or a suspended business): send them to a page that
  *   explains it, instead of a blank screen that looks broken.
  * - anything else (network error, 5xx, timeout): not an auth problem: leave
- *   it to the caller's existing empty-list/undefined fallback, which is
- *   surfaced separately by DemoDataBanner ("can't reach the server").
+ *   it to the caller - emptyOnlyIfUnreachable / undefinedIfNotFound below
+ *   for most getters (empty only when the API is asleep, which DemoDataBanner
+ *   explains; otherwise rethrow), or a getter's own null for the few secondary
+ *   ones whose widget renders "couldn't load" for it.
  *
  * Calling redirect() here (inside the caller's catch block, not nested inside
  * another try) is safe: Next's redirect() throws a special NEXT_REDIRECT
@@ -156,45 +160,59 @@ function redirectOnAuthError(err: unknown): void {
 }
 
 /**
- * Shared failure handling for the four catalog getters (material favourites,
- * labour rates, equipment, jobs). These have no fixture to fall back to, so
- * historically every failure — API asleep or API up but this one request
- * failed — returned an empty list. That made a live 500 indistinguishable
- * from "you have nothing saved," which reads to a contractor as "recreate
- * your catalog" and produces duplicates.
+ * Shared failure handling for every getter whose result is a page's primary
+ * data (the four catalog getters, clients, quotes, invoices, projects,
+ * reports, business, the settings vocabulary lists...). Historically every
+ * failure - API asleep, or API up but this one request failed - returned an
+ * empty value. That made a live 500 indistinguishable from "you have none,"
+ * which reads to a contractor as "recreate it" and produces duplicates.
  *
  * The two cases now get different treatment:
  *  - API unreachable (checkApiReachable(), the SAME probe the app shell's
- *    layout already runs to decide whether to show DemoDataBanner — not a
+ *    layout already runs to decide whether to show DemoDataBanner - not a
  *    second implementation of that check): still return `empty`. The
  *    layout's banner already explains why the screen is empty.
- *  - API reachable, this request failed: rethrow. The catalog route's
- *    error.tsx boundary (apps/web/app/(app)/{materials,labour,equipment,jobs}/error.tsx)
- *    catches it and renders "Couldn't load your …" with Retry, instead of
- *    the page's own "No saved … yet" empty state.
+ *  - API reachable, this request failed: rethrow. The route's error.tsx
+ *    catches it - the catalog routes have their own ("Couldn't load your
+ *    ..."), everything else falls to app/(app)/error.tsx ("Couldn't load this
+ *    page") - instead of the page's own "No ... yet" empty state. A page that
+ *    uses one of these for a SIDE widget wraps the call in softLoad()
+ *    (lib/soft-load.ts) and renders its own "couldn't load" state instead.
  *
  * Auth errors (401/403) are handled first via redirectOnAuthError, same as
- * every other getter — unaffected by this.
+ * every other getter - unaffected by this.
  *
  * The reachability probe only runs on the failure path, not on every
  * success, so normal page loads pay no extra request.
  */
-async function catalogFailureOrEmpty<T>(err: unknown, label: string, empty: T): Promise<T> {
+async function emptyOnlyIfUnreachable<T>(err: unknown, label: string, empty: T): Promise<T> {
   redirectOnAuthError(err);
   if (await checkApiReachable()) {
     throw err;
   }
-  console.warn(`[api-server] ${label}: API unreachable, using empty list`);
+  console.warn(`[api-server] ${label}: API unreachable, using empty value`);
   return empty;
+}
+
+/**
+ * Failure handling for the detail getters (getClient/getQuote/getInvoice/
+ * getProject), whose callers turn `undefined` into notFound() / a 404
+ * response. Only a genuine 404 from the API may do that. Any other failure
+ * while the API is reachable rethrows, so the page shows the error boundary
+ * ("Couldn't load this page", with Retry) rather than telling the contractor
+ * their quote does not exist. An unreachable API still returns undefined, as
+ * before.
+ */
+async function undefinedIfNotFound(err: unknown, label: string): Promise<undefined> {
+  if (err instanceof ApiError && err.status === 404) return undefined;
+  return emptyOnlyIfUnreachable(err, label, undefined);
 }
 
 export async function getClients(): Promise<Client[]> {
   try {
     return (await serverRequest<ApiClientRow[]>("/clients")).map(mapClient);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getClients: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getClients", []);
   }
 }
 
@@ -202,9 +220,7 @@ export async function getClient(id: string): Promise<Client | undefined> {
   try {
     return mapClient(await serverRequest<ApiClientRow>(`/clients/${id}`));
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn(`[api-server] getClient(${id}): API unreachable, returning undefined`);
-    return undefined;
+    return undefinedIfNotFound(err, `getClient(${id})`);
   }
 }
 
@@ -214,9 +230,7 @@ export async function getBusiness(): Promise<Business> {
   try {
     return mapBusiness(await serverRequest<ApiBusiness>("/business/current"));
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getBusiness: API unreachable, returning empty business");
-    return EMPTY_BUSINESS;
+    return emptyOnlyIfUnreachable(err, "getBusiness", EMPTY_BUSINESS);
   }
 }
 
@@ -248,7 +262,7 @@ export async function getMaterialFavourites(params?: {
       await serverRequest<ApiMaterialFavourite[]>(`/catalogs/material-favourites${suffix}`)
     ).map(mapMaterialFavourite);
   } catch (err) {
-    return catalogFailureOrEmpty(err, "getMaterialFavourites", []);
+    return emptyOnlyIfUnreachable(err, "getMaterialFavourites", []);
   }
 }
 
@@ -260,7 +274,7 @@ export async function getLabourRates(includeHidden = false): Promise<LabourRate[
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return (await serverRequest<ApiLabourRate[]>(`/catalogs/labour-rates${suffix}`)).map(mapLabourRate);
   } catch (err) {
-    return catalogFailureOrEmpty(err, "getLabourRates", []);
+    return emptyOnlyIfUnreachable(err, "getLabourRates", []);
   }
 }
 
@@ -272,7 +286,7 @@ export async function getEquipment(includeHidden = false): Promise<EquipmentItem
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return (await serverRequest<ApiEquipmentItem[]>(`/catalogs/equipment${suffix}`)).map(mapEquipmentItem);
   } catch (err) {
-    return catalogFailureOrEmpty(err, "getEquipment", []);
+    return emptyOnlyIfUnreachable(err, "getEquipment", []);
   }
 }
 
@@ -294,16 +308,15 @@ export async function getPurchases(params?: {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return await serverRequest<ApiPurchase[]>(`/purchases${suffix}`);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getPurchases: API unreachable, using empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getPurchases", []);
   }
 }
 
 /**
  * Categories this business has already spent under, for the purchase form's
- * dropdown. Falls back to an empty list, which just means the form offers the
- * built-in suggestions only — never a broken screen.
+ * dropdown. Falls back to an empty list on ANY failure, deliberately: it only
+ * means the form offers the built-in suggestions (the field still accepts
+ * free text), so there is nothing false shown and no reason to fail a page.
  */
 export async function getPurchaseCategories(): Promise<string[]> {
   try {
@@ -327,14 +340,13 @@ export async function getLabourEntries(params?: {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return await serverRequest<ApiLabourEntry[]>(`/purchases/labour${suffix}`);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getLabourEntries: API unreachable, using empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getLabourEntries", []);
   }
 }
 
-/** Did this job make money? Null when the API is unreachable, so the card
- * renders "unavailable" rather than an invented zero. */
+/** Did this job make money? Null on ANY failure, deliberately: the profit card
+ * renders null as "Couldn't load the figures", which is already the visible
+ * failure state, rather than an invented zero. */
 export async function getProjectProfit(
   projectId: string,
 ): Promise<(JobProfit & { registeredForGct: boolean; labourCostCents: number; purchaseCostCents: number }) | null> {
@@ -357,7 +369,7 @@ export async function getJobs(): Promise<Job[]> {
   try {
     return (await serverRequest<ApiJob[]>("/jobs")).map(mapJob);
   } catch (err) {
-    return catalogFailureOrEmpty(err, "getJobs", []);
+    return emptyOnlyIfUnreachable(err, "getJobs", []);
   }
 }
 
@@ -384,9 +396,7 @@ export async function getProjects(): Promise<ProjectSummary[]> {
       };
     });
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getProjects: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getProjects", []);
   }
 }
 
@@ -410,9 +420,7 @@ export async function getProject(id: string): Promise<ProjectDetail | undefined>
       progressPct: project.progressPct,
     };
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn(`[api-server] getProject(${id}): API unreachable, returning undefined`);
-    return undefined;
+    return undefinedIfNotFound(err, `getProject(${id})`);
   }
 }
 
@@ -427,9 +435,7 @@ export async function getQuotes(): Promise<Quote[]> {
       .map((q) => mapQuote(q, jobName.get(q.projectId ?? "") ?? ""))
       .sort((a, b) => b.num.localeCompare(a.num));
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getQuotes: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getQuotes", []);
   }
 }
 
@@ -446,9 +452,7 @@ export async function getQuote(id: string): Promise<Quote | undefined> {
     }
     return mapQuote(q, projectLabel);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn(`[api-server] getQuote(${id}): API unreachable, returning undefined`);
-    return undefined;
+    return undefinedIfNotFound(err, `getQuote(${id})`);
   }
 }
 
@@ -462,9 +466,7 @@ export async function getInvoices(params?: { status?: InvoiceStatus; clientId?: 
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return (await serverRequest<ApiInvoice[]>(`/invoices${suffix}`)).map(mapInvoice);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getInvoices: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getInvoices", []);
   }
 }
 
@@ -474,9 +476,7 @@ export async function getInvoice(id: string): Promise<Invoice | undefined> {
   try {
     return mapInvoice(await serverRequest<ApiInvoice>(`/invoices/${id}`));
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn(`[api-server] getInvoice(${id}): API unreachable, returning undefined`);
-    return undefined;
+    return undefinedIfNotFound(err, `getInvoice(${id})`);
   }
 }
 
@@ -520,18 +520,19 @@ export async function getReports(from?: string, to?: string): Promise<ReportsSum
   try {
     return await serverRequest<ReportsSummary>(`/reports${suffix}`);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getReports: API unreachable, returning empty summary");
     const now = new Date().toISOString();
-    return emptyReportsSummary(from ?? now, to ?? now);
+    return emptyOnlyIfUnreachable(err, "getReports", emptyReportsSummary(from ?? now, to ?? now));
   }
 }
 
 /** GET /trades (server-side read) — merged global + this business's custom
  * trades, for populating TradeSelectField from a server component (e.g. the
  * settings page passing the list into EditBusinessButton). Returns an empty
- * list (rather than throwing) when the API is unreachable — the picker still
- * works as a plain free-text field in that case.
+ * list when the API is unreachable (the picker then works as a plain
+ * free-text field); rethrows when the API is up and this request failed,
+ * since every caller is an editor or catalog screen whose catalog getters
+ * already rethrow, and the settings vocabulary list would otherwise read as
+ * "no trades".
  *
  * `includeHidden` also returns trades this business has hidden (Phase 3) —
  * omit it (or pass false) for every normal picker; the "Catalog &
@@ -542,9 +543,7 @@ export async function getTrades(includeHidden = false): Promise<Trade[]> {
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return await serverRequest<Trade[]>(`/trades${suffix}`);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getTrades: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getTrades", []);
   }
 }
 
@@ -552,16 +551,14 @@ export async function getTrades(includeHidden = false): Promise<Trade[]> {
  * for the "Catalog & vocabulary" settings screen. `includeHidden=true`
  * returns rows this business has hidden as well, so they can be shown
  * (muted) and restored — without it a hidden entry would vanish from the
- * list with no way back. Returns empty categories/units (rather than
- * throwing) when the API is unreachable, same convention as getTrades. */
+ * list with no way back. Returns empty categories/units when the API is
+ * unreachable and rethrows when it is up, same convention as getTrades. */
 export async function getMaterialSchema(includeHidden = false): Promise<ApiMaterialSchema> {
   try {
     const suffix = includeHidden ? "?includeHidden=true" : "";
     return await serverRequest<ApiMaterialSchema>(`/catalogs/material-schema${suffix}`);
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getMaterialSchema: API unreachable, returning empty schema");
-    return { categories: [], units: [] };
+    return emptyOnlyIfUnreachable(err, "getMaterialSchema", { categories: [], units: [] });
   }
 }
 
@@ -569,21 +566,21 @@ export async function getMaterialSchema(includeHidden = false): Promise<ApiMater
  * (material categories, material units, trades) this business has hidden,
  * for the "Catalog & vocabulary" settings screen to mark which rows in the
  * includeHidden=true lists above are currently off. Returns an empty list
- * (rather than throwing) when the API is unreachable — the screen then shows
- * every row as visible, which is a safe under-approximation. */
+ * only when the API is unreachable. While it is up a failure rethrows: an
+ * empty list would show every hidden row as visible, a false state the
+ * contractor would then act on. */
 export async function getHiddenCatalog(): Promise<ApiHiddenCatalogEntry[]> {
   try {
     return await serverRequest<ApiHiddenCatalogEntry[]>("/catalogs/hidden");
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getHiddenCatalog: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getHiddenCatalog", []);
   }
 }
 
 /** GET /billing/plans (public) — the platform's current PricingConfig, used
- * by the settings page to show the Pro price. Returns null (rather than
- * throwing) when the API is unreachable, same convention as getAdminData. */
+ * by the settings page to show the Pro price. Returns null on any failure,
+ * deliberately: BillingCard then simply omits the price hint (the upgrade
+ * explainer says to contact JamQuote either way), nothing false is shown. */
 export async function getBillingPlans(): Promise<PricingConfig | null> {
   try {
     return await serverRequest<PricingConfig>("/billing/plans");
@@ -594,7 +591,9 @@ export async function getBillingPlans(): Promise<PricingConfig | null> {
 }
 
 /** GET /billing/status (business-scoped) — the caller's own plan, usage and
- * renewal date. Returns null when the API is unreachable. */
+ * renewal date. Returns null on any non-auth failure, deliberately: it is one
+ * card on settings, and BillingCard renders null as "Couldn't load billing
+ * status" with no plan pill - taking settings down for it would be worse. */
 export async function getBillingStatus(): Promise<BillingStatus | null> {
   try {
     return await serverRequest<BillingStatus>("/billing/status");
@@ -606,15 +605,15 @@ export async function getBillingStatus(): Promise<BillingStatus | null> {
 }
 
 /** GET /regulatory — the published regulatory feed the dashboard card shows.
- * No fixture backs these, so an unreachable API returns an empty list and the
- * card renders its empty state (same convention as getLabourRates). */
+ * An unreachable API returns an empty list (same convention as
+ * getLabourRates); a failure while it is up rethrows, and the dashboard wraps
+ * this call in softLoad() so the card says it couldn't load instead of
+ * "No regulatory updates right now". */
 export async function getRegulatoryUpdates(): Promise<ApiRegulatoryUpdate[]> {
   try {
     return await serverRequest<ApiRegulatoryUpdate[]>("/regulatory");
   } catch (err) {
-    redirectOnAuthError(err);
-    console.warn("[api-server] getRegulatoryUpdates: API unreachable, returning empty list");
-    return [];
+    return emptyOnlyIfUnreachable(err, "getRegulatoryUpdates", []);
   }
 }
 

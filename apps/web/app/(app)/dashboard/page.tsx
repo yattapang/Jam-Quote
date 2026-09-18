@@ -3,23 +3,34 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import StatusPill from "@/components/ui/StatusPill";
 import MoneyText from "@/components/ui/MoneyText";
+import LoadFailedNotice from "@/components/ui/LoadFailedNotice";
 import { quoteStatusPill } from "@/lib/status";
 import { getQuotes, getClients, getBusiness, getInvoices, getRegulatoryUpdates } from "@/lib/api-server";
 import { sortRegulatoryAlerts } from "@/lib/regulatory";
+import { softLoad } from "@/lib/soft-load";
 import { computeDashboardStats, QuoteStatus, safeHref } from "@jamquote/core";
 import shared from "../shared.module.css";
 
 export const metadata = { title: "Dashboard · JamQuote" };
 
 export default async function DashboardPage() {
-  const [allQuotes, clients, business, regulatory, allInvoices] = await Promise.all([
+  // Quotes and invoices are this page's primary data (every stat card): a
+  // failure while the API is up goes to the error boundary. The client-name
+  // lookup, the business-name eyebrow and the regulatory card are side
+  // widgets - softLoad keeps the dashboard up and each one says it couldn't
+  // load, instead of "Unknown client" / "No regulatory updates right now".
+  const [allQuotes, clientsLoad, businessLoad, regulatoryLoad, allInvoices] = await Promise.all([
     getQuotes(),
-    getClients(),
-    getBusiness(),
-    getRegulatoryUpdates(),
+    softLoad(getClients()),
+    softLoad(getBusiness()),
+    softLoad(getRegulatoryUpdates()),
     getInvoices(),
   ]);
-  const clientNames = Object.fromEntries(clients.map((c) => [c.id, c.name]));
+  const clientNames: Record<string, string> = clientsLoad.ok
+    ? Object.fromEntries(clientsLoad.value.map((c) => [c.id, c.name]))
+    : {};
+  const clientLabel = (id: string) =>
+    clientNames[id] ?? (clientsLoad.ok ? "Unknown client" : "Client name couldn't load");
   // Most recently created first, so a brand-new draft always surfaces here
   // regardless of its quote number (revisions can reuse an older number).
   const recentQuotes = [...allQuotes]
@@ -60,13 +71,15 @@ export default async function DashboardPage() {
 
   // Soonest-to-take-effect first; the card only has room for the few that
   // still leave time to act.
-  const alerts = sortRegulatoryAlerts(regulatory, new Date()).slice(0, 3);
+  const alerts = regulatoryLoad.ok ? sortRegulatoryAlerts(regulatoryLoad.value, new Date()).slice(0, 3) : [];
 
   return (
     <div className={shared.page}>
       <header className={shared.header}>
         <div className={shared.headings}>
-          <span className={shared.eyebrow}>{business.name}</span>
+          <span className={shared.eyebrow}>
+            {businessLoad.ok ? businessLoad.value.name : "Business name couldn't load"}
+          </span>
           {/* The Business model has no owner name (that's on User, not wired
               here) — a generic greeting rather than fabricating one. */}
           <h1 className={shared.title}>Good day</h1>
@@ -132,7 +145,7 @@ export default async function DashboardPage() {
                           <StatusPill label={pill.label} kind={pill.kind} variant={pill.variant} />
                         </span>
                         <span className={shared.rowSub}>
-                          {clientNames[q.clientId] ?? "Unknown client"} · {q.projectLabel}
+                          {clientLabel(q.clientId)} · {q.projectLabel}
                         </span>
                       </div>
                       <div className={shared.rowRight}>
@@ -158,7 +171,7 @@ export default async function DashboardPage() {
                   <Link key={q.id} href={`/quotes/${q.id}`} className={shared.rowLink}>
                     <div className={shared.rowMain}>
                       <span className={shared.rowTitle}>
-                        {clientNames[q.clientId] ?? "Unknown client"}
+                        {clientLabel(q.clientId)}
                       </span>
                       <span className={shared.rowSub}>
                         {q.projectLabel} · {q.createdLabel} · awaiting response
@@ -175,7 +188,9 @@ export default async function DashboardPage() {
           </h2>
           <Card>
             <div className={shared.list}>
-              {alerts.length === 0 ? (
+              {!regulatoryLoad.ok ? (
+                <LoadFailedNotice what="regulatory updates" />
+              ) : alerts.length === 0 ? (
                 <div className={shared.empty}>No regulatory updates right now.</div>
               ) : (
                 alerts.map((a) => {

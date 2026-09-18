@@ -4,6 +4,8 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import LoadFailedNotice from "@/components/ui/LoadFailedNotice";
+import { softLoad } from "@/lib/soft-load";
 import { PROJECT_STAGE_LABELS, projectStageTracksProgress } from "@jamquote/core";
 import { quoteStatusPill } from "@/lib/status";
 import {
@@ -28,16 +30,24 @@ export default async function JobDetailPage({ params }: { params: { id: string }
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [clients, quotes, purchases, labour, labourRates, profit, usedCategories] =
+  // Primary data (a failure while the API is up goes to the error boundary):
+  // the job's costs - purchases, labour entries and rates, which an empty
+  // ledger would invite re-logging as duplicates - and the client list the
+  // Edit form's picker needs (an empty picker could save the job clientless).
+  // Secondary: the Quotes card (softLoad, says it couldn't load), the profit
+  // card (null already renders "Couldn't load the figures") and the purchase
+  // category suggestions (empty just means the built-in suggestions only).
+  const [clients, quotesLoad, purchases, labour, labourRates, profit, usedCategories] =
     await Promise.all([
       getClients(),
-      getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id)),
+      softLoad(getQuotes().then((qs) => qs.filter((q) => q.projectId === project.id))),
       getPurchases({ projectId: project.id }),
       getLabourEntries({ projectId: project.id }),
       getLabourRates(),
       getProjectProfit(project.id),
       getPurchaseCategories(),
     ]);
+  const quotes = quotesLoad.ok ? quotesLoad.value : [];
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 
   return (
@@ -144,7 +154,10 @@ export default async function JobDetailPage({ params }: { params: { id: string }
           </div>
           <Card>
             <div className={shared.list}>
-              {quotes.length === 0 && <div className={shared.empty}>No quotes for this project yet.</div>}
+              {!quotesLoad.ok && <LoadFailedNotice what="this job's quotes" />}
+              {quotesLoad.ok && quotes.length === 0 && (
+                <div className={shared.empty}>No quotes for this project yet.</div>
+              )}
               {quotes.map((q) => {
                 const pill = quoteStatusPill(q.status);
                 return (
@@ -206,7 +219,7 @@ export default async function JobDetailPage({ params }: { params: { id: string }
               )}
               <div className={shared.totalRowGrand}>
                 <span>Total quoted</span>
-                <MoneyText cents={totalCents} tone="accent" />
+                {quotesLoad.ok ? <MoneyText cents={totalCents} tone="accent" /> : <span>—</span>}
               </div>
             </div>
           </Card>

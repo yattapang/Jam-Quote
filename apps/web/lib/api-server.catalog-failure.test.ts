@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Covers the fix in lib/api-server.ts's catalogFailureOrEmpty(): the four
+ * Covers the fix in lib/api-server.ts's emptyOnlyIfUnreachable(): the four
  * catalog getters (getMaterialFavourites, getLabourRates, getEquipment,
  * getJobs) must tell "API asleep" apart from "API up, this request failed."
  *

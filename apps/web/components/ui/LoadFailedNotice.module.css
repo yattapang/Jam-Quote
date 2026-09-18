@@ -1,0 +1,17 @@
+.wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.icon {
+  flex: 0 0 auto;
+  color: var(--jq-accent);
+}
+
+.body {
+  color: var(--jq-text-muted);
+}

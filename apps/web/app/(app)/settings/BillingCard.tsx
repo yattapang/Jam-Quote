@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
+import LoadFailedNotice from "@/components/ui/LoadFailedNotice";
 import type { BillingStatus, PricingConfig } from "@/lib/api-client";
 import shared from "../shared.module.css";
 
@@ -37,11 +38,13 @@ export default function BillingCard({
     <Card>
       <div className={shared.sectionHead}>
         <div className={shared.statLabel}>Plan &amp; billing</div>
-        <StatusPill label={isPro ? "Pro" : "Free"} kind={isPro ? "accent" : "neutral"} />
+        {/* No pill without a status: "Free" would assert a plan this page never
+            learned, and tell a paying Pro contractor they were on Free. */}
+        {status && <StatusPill label={isPro ? "Pro" : "Free"} kind={isPro ? "accent" : "neutral"} />}
       </div>
 
       {!status ? (
-        <div className={shared.statHint}>Couldn&apos;t load billing status. Try reloading.</div>
+        <LoadFailedNotice what="billing status" />
       ) : isPro ? (
         <div className={shared.list}>
           <div className={shared.totalRow}>

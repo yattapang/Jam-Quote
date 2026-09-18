@@ -4,6 +4,8 @@ import Card from "@/components/ui/Card";
 import MoneyText from "@/components/ui/MoneyText";
 import StatusPill from "@/components/ui/StatusPill";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
+import LoadFailedNotice from "@/components/ui/LoadFailedNotice";
+import { softLoad } from "@/lib/soft-load";
 import { quoteStatusPill } from "@/lib/status";
 import { getClient, getQuotes } from "@/lib/api-server";
 import EditClientButton from "./EditClientButton";
@@ -16,7 +18,12 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
   const client = await getClient(params.id);
   if (!client) notFound();
 
-  const quotes = (await getQuotes()).filter((q) => q.clientId === client.id);
+  // The client record is this page's primary data (getClient: a real 404 is
+  // notFound(), any other failure while the API is up hits the error
+  // boundary). Their quotes are a side section: softLoad keeps the client
+  // visible and the section says it couldn't load, rather than "No quotes".
+  const quotesLoad = await softLoad(getQuotes());
+  const quotes = quotesLoad.ok ? quotesLoad.value.filter((q) => q.clientId === client.id) : [];
   const totalCents = quotes.reduce((sum, q) => sum + (q.totalCents ?? 0), 0);
 
   return (
@@ -51,7 +58,10 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
           </div>
           <Card>
             <div className={shared.list}>
-              {quotes.length === 0 && <div className={shared.empty}>No quotes for this client yet.</div>}
+              {!quotesLoad.ok && <LoadFailedNotice what="this client's quotes" />}
+              {quotesLoad.ok && quotes.length === 0 && (
+                <div className={shared.empty}>No quotes for this client yet.</div>
+              )}
               {quotes.map((q) => {
                 const pill = quoteStatusPill(q.status);
                 return (
@@ -98,7 +108,7 @@ export default async function ClientDetailPage({ params }: { params: { id: strin
               </div>
               <div className={shared.totalRowGrand}>
                 <span>Total quoted</span>
-                <MoneyText cents={totalCents} tone="accent" />
+                {quotesLoad.ok ? <MoneyText cents={totalCents} tone="accent" /> : <span>—</span>}
               </div>
             </div>
           </Card>

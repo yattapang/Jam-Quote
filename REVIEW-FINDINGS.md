@@ -388,9 +388,21 @@ fields carry `PASSWORD_MAX_LENGTH` (I added the mobile one myself - the agent st
   builder, invoice editor, project page and settings call the same getters for their
   pickers and have no boundary, so a single failed request would have crashed them to
   Next's generic page; I added an app-wide `app/(app)/error.tsx` fallback. Planted the
-  old swallow-everything behaviour: 4 tests fail. Open: 20 other getters (clients,
-  quotes, invoices, projects, reports...) still return empty on any failure - each needs
-  its own page decision.
+  old swallow-everything behaviour: 4 tests fail. The helper is now `emptyOnlyIfUnreachable`.
+- **The other 20 getters, DONE 2026-09-18:** each classified by what empty means on its
+  screen - primary data rethrows when the API is up (clients, projects, quotes,
+  invoices, reports, trades, purchases, labour entries, material schema, hidden catalog);
+  detail getters keep a real 404 as "not found" but rethrow any other failure
+  (`undefinedIfNotFound`), so a failed load no longer claims the quote does not exist;
+  side widgets stay up and say "couldn't load" (`softLoad` + `LoadFailedNotice`: the
+  dashboard's names and regulatory card, a client's or job's quotes section). `getBusiness`
+  rethrows because blank business data would pre-fill settings with blanks (saving would
+  wipe the profile) and send a PDF with no business name; no layout calls it, so only
+  those pages are affected. BillingCard's "Free" badge is hidden when status fails - it
+  told a Pro customer they were on Free. Three stay deliberately soft with reasons
+  (purchase-category suggestions, project profit which already says so, billing plans).
+  57 table-driven tests; I planted "every API error is not found" and 12 tests failed.
+  Open: the email routes still fall back to a blank business when the API is asleep.
 - Was queued (design gap, not a regression): `DemoDataBanner` shows only when the whole
   API is unreachable. If one endpoint returns 500 while the API is up, a catalog list is
   empty with no banner, and a contractor may create duplicate items. Needs its own error
