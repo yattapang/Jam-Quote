@@ -352,6 +352,28 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Review of 0839e19 (2026-09-18) - product code sound, guard not; fixes in progress
+
+- **HIGH, CONFIRMED - the rebuilt DTO bounds guard is beaten three ways:** an aliased zod
+  import (`z as zz`), a helper returning `z.string()`, and a quoted key. It matched `z` by
+  identifier text and its own comment called that sound - the resolve-don't-spell lesson,
+  again, in a guard written the same day the lesson was re-recorded.
+- **MEDIUM, CONFIRMED - the `validUntil` comment says the opposite of the code:** the
+  update schema keeps the not-past check, so an API client re-sending an expired quote's
+  stored date is refused. No real path does today (the web recomputes; mobile, sync,
+  revise and duplicate don't send it through the DTO).
+- LOW-MEDIUM - a date-only `YYYY-MM-DD` for today is refused (read as UTC midnight);
+  LOW - a stale error in the regulatory dialog, deleted quotes counted as tenant activity,
+  two login password fields without `maxLength`.
+- Sound: password limit consistent and checked before hashing; new length bounds fit
+  real data; `inputMin` no longer blocks anything the server accepts; unit normalising
+  touches only new writes and nothing compares labels; JobForm round-trips; the mobile
+  demo invoice adds up in the right order; the catalog revert is complete.
+- **Queued (design gap, not a regression):** `DemoDataBanner` shows only when the whole
+  API is unreachable. If one endpoint returns 500 while the API is up, a catalog list is
+  empty with no banner, and a contractor may create duplicate items. Needs its own error
+  state.
+
 ## Remaining sweeps, 2026-09-18 - FIXED (see the landing note below)
 
 **Landed:** the three small items (server-side quote validity on Jamaica time; admin
