@@ -1032,6 +1032,12 @@ same time — it counts a state nothing sets.
 | Who receives email | A billing contact the subscriber provides. |
 | Partial payments | Not allowed — whole terms only. |
 | Trial | None. Free tier is 3 quotes/month. |
+| Admin reads of reference data (2026-09-18) | Any platform admin may READ pricing, the regulatory feed and the rule pack; edits stay capability-gated. Reference data staff need to answer customers. |
+| Voiding a subscription payment (2026-09-18) | A void removes money, not entitlement: later payments slide up to cover the earliest unpaid period, and a payment on the term-end day buys the earliest unpaid month. No gaps in the ledger. |
+| Dual-role admins (2026-09-18) | A platform admin must not also be a contractor user. Promotion clears the business link (or is refused for a sole owner); existing dual-role admins are listed for review, not changed automatically. |
+| Impersonation (2026-09-18) | "View as tenant" gets its own capability, IMPERSONATE_TENANTS, separate from MANAGE_TENANTS. Existing MANAGE_TENANTS holders are granted it so nobody loses access silently. |
+| Renewal-day drift (2026-09-18) | Accepted: a term starting on the 29th-31st clamps to the short month's end and stays there (at most 3 days, once). Revisit with a billing-day column if automatic card billing arrives. |
+| GCT registration (2026-09-18) | An explicit "GCT registered" yes/no on the business profile replaces inferring it from the TRN (every Jamaican has a TRN). Existing businesses keep their current treatment via backfill; new ones default to not registered. |
 
 ### Notification schedule — SETTLED (owner, 2026-08-18)
 

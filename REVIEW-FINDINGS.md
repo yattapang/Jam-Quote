@@ -193,7 +193,7 @@ Before relaunching, check for live children, not just an unchanged tree.
   strips. Twin of S4. Fix in progress, executed-bypass test first.
 - **MEDIUM - Suspend and the plan `<select>` act on one click/change**, unlike revoke,
   void and delete, which confirm. Fix in progress.
-- **OWNER QUESTION - read routes for pricing, regulatory feed and rule pack declare no
+- **DECIDED 2026-09-18 (2a): leave as is** - any admin may read reference data. Was: **OWNER QUESTION - read routes for pricing, regulatory feed and rule pack declare no
   capability**, so any admin can read them. Not tenant data; possibly intended ("Viewable
   by any admin" is documented only for the rule pack). Should reads follow the
   capability model?
