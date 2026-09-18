@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BOUNDS, JobComponentKind, computeJobUnitCostCents } from "@jamquote/core";
+import { BOUNDS, JobComponentKind, computeJobUnitCostCents, normalizeUnitLabel } from "@jamquote/core";
 import { ADD_NEW_OPTION_VALUE, isAddNewOption } from "@/lib/catalog-options";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -101,6 +101,26 @@ const toCents = (dollars: string) => Math.round((Number(dollars) || 0) * 100);
  * left over from "+ Add component" are dropped rather than saved/costed. */
 function validComponents(components: JobComponentDraft[]): JobComponentDraft[] {
   return components.filter((c) => c.description.trim() && (Number(c.quantityPerUnit) || 0) > 0);
+}
+
+/**
+ * A HALF-filled row — something was typed or picked, but it fails
+ * validComponents' criteria — used to silently vanish on save: a price
+ * typed against quantity 0, or an OTHER row with a price but no
+ * description, would simply be dropped by validComponents with no sign
+ * anything was wrong. Returns a message naming the row (1-based, matching
+ * what's on screen) so the save can be refused instead, or null when the
+ * row is either fully valid or genuinely untouched (nothing entered at
+ * all — the spare row "+ Add component" leaves behind, which is not an
+ * error, just unfinished).
+ */
+export function componentRowProblem(c: JobComponentDraft, rowNumber: number): string | null {
+  const picked = Boolean(c.materialFavouriteId || c.labourRateId || c.equipmentItemId);
+  const touched = picked || c.description.trim() !== "" || c.unitPriceDollars.trim() !== "";
+  if (!touched) return null;
+  if (!c.description.trim()) return `Row ${rowNumber} needs a description`;
+  if (!((Number(c.quantityPerUnit) || 0) > 0)) return `Row ${rowNumber} needs a quantity above 0`;
+  return null;
 }
 
 export function jobPayloadFromValues(values: JobFormValues): NewJobInput {
@@ -243,7 +263,20 @@ function ComponentRow({
   }
 
   return (
-    <div className={`${styles.componentRow} ${isDuplicate ? styles.duplicateRow : ""}`}>
+    <div
+      className={`${styles.componentRow} ${isDuplicate ? styles.duplicateRow : ""}`}
+      // Enter in a text input inside a <form> submits it by default. Inside
+      // a component row that means Enter while typing a description or
+      // price saved the WHOLE job — reported as the form closing mid-edit.
+      // Blocked here, at the row, so Enter still submits normally from the
+      // job's own header fields (Name/Unit/Markup), which sit outside this
+      // wrapper.
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && e.target instanceof HTMLElement && e.target.tagName !== "TEXTAREA") {
+          e.preventDefault();
+        }
+      }}
+    >
       <div className={styles.componentTopRow}>
         <Select
           label="Kind"
@@ -332,15 +365,19 @@ function ComponentRow({
           label="Unit price $"
           type="number"
           min={BOUNDS.moneyDollars.min}
+          step={BOUNDS.moneyDollars.step}
           value={draft.unitPriceDollars}
           onChange={(e) => onChange({ unitPriceDollars: e.target.value })}
         />
       </div>
       {/* Advisory, not preventive. Adding the same material twice is almost
-          always a slip — reported as exactly that — but it is not invalid: the
-          cost comes out identical either way. So it is pointed out with a way
-          to fix it, rather than blocking the save. Only the LATER row is
-          flagged; marking both would leave you unsure which to remove. */}
+          always a slip — reported as exactly that — but it is not invalid.
+          "Combine them" is offered, but only actually merges when the two
+          rows share a price AND a unit — mergeDuplicateComponents refuses to
+          fold together rows priced or measured differently, because doing so
+          would change the job's cost (see apps/web/lib/job-components.ts).
+          Only the LATER row is flagged; marking both would leave you unsure
+          which to remove. */}
       {isDuplicate && (
         <div className={styles.duplicateNote}>
           <span>Already in this job.</span>
@@ -451,6 +488,13 @@ export default function JobForm({
     e.preventDefault();
     if (!values.name.trim()) return setError("Name is required.");
     if (!values.unit.trim()) return setError("Unit is required (e.g. sq ft, hour, job).");
+    // A half-filled row (a price with quantity 0, or a row with no
+    // description) used to vanish silently — validComponents just filters
+    // it out. Named and refused here instead, before that filter runs.
+    for (const [idx, c] of values.components.entries()) {
+      const problem = componentRowProblem(c, idx + 1);
+      if (problem) return setError(problem);
+    }
     if (validComponents(values.components).length === 0) {
       return setError("Add at least one component with a description and quantity.");
     }
@@ -526,7 +570,12 @@ export default function JobForm({
           <MoneyText cents={markupCents} tone="muted" weight={600} />
         </div>
         <div className={styles.costRowGrand}>
-          <span>Unit cost{values.unit.trim() ? ` / ${values.unit.trim()}` : ""}</span>
+          {/* Same normalisation the API applies on save (jobs.service.ts
+              calls normalizeUnitLabel on `unit`) — without it here, "m2"
+              typed in the Unit field above showed literally as "/ m2" on
+              this row while the saved job's unit rendered as "m²"
+              everywhere else. */}
+          <span>Unit cost{values.unit.trim() ? ` / ${normalizeUnitLabel(values.unit)}` : ""}</span>
           <MoneyText cents={unitCostCents} tone="accent" />
         </div>
       </div>

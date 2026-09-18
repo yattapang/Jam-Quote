@@ -45,4 +45,21 @@ describe("computeJobUnitCostCents", () => {
   it("returns 0 for an job with no components", () => {
     expect(computeJobUnitCostCents({ components: [] })).toBe(0);
   });
+
+  it("refuses rather than silently losing precision past MAX_SAFE_INTEGER", () => {
+    // quantityPerUnit near BOUNDS.quantity.max (999,999,999) x unitPriceCents
+    // near the Postgres Int max (2,147,483,647) overflows Number.MAX_SAFE_INTEGER
+    // (~9.007e15) badly — this must throw, not return a silently-wrong number.
+    expect(() =>
+      computeJobUnitCostCents({
+        components: [{ quantityPerUnit: 999_999_999, unitPriceCents: 2_147_483_647 }],
+      }),
+    ).toThrow(RangeError);
+  });
+
+  it("stays exact for an ordinary large-but-safe job cost", () => {
+    expect(
+      computeJobUnitCostCents({ components: [{ quantityPerUnit: 1000, unitPriceCents: 2_147_483_647 }] }),
+    ).toBe(2_147_483_647_000);
+  });
 });

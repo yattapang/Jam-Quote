@@ -124,6 +124,7 @@ export default function LabourRateForm({
           label="Rate $"
           type="number"
           min={BOUNDS.moneyDollars.min}
+          step={BOUNDS.moneyDollars.step}
           value={values.rateDollars}
           onChange={(e) => set("rateDollars", e.target.value)}
         />

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamquote/core";
+import { centsSchema, PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamquote/core";
 
 /**
  * Recording a payment the contractor took outside the app — cash, bank
@@ -14,7 +14,7 @@ import { PAYMENT_REFERENCE_MAX_LENGTH, PaymentMethod } from "@jamquote/core";
 export const recordManualPaymentSchema = z.object({
   // .positive(), not .nonnegative(): a zero-value payment is not a payment,
   // and recording one would add a meaningless row to the customer's history.
-  amountCents: z.number().int().positive(),
+  amountCents: centsSchema("amountCents", { positiveOnly: true }),
   method: z.nativeEnum(PaymentMethod),
   /** Cheque number, bank reference, wallet transaction id — whatever the
    * contractor needs to reconcile this against their own records later. */

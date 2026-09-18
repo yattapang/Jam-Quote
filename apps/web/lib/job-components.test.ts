@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { computeJobUnitCostCents } from "@jamquote/core";
 import {
   duplicateComponentKeys,
   mergeDuplicateComponents,
@@ -12,6 +13,29 @@ function comp(over: Partial<ComponentLike> & { key: string }): ComponentLike {
     quantityPerUnit: "1",
     ...over,
   };
+}
+
+/** A component shaped enough to feed computeJobUnitCostCents, with price
+ * expressed the way the form holds it: dollars, as a string. */
+function costedComp(
+  over: Partial<ComponentLike> & { key: string; unitPriceDollars: string },
+): ComponentLike & { unitPriceDollars: string } {
+  return {
+    kind: "MATERIAL",
+    description: "Transport",
+    quantityPerUnit: "1",
+    unitLabel: "trip",
+    ...over,
+  };
+}
+
+function jobCost(components: (ComponentLike & { unitPriceDollars: string })[]): number {
+  return computeJobUnitCostCents({
+    components: components.map((c) => ({
+      quantityPerUnit: Number(c.quantityPerUnit) || 0,
+      unitPriceCents: Math.round((Number(c.unitPriceDollars) || 0) * 100),
+    })),
+  });
 }
 
 describe("duplicateComponentKeys", () => {
@@ -107,6 +131,49 @@ describe("mergeDuplicateComponents", () => {
   it("is a no-op when there is nothing repeated", () => {
     const rows = [comp({ key: "a", description: "Sand" }), comp({ key: "b", description: "Cement" })];
     expect(mergeDuplicateComponents(rows)).toHaveLength(2);
+  });
+
+  it("P0: never changes computeJobUnitCostCents, even when unit prices differ", () => {
+    // "Transport" 1 x $5,000 and "transport " 1 x $3,000: same loose identity
+    // (trimmed/case-folded description) but different prices. Merging must
+    // never invent a price — 800000 cents must stay 800000, not become
+    // 1000000 (2 x the first row's price).
+    const rows = [
+      costedComp({ key: "a", description: "Transport", quantityPerUnit: "1", unitPriceDollars: "5000" }),
+      costedComp({ key: "b", description: "transport ", quantityPerUnit: "1", unitPriceDollars: "3000" }),
+    ];
+
+    const before = jobCost(rows);
+    expect(before).toBe(800_000);
+
+    const merged = mergeDuplicateComponents(rows);
+    const after = jobCost(merged);
+
+    expect(after).toBe(before);
+    // Rows with mismatched price are not merged at all — the pair survives
+    // as two rows for the contractor to resolve by hand.
+    expect(merged).toHaveLength(2);
+  });
+
+  it("refuses to merge rows whose units differ, e.g. 1 bag + 25 kg", () => {
+    const rows = [
+      costedComp({ key: "a", description: "Cement", quantityPerUnit: "1", unitPriceDollars: "10", unitLabel: "bag" }),
+      costedComp({ key: "b", description: "Cement", quantityPerUnit: "25", unitPriceDollars: "10", unitLabel: "kg" }),
+    ];
+
+    const merged = mergeDuplicateComponents(rows);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((m) => m.quantityPerUnit)).toEqual(["1", "25"]);
+  });
+
+  it("rounds a summed quantity to the quantity step so it can be saved", () => {
+    // 0.1 + 0.2 === 0.30000000000000004 in floating point, which both the
+    // browser (step=0.001) and the DTO refuse. It must round to 3 decimals.
+    const merged = mergeDuplicateComponents([
+      comp({ key: "a", materialFavouriteId: "m1", quantityPerUnit: "0.1" }),
+      comp({ key: "b", materialFavouriteId: "m1", quantityPerUnit: "0.2" }),
+    ]);
+    expect(merged[0]?.quantityPerUnit).toBe("0.3");
   });
 });
 

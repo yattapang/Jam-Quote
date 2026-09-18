@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { modalStyles } from "@/components/ui/Modal";
+import { BOUNDS } from "@jamquote/core";
 import { emptyQuickJobForm, type QuickJobFormValues } from "@/lib/line-editor";
 
 import { errorMessage } from "@/lib/error-message";
@@ -73,6 +74,8 @@ export default function QuickJobForm({
         <Input
           label="Rate $ per unit"
           type="number"
+          min={BOUNDS.moneyDollars.min}
+          step={BOUNDS.moneyDollars.step}
           value={values.rateDollars}
           onChange={(e) => set("rateDollars", e.target.value)}
         />

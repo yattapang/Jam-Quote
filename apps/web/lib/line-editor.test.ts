@@ -5,6 +5,7 @@ import {
   LineCategory,
   RateUnit,
   computeJobUnitCostCents,
+  computeTotals,
   PriceSource,
   lineAmountCents,
 } from "@jamquote/core";
@@ -708,6 +709,16 @@ describe("line kinds", () => {
       expect("quantity" in patch).toBe(false);
       expect("unitPriceDollars" in patch).toBe(false);
     });
+
+    it("does not clear markupPct for a non-JOB kind", () => {
+      expect("markupPct" in applyKindChange(LineKind.LABOUR)).toBe(false);
+    });
+
+    it("P1: clears markupPct when switching to JOB — a job's price is markup-inclusive", () => {
+      const patch = applyKindChange(LineKind.JOB);
+      expect(patch.markupPct).toBeUndefined();
+      expect("markupPct" in patch).toBe(true);
+    });
   });
 });
 
@@ -770,6 +781,49 @@ describe("picking a saved row onto an existing line", () => {
       expect(picked.unitPriceDollars).toBe(fresh.unitPriceDollars);
       expect(picked.unitLabel).toBe(fresh.unitLabel);
       expect(picked.jobComponents).toEqual(fresh.jobComponents);
+    });
+
+    it("P1: clears a leftover line markupPct — the job's price already includes the job's own markup", () => {
+      // unitCostCents (45_000) was built by computeJobUnitCostCents WITH the
+      // job's 20% markup applied. A line that still carries its own
+      // markupPct (e.g. round-tripped from a saved line, or left over from
+      // switching kind before a job was picked) must not have that markup
+      // applied a second time by lineAmountCents in computeTotals.
+      //
+      // Asserted two ways: the value is undefined AND the key is present in
+      // the patch (not merely absent, which patchLine's {...l, ...p} spread
+      // would leave untouched — a patch that omits markupPct entirely would
+      // pass a bare toBeUndefined() check without actually clearing
+      // anything on a line that already had one).
+      const patch = applyJobPick(job);
+      expect(patch.markupPct).toBeUndefined();
+      expect("markupPct" in patch).toBe(true);
+    });
+
+    it("P1: end-to-end — a stale 15% line markup does not double up with the job's own 20% markup", () => {
+      // Reproduces the reported path: a line already has markupPct set
+      // (from before it was pointed at this job type — patchLine's
+      // {...line, ...patch} would otherwise leave it in place), then a job
+      // is picked. computeTotals must land on the job's own unitCostCents
+      // (which already has the job's 20% baked in), not that amount marked
+      // up an additional 15%.
+      const staleLine = { markupPct: 15 };
+      const patch = applyJobPick(job);
+      const afterPick = { ...staleLine, ...patch };
+
+      const totals = computeTotals({
+        lines: [
+          {
+            quantity: 1,
+            unitPriceCents: Math.round(Number(afterPick.unitPriceDollars) * 100),
+            markupPct: afterPick.markupPct,
+            gctTreatment: GctTreatment.STANDARD,
+          },
+        ],
+        gctRatePct: 0,
+      });
+
+      expect(totals.subtotalCents).toBe(job.unitCostCents);
     });
   });
 

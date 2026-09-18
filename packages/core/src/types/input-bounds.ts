@@ -56,8 +56,12 @@ export const BOUNDS = {
    * No upper bound: a real contract can be large, and inventing a ceiling would
    * refuse legitimate work. The server bounds it as an integer number of cents,
    * which is what stops a payload.
+   *
+   * `step: 0.01` matches the cents scale: without it a bare `type="number"`
+   * input refuses "12.50" in most browsers, even though `toCents` and every
+   * cents DTO field accept it.
    */
-  moneyDollars: { min: 0 },
+  moneyDollars: { min: 0, step: 0.01 },
   /** Progress on a job. Whole numbers only — the server validates `.int()`. */
   progressPct: { min: 0, max: 100, step: 1 },
   /** Retention held back under the contract. */

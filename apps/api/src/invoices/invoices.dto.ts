@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   BOUNDS,
   boundedNumber,
+  centsSchema,
   JobComponentKind,
   QuoteDetailLevel,
   quoteLineItemSchema,
@@ -19,7 +20,7 @@ export const invoiceLineJobComponentSchema = z.object({
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
   unitLabel: z.string().trim().min(1).max(40).optional(),
-  unitPriceCents: z.number().int().nonnegative(),
+  unitPriceCents: centsSchema("unitPriceCents"),
 });
 export type InvoiceLineJobComponentInput = z.infer<
   typeof invoiceLineJobComponentSchema
@@ -67,7 +68,7 @@ export const updateInvoiceSchema = z.object({
   terms: z.string().max(5000).optional(),
   gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
   discountPct: boundedNumber(BOUNDS.discountPct).optional(),
-  depositCents: z.number().int().nonnegative().optional(),
+  depositCents: centsSchema("depositCents").optional(),
   // Display setting only — does not affect totals math.
   detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
   sections: z.array(invoiceSectionInputSchema).optional(),
@@ -99,7 +100,7 @@ export const createInvoiceSchema = z.object({
   // InvoicesService.create, which reads defaultGctRate rather than hardcoding.
   gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
   discountPct: boundedNumber(BOUNDS.discountPct).default(0),
-  depositCents: z.number().int().nonnegative().default(0),
+  depositCents: centsSchema("depositCents").default(0),
   detailLevel: z.nativeEnum(QuoteDetailLevel).optional(),
   sections: z.array(invoiceSectionInputSchema).default([]),
   lineItems: z.array(invoiceLineItemInputSchema).default([]),

@@ -352,6 +352,43 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Job form sweep (2026-09-18) - FIXED
+
+All nine fixed. "Combine them" merges only rows with the same price and unit, and a merge
+can never change the job cost (tested against `computeJobUnitCostCents`); summed
+quantities round to the quantity step. `BOUNDS.moneyDollars` gained `step: 0.01` and
+every money input in `apps/web` was listed and wired - six were missing it. One shared
+`centsSchema()` caps every cents field at the 32-bit `Int` the columns use (all are
+`Int`; none are `BigInt`), and core's job cost refuses an unsafe integer rather than
+clamping to a wrong-but-plausible price. **The double markup was real:** a job at 12000
+cents with a leftover 15% line markup quoted 13800; picking a job now clears the line
+markup. Components capped at 200 and inserted with `createMany`; half-filled rows are
+refused by row number; Enter in a component row no longer saves the job; the cost row
+shows `m²`. The agent also caught its own vacuous test (jsdom does not submit on Enter,
+so its first Enter test passed against the unfixed form) and replaced it.
+Verified by me: gate green; I planted "merge ignores price and unit" (2 tests fail) and
+removed both markup clears (3 fail); both files restored byte-identical.
+
+
+- **P0 CONFIRMED - "Combine them" reprices the job:** merging duplicate rows sums the
+  quantities and keeps only the first row's price, so "Transport" $5,000 + "transport"
+  $3,000 becomes $10,000. Two comments claim the cost is unchanged either way.
+- **P1 CONFIRMED:** a merged 0.1 + 0.2 quantity cannot be saved; a job price with cents
+  cannot be saved - and the same gap is in the equipment, labour-rate and quick-job forms,
+  **contradicting the earlier audit note that no money input was missing a step**; cents
+  fields have no upper bound though the columns are 32-bit `Int`, so a large price is a
+  500, and core's job cost can pass `MAX_SAFE_INTEGER`.
+- **P1 PLAUSIBLE:** a quote line switched to a job may keep its own markup on top of the
+  job's markup (to be executed before fixing).
+- P2 - no cap on components; half-filled rows silently dropped; Enter in a row saves the
+  whole job; "/ m2" shown where `m²` is stored.
+- Sound: form, API and quote line compute the job cost with the same core function, to
+  the cent; editing a job never reprices an issued quote; retired catalog links survive
+  edits; quantity and markup limits match the DTO; a failed save keeps input.
+- **Lesson:** an "audited, none missing" note written by an agent was wrong. An audit
+  claim is only as good as the search that produced it - record the search, not the
+  conclusion.
+
 ## Review of 0839e19 (2026-09-18) - FIXED
 
 All six fixed. The DTO bounds guard now resolves `z` by symbol, accepts quoted keys and

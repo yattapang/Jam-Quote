@@ -353,6 +353,7 @@ export default function InvoiceBuilder({
                 label="Deposit $"
                 type="number"
                 min={BOUNDS.moneyDollars.min}
+                step={BOUNDS.moneyDollars.step}
                 value={depositDollars}
                 onChange={(e) => setDepositDollars(e.target.value)}
               />

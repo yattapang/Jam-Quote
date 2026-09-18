@@ -30,6 +30,31 @@ export function boundedNumber(b: NumericBound): z.ZodType<number, z.ZodTypeDef, 
   });
 }
 
+/**
+ * The largest value a Postgres `Int` column can hold. Every cents column in
+ * `schema.prisma` (unitPriceCents, priceCents, rateCents, amountCents,
+ * depositCents, gctCents, …) is `Int`, not `BigInt` — so a DTO that only
+ * checked `.int().nonnegative()` let a value like 3,000,000,000 through
+ * validation and then fail at the database as an unhandled 500, instead of
+ * a normal 400 naming the field.
+ */
+export const INT32_MAX_CENTS = 2_147_483_647;
+
+/**
+ * The one cents validator every money DTO field spends, so a Postgres `Int`
+ * overflow is always a 400 naming the field rather than a 500 from the
+ * database. Pass `positiveOnly` for a field the server also refuses zero on
+ * (a payment or purchase amount), matching the field's own `.positive()`
+ * rule; otherwise it is `.nonnegative()`, matching `.int().nonnegative()`.
+ */
+export function centsSchema(
+  field: string,
+  opts: { positiveOnly?: boolean } = {},
+): z.ZodType<number, z.ZodTypeDef, number> {
+  const base = opts.positiveOnly ? z.number().int().positive() : z.number().int().nonnegative();
+  return base.max(INT32_MAX_CENTS, `${field} must be at most ${INT32_MAX_CENTS}`);
+}
+
 /** Jamaican TRN: 9 digits, optionally shown grouped as 123-456-789. */
 export const trnSchema = z
   .string()
@@ -62,7 +87,7 @@ export const quoteLineItemSchema = z.object({
    * Falls back to rateUnit's label when unset.
    */
   unitLabel: z.string().max(40).optional(),
-  unitPriceCents: z.number().int().nonnegative(),
+  unitPriceCents: centsSchema("unitPriceCents"),
   priceSource: z.nativeEnum(PriceSource).default(PriceSource.MANUAL),
   supplierId: z.string().uuid().optional(),
   gctTreatment: z.nativeEnum(GctTreatment).default(GctTreatment.STANDARD),

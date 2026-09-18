@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ADMIN_CAPABILITIES, isHttpUrl } from "@jamquote/core";
+import { ADMIN_CAPABILITIES, centsSchema, isHttpUrl } from "@jamquote/core";
 
 // zod's z.enum needs a non-empty string tuple; ADMIN_CAPABILITIES is the
 // single source of truth for valid capability values (from core).
@@ -19,7 +19,7 @@ export const setTenantPlanSchema = z.object({
    * returns them to standard. Kept separate from the global pricing config so
    * one tenant's deal never moves everyone else's bill.
    */
-  priceCents: z.number().int().nonnegative().nullable().optional(),
+  priceCents: centsSchema("priceCents").nullable().optional(),
   renewsAt: z.string().datetime().optional(),
 });
 export type SetTenantPlanInput = z.infer<typeof setTenantPlanSchema>;
@@ -108,7 +108,7 @@ export type ReviewRegulatoryUpdateInput = z.infer<typeof reviewRegulatoryUpdateS
  * short payment rather than silently redefining the agreed rate.
  */
 export const recordSubscriptionPaymentSchema = z.object({
-  amountCents: z.number().int().positive().optional(),
+  amountCents: centsSchema("amountCents", { positiveOnly: true }).optional(),
   method: z.enum(["CARD", "CASH", "BANK_TRANSFER", "MOBILE_MONEY", "OTHER"]),
   /** Cheque number, bank reference, wallet transaction id — whatever lets this
    * be matched against a bank statement later. */

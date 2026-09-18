@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { BOUNDS, PARISHES, RateUnit, boundedNumber } from "@jamquote/core";
+import { BOUNDS, PARISHES, RateUnit, boundedNumber, centsSchema } from "@jamquote/core";
 
 export const createLabourRateSchema = z.object({
   trade: z.string().trim().min(1).max(80),
   skillTier: z.string().max(40).optional(),
-  rateCents: z.number().int().nonnegative(),
+  rateCents: centsSchema("rateCents"),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
@@ -31,7 +31,7 @@ export const createMaterialFavouriteSchema = z.object({
   // Controlled vocabulary for how the material is sold. Validated against the
   // rows this business may see — a curated unit or one of its own.
   unitId: z.string().uuid().optional(),
-  priceCents: z.number().int().nonnegative(),
+  priceCents: centsSchema("priceCents"),
   supplierId: z.string().uuid().optional(),
   categoryDefId: z.string().uuid().optional(),
   // Keyed by MaterialAttributeDef.key. Unknown keys are rejected; ENUM values
@@ -117,7 +117,7 @@ export const createEquipmentItemSchema = z.object({
   owned: z.boolean().default(false),
   vendor: z.string().max(120).optional(),
   vendorPhone: z.string().max(40).optional(),
-  rateCents: z.number().int().nonnegative(),
+  rateCents: centsSchema("rateCents"),
   rateUnit: z.nativeEnum(RateUnit).default(RateUnit.DAY),
   // Free-text override for what prints on the document ("sq ft", "window").
   // RateUnit is a closed platform-wide enum of cadences; this is where a
@@ -160,7 +160,7 @@ export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
 export const createMaterialPriceEntrySchema = z.object({
   supplierId: z.string().uuid(),
   materialFavouriteId: z.string().uuid(),
-  priceCents: z.number().int().nonnegative(),
+  priceCents: centsSchema("priceCents"),
   // Free-text qualifier on the observation ("delivered", "cash discount").
   note: z.string().max(200).optional(),
   // Defaults to now; accepted so a contractor can back-date a price they were

@@ -426,6 +426,7 @@ export default function QuoteBuilder({
                 label={depositMode === DepositMode.PERCENT ? "Deposit %" : "Deposit $"}
                 type="number"
                 min={BOUNDS.moneyDollars.min}
+                step={depositMode === DepositMode.PERCENT ? undefined : BOUNDS.moneyDollars.step}
                 {...(depositMode === DepositMode.PERCENT ? { max: BOUNDS.depositPct.max } : {})}
                 value={depositInput}
                 onChange={(e) => setDepositInput(e.target.value)}

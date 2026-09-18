@@ -6,6 +6,7 @@ import {
   quoteLineItemSchema,
   BOUNDS,
   boundedNumber,
+  centsSchema,
   startOfJamaicaDayMs,
 } from "@jamquote/core";
 
@@ -60,7 +61,7 @@ export const quoteLineJobComponentSchema = z.object({
   // Snapshotted with the rest of the component so a sent document keeps
   // printing "3 trips" even if the job is later edited.
   unitLabel: z.string().trim().min(1).max(40).optional(),
-  unitPriceCents: z.number().int().nonnegative(),
+  unitPriceCents: centsSchema("unitPriceCents"),
 });
 export type QuoteLineJobComponentInput = z.infer<
   typeof quoteLineJobComponentSchema
@@ -100,7 +101,7 @@ export const createQuoteSchema = z.object({
   projectId: z.string().max(64).min(1).optional(),
   gctRatePct: boundedNumber(BOUNDS.gctRatePct).optional(),
   discountPct: boundedNumber(BOUNDS.discountPct).optional(),
-  depositCents: z.number().int().nonnegative().optional(),
+  depositCents: centsSchema("depositCents").optional(),
   validUntil: validUntilNotPast.optional(),
   terms: z.string().max(5000).optional(),
   // Display setting only (defaults to SUMMARY in the service): does not

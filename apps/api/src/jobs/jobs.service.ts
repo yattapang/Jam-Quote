@@ -74,9 +74,13 @@ export class JobsService {
           markupPct: input.markupPct ?? 0,
         },
       });
-      for (const [idx, c] of input.components.entries()) {
-        await tx.jobComponent.create({
-          data: componentCreateData(job.id, c, idx),
+      // createMany over one insert per row: with the 200-row cap (jobs.dto.ts)
+      // this is at most one round trip instead of up to 200, and nothing
+      // afterwards needs the created rows' ids — findOne below re-fetches the
+      // job with its components afresh.
+      if (input.components.length > 0) {
+        await tx.jobComponent.createMany({
+          data: input.components.map((c, idx) => componentCreateData(job.id, c, idx)),
         });
       }
       return job.id;
@@ -153,8 +157,11 @@ export class JobsService {
 
       if (replacingComponents) {
         await tx.jobComponent.deleteMany({ where: { jobId: id } });
-        for (const [idx, c] of (input.components ?? []).entries()) {
-          await tx.jobComponent.create({ data: componentCreateData(id, c, idx) });
+        const components = input.components ?? [];
+        if (components.length > 0) {
+          await tx.jobComponent.createMany({
+            data: components.map((c, idx) => componentCreateData(id, c, idx)),
+          });
         }
       }
     });

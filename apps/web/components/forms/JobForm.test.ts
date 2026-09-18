@@ -1,7 +1,51 @@
 import { describe, expect, it } from "vitest";
 import { JobComponentKind } from "@jamquote/core";
 import type { Job, JobComponent } from "@/lib/types";
-import { jobFormValuesFromAssembly, jobPayloadFromValues } from "./JobForm";
+import { componentRowProblem, jobFormValuesFromAssembly, jobPayloadFromValues, type JobComponentDraft } from "./JobForm";
+
+function draft(over: Partial<JobComponentDraft> = {}): JobComponentDraft {
+  return {
+    key: "k1",
+    kind: JobComponentKind.OTHER,
+    description: "",
+    quantityPerUnit: "1",
+    unitLabel: "",
+    unitPriceDollars: "",
+    ...over,
+  };
+}
+
+describe("componentRowProblem", () => {
+  it("is silent on a genuinely untouched row — the spare row is not an error", () => {
+    expect(componentRowProblem(draft(), 1)).toBeNull();
+  });
+
+  it("is silent on a fully valid row", () => {
+    expect(componentRowProblem(draft({ description: "Transport", quantityPerUnit: "1" }), 1)).toBeNull();
+  });
+
+  it("P2: names the row when it has a price but quantity 0", () => {
+    expect(
+      componentRowProblem(
+        draft({ description: "Transport", quantityPerUnit: "0", unitPriceDollars: "500" }),
+        3,
+      ),
+    ).toBe("Row 3 needs a quantity above 0");
+  });
+
+  it("P2: names the row when an OTHER row has no description", () => {
+    expect(componentRowProblem(draft({ unitPriceDollars: "500" }), 2)).toBe("Row 2 needs a description");
+  });
+
+  it("a picked library row with no quantity is still flagged", () => {
+    expect(
+      componentRowProblem(
+        draft({ materialFavouriteId: "m1", description: "Cement", quantityPerUnit: "0" }),
+        1,
+      ),
+    ).toBe("Row 1 needs a quantity above 0");
+  });
+});
 
 /**
  * Round-trips a job's components through jobFormValuesFromAssembly (server

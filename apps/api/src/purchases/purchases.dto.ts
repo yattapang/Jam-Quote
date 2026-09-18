@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BOUNDS, fitsStep } from "@jamquote/core";
+import { BOUNDS, centsSchema, fitsStep } from "@jamquote/core";
 
 /**
  * Recording what a contractor spent.
@@ -16,8 +16,8 @@ export const createPurchaseSchema = z
     projectId: z.string().max(64).min(1).nullable().optional(),
     supplierId: z.string().max(64).min(1).nullable().optional(),
     description: z.string().trim().min(1).max(200),
-    amountCents: z.number().int().positive(),
-    gctCents: z.number().int().nonnegative().optional(),
+    amountCents: centsSchema("amountCents", { positiveOnly: true }),
+    gctCents: centsSchema("gctCents").optional(),
     category: z.string().max(60).nullable().optional(),
     purchasedAt: z.string().datetime(),
     reference: z.string().max(120).nullable().optional(),
@@ -36,8 +36,8 @@ export const updatePurchaseSchema = z.object({
   projectId: z.string().max(64).min(1).nullable().optional(),
   supplierId: z.string().max(64).min(1).nullable().optional(),
   description: z.string().trim().min(1).max(200).optional(),
-  amountCents: z.number().int().positive().optional(),
-  gctCents: z.number().int().nonnegative().optional(),
+  amountCents: centsSchema("amountCents", { positiveOnly: true }).optional(),
+  gctCents: centsSchema("gctCents").optional(),
   category: z.string().max(60).nullable().optional(),
   purchasedAt: z.string().datetime().optional(),
   reference: z.string().max(120).nullable().optional(),
@@ -80,7 +80,7 @@ export const createLabourEntrySchema = z.object({
     .positive()
     .max(100_000)
     .refine((v) => fitsStep(v, BOUNDS.quantity.step), { message: "Use at most 3 decimal places" }),
-  rateCents: z.number().int().nonnegative(),
+  rateCents: centsSchema("rateCents"),
   unitLabel: z.string().trim().min(1).max(30).optional(),
   workedOn: z.string().datetime(),
   note: z.string().max(500).nullable().optional(),

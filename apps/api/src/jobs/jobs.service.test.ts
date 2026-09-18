@@ -39,7 +39,7 @@ function tileAssemblyRow(overrides: Partial<Record<string, unknown>> = {}) {
 function withPrisma(overrides: Partial<Record<string, unknown>> = {}) {
   const tx = {
     job: { create: vi.fn().mockResolvedValue({ id: "a1" }), update: vi.fn() },
-    jobComponent: { create: vi.fn(), deleteMany: vi.fn() },
+    jobComponent: { create: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
   };
   const prisma = {
     $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
@@ -94,13 +94,12 @@ describe("JobsService.create", () => {
     expect(tx.job.create).toHaveBeenCalledWith({
       data: { businessId: "b1", name: "Tiling — per sq ft", unit: "ft²", markupPct: 20 },
     });
-    expect(tx.jobComponent.create).toHaveBeenCalledTimes(2);
-    expect(tx.jobComponent.create).toHaveBeenNthCalledWith(1, {
-      data: expect.objectContaining({
-        jobId: "a1",
-        kind: JobComponentKind.MATERIAL,
-        sort: 0,
-      }),
+    expect(tx.jobComponent.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.jobComponent.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({ jobId: "a1", kind: JobComponentKind.MATERIAL, sort: 0 }),
+        expect.objectContaining({ jobId: "a1", kind: JobComponentKind.LABOUR, sort: 1 }),
+      ],
     });
 
     const expectedCost = computeJobUnitCostCents({
@@ -124,8 +123,8 @@ describe("JobsService.create", () => {
     expect(tx.job.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ unit: "m²" }),
     });
-    expect(tx.jobComponent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ unitLabel: "m²" }),
+    expect(tx.jobComponent.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ unitLabel: "m²" })],
     });
   });
 
@@ -377,9 +376,9 @@ describe("JobsService.update", () => {
     expect(tx.jobComponent.deleteMany).toHaveBeenCalledWith({
       where: { jobId: "a1" },
     });
-    expect(tx.jobComponent.create).toHaveBeenCalledTimes(1);
-    expect(tx.jobComponent.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ jobId: "a1", kind: JobComponentKind.OTHER }),
+    expect(tx.jobComponent.createMany).toHaveBeenCalledTimes(1);
+    expect(tx.jobComponent.createMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ jobId: "a1", kind: JobComponentKind.OTHER })],
     });
   });
 
@@ -408,7 +407,7 @@ describe("JobsService.update", () => {
     await svc.update("b1", "a1", { name: "Tiling (updated)" } as any);
 
     expect(tx.jobComponent.deleteMany).not.toHaveBeenCalled();
-    expect(tx.jobComponent.create).not.toHaveBeenCalled();
+    expect(tx.jobComponent.createMany).not.toHaveBeenCalled();
   });
 
   it("throws NotFoundException instead of updating when the row is already gone", async () => {

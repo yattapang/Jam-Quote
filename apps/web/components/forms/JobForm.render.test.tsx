@@ -87,3 +87,64 @@ describe("JobForm — picking a saved labour rate", () => {
     expect(description.value).toBe("Mason — Senior");
   });
 });
+
+describe("JobForm — unit cost row normalises the unit", () => {
+  it("P2: shows 'm²', not 'm2', matching what the API stores after normalizeUnitLabel", async () => {
+    renderForm();
+    const unitField = screen.getAllByLabelText("Unit")[0] as HTMLInputElement;
+    await userEvent.clear(unitField);
+    await userEvent.type(unitField, "m2");
+
+    expect(screen.getByText("Unit cost / m²")).toBeInTheDocument();
+    expect(screen.queryByText("Unit cost / m2")).not.toBeInTheDocument();
+  });
+});
+
+describe("JobForm — Enter key inside a component row", () => {
+  // jsdom does not implement a browser's implicit "Enter submits the
+  // nearest form" behaviour for a single-field form the way real browsers
+  // do, so `userEvent.type(field, "{Enter}")` never actually exercises that
+  // path here — a test asserting `onSubmit` was not called would pass
+  // identically whether or not the row's onKeyDown guard exists at all
+  // (confirmed: it passed against the pre-fix component too). Testing the
+  // real mechanism instead: dispatch the native, cancelable keydown event
+  // the browser would use to trigger implicit submission, and check that
+  // the row's handler actually calls preventDefault() on it.
+  it("P2: preventDefault()s an Enter keydown while typing a component's description", async () => {
+    const onSubmit = vi.fn();
+    render(
+      <JobForm
+        initial={emptyJobForm}
+        materials={[material]}
+        labourRates={[labourRate]}
+        equipment={[] as EquipmentItem[]}
+        onCancel={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+    const description = screen.getAllByLabelText("Description")[0] as HTMLInputElement;
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    description.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("still lets Enter submit from the job's own header fields (Name)", () => {
+    render(
+      <JobForm
+        initial={emptyJobForm}
+        materials={[material]}
+        labourRates={[labourRate]}
+        equipment={[] as EquipmentItem[]}
+        onCancel={() => {}}
+        onSubmit={vi.fn()}
+      />,
+    );
+    const name = screen.getByLabelText("Name") as HTMLInputElement;
+    const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    name.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+});

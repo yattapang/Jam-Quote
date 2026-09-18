@@ -189,6 +189,14 @@ export function applyKindChange(kind: LineKind, currentHeading?: Heading): Parti
     jobName: undefined,
     jobUnit: undefined,
     jobComponents: undefined,
+    // A JOB line's price comes from computeJobUnitCostCents, which already
+    // applies the job's own markupPct — so a leftover per-line markupPct
+    // from before the kind change would apply again on top in computeTotals
+    // (lineAmountCents), silently doubling the markup the moment a job is
+    // picked (see jobPatch below, which sets the price). Cleared here too,
+    // not just there, so a line switched to JOB but with no job picked yet
+    // does not carry a markup that has nothing to do with a job price.
+    ...(kind === LineKind.JOB ? { markupPct: undefined } : {}),
   };
 }
 
@@ -264,10 +272,24 @@ export function newLine(): DraftLine {
  * ft" (which reads jobUnit directly — see QuotePdf.tsx) never disagree about
  * what the job is priced per; see `lineUnitLabel` in quote-totals.ts, which
  * prefers unitLabel over the rateUnit fallback.
+ *
+ * `markupPct` is explicitly cleared (not merely omitted): `unitPriceDollars`
+ * here is `a.unitCostCents`, which computeJobUnitCostCents already built
+ * WITH the job's own markup applied. `lineAmountCents` (packages/core
+ * quote/totals.ts) applies a line's `markupPct` on top of `unitPriceCents`
+ * unconditionally, with no notion of "already marked up" — so a line that
+ * still carried a markupPct from before a job was picked (e.g. round-tripped
+ * from an existing saved line, or left over from switching kind) had the
+ * job's markup applied twice. Verified: a $10,000 base at 20% job markup
+ * (unitCostCents 12000) with a leftover line markupPct of 15 produced
+ * afterMarkupCents 13800, not 12000, before this fix.
  */
 function jobPatch(
   a: Job,
-): Pick<DraftLine, "description" | "unitPriceDollars" | "unitLabel" | "jobId" | "jobName" | "jobUnit" | "jobComponents"> {
+): Pick<
+  DraftLine,
+  "description" | "unitPriceDollars" | "unitLabel" | "jobId" | "jobName" | "jobUnit" | "jobComponents" | "markupPct"
+> {
   return {
     description: a.name,
     unitPriceDollars: fromCents(a.unitCostCents),
@@ -282,6 +304,7 @@ function jobPatch(
       unitLabel: c.unitLabel,
       unitPriceCents: c.unitPriceCents,
     })),
+    markupPct: undefined,
   };
 }
 
