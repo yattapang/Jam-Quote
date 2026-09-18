@@ -18,6 +18,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const [clients, business, logo] = await Promise.all([getClients(), getBusiness(), getLogoBytes()]);
   const client = clients.find((c) => c.id === quote.clientId);
 
+  // getBusiness() can still resolve to EMPTY_BUSINESS (blank name/TRN/etc):
+  // when the API is unreachable, and in the race where it drops between the
+  // getQuote() call above and this getBusiness() call. A PDF with no business
+  // name on it is worse than refusing to render one.
+  if (!business.name.trim()) {
+    return new Response(
+      "Couldn't load your business profile, so this wasn't generated. Try again in a moment.",
+      { status: 503 },
+    );
+  }
+
   const buffer = await renderToBuffer(QuotePdf({ quote, client, business, logo: logo ?? undefined }));
 
   return new Response(new Uint8Array(buffer), {

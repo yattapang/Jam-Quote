@@ -4,6 +4,7 @@ import shared from "./shared.module.css";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import styles from "@/components/layout/CatalogLoadError.module.css";
+import { useRetry } from "@/lib/use-retry";
 
 /**
  * Fallback boundary for every app route without its own error.tsx.
@@ -20,6 +21,7 @@ import styles from "@/components/layout/CatalogLoadError.module.css";
  * text or stack trace is shown.
  */
 export default function AppError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  const { retry } = useRetry(reset);
   return (
     <div className={shared.page}>
       <Card>
@@ -34,7 +36,7 @@ export default function AppError({ reset }: { error: Error & { digest?: string }
               lost - retry in a moment.
             </span>
           </div>
-          <Button variant="secondary" onClick={reset}>
+          <Button variant="secondary" onClick={retry}>
             Retry
           </Button>
         </div>

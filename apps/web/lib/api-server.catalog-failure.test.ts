@@ -32,6 +32,7 @@ import {
   getEquipment,
   getJobs,
 } from "./api-server";
+import { resetApiReachableCacheForTests } from "./api-reachable";
 
 type Getter = () => Promise<unknown[]>;
 
@@ -66,6 +67,8 @@ function stubFetch(opts: { healthOk: boolean; mainOk?: boolean; mainStatus?: num
 describe.each(getters)("$name: catalog reachability handling", ({ run }) => {
   beforeEach(() => {
     redirectSpy.mockClear();
+    // See lib/api-server.load-failure.test.ts's beforeEach for why.
+    resetApiReachableCacheForTests();
   });
   afterEach(() => {
     vi.unstubAllGlobals();

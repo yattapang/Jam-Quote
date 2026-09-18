@@ -46,6 +46,19 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return Response.json({ error: "This client has no email address on file." }, { status: 400 });
   }
 
+  // getBusiness() can still resolve to EMPTY_BUSINESS (blank name/TRN/etc):
+  // when the API is unreachable, and in the race where it drops between the
+  // getQuote() call above and this getBusiness() call. Sending a quote with
+  // no business name on it — or in the "from" line below — is worse than not
+  // sending at all: the client has no idea who it's from, and the contractor
+  // has no way to know it went out wrong.
+  if (!business.name.trim()) {
+    return Response.json(
+      { error: "Couldn't load your business profile, so this wasn't sent. Try again in a moment." },
+      { status: 503 },
+    );
+  }
+
   const totalCents = getQuoteTotals(quote).totalCents;
   const buffer = await renderToBuffer(QuotePdf({ quote, client, business }));
 

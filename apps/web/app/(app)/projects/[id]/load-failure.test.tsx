@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * The project page's Quotes card is secondary to the job itself: a failed
@@ -46,7 +47,7 @@ beforeEach(() => {
 
 describe("project detail: quotes card", () => {
   it("shows 'couldn't load' instead of 'No quotes for this project yet'", async () => {
-    api.getQuotes.mockRejectedValue(new Error("500"));
+    api.getQuotes.mockRejectedValue(new ApiError("500", 500));
     render(await JobDetailPage({ params: { id: "p1" } }));
     expect(screen.getByRole("heading", { name: "Roof job" })).toBeInTheDocument();
     expect(screen.getByText(/Couldn't load this job's quotes/i)).toBeInTheDocument();
@@ -55,7 +56,7 @@ describe("project detail: quotes card", () => {
 
   it("the job's costs (primary data) failing still throws to the error boundary", async () => {
     api.getQuotes.mockResolvedValue([]);
-    api.getPurchases.mockRejectedValue(new Error("500"));
+    api.getPurchases.mockRejectedValue(new ApiError("500", 500));
     await expect(JobDetailPage({ params: { id: "p1" } })).rejects.toThrow("500");
   });
 });

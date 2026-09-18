@@ -19,7 +19,6 @@ import type { JobProfit } from "@jamquote/core";
 import {
   API_BASE_URL,
   ApiError,
-  checkApiReachable,
   mapJob,
   mapBusiness,
   mapClient,
@@ -61,6 +60,7 @@ import type { ProjectSummary, ProjectDetail } from "./mock-data";
 import type { InvoiceStatus, ProjectStage, ReportsSummary } from "@jamquote/core";
 import { PROJECT_STAGES } from "@jamquote/core";
 import { IMPERSONATION_COOKIE } from "./session";
+import { getApiReachable } from "./api-reachable";
 
 const TOKEN_COOKIE = "jamquote_token";
 
@@ -187,7 +187,7 @@ function redirectOnAuthError(err: unknown): void {
  */
 async function emptyOnlyIfUnreachable<T>(err: unknown, label: string, empty: T): Promise<T> {
   redirectOnAuthError(err);
-  if (await checkApiReachable()) {
+  if (await getApiReachable()) {
     throw err;
   }
   console.warn(`[api-server] ${label}: API unreachable, using empty value`);

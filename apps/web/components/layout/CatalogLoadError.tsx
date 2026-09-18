@@ -3,6 +3,7 @@
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import styles from "./CatalogLoadError.module.css";
+import { useRetry } from "@/lib/use-retry";
 
 /**
  * Rendered by the catalog route error.tsx boundaries (materials, labour,
@@ -19,6 +20,7 @@ import styles from "./CatalogLoadError.module.css";
  * render `error.message`.
  */
 export default function CatalogLoadError({ label, reset }: { label: string; reset: () => void }) {
+  const { retry } = useRetry(reset);
   return (
     <Card>
       <div className={styles.wrap} role="alert">
@@ -32,7 +34,7 @@ export default function CatalogLoadError({ label, reset }: { label: string; rese
             there — retry instead of re-adding them.
           </span>
         </div>
-        <Button variant="secondary" onClick={reset}>
+        <Button variant="secondary" onClick={retry}>
           Retry
         </Button>
       </div>

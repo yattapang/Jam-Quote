@@ -45,6 +45,7 @@ import {
   getBillingPlans,
   getBillingStatus,
 } from "./api-server";
+import { resetApiReachableCacheForTests } from "./api-reachable";
 
 type Reply = { status: number; body?: unknown } | "network";
 
@@ -76,6 +77,11 @@ const allNetwork = () => "network" as const;
 
 beforeEach(() => {
   redirectSpy.mockClear();
+  // Each `it()` below stubs its own reachability answer; getApiReachable()
+  // memoises one answer per request in the real app (a fresh React cache()
+  // scope per request), which under Vitest means per test file instead —
+  // reset it so consecutive cases don't see a stale, previous case's answer.
+  resetApiReachableCacheForTests();
 });
 afterEach(() => vi.unstubAllGlobals());
 

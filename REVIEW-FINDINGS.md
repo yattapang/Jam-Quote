@@ -403,6 +403,22 @@ fields carry `PASSWORD_MAX_LENGTH` (I added the mobile one myself - the agent st
   (purchase-category suggestions, project profit which already says so, billing plans).
   57 table-driven tests; I planted "every API error is not found" and 12 tests failed.
   Open: the email routes still fall back to a blank business when the API is asleep.
+- **Review of 91de675/9eada2b, all five fixed (2026-09-18):**
+  - HIGH - **Retry did nothing**: Next 14's `reset` only re-renders the cached payload,
+    so the error came straight back. Both boundaries now share `useRetry`
+    (`router.refresh()` then `reset()`); the tests had only asserted `reset` was called.
+  - One reachability probe per request (`getApiReachable`, React `cache`), shared by the
+    layout and the helper, so the asleep banner and "server is up but this failed" can
+    no longer both show, and six failing getters probe once. **I changed the agent's
+    fallback:** where `cache` is missing it memoised for the life of the process, which
+    would freeze the first answer - an API asleep at boot would show the banner until a
+    restart. It now calls through; the dedup tests inject a per-test `cache`.
+  - `softLoad` rethrows programming errors; it absorbs only `ApiError` and a fetch
+    network failure.
+  - Email and PDF routes refuse with 503 "Couldn't load your business profile" when the
+    business name is blank, so the "blank business" item above is now closed.
+  - I planted: the per-request cache bypassed (3 tests fail), `router.refresh()` removed
+    (2 fail). Gate green, `next build` compiles.
 - Was queued (design gap, not a regression): `DemoDataBanner` shows only when the whole
   API is unreachable. If one endpoint returns 500 while the API is up, a catalog list is
   empty with no banner, and a contractor may create duplicate items. Needs its own error

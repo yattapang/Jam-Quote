@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * The dashboard's side widgets (regulatory card, client names on quote rows,
@@ -41,7 +42,7 @@ beforeEach(() => {
 
 describe("dashboard side widgets", () => {
   it("shows 'couldn't load' for the regulatory card instead of 'No regulatory updates'", async () => {
-    api.getRegulatoryUpdates.mockRejectedValue(new Error("500"));
+    api.getRegulatoryUpdates.mockRejectedValue(new ApiError("500", 500));
     render(await DashboardPage());
     expect(screen.getByText(/Couldn't load regulatory updates/i)).toBeInTheDocument();
     expect(screen.queryByText(/No regulatory updates right now/i)).not.toBeInTheDocument();
@@ -50,20 +51,20 @@ describe("dashboard side widgets", () => {
   });
 
   it("says client names couldn't load rather than 'Unknown client'", async () => {
-    api.getClients.mockRejectedValue(new Error("500"));
+    api.getClients.mockRejectedValue(new ApiError("500", 500));
     render(await DashboardPage());
     expect(screen.getAllByText(/Client name couldn't load/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Unknown client/i)).not.toBeInTheDocument();
   });
 
   it("says the business name couldn't load", async () => {
-    api.getBusiness.mockRejectedValue(new Error("500"));
+    api.getBusiness.mockRejectedValue(new ApiError("500", 500));
     render(await DashboardPage());
     expect(screen.getByText(/Business name couldn't load/i)).toBeInTheDocument();
   });
 
   it("the page's primary data (quotes) failing still throws to the error boundary", async () => {
-    api.getQuotes.mockRejectedValue(new Error("500"));
+    api.getQuotes.mockRejectedValue(new ApiError("500", 500));
     await expect(DashboardPage()).rejects.toThrow("500");
   });
 

@@ -66,6 +66,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     return Response.json({ error: "This client has no email address on file." }, { status: 400 });
   }
 
+  // getBusiness() can still resolve to EMPTY_BUSINESS (blank name/TRN/etc):
+  // when the API is unreachable, and in the race where it drops between the
+  // getInvoice() call above and this getBusiness() call. Sending an invoice
+  // with no business name on it is worse than not sending at all.
+  if (!business.name.trim()) {
+    return Response.json(
+      { error: "Couldn't load your business profile, so this wasn't sent. Try again in a moment." },
+      { status: 503 },
+    );
+  }
+
   // The email must ask for what is DUE NOW — not the total, and not the total
   // less payments. Retention is money the client keeps under the terms, so asking
   // for it demands what the contract says they may withhold. This figure is

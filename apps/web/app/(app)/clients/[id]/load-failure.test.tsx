@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * The client page's Quotes section is secondary to the client record: a
@@ -21,7 +22,7 @@ beforeEach(() => {
 
 describe("client detail: quotes section", () => {
   it("shows 'couldn't load' instead of 'No quotes for this client yet'", async () => {
-    api.getQuotes.mockRejectedValue(new Error("500"));
+    api.getQuotes.mockRejectedValue(new ApiError("500", 500));
     render(await ClientDetailPage({ params: { id: "c1" } }));
     expect(screen.getByRole("heading", { name: "Marcia Brown" })).toBeInTheDocument();
     expect(screen.getByText(/Couldn't load this client's quotes/i)).toBeInTheDocument();
