@@ -21,6 +21,7 @@ import {
   publicQuoteWire,
   lineAmountCents,
   startOfJamaicaDayMs,
+  newDocumentGctRatePct,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
@@ -383,7 +384,8 @@ export class QuotesService {
     // silently charge GCT the business isn't registered to collect. This only
     // applies at creation — update() below never re-derives the rate from the
     // business's registration status.
-    const gctRatePct = input.gctRatePct ?? (business.gctRegistered ? Number(business.defaultGctRate) : 0);
+    const gctRatePct = input.gctRatePct ??
+      newDocumentGctRatePct({ gctRegistered: business.gctRegistered, defaultGctRatePct: business.defaultGctRate.toString() });
     const discountPct = input.discountPct ?? 0;
     const depositCents = input.depositCents ?? 0;
     const detailLevel = input.detailLevel ?? QuoteDetailLevel.SUMMARY;

@@ -3,6 +3,7 @@ export * from "./types/enums.js";
 export * from "./types/input-bounds.js";
 export * from "./types/validators.js";
 export * from "./tax/money.js";
+export * from "./tax/gct-default.js";
 export * from "./quote/totals.js";
 export * from "./quote/job.js";
 export * from "./quote/coverage.js";

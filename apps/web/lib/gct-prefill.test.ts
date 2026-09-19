@@ -16,11 +16,13 @@ describe("newDocumentGctPrefill", () => {
     expect(newDocumentGctPrefill({ gctRegistered: true, defaultGctRatePct: 12.5 })).toBe(12.5);
   });
 
-  it("falls back to 15 for a registered business with an unreadable default", () => {
-    expect(newDocumentGctPrefill({ gctRegistered: true, defaultGctRatePct: NaN })).toBe(15);
+  it("agrees with the API for a registered business with an unreadable default: 0, not a guessed rate", () => {
+    // This web copy used to fall back to a hardcoded 15 while the API produced NaN - the
+    // twin had already drifted. Both now call core's newDocumentGctRatePct.
+    expect(newDocumentGctPrefill({ gctRegistered: true, defaultGctRatePct: NaN })).toBe(0);
   });
 
-  it("never falls back to 15 for an unregistered business, even with an unreadable default", () => {
+  it("starts an unregistered business at 0, even with an unreadable default", () => {
     expect(newDocumentGctPrefill({ gctRegistered: false, defaultGctRatePct: NaN })).toBe(0);
   });
 });

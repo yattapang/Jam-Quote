@@ -365,7 +365,11 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
   a non-blocking warning shows when a document charges GCT while the business is not
   registered. Signup still stores the rule-pack rate, so ticking "registered" later
   restores it without re-entry. I planted the old default: the quote tests fail.
-  Residue: the web prefill helper restates the API's rule - a twin to fold into core.
+  Residue FOLDED into core the same day: `newDocumentGctRatePct` is the one copy, used by
+  both services and the web prefill. The twin had ALREADY drifted - the web fell back to
+  a hardcoded 15% where the API produced NaN; both now start an unreadable default at 0.
+  Planting the core rule broke the core test AND the API quote test, proving the API
+  really spends it.
   Was: **OPEN, needs the owner - GCT is CHARGED regardless of registration:** every business
   gets the rule pack's 15% default at signup, and quotes/invoices use it, so an
   unregistered sole trader bills clients GCT unless they zero the rate themselves.

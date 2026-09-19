@@ -1,3 +1,4 @@
+import { newDocumentGctRatePct } from "@jamquote/core";
 import type { Business } from "./types";
 
 /**
@@ -14,6 +15,9 @@ import type { Business } from "./types";
  * fallback), same as the pre-existing fallback behaviour.
  */
 export function newDocumentGctPrefill(business: Pick<Business, "gctRegistered" | "defaultGctRatePct">): number {
-  if (!business.gctRegistered) return 0;
-  return Number.isFinite(business.defaultGctRatePct) ? business.defaultGctRatePct : 15;
+  // The rule lives once, in core, and the API applies the same function on create.
+  return newDocumentGctRatePct({
+    gctRegistered: business.gctRegistered === true,
+    defaultGctRatePct: business.defaultGctRatePct,
+  });
 }
