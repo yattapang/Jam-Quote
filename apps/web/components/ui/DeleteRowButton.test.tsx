@@ -7,9 +7,9 @@ import userEvent from "@testing-library/user-event";
  * The delete affordance, and the message it gives when the API says no.
  *
  * The owner met this trying to delete a quote: the API had answered *"Only DRAFT
- * quotes can be deleted"* — a deliberate business rule — and the app replied
- * *"Couldn't delete — is the API running?"*, sending them to check a server that
- * had answered them perfectly well.
+ * quotes can be deleted"* — a deliberate business rule — and the app replied with
+ * a generic connection fallback, sending them to check a server that had
+ * answered them perfectly well.
  *
  * The cause was a bare `catch {}` that discarded the error. Eleven screens share
  * this component, so the same wrong answer was waiting on every one of them.
@@ -141,10 +141,10 @@ describe("DeleteRowButton — what it says when the API refuses", () => {
     await confirmDelete(user);
 
     await screen.findByText(/only draft quotes/i);
-    expect(screen.queryByText(/is the api running/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/check your connection/i)).not.toBeInTheDocument();
   });
 
-  it("DOES blame the network when the fetch never completed", async () => {
+  it("DOES show the generic fallback when the fetch never completed", async () => {
     // Here the fallback is accurate, and saying so is useful. A TypeError from
     // fetch means no response arrived at all.
     deleteQuote.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -152,7 +152,7 @@ describe("DeleteRowButton — what it says when the API refuses", () => {
     await user.click(screen.getByRole("button", { name: /delete/i }));
     await confirmDelete(user);
 
-    expect(await screen.findByText(/is the api running/i)).toBeInTheDocument();
+    expect(await screen.findByText(/check your connection/i)).toBeInTheDocument();
   });
 
   it("leaves the row in place when the delete failed", async () => {

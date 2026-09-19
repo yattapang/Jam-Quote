@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BOUNDS, formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
 import { lineUnitLabel } from "@/lib/quote-totals";
@@ -62,6 +62,10 @@ export default function ProjectCosts({
 
   const [removingPurchaseId, setRemovingPurchaseId] = useState<string | null>(null);
   const [removingLabourId, setRemovingLabourId] = useState<string | null>(null);
+  // The disabled prop alone does not stop a fast double click: both clicks can run
+  // before React re-renders the button as disabled, sending two deletes. A ref is
+  // updated synchronously, so the second click sees the first is already in flight.
+  const removingRef = useRef(new Set<string>());
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -210,7 +214,9 @@ export default function ProjectCosts({
                   size="sm"
                   disabled={removingPurchaseId === p.id}
                   onClick={async () => {
+                    if (removingRef.current.has(`purchase:${p.id}`)) return;
                     if (!window.confirm(`Remove "${p.description}"?`)) return;
+                    removingRef.current.add(`purchase:${p.id}`);
                     setRemovingPurchaseId(p.id);
                     setError(null);
                     try {
@@ -219,6 +225,7 @@ export default function ProjectCosts({
                     } catch (err) {
                       setError(err instanceof Error ? err.message : "Couldn't remove that.");
                     } finally {
+                      removingRef.current.delete(`purchase:${p.id}`);
                       setRemovingPurchaseId(null);
                     }
                   }}
@@ -270,7 +277,9 @@ export default function ProjectCosts({
                     size="sm"
                     disabled={removingLabourId === l.id}
                     onClick={async () => {
-                      if (!window.confirm(`Remove "${l.description}"?`)) return;
+                      if (removingRef.current.has(`labour:${l.id}`)) return;
+                    if (!window.confirm(`Remove "${l.description}"?`)) return;
+                    removingRef.current.add(`labour:${l.id}`);
                       setRemovingLabourId(l.id);
                       setError(null);
                       try {
@@ -279,6 +288,7 @@ export default function ProjectCosts({
                       } catch (err) {
                         setError(err instanceof Error ? err.message : "Couldn't remove that.");
                       } finally {
+                        removingRef.current.delete(`labour:${l.id}`);
                         setRemovingLabourId(null);
                       }
                     }}

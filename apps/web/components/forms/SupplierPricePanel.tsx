@@ -77,7 +77,7 @@ export default function SupplierPricePanel({
     } catch (err) {
       // Inline, never thrown: this panel sits beside a working edit form, and
       // a price lookup failing must not take that form down with it.
-      setError(errorMessage(err, "Couldn't load supplier prices — is the API running?"));
+      setError(errorMessage(err, "Couldn't load supplier prices — check your connection and try again."));
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,7 @@ export default function SupplierPricePanel({
       await deleteMaterialPrice(id);
       await load();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't remove that price — is the API running?"));
+      setError(errorMessage(err, "Couldn't remove that price — check your connection and try again."));
     } finally {
       setRemovingId("");
     }
@@ -143,7 +143,7 @@ export default function SupplierPricePanel({
       // canonical one, and another tab may have added suppliers since.
       void loadSuppliers();
     } catch (err) {
-      setAddError(errorMessage(err, "Couldn't add that supplier — is the API running?"));
+      setAddError(errorMessage(err, "Couldn't add that supplier — check your connection and try again."));
     } finally {
       setAddingBusy(false);
     }
@@ -168,7 +168,7 @@ export default function SupplierPricePanel({
       setNote("");
       await load();
     } catch (err) {
-      setFormError(errorMessage(err, "Couldn't record that price — is the API running?"));
+      setFormError(errorMessage(err, "Couldn't record that price — check your connection and try again."));
     } finally {
       setSaving(false);
     }

@@ -716,7 +716,7 @@ export default function LineItemsEditor({
         onLinesChange((ls) => ls.map((l) => (l.key === key ? { ...l, materialFavouriteId: created.id } : l)));
       }
     } catch (err) {
-      setFavError(errorMessage(err, "Couldn't save the material — is the API running?"));
+      setFavError(errorMessage(err, "Couldn't save the material — check your connection and try again."));
     } finally {
       setSavingFavKey(null);
     }
@@ -961,7 +961,7 @@ export default function LineItemsEditor({
           <InlineAddRow
             label="New unit"
             placeholder="e.g. per pallet"
-            errorText="Couldn't add that unit — is the API running?"
+            errorText="Couldn't add that unit — check your connection and try again."
             // Says it out loud, because a contractor who cannot type ² assumes
             // the unit simply is not available and writes "sqm" on the client's
             // quote instead.

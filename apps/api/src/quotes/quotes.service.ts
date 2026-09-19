@@ -499,22 +499,12 @@ export class QuotesService {
   }
 
   /**
-   * Resolve a public share token — NO businessId, because the token IS the
-   * authorisation. Deliberately the only unscoped read in this service.
-   *
-   * Also records the first view, which is what finally makes
-   * `QuoteStatus.VIEWED` reachable: the enum, its allowed transitions and the
-   * expiry sweep all referenced it, but nothing in the app could ever set it.
-   *
-   * Only DRAFT is refused. A draft has not been sent to anyone, so a link to
-   * one would expose a figure the contractor is still working on.
-   */
-  /**
    * Resolve ONLY the businessId behind a share token, for the public logo
    * route. Same draft/unknown-token collapse as findByShareToken — a wrong
-   * token and a draft's token must be indistinguishable, or the 404 vs "no
-   * logo" split would leak which tokens are real. Never returns anything
-   * about the quote itself; the logo route has no other use for this.
+   * token and a draft's token must return the identical not-found message, or
+   * the 404 vs "no logo" split would leak which tokens are real. Never
+   * returns anything about the quote itself; the logo route has no other use
+   * for this.
    */
   async resolveBusinessIdByShareToken(token: string): Promise<string> {
     const quote = await this.prisma.quote.findFirst({
@@ -527,6 +517,17 @@ export class QuotesService {
     return quote.businessId;
   }
 
+  /**
+   * Resolve a public share token — NO businessId, because the token IS the
+   * authorisation. Deliberately the only unscoped read in this service.
+   *
+   * Also records the first view, which is what finally makes
+   * `QuoteStatus.VIEWED` reachable: the enum, its allowed transitions and the
+   * expiry sweep all referenced it, but nothing in the app could ever set it.
+   *
+   * Only DRAFT is refused. A draft has not been sent to anyone, so a link to
+   * one would expose a figure the contractor is still working on.
+   */
   async findByShareToken(token: string): Promise<PublicQuoteView> {
     const quote = await this.prisma.quote.findFirst({
       where: { shareToken: token, deletedAt: null },

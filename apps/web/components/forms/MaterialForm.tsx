@@ -402,7 +402,7 @@ export default function MaterialForm({
         category,
       );
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save — is the API running?"));
+      setError(errorMessage(err, "Couldn't save — check your connection and try again."));
       setSaving(false);
       onBusyChange?.(false);
     }
@@ -433,7 +433,7 @@ export default function MaterialForm({
         <InlineAddRow
           label="New category"
           placeholder="e.g. Rebar"
-          errorText="Couldn't add that category — is the API running?"
+          errorText="Couldn't add that category — check your connection and try again."
           onAdd={addCategory}
           onCancel={() => setAddingCategory(false)}
         />
@@ -539,7 +539,7 @@ export default function MaterialForm({
         <InlineAddRow
           label="New unit"
           placeholder="e.g. per pallet"
-          errorText="Couldn't add that unit — is the API running?"
+          errorText="Couldn't add that unit — check your connection and try again."
           onAdd={addUnit}
           onCancel={() => setAddingUnit(false)}
         />
@@ -667,8 +667,8 @@ export function InlineAddRow({
     } catch (err) {
       // The caller's `errorText` is the FALLBACK, not the answer. When the API
       // declined with a reason - a duplicate name, a validation rule - that
-      // reason is what the contractor needs; "is the API running?" sends them
-      // to check a server that answered them perfectly well.
+      // reason is what the contractor needs; the generic connection fallback
+      // sends them to check a connection that answered them perfectly well.
       setError(errorMessage(err, errorText));
       setBusy(false);
     }

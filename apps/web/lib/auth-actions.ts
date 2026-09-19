@@ -39,7 +39,7 @@ async function authenticate(
     if (!res.ok) return { ok: false, error: messageFrom(data) };
     return { ok: true, token: (data as { token: string }).token };
   } catch {
-    return { ok: false, error: "Couldn't reach the server. Is the API running?" };
+    return { ok: false, error: "Couldn't reach the server — check your connection and try again." };
   }
 }
 
@@ -130,7 +130,7 @@ export async function adminLogin(
     data = (await res.json().catch(() => ({}))) as typeof data;
     if (!res.ok) return { error: messageFrom(data) };
   } catch {
-    return { error: "Couldn't reach the server. Is the API running?" };
+    return { error: "Couldn't reach the server — check your connection and try again." };
   }
 
   if (data.user?.role !== "ADMIN") {
@@ -180,7 +180,7 @@ export async function forgotPasswordAction(
     });
     return { submitted: true };
   } catch {
-    return { error: "Couldn't reach the server. Is the API running?" };
+    return { error: "Couldn't reach the server — check your connection and try again." };
   }
 }
 
@@ -209,7 +209,7 @@ export async function resetPasswordAction(
       return { error: messageFrom(data) };
     }
   } catch {
-    return { error: "Couldn't reach the server. Is the API running?" };
+    return { error: "Couldn't reach the server — check your connection and try again." };
   }
 
   redirect("/login?reset=success");

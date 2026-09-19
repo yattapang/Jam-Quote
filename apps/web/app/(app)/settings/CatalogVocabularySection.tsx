@@ -118,7 +118,7 @@ export default function CatalogVocabularySection({
       // exactly like the hide/restore having silently failed.
       invalidateMaterialSchema();
     } catch (err) {
-      setError(errorMessage(err, "Couldn't update that — is the API running?"));
+      setError(errorMessage(err, "Couldn't update that — check your connection and try again."));
     } finally {
       setBusyKeys((prev) => {
         const next = new Set(prev);

@@ -70,9 +70,9 @@ export default function DeleteRowButton({
       // The API's OWN message, when it sent one. This used to be a bare catch
       // that discarded the error and guessed at the cause, so a deliberate
       // rule — "Only DRAFT quotes can be deleted" — reached the contractor as
-      // "is the API running?", sending them to check infrastructure over a
-      // business rule. Reporting the wrong cause is worse than reporting none.
-      setError(errorMessage(err, "Couldn't delete — is the API running?"));
+      // the generic connection fallback, sending them to check infrastructure
+      // over a business rule. Reporting the wrong cause is worse than reporting none.
+      setError(errorMessage(err, "Couldn't delete — check your connection and try again."));
     } finally {
       setSaving(false);
     }

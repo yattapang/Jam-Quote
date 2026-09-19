@@ -333,7 +333,7 @@ export default function QuoteBuilder({
         setError(
           errorMessage(
             err,
-            isEdit ? "Couldn't save changes — is the API running?" : "Couldn't save the quote — is the API running?",
+            isEdit ? "Couldn't save changes — check your connection and try again." : "Couldn't save the quote — check your connection and try again.",
           ),
         );
         setLimitReached(false);

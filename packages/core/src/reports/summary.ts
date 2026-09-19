@@ -171,6 +171,30 @@ export function startOfJamaicaDayMs(ms: number): number {
   return dayStart - JAMAICA_UTC_OFFSET_MS;
 }
 
+/**
+ * The ONE date-label formatter for a quote/invoice date shown to a human —
+ * on the web app pages, the emailed PDF, and the public share pages. All
+ * three used to call `toLocaleDateString` with no `timeZone`, which resolves
+ * to the server or browser's OWN zone. A UTC-midnight date (as stored) then
+ * renders as the day BEFORE in any zone west of UTC, including whichever
+ * zone Vercel or the visitor's browser happens to be in — this is not
+ * theoretical, it silently shifted `validUntilLabel`/`dueDateLabel` by a day.
+ *
+ * Fixed to `America/Jamaica` (UTC-5, no DST — see JAMAICA_UTC_OFFSET_MS
+ * above) so the label is the same no matter where the API, the web server,
+ * or the reader's browser happens to run.
+ */
+export function formatJamaicaDateLabel(iso: string, prefix = ""): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const formatted = new Intl.DateTimeFormat("en-JM", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/Jamaica",
+  }).format(d);
+  return `${prefix}${formatted}`;
+}
+
 /** Compute every headline number the Reports page shows, from raw rows. */
 export function computeReportsSummary(
   input: {

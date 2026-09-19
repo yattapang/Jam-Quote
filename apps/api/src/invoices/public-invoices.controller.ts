@@ -30,11 +30,17 @@ export class PublicInvoicesController {
   async logo(@Param("token") token: string, @Res() res: Response): Promise<void> {
     const businessId = await this.invoices.resolveBusinessIdByShareToken(token);
     const row = await this.business.getLogo(businessId);
-    if (!row) throw new NotFoundException("No logo set");
+    // Same message as an unknown/draft token ("Invoice not found" from
+    // resolveBusinessIdByShareToken) — a business with no logo must not be
+    // distinguishable from a bad token by response wording.
+    if (!row) throw new NotFoundException("Invoice not found");
     res.setHeader("Content-Type", row.contentType);
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Disposition", 'inline; filename="logo"');
-    res.setHeader("Cache-Control", "public, max-age=300");
+    // Private, not public: a shared/CDN cache could otherwise keep serving a
+    // revoked link's logo for the cache lifetime after the contractor
+    // revokes it. Still cacheable by the one client holding this link.
+    res.setHeader("Cache-Control", "private, max-age=300");
     res.end(Buffer.from(row.bytes));
   }
 

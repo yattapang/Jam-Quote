@@ -74,9 +74,6 @@ export default async function SharedQuotePage({ params }: { params: { token: str
             {/* Same dateLabel() the PDF's validUntilLabel is built from (see
                 mapQuote in lib/api-client.ts), so this page and the PDF never
                 show different dates for the same quote. */}
-            {/* Same dateLabel() the PDF's validUntilLabel is built from (see
-                mapQuote in lib/api-client.ts), so this page and the PDF never
-                show different dates for the same quote. */}
             {quote.validUntil && (
               <div className={styles.muted}>{dateLabel(quote.validUntil, "Valid until ")}</div>
             )}

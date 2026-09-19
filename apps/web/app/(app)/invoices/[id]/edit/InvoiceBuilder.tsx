@@ -268,7 +268,7 @@ export default function InvoiceBuilder({
       clearDraft(storageKey);
       router.push(`/invoices/${invoiceId}`);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save changes — is the API running?"));
+      setError(errorMessage(err, "Couldn't save changes — check your connection and try again."));
       setSaving(false);
     }
   }

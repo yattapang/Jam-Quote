@@ -38,7 +38,7 @@ export default function EmailInvoiceButton({
       }
       setSent(true);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't send — is the API running?"));
+      setError(errorMessage(err, "Couldn't send — check your connection and try again."));
     } finally {
       setSending(false);
     }

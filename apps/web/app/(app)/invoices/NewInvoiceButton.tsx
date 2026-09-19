@@ -46,7 +46,7 @@ export default function NewInvoiceButton({ clients }: { clients: ClientOption[] 
       // find the Edit button themselves.
       router.push(`/invoices/${invoice.id}/edit`);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't create the invoice — is the API running?"));
+      setError(errorMessage(err, "Couldn't create the invoice — check your connection and try again."));
       setSaving(false);
     }
   }

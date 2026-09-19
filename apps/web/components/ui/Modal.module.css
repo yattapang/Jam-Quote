@@ -18,6 +18,12 @@
   border-radius: 14px;
   padding: 20px 22px 22px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  /* display:flex + order below is deliberate, not decorative: .head is kept
+     LAST in DOM order (see Modal.tsx) so the close (x) button sits at the
+     end of the natural tab sequence, after the dialog's own content, while
+     still appearing first visually via `order: -1`. */
+  display: flex;
+  flex-direction: column;
 }
 
 .cardWide {
@@ -25,6 +31,7 @@
 }
 
 .head {
+  order: -1;
   display: flex;
   align-items: center;
   justify-content: space-between;

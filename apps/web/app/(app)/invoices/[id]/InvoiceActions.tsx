@@ -31,7 +31,7 @@ export default function InvoiceActions({ id, status }: { id: string; status: Inv
       setFinalizeOpen(false);
       router.refresh();
     } catch (err) {
-      setFinalizeError(errorMessage(err, "Couldn't finalize — is the API running?"));
+      setFinalizeError(errorMessage(err, "Couldn't finalize — check your connection and try again."));
       setFinalizing(false);
     }
   }

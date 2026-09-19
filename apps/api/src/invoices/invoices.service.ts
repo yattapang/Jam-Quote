@@ -664,15 +664,6 @@ export class InvoicesService {
   }
 
   /**
-   * Resolve a public invoice token — NO businessId, because the token IS the
-   * authorisation. Mirrors findByShareToken on quotes, including the rule that
-   * a DRAFT and an unknown token are indistinguishable.
-   *
-   * Records the first view, which is the only evidence a chase actually
-   * landed: the reminder ledger records that a reminder was SENT, never that
-   * it was read.
-   */
-  /**
    * Resolve ONLY the businessId behind a share token, for the public logo
    * route. Mirrors QuotesService.resolveBusinessIdByShareToken: same
    * draft/unknown-token collapse, and no other field of the invoice is ever
@@ -689,6 +680,15 @@ export class InvoicesService {
     return invoice.businessId;
   }
 
+  /**
+   * Resolve a public invoice token — NO businessId, because the token IS the
+   * authorisation. Mirrors findByShareToken on quotes, including the rule that
+   * a DRAFT and an unknown token are indistinguishable.
+   *
+   * Records the first view, which is the only evidence a chase actually
+   * landed: the reminder ledger records that a reminder was SENT, never that
+   * it was read.
+   */
   async findByShareToken(token: string): Promise<PublicInvoiceView> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { shareToken: token, deletedAt: null },

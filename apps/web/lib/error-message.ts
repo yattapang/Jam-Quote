@@ -11,13 +11,25 @@ import { ApiError } from "@/lib/api-client";
  * message is a deliberate sentence written for the contractor: "Only DRAFT
  * quotes can be deleted", "You've reached your free plan limit for this month",
  * "from must not be after to". Any other throw is a genuine transport failure —
- * the fetch never completed — and the fallback's "is the API running?" is then
- * literally true.
+ * the fetch never completed — and the fallback is then the only honest thing
+ * to show.
+ *
+ * ## Fallback wording
+ *
+ * Every fallback passed to this helper is plain English a contractor at a
+ * client's kitchen table can act on — "Couldn't save — check your connection
+ * and try again." — never "is the API running?", a raw HTTP status, a
+ * `server error`, or a stringified `undefined`/`null`. Those are developer
+ * words describing developer infrastructure; a contractor has no server to
+ * check. Each call site keeps its own action-specific clause ("Couldn't send
+ * —", "Couldn't add that category —") ahead of the same plain closing
+ * clause, so the fallback still says what failed, just not why in developer
+ * terms.
  *
  * ## Why this exists
  *
  * Thirty-eight call sites used a bare `catch {}` that discarded the error and
- * printed "is the API running?" regardless. The owner hit it deleting a quote:
+ * printed a developer-facing guess regardless. The owner hit it deleting a quote:
  * the API had said *"Only DRAFT quotes can be deleted"* — a deliberate business
  * rule — and the app sent them to go and check whether their server was up.
  *

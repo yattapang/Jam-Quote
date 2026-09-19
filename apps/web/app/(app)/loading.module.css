@@ -1,0 +1,42 @@
+/* Calm skeleton, not a spinner: fixed placeholder shapes that pulse gently,
+   so a slow connection reads as "still loading" rather than "broken" without
+   drawing constant attention (see loading.tsx). Colors only from --jq-*
+   theme tokens. */
+
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bar,
+.block {
+  border-radius: 8px;
+  background: var(--jq-surface-alt);
+  animation: jq-loading-pulse 1.4s ease-in-out infinite;
+}
+
+.bar {
+  height: 16px;
+}
+
+.block {
+  height: 96px;
+}
+
+@keyframes jq-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .block {
+    animation: none;
+  }
+}

@@ -31,7 +31,7 @@ export default function BrandingSection() {
       })
       .catch((err) => {
         // A branding panel failing must not take the settings page down.
-        if (active) setError(errorMessage(err, "Couldn't check for a logo — is the API running?"));
+        if (active) setError(errorMessage(err, "Couldn't check for a logo — check your connection and try again."));
       })
       .finally(() => {
         if (active) setLoading(false);

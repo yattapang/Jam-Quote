@@ -47,7 +47,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       // The API's own message names the reason (e.g. "quote is not
       // ACCEPTED" or "already converted to an invoice") — surface it as-is
       // rather than a generic failure text.
-      setConvertError(errorMessage(err, "Couldn't convert to invoice — is the API running?"));
+      setConvertError(errorMessage(err, "Couldn't convert to invoice — check your connection and try again."));
       setConverting(false);
     }
   }
@@ -60,7 +60,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setSendOpen(false);
       router.refresh();
     } catch (err) {
-      setSendError(errorMessage(err, "Couldn't send — is the API running?"));
+      setSendError(errorMessage(err, "Couldn't send — check your connection and try again."));
     } finally {
       setSending(false);
     }
@@ -74,7 +74,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setReviseOpen(false);
       router.push(`/quotes/${newId}/edit`);
     } catch (err) {
-      setReviseError(errorMessage(err, "Couldn't create a revision — is the API running?"));
+      setReviseError(errorMessage(err, "Couldn't create a revision — check your connection and try again."));
       setRevising(false);
     }
   }
@@ -134,7 +134,7 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
       setOutcome(null);
       router.refresh();
     } catch (err) {
-      setOutcomeError(errorMessage(err, "Couldn't record that — is the API running?"));
+      setOutcomeError(errorMessage(err, "Couldn't record that — check your connection and try again."));
     } finally {
       setRecording(false);
     }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { act } from "react";
 import userEvent from "@testing-library/user-event";
 import type { ApiLabourEntry, ApiPurchase } from "@/lib/api-client";
 
@@ -22,6 +23,10 @@ vi.mock("@/lib/api-client", () => ({
 }));
 
 import ProjectCosts from "./ProjectCosts";
+
+// Rendering and driving this form with userEvent exceeds vitest's 5s default under
+// the full parallel run; it timed out intermittently. A harness limit, not behaviour.
+vi.setConfig({ testTimeout: 30_000 });
 
 function purchase(overrides: Partial<ApiPurchase> = {}): ApiPurchase {
   return {
@@ -74,6 +79,31 @@ describe("ProjectCosts — Remove purchase", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
     expect(await screen.findByText("Network down")).toBeInTheDocument();
+  });
+
+  it("sends only one delete when two clicks land before React re-renders", async () => {
+    // userEvent.dblClick yields between clicks, so React re-renders the button as
+    // disabled and a state-only guard passes. Real taps on a slow phone can both land
+    // first; firing both clicks synchronously reproduces that, and only the ref holds.
+    const { deletePurchase } = await import("@/lib/api-client");
+    vi.mocked(deletePurchase).mockReset();
+    vi.mocked(deletePurchase).mockImplementation(() => new Promise(() => {}));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(
+      <ProjectCosts
+        projectId="proj-1"
+        purchases={[purchase()]}
+        labour={[]}
+        labourRates={[]}
+        usedCategories={[]}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Remove" });
+    act(() => {
+      button.click();
+      button.click();
+    });
+    expect(deletePurchase).toHaveBeenCalledTimes(1);
   });
 
   it("sends only one delete on a double click", async () => {

@@ -130,7 +130,7 @@ export default function MaterialsListClient({ materials: initialMaterials }: { m
       })
       .catch((err) => {
         if (requestRef.current !== requestId) return;
-        setSearchError(errorMessage(err, "Couldn't search materials — is the API running?"));
+        setSearchError(errorMessage(err, "Couldn't search materials — check your connection and try again."));
         setSearching(false);
       });
   }, [debouncedQuery, filter, filterParams, initialMaterials]);

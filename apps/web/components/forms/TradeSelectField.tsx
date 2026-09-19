@@ -91,7 +91,7 @@ export default function TradeSelectField({
       onChange(created.name);
       setOpen(false);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't add that trade — is the API running?"));
+      setError(errorMessage(err, "Couldn't add that trade — check your connection and try again."));
     } finally {
       setBusy(false);
     }

@@ -15,6 +15,7 @@
 import type { RulePackPatch } from "@/lib/rulepack-patch";
 import type { Job, JobComponent, Business, Client, EquipmentItem, LabourRate, MaterialFavourite, Quote, QuoteLine, QuoteLineJobComponent } from "./types";
 import type { BusinessWire, ClientWire, EquipmentItemWire, LabourRateWire, InvoiceWire, LabourEntryWire, LineJobComponentWire, MaterialFavouriteWire, ProjectWire, PurchaseWire, QuoteLineWire, QuoteWire, JobComponentKind, InvoiceStatus, ProjectStage, PaymentMethod, QuoteDetailLevel, QuoteLineItemInput, QuoteStatus, RateUnit } from "@jamquote/core";
+import { formatJamaicaDateLabel } from "@jamquote/core";
 
 // Server-side (RSC/route handlers) reach the API directly; the browser goes
 // through the same-origin proxy so the httpOnly auth cookie is applied. Override
@@ -320,11 +321,11 @@ export function initialsOf(name: string): string {
 // Exported so the public quote/invoice pages (app/q, app/i) format dates with
 // this SAME function the PDF's validUntilLabel/dueDateLabel are built from —
 // otherwise the web page and the emailed PDF can show different dates for the
-// same quote.
+// same quote. Delegates to core's formatJamaicaDateLabel, which fixes the
+// timezone to America/Jamaica so a UTC-midnight date can't render as the day
+// before depending on where the browser or server happens to be (item 8).
 export function dateLabel(iso: string, prefix = ""): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${prefix}${d.toLocaleDateString("en-JM", { month: "short", day: "numeric" })}`;
+  return formatJamaicaDateLabel(iso, prefix);
 }
 
 export function mapClient(c: ApiClientRow): Client {
@@ -621,6 +622,7 @@ export function mapInvoice(i: ApiInvoice): Invoice {
       year: "numeric",
       month: "short",
       day: "numeric",
+      timeZone: "America/Jamaica",
     })}`,
     updatedAt: i.updatedAt,
   };

@@ -127,7 +127,7 @@ export default function ClientForm({
     try {
       await onSubmit(values);
     } catch (err) {
-      setError(errorMessage(err, "Couldn't save — is the API running?"));
+      setError(errorMessage(err, "Couldn't save — check your connection and try again."));
       setSaving(false);
       onBusyChange?.(false);
     }

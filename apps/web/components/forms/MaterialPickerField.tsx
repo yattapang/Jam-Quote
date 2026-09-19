@@ -72,7 +72,7 @@ export default function MaterialPickerField({
       })
       .catch((err) => {
         if (requestRef.current !== requestId) return;
-        setError(errorMessage(err, "Couldn't search materials — is the API running?"));
+        setError(errorMessage(err, "Couldn't search materials — check your connection and try again."));
         setLoading(false);
       });
   }, [open, debouncedQuery, category]);

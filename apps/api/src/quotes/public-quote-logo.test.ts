@@ -42,6 +42,10 @@ describe("PublicQuotesController.logo", () => {
     await controller.logo("tok_valid", res as any);
     expect(business.getLogo).toHaveBeenCalledWith("biz_1");
     expect(res.headers["Content-Type"]).toBe("image/png");
+    expect(res.headers["X-Content-Type-Options"]).toBe("nosniff");
+    // private, not public: a shared/CDN cache must not keep serving a
+    // revoked link's logo after the contractor revokes it (item 5).
+    expect(res.headers["Cache-Control"]).toBe("private, max-age=300");
     expect(res.ended?.toString()).toBe("PNGDATA");
   });
 
@@ -61,6 +65,27 @@ describe("PublicQuotesController.logo", () => {
     const { controller, res } = build({ businessId: "biz_1", status: QuoteStatus.SENT }, null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(controller.logo("tok_valid", res as any)).rejects.toThrow(NotFoundException);
+  });
+
+  it("uses the identical not-found message for an unknown token and a valid token with no logo (item 6)", async () => {
+    const unknown = build(null, null);
+    const noLogo = build({ businessId: "biz_1", status: QuoteStatus.SENT }, null);
+    let unknownMessage = "";
+    let noLogoMessage = "";
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await unknown.controller.logo("tok_wrong", unknown.res as any);
+    } catch (e) {
+      unknownMessage = (e as NotFoundException).message;
+    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await noLogo.controller.logo("tok_valid", noLogo.res as any);
+    } catch (e) {
+      noLogoMessage = (e as NotFoundException).message;
+    }
+    expect(unknownMessage).not.toBe("");
+    expect(noLogoMessage).toBe(unknownMessage);
   });
 
   it("never uses one quote's token to serve a different business's logo", async () => {

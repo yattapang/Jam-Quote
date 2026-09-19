@@ -14,8 +14,8 @@ export default function DemoDataBanner() {
         ⚠
       </span>
       <span>
-        Can&apos;t reach the server right now — screens below may show no data until it&apos;s back. On the
-        free tier the API may be waking up from sleep (up to a minute); reload the page in a moment to
+        Can&apos;t reach the server right now — screens below may show no data until it&apos;s back. The
+        server may just be waking up from sleep (up to a minute); reload the page in a moment to
         retry. Any changes you make won&apos;t be saved until it&apos;s back.
       </span>
     </div>

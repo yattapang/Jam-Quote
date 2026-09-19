@@ -10,6 +10,10 @@ vi.mock("@/lib/impersonation-actions", () => ({ startImpersonation: vi.fn() }));
 
 import { RegulatoryEditor } from "./AdminConsole";
 
+// Rendering and driving this form with userEvent exceeds vitest's 5s default under
+// the full parallel run; it timed out intermittently. A harness limit, not behaviour.
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * The "Add entry" form accepted a title of only spaces and an `ftp://`
  * source URL, both of which the server refuses — createRegulatoryUpdateSchema

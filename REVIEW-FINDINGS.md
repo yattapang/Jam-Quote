@@ -377,7 +377,22 @@ Plan, in order:
 2. Mobile and touch - DONE. The line grid stacks by the editor's own width (container
    query), 44px targets under coarse pointers, modal rows stack below 420px, the closed
    drawer is inert with `aria-current` on the active link.
-3. Modal, loading state, plain-English errors, one confirm pattern - objective.
+3. Modal, loading state, plain-English errors - DONE 2026-09-19 (delete-confirm pattern
+   and "Saved" feedback still to do). The Modal gained Escape, a focus trap, focus return,
+   `role="dialog"`/`aria-modal`/`aria-labelledby`, and no longer closes on a backdrop click
+   (opt-in only); nested modals act on the top one, resolved by DOM containment because
+   React commits the inner effect first. `app/(app)/loading.tsx` added. "is the API
+   running?" replaced in every contractor-facing site, guarded by a parser-based test.
+   Review follow-ups for fd7d9c8: the theme guard now catches template-built names,
+   ignores comments and conditional-only declarations (admin light/dark pair handled),
+   logo headers asserted and `Cache-Control: private`, one not-found message, and a
+   Jamaica-zoned date formatter in core shared by the web page and the PDF.
+   **Real bug found while gating:** a double tap on "Remove" in project costs could send
+   two deletes - the busy state disables the button only after React re-renders, and two
+   fast taps both land first. The existing test used userEvent.dblClick, which yields
+   between clicks, so it could never see it. Fixed with a synchronous ref; the new test
+   fires both clicks before a render and fails without the ref. **Open:** other forms that
+   rely on `disabled={saving}` alone likely share this race - sweep queued.
 4. Client-facing documents - DONE (owner chose 4a, green accept). Brand palette forced
    light on /q and /i (all text and buttons AA), the business logo served by a
    share-token-scoped route that 404s like the document reads, PDF-identical dates, and
