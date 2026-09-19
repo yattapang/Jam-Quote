@@ -6,6 +6,7 @@ import { QuoteStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { setQuoteStatus } from "@/lib/api-client";
+import { useToast } from "@/components/ui/ToastProvider";
 
 import { errorMessage } from "@/lib/error-message";
 interface EmailQuoteButtonProps {
@@ -45,6 +46,7 @@ export interface EmailQuoteButtonHandle {
 const EmailQuoteButton = forwardRef<EmailQuoteButtonHandle, EmailQuoteButtonProps>(
   function EmailQuoteButton({ quoteId, clientEmail, status, unavailableReason }, ref) {
     const router = useRouter();
+    const { showToast } = useToast();
     const hasEmail = Boolean(clientEmail && clientEmail.trim());
     const [open, setOpen] = useState(false);
     const [sending, setSending] = useState(false);
@@ -63,6 +65,7 @@ const EmailQuoteButton = forwardRef<EmailQuoteButtonHandle, EmailQuoteButtonProp
           return;
         }
         setSent(true);
+        showToast("Quote emailed");
 
         // Only AFTER a confirmed send. Marking a quote sent when the email
         // failed would tell the contractor their customer has it when nobody

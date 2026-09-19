@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/ToastProvider";
 import TradeSelectField from "@/components/forms/TradeSelectField";
 import { updateBusiness, type Trade } from "@/lib/api-client";
 import { BOUNDS, PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
@@ -33,6 +34,7 @@ export default function EditBusinessButton({
   trades?: Trade[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(business.name);
   // Held in the DISPLAY form. The API strips punctuation on the way in
@@ -77,6 +79,7 @@ export default function EditBusinessButton({
         billingContactName: billingName.trim(),
         billingContactEmail: billingEmail.trim(),
       });
+      showToast("Business settings saved");
       setOpen(false);
       router.refresh();
     } catch (err) {

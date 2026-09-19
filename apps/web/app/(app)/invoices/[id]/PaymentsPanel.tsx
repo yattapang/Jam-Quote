@@ -11,6 +11,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import MoneyText from "@/components/ui/MoneyText";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { recordManualPayment, voidPayment, type InvoicePayment } from "@/lib/api-client";
+import { useToast } from "@/components/ui/ToastProvider";
 import { useSingleFlight } from "@/lib/use-single-flight";
 import styles from "./PaymentsPanel.module.css";
 
@@ -54,6 +55,7 @@ export default function PaymentsPanel({
   payments: InvoicePayment[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [amountDollars, setAmountDollars] = useState("");
   const [method, setMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
@@ -98,6 +100,7 @@ export default function PaymentsPanel({
         paidAt: paidAt || undefined,
       });
       setOpen(false);
+      showToast("Payment recorded");
       // The server re-derives paidCents and the PAID/PARTIAL status, so re-read
       // rather than patching local state and risking a different answer.
       router.refresh();

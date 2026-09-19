@@ -11,6 +11,7 @@ import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import AlertBanner from "@/components/layout/AlertBanner";
 import { createQuote, updateQuote, ApiError, type Trade } from "@/lib/api-client";
+import { useToast } from "@/components/ui/ToastProvider";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
@@ -139,6 +140,7 @@ export default function QuoteBuilder({
   gctRegistered?: boolean;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const isEdit = mode === "edit" && !!quoteId;
   const backHref = isEdit ? `/quotes/${quoteId}` : "/quotes";
   const [clientId, setClientId] = useState(initial?.clientId ?? "");
@@ -320,6 +322,7 @@ export default function QuoteBuilder({
       // The quote exists on the server now, so the local copy is no longer a
       // safety net — leaving it would offer to "restore" work already saved.
       clearDraft(storageKey);
+      showToast("Quote saved");
       router.push(`/quotes/${id}`);
     } catch (err) {
       // Free-plan quote limit: the API returns 402 with

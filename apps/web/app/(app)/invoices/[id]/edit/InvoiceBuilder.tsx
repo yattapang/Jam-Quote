@@ -9,6 +9,7 @@ import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
 import AlertBanner from "@/components/layout/AlertBanner";
 import { updateInvoice, type Trade } from "@/lib/api-client";
+import { useToast } from "@/components/ui/ToastProvider";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
@@ -115,6 +116,7 @@ export default function InvoiceBuilder({
   gctRegistered?: boolean;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const backHref = `/invoices/${invoiceId}`;
 
   const [clientId, setClientId] = useState(initial.clientId ?? "");
@@ -266,6 +268,7 @@ export default function InvoiceBuilder({
       // Saved to the server, so the local copy would only ever offer to
       // "restore" work that is already safely stored.
       clearDraft(storageKey);
+      showToast("Invoice saved");
       router.push(`/invoices/${invoiceId}`);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save changes — check your connection and try again."));

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastProvider";
 import Modal from "@/components/ui/Modal";
 import { createProject } from "@/lib/api-client";
 import ProjectForm, { projectPayloadFromValues, type ProjectFormValues } from "@/components/forms/ProjectForm";
@@ -10,11 +11,13 @@ import type { ClientOption } from "@/components/forms/types";
 
 export default function AddProjectButton({ clients }: { clients: ClientOption[] }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: ProjectFormValues) {
     await createProject(projectPayloadFromValues(values));
+    showToast("Project saved");
     setOpen(false);
     router.refresh();
   }

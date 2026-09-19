@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/ToastProvider";
 import { createMaterialFavourite, type ApiMaterialCategory } from "@/lib/api-client";
 import MaterialForm, { materialPayloadFromValues, type MaterialFormValues } from "@/components/forms/MaterialForm";
 import { invalidateMaterialSchema } from "@/lib/use-material-schema";
 
 export default function AddMaterialButton() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -18,6 +20,7 @@ export default function AddMaterialButton() {
     // A new spec value becomes this business's own option server-side, so the
     // cached schema is stale until we drop it.
     invalidateMaterialSchema();
+    showToast("Material saved");
     setOpen(false);
     router.refresh();
   }

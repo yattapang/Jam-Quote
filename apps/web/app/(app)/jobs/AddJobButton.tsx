@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastProvider";
 import Modal from "@/components/ui/Modal";
 import { createJob, type Trade } from "@/lib/api-client";
 import JobForm, { jobPayloadFromValues, type JobFormValues } from "@/components/forms/JobForm";
@@ -20,11 +21,13 @@ export default function AddJobButton({
   equipment: EquipmentItem[];
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: JobFormValues) {
     await createJob(jobPayloadFromValues(values));
+    showToast("Job type saved");
     setOpen(false);
     router.refresh();
   }

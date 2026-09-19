@@ -3,17 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastProvider";
 import Modal from "@/components/ui/Modal";
 import { createClient } from "@/lib/api-client";
 import ClientForm, { clientPayloadFromValues, type ClientFormValues } from "@/components/forms/ClientForm";
 
 export default function AddClientButton() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: ClientFormValues) {
     await createClient(clientPayloadFromValues(values));
+    showToast("Client saved");
     setOpen(false);
     router.refresh();
   }

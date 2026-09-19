@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
+import { useToast } from "@/components/ui/ToastProvider";
 import Modal from "@/components/ui/Modal";
 import { createLabourRate, type Trade } from "@/lib/api-client";
 import LabourRateForm, {
@@ -12,11 +13,13 @@ import LabourRateForm, {
 
 export default function AddLabourRateButton({ trades }: { trades: Trade[] }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function handleSubmit(values: LabourRateFormValues) {
     await createLabourRate(labourRatePayloadFromValues(values));
+    showToast("Labour rate saved");
     setOpen(false);
     router.refresh();
   }

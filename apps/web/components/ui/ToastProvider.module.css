@@ -1,0 +1,85 @@
+.viewport {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 16px;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  /* Safe-area padding for phones with a home-indicator gesture bar. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  pointer-events: none;
+  z-index: 70;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  width: 100%;
+  background: var(--jq-surface);
+  color: var(--jq-text);
+  border: 1px solid var(--jq-border);
+  border-left: 4px solid var(--jq-good);
+  border-radius: var(--jq-radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  animation: rise 160ms ease-out;
+}
+
+.toast:focus-visible {
+  outline: 2px solid var(--jq-accent);
+  outline-offset: 2px;
+}
+
+.message {
+  flex: 1;
+  min-width: 0;
+}
+
+.close {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--jq-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--jq-radius-sm);
+}
+
+.close:hover,
+.close:focus-visible {
+  color: var(--jq-text);
+  outline: 2px solid var(--jq-accent);
+  outline-offset: 1px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Sidebar is off-canvas on mobile; the toast sits at the bottom, full width
+   up to 420px, so it never sits under the drawer or the fixed top bar. */
+@media (max-width: 767px) {
+  .viewport {
+    bottom: 12px;
+    padding: 0 12px;
+  }
+  .toast {
+    max-width: none;
+  }
+}

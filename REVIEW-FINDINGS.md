@@ -352,6 +352,25 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Review of 6d8772d + 179c903 (2026-09-19) - safe on main; plain-errors item NOT closed
+
+- **HIGH, CONFIRMED - raw `err.message` still reaches the screen at 11 sites** that skip
+  `errorMessage()` (PaymentsPanel x2, RemindButton, RetentionPanel, ProjectCosts x4,
+  CreateVariationButton, BrandingSection, and the CLIENT-facing QuoteDecision): offline,
+  a contractor sees "Failed to fetch". The guard exempts thrown `Error` messages and
+  scans only a template literal's head, so it passed both planted bypasses.
+- MEDIUM - WhatsAppButton has no in-flight or phone guard of its own (double tap = two
+  share links, two tabs; the chooser reads `ref.current.disabled` during render).
+- LOW - Escape during IME composition closes a modal; the favourite-save lock is per line
+  not per material (duplicate favourites); the "one not-found message" is not asserted;
+  Convert to invoice is not single-flight; three date displays bypass the Jamaica formatter.
+- Sound: `useSingleFlight` resets on error and cannot cross-block; RetentionPanel apply
+  sends an absolute flag (a double apply moves no money); every modal caller has Cancel
+  or the close button; every QuoteStatus covered; the email route is gated through the chooser.
+- **Lesson:** the guard proved a string does not appear, not that raw errors do not reach
+  the screen. The defect is a DATA FLOW (`err.message` into rendered state), so the guard
+  must follow the flow, not scan literals.
+
 ## Visual and UX polish - audit and plan (2026-09-18)
 
 A read-only audit (from code; the app is behind auth) found 20 issues in 7 themes. The
@@ -377,8 +396,13 @@ Plan, in order:
 2. Mobile and touch - DONE. The line grid stacks by the editor's own width (container
    query), 44px targets under coarse pointers, modal rows stack below 420px, the closed
    drawer is inert with `aria-current` on the active link.
-3. Modal, loading state, plain-English errors - DONE 2026-09-19 (delete-confirm pattern
-   and "Saved" feedback still to do). The Modal gained Escape, a focus trap, focus return,
+3. Modal, loading state, plain-English errors - DONE 2026-09-19. "Saved" feedback DONE
+   too: one `ToastProvider` in the app layout (`role="status"`, `aria-live="polite"`, body
+   text on surface), so a message survives client navigation without a query flag; wired
+   to the client, project, catalog, business, quote, invoice, payment and email saves,
+   shown only after the save resolves. The agent died at the usage limit before its plant
+   step and left an unused import that broke lint and the web build; I fixed the import
+   and planted "toast before the save resolves" myself - the test fails. The Modal gained Escape, a focus trap, focus return,
    `role="dialog"`/`aria-modal`/`aria-labelledby`, and no longer closes on a backdrop click
    (opt-in only); nested modals act on the top one, resolved by DOM containment because
    React commits the inner effect first. `app/(app)/loading.tsx` added. "is the API

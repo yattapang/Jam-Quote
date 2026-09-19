@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/ToastProvider";
 import fieldStyles from "@/components/ui/Field.module.css";
 import MaterialForm, {
   InlineAddRow,
@@ -516,6 +517,7 @@ export default function LineItemsEditor({
   detailLevel: QuoteDetailLevel;
   onDetailLevelChange: (level: QuoteDetailLevel) => void;
 }) {
+  const { showToast } = useToast();
   const [customHeadings, setCustomHeadings] = useState<string[]>(initialCustomHeadings);
   const [addingHeadingKey, setAddingHeadingKey] = useState<string | null>(null);
   const [newHeadingText, setNewHeadingText] = useState("");
@@ -788,6 +790,7 @@ export default function LineItemsEditor({
     setJobs((js) => (js.some((j) => j.id === created.id) ? js : [...js, created]));
     patch(key, applyJobPick(created));
     setAddingEntity(null);
+    showToast("Job type saved");
   };
 
   /** "+ Add new equipment…" from an EQUIPMENT line's Saved picker. */

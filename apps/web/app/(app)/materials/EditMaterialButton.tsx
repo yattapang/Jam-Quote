@@ -12,6 +12,7 @@ import MaterialForm, {
   type MaterialFormValues,
 } from "@/components/forms/MaterialForm";
 import SupplierPricePanel from "@/components/forms/SupplierPricePanel";
+import { useToast } from "@/components/ui/ToastProvider";
 import { priceDollarsToCents } from "@/lib/supplier-prices";
 import type { MaterialFavourite } from "@/lib/types";
 import { invalidateMaterialSchema } from "@/lib/use-material-schema";
@@ -22,6 +23,7 @@ import { invalidateMaterialSchema } from "@/lib/use-material-schema";
  * supplier price comparison, which needs a material that already exists. */
 export default function EditMaterialButton({ material }: { material: MaterialFavourite }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [appliedPrice, setAppliedPrice] = useState<AppliedPrice>();
@@ -37,6 +39,7 @@ export default function EditMaterialButton({ material }: { material: MaterialFav
   async function handleSubmit(values: MaterialFormValues, category: ApiMaterialCategory | undefined) {
     await updateMaterialFavourite(material.id, materialEditPayloadFromValues(values, category));
     invalidateMaterialSchema();
+    showToast("Material saved");
     close();
     router.refresh();
   }
