@@ -12,23 +12,23 @@
 
 .neutralSoft {
   background: var(--jq-neutral-pill-soft);
-  color: var(--jq-neutral-pill);
+  color: var(--jq-text);
 }
 .goodSoft {
   background: var(--jq-good-soft);
-  color: var(--jq-good);
+  color: var(--jq-text);
 }
 .goodSolid {
   background: var(--jq-good);
-  color: #fff;
+  color: var(--jq-on-accent);
 }
 .warnSoft {
   background: var(--jq-warn-soft);
-  color: var(--jq-warn);
+  color: var(--jq-text);
 }
 .warnSolid {
   background: var(--jq-warn);
-  color: #fff;
+  color: var(--jq-on-accent);
 }
 .criticalSoft {
   background: var(--jq-crit-soft);
@@ -36,7 +36,7 @@
 }
 .criticalSolid {
   background: var(--jq-crit);
-  color: #fff;
+  color: var(--jq-on-accent);
 }
 .infoSoft {
   background: var(--jq-info-soft);
@@ -44,7 +44,7 @@
 }
 .infoSolid {
   background: var(--jq-info);
-  color: #fff;
+  color: var(--jq-on-accent);
 }
 .accentSolid {
   background: var(--jq-accent);

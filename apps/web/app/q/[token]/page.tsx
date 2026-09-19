@@ -1,6 +1,7 @@
 import { formatJmd, formatTrn } from "@jamquote/core";
-import { getSharedQuote, type PublicQuoteLine } from "@/lib/public-quote";
+import { getSharedQuote, getSharedQuoteLogo, type PublicQuoteLine } from "@/lib/public-quote";
 import { lineUnitLabel } from "@/lib/quote-totals";
+import { dateLabel } from "@/lib/api-client";
 import styles from "./shared-quote.module.css";
 import PrintButton from "./PrintButton";
 import QuoteDecision from "./QuoteDecision";
@@ -39,6 +40,10 @@ export default async function SharedQuotePage({ params }: { params: { token: str
   }
 
   const { business } = quote;
+  // Fetched from the API's public, token-scoped logo route (see
+  // PublicQuotesController.logo) — never the tenant's authenticated
+  // /business/logo, which this anonymous page has no session for.
+  const logo = await getSharedQuoteLogo(params.token);
   const address = [business.addressLine, business.town, business.parish]
     .filter(Boolean)
     .join(", ");
@@ -50,6 +55,14 @@ export default async function SharedQuotePage({ params }: { params: { token: str
   return (
     <main className={styles.page}>
       <div className={styles.card}>
+        {logo && (
+          <div className={styles.logoRow}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a data
+                URI can't go through next/image's remote loader, and this is a
+                one-off logo on a page with no other images to optimize. */}
+            <img className={styles.logo} src={logo.dataUri} alt={`${business.name} logo`} />
+          </div>
+        )}
         <header className={styles.header}>
           <div>
             <div className={styles.business}>{business.name}</div>
@@ -58,8 +71,14 @@ export default async function SharedQuotePage({ params }: { params: { token: str
           </div>
           <div className={styles.numberBlock}>
             <div className={styles.number}>{quote.number}</div>
+            {/* Same dateLabel() the PDF's validUntilLabel is built from (see
+                mapQuote in lib/api-client.ts), so this page and the PDF never
+                show different dates for the same quote. */}
+            {/* Same dateLabel() the PDF's validUntilLabel is built from (see
+                mapQuote in lib/api-client.ts), so this page and the PDF never
+                show different dates for the same quote. */}
             {quote.validUntil && (
-              <div className={styles.muted}>Valid until {quote.validUntil.slice(0, 10)}</div>
+              <div className={styles.muted}>{dateLabel(quote.validUntil, "Valid until ")}</div>
             )}
           </div>
         </header>

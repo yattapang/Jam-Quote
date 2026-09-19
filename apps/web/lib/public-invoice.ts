@@ -25,6 +25,27 @@ export type PublicInvoice = Omit<PublicInvoiceWire, "lineItems" | "sections"> & 
   sections: { id: string; title: string; lineItems: PublicQuoteLine[] }[];
 };
 
+/**
+ * The business logo for a shared invoice, mirroring
+ * `getSharedQuoteLogo` — same reasoning, same scoping by the invoice's own
+ * share token via `/public/invoices/:token/logo`.
+ */
+export async function getSharedInvoiceLogo(
+  token: string,
+): Promise<{ dataUri: string } | undefined> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/public/invoices/${encodeURIComponent(token)}/logo`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return undefined;
+    const contentType = res.headers.get("content-type") ?? "image/png";
+    const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+    return { dataUri: `data:${contentType};base64,${base64}` };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Undefined for an unknown, revoked or still-draft token — the API returns
  * the same 404 for all three so the response cannot be used to probe which
  * tokens are real. */

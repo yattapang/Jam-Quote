@@ -352,6 +352,40 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Visual and UX polish - audit and plan (2026-09-18)
+
+A read-only audit (from code; the app is behind auth) found 20 issues in 7 themes. The
+worst: the LOGIN title is near-invisible in dark mode (styles point at `--surface`/
+`--muted`, which do not exist - 1.21:1 contrast); several error texts and borders
+silently don't render for the same reason; the quote builder's line grid overflows
+between 768 and ~1,200px; there is no loading state anywhere; the shared Modal has no
+Escape, focus trap or label; "is the API running?" reaches users in 25 files; the public
+quote/invoice pages show no logo, a different palette from the PDF, and raw ISO dates.
+Plan, in order:
+1. Broken colours and dark mode, pill contrast - DONE 2026-09-19. Every undefined
+   variable in the contractor app mapped to a `--jq-*` token; ProjectCosts' inline styles
+   moved to a CSS module; every status pill now meets AA (4.5:1 to 13.2:1) with existing
+   tokens only. **Two corrections I made:** (a) the agent remapped ~400 variables in the
+   ADMIN console, but those were never undefined - `console.module.css` gives the console
+   its own self-contained theme with its own light/dark toggle; remapping them to `--jq-*`
+   would have made the console ignore its own toggle. Reverted. (b) Its guard checked only
+   `var(--jq-*)` names, so it could not see the bug class it was written for (`var(--muted)`
+   and friends); planting `var(--muted)` in the login CSS passed it. The guard now checks
+   every `var()` name against the tokens, next/font variables, and custom properties
+   declared in the SAME directory tree - so the admin theme stays valid for admin files only.
+   Re-planted `var(--muted)` in the login CSS: it fails.
+2. Mobile and touch - DONE. The line grid stacks by the editor's own width (container
+   query), 44px targets under coarse pointers, modal rows stack below 420px, the closed
+   drawer is inert with `aria-current` on the active link.
+3. Modal, loading state, plain-English errors, one confirm pattern - objective.
+4. Client-facing documents - DONE (owner chose 4a, green accept). Brand palette forced
+   light on /q and /i (all text and buttons AA), the business logo served by a
+   share-token-scoped route that 404s like the document reads, PDF-identical dates, and
+   calm branded error pages. The recurring 14-16 test failures both agents reported were
+   CPU contention: the full suite is green twice with nothing else running.
+5. Screen hierarchy (one primary action per quote status, sidebar order) - NEEDS OWNER.
+6. Token hygiene (date helper, PDF importing tokens, radius/spacing) - objective, later.
+
 ## Owner decisions implemented (2026-09-18)
 
 - **GCT registration:** `Business.gctRegistered` (migration `20260918120000_business_gct_registered`,

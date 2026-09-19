@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
@@ -36,7 +36,36 @@ function BrandMark() {
 export default function Sidebar({ session }: { session: SidebarSession | null }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const close = () => setOpen(false);
+
+  // The drawer only goes off-canvas below the CSS breakpoint (767px); on
+  // desktop it's always visible so it must never be made inert.
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  const drawerHidden = isMobile && !open;
+
+  // The `inert` DOM attribute isn't in this React version's JSX typings as
+  // a settable string, and passing the boolean `true` prop is silently
+  // dropped by React 18's renderer (it only recognizes it as a string
+  // attribute) — so it's set imperatively via the DOM API instead, which
+  // works identically in jsdom and real browsers.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+    if (drawerHidden) {
+      el.setAttribute("inert", "");
+    } else {
+      el.removeAttribute("inert");
+    }
+  }, [drawerHidden]);
 
   return (
     <>
@@ -65,7 +94,12 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
       {/* Backdrop behind the open drawer (mobile only). */}
       {open && <div className={styles.backdrop} onClick={close} aria-hidden="true" />}
 
-      <nav className={`${styles.sidebar} ${open ? styles.sidebarOpen : ""}`} data-print-hide>
+      <nav
+        ref={navRef}
+        className={`${styles.sidebar} ${open ? styles.sidebarOpen : ""}`}
+        data-print-hide
+        aria-hidden={drawerHidden || undefined}
+      >
         <div className={styles.brand}>
           <BrandMark />
           <div className={styles.brandName}>JamQuote</div>
@@ -80,6 +114,7 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
                 href={item.href}
                 onClick={close}
                 className={active ? styles.navItemActive : styles.navItem}
+                aria-current={active ? "page" : undefined}
               >
                 <span className={active ? styles.dotActive : styles.dot} />
                 {item.label}

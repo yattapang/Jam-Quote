@@ -19,6 +19,7 @@ import {
 } from "@/lib/api-client";
 import type { LabourRate } from "@/lib/types";
 import shared from "../../shared.module.css";
+import styles from "./ProjectCosts.module.css";
 
 /**
  * What this job cost, and what was logged against it.
@@ -164,7 +165,7 @@ export default function ProjectCosts({
         </Button>
       </div>
       {error && !open && !labourOpen && (
-        <div style={{ fontSize: 12.5, color: "var(--critical)", marginBottom: 10 }}>{error}</div>
+        <div className={styles.error}>{error}</div>
       )}
       <Card>
         {/* Where the money went, largest first. This is what the category
@@ -172,30 +173,12 @@ export default function ProjectCosts({
             payoff, and a contractor would rightly stop filling it in. */}
         {purchases.length > 0 && (
           <div>
-            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 8 }}>
+            <div className={styles.categoryLabel}>
               Spend by category (incl. GCT)
             </div>
-            <div
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                marginBottom: 14,
-                paddingBottom: 12,
-                borderBottom: "1px solid var(--border)",
-              }}
-            >
+            <div className={styles.categoryChips}>
               {groupByCategory(purchases).map((g) => (
-                <span
-                  key={g.category}
-                  style={{
-                    fontSize: 12,
-                    padding: "5px 10px",
-                    borderRadius: 999,
-                    background: "var(--surface-alt)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
+                <span key={g.category} className={styles.categoryChip}>
                   {g.category} <strong>{formatJmd(g.totalCents)}</strong>
                 </span>
               ))}
@@ -212,16 +195,16 @@ export default function ProjectCosts({
           <div className={shared.list}>
             {purchases.map((p) => (
               <div key={p.id} className={shared.row}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>{p.description}</div>
-                  <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                <div className={styles.rowMain}>
+                  <div className={styles.rowTitle}>{p.description}</div>
+                  <div className={styles.rowMeta}>
                     {p.purchasedAt.slice(0, 10)}
                     {p.category ? ` · ${p.category}` : ""}
                     {p.gctCents > 0 ? ` · incl. GCT ${formatJmd(p.gctCents)}` : ""}
                     {p.reference ? ` · ${p.reference}` : ""}
                   </div>
                 </div>
-                <span style={{ fontWeight: 600 }}>{formatJmd(p.amountCents)}</span>
+                <span className={styles.rowAmount}>{formatJmd(p.amountCents)}</span>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -252,7 +235,7 @@ export default function ProjectCosts({
           the LARGEST cost on a job, and it is counted in days rather than
           dollars, which is the number that tells a contractor whether the job
           overran. */}
-      <div className={shared.sectionHead} style={{ marginTop: 20 }}>
+      <div className={`${shared.sectionHead} ${styles.sectionHeadSpaced}`}>
         <h2 className={shared.sectionTitle}>Labour</h2>
         <Button variant="secondary" size="sm" onClick={() => setLabourOpen(true)}>
           Log time
@@ -266,20 +249,20 @@ export default function ProjectCosts({
           </div>
         ) : (
           <>
-            <div style={{ marginBottom: 12, paddingBottom: 10, borderBottom: "1px solid var(--border)", fontSize: 13 }}>
+            <div className={styles.labourTotal}>
               Total labour <strong>{formatJmd(labourTotal)}</strong>
             </div>
             <div className={shared.list}>
               {labour.map((l) => (
                 <div key={l.id} className={shared.row}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600 }}>{l.description}</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                  <div className={styles.rowMain}>
+                    <div className={styles.rowTitle}>{l.description}</div>
+                    <div className={styles.rowMeta}>
                       {l.workedOn.slice(0, 10)} · {Number(l.quantity)} {l.unitLabel} @{" "}
                       {formatJmd(l.rateCents)}
                     </div>
                   </div>
-                  <span style={{ fontWeight: 600 }}>
+                  <span className={styles.rowAmount}>
                     {formatJmd(Math.round(Number(l.quantity) * l.rateCents))}
                   </span>
                   <Button
@@ -312,7 +295,7 @@ export default function ProjectCosts({
       {labourOpen && (
         <Modal title="Log time" onClose={() => (busy ? undefined : setLabourOpen(false))}>
           <form
-            style={{ display: "grid", gap: 12 }}
+            className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
               if (busy || !who.trim() || !qty.trim() || !rate.trim()) return;
@@ -320,12 +303,12 @@ export default function ProjectCosts({
             }}
           >
             {labourRates.length > 0 && (
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
+              <label className={styles.rateLabel}>
                 Saved rate
                 <select
                   value={rateId}
                   onChange={(e) => pickRate(e.target.value)}
-                  style={{ width: "100%", height: 36, padding: "0 9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", font: "inherit" }}
+                  className={styles.rateSelect}
                 >
                   <option value="">Type a one-off rate…</option>
                   {labourRates.map((r) => (
@@ -343,7 +326,7 @@ export default function ProjectCosts({
               onChange={(e) => setWho(e.target.value)}
               placeholder="e.g. Devon, or 3 masons"
             />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className={styles.grid3}>
               <Input
                 label="How many"
                 type="number"
@@ -373,8 +356,8 @@ export default function ProjectCosts({
               value={workedOn}
               onChange={(e) => setWorkedOn(e.target.value)}
             />
-            {error && <span style={{ fontSize: 12.5, color: "var(--critical)" }}>{error}</span>}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {error && <span className={styles.formError}>{error}</span>}
+            <div className={styles.formActions}>
               <Button variant="ghost" type="button" onClick={() => setLabourOpen(false)} disabled={busy}>
                 Cancel
               </Button>
@@ -393,7 +376,7 @@ export default function ProjectCosts({
       {open && (
         <Modal title="Log a cost" onClose={() => (busy ? undefined : setOpen(false))}>
           <form
-            style={{ display: "grid", gap: 12 }}
+            className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
               if (busy || !description.trim() || !amount.trim()) return;
@@ -407,7 +390,7 @@ export default function ProjectCosts({
               placeholder="e.g. Cement x 20 bags"
               autoFocus
             />
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className={styles.grid2}>
               <Input
                 label="Amount paid $"
                 type="number"
@@ -429,7 +412,7 @@ export default function ProjectCosts({
                 placeholder="0 if none"
               />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className={styles.grid2}>
               <Input
                 label="Date"
                 type="date"
@@ -479,8 +462,8 @@ export default function ProjectCosts({
               onChange={(e) => setReference(e.target.value)}
               placeholder="Receipt or invoice no."
             />
-            {error && <span style={{ fontSize: 12.5, color: "var(--critical)" }}>{error}</span>}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            {error && <span className={styles.formError}>{error}</span>}
+            <div className={styles.formActions}>
               <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </Button>

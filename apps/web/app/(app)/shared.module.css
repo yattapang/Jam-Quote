@@ -347,9 +347,9 @@
   gap: 10px;
   margin-bottom: 14px;
   padding: 11px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--jq-accent) 35%, var(--jq-border));
   border-radius: 11px;
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: color-mix(in srgb, var(--jq-accent) 8%, transparent);
   font-size: 13.5px;
   line-height: 1.45;
 }

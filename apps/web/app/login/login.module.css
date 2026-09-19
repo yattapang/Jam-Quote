@@ -13,8 +13,8 @@
   gap: 20px;
   padding: 32px;
   border-radius: 16px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
-  background: var(--surface, #fff);
+  border: 1px solid var(--jq-border);
+  background: var(--jq-surface);
 }
 
 .brand {
@@ -31,7 +31,7 @@
 
 .subtitle {
   margin: 0;
-  color: var(--muted, #6b7280);
+  color: var(--jq-text-muted);
   font-size: 14px;
 }
 
@@ -42,14 +42,14 @@
 }
 
 .error {
-  color: var(--danger, #b42318);
+  color: var(--jq-crit);
   font-size: 13px;
 }
 
 .switch {
   text-align: center;
   font-size: 13px;
-  color: var(--muted, #6b7280);
+  color: var(--jq-text-muted);
 }
 
 .switchButton {
@@ -57,15 +57,15 @@
   border: none;
   padding: 0;
   margin-left: 4px;
-  color: var(--accent, #9c6e1b);
+  color: var(--jq-accent);
   font-weight: 600;
   cursor: pointer;
 }
 
 .demoHint {
   font-size: 12px;
-  color: var(--muted, #6b7280);
+  color: var(--jq-text-muted);
   text-align: center;
-  border-top: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-top: 1px solid var(--jq-border);
   padding-top: 12px;
 }

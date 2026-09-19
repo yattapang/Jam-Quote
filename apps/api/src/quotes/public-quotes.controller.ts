@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Param, Post, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { QuotesService } from "./quotes.service.js";
+import { BusinessService } from "../business/business.service.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { quoteDecisionSchema, type QuoteDecisionInput } from "./quotes.dto.js";
 
@@ -25,7 +27,34 @@ import { quoteDecisionSchema, type QuoteDecisionInput } from "./quotes.dto.js";
  */
 @Controller("public/quotes")
 export class PublicQuotesController {
-  constructor(private readonly quotes: QuotesService) {}
+  constructor(
+    private readonly quotes: QuotesService,
+    private readonly business: BusinessService,
+  ) {}
+
+  /**
+   * The business logo for THIS shared quote, scoped by the share token — not
+   * the tenant's authenticated `/business/logo`, which needs a session this
+   * caller does not have. Resolves the businessId from the token first (same
+   * draft/unknown-token collapse as the rest of this controller) and serves
+   * only the logo bytes: nothing else about the quote or business.
+   *
+   * Declared BEFORE `:token` for the same reason `logo/meta` precedes `:id`
+   * on BusinessController — Nest matches routes in declaration order.
+   */
+  @Get(":token/logo")
+  async logo(@Param("token") token: string, @Res() res: Response): Promise<void> {
+    const businessId = await this.quotes.resolveBusinessIdByShareToken(token);
+    const row = await this.business.getLogo(businessId);
+    if (!row) throw new NotFoundException("No logo set");
+    res.setHeader("Content-Type", row.contentType);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", 'inline; filename="logo"');
+    // Public, unlike the tenant route's `private` — the same image is fine to
+    // cache along the path to any anonymous client with this same link.
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.end(Buffer.from(row.bytes));
+  }
 
   /** Resolving the link also records the first view, which is what makes
    * QuoteStatus.VIEWED reachable at all. */

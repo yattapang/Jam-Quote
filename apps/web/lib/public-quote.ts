@@ -56,6 +56,33 @@ export async function getSharedQuote(token: string): Promise<PublicQuote | undef
 }
 
 /**
+ * The business logo for a shared quote, fetched server-side and scoped by the
+ * SAME share token as the quote itself (`/public/quotes/:token/logo` on the
+ * API — see PublicQuotesController.logo). Rendered as a data URI rather than
+ * pointed at from the browser: this page's other fetches all go through
+ * API_BASE_URL, which is a server-only address in deploy, not one a client's
+ * browser can reach directly.
+ *
+ * Undefined whenever there is no logo, the token is bad, or the fetch fails —
+ * a missing logo must degrade to the text header, never break the page.
+ */
+export async function getSharedQuoteLogo(
+  token: string,
+): Promise<{ dataUri: string } | undefined> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/public/quotes/${encodeURIComponent(token)}/logo`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return undefined;
+    const contentType = res.headers.get("content-type") ?? "image/png";
+    const base64 = Buffer.from(await res.arrayBuffer()).toString("base64");
+    return { dataUri: `data:${contentType};base64,${base64}` };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * The client's answer, sent with the share token as the only credential.
  *
  * Same reasoning as the fetch above: no bearer token, because there is no

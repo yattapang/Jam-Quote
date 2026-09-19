@@ -317,7 +317,11 @@ export function initialsOf(name: string): string {
     .join("");
 }
 
-function dateLabel(iso: string, prefix = ""): string {
+// Exported so the public quote/invoice pages (app/q, app/i) format dates with
+// this SAME function the PDF's validUntilLabel/dueDateLabel are built from —
+// otherwise the web page and the emailed PDF can show different dates for the
+// same quote.
+export function dateLabel(iso: string, prefix = ""): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return `${prefix}${d.toLocaleDateString("en-JM", { month: "short", day: "numeric" })}`;

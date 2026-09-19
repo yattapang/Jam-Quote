@@ -1039,6 +1039,10 @@ same time — it counts a state nothing sets.
 | Renewal-day drift (2026-09-18) | Accepted: a term starting on the 29th-31st clamps to the short month's end and stays there (at most 3 days, once). Revisit with a billing-day column if automatic card billing arrives. |
 | GCT registration (2026-09-18) | An explicit "GCT registered" yes/no on the business profile replaces inferring it from the TRN (every Jamaican has a TRN). Existing businesses keep their current treatment via backfill; new ones default to not registered. |
 | GCT charging (2026-09-18) | Unregistered businesses default to 0% GCT on NEW quotes and invoices; an explicit rate is honoured; existing documents never change. A non-blocking warning shows when a document charges GCT while the business is not registered. |
+| Client-facing quote/invoice page (2026-09-18) | Matches the PDF: the gold brand palette plus the contractor's logo, so the link and the PDF read as one brand. |
+| Accept-quote button (2026-09-18) | Green (universal "yes/go"), not the brand gold. |
+| Quote screen actions (2026-09-18) | One primary action per status (Draft: Send; Sent: record payment / convert to invoice); the rest secondary; Delete set apart. |
+| Sidebar order (2026-09-18) | Money screens (Quotes, Invoices, Reports) move up; the catalogue (Materials, Labour, Equipment, Jobs) groups below. |
 
 ### Notification schedule — SETTLED (owner, 2026-08-18)
 

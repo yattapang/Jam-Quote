@@ -672,6 +672,23 @@ export class InvoicesService {
    * landed: the reminder ledger records that a reminder was SENT, never that
    * it was read.
    */
+  /**
+   * Resolve ONLY the businessId behind a share token, for the public logo
+   * route. Mirrors QuotesService.resolveBusinessIdByShareToken: same
+   * draft/unknown-token collapse, and no other field of the invoice is ever
+   * read here.
+   */
+  async resolveBusinessIdByShareToken(token: string): Promise<string> {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: { businessId: true, status: true },
+    });
+    if (!invoice || invoice.status === InvoiceStatus.DRAFT) {
+      throw new NotFoundException("Invoice not found");
+    }
+    return invoice.businessId;
+  }
+
   async findByShareToken(token: string): Promise<PublicInvoiceView> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { shareToken: token, deletedAt: null },

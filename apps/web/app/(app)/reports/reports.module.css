@@ -259,15 +259,15 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--muted, #666);
+  color: var(--jq-text-muted);
 }
 
 .rangeLabel input {
   font: inherit;
   padding: 4px 6px;
-  border: 1px solid var(--border, #d8d8d8);
+  border: 1px solid var(--jq-border);
   border-radius: 6px;
-  background: var(--surface, #fff);
+  background: var(--jq-surface);
   color: inherit;
 }
 
@@ -277,7 +277,7 @@
 .rangeCaption {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--muted, #666);
+  color: var(--jq-text-muted);
 }
 
 /*

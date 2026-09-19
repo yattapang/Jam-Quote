@@ -83,7 +83,7 @@ export default function WhatsAppButton({
         {busy ? "Preparing…" : "Send on WhatsApp"}
       </Button>
       {error && (
-        <span style={{ fontSize: 11.5, color: "var(--critical)" }}>{error}</span>
+        <span style={{ fontSize: 11.5, color: "var(--jq-crit)" }}>{error}</span>
       )}
     </>
   );

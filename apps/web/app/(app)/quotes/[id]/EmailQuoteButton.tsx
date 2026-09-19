@@ -109,7 +109,7 @@ export default function EmailQuoteButton({
           hover, and a disabled button with no explanation reads as a bug. */}
       {unavailableReason && (
         <span
-          style={{ fontSize: 11.5, color: "var(--muted)", maxWidth: 260, lineHeight: 1.35 }}
+          style={{ fontSize: 11.5, color: "var(--jq-text-muted)", maxWidth: 260, lineHeight: 1.35 }}
         >
           {unavailableReason}
         </span>

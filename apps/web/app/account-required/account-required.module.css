@@ -13,8 +13,8 @@
   gap: 14px;
   padding: 32px;
   border-radius: 16px;
-  border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
-  background: var(--surface, #fff);
+  border: 1px solid var(--jq-border);
+  background: var(--jq-surface);
 }
 
 .title {
@@ -25,7 +25,7 @@
 
 .body {
   margin: 0;
-  color: var(--muted, #6b7280);
+  color: var(--jq-text-muted);
   font-size: 14px;
   line-height: 1.5;
 }

@@ -82,3 +82,16 @@
 .fullWidth {
   width: 100%;
 }
+
+/* Touch targets: keep the compact desktop visual size (padding/font above)
+   but guarantee at least 44x44 hit area on coarse-pointer (touch) devices,
+   per WCAG 2.5.5. min-height/min-width don't change the visible padding,
+   they just pad out the tappable box. */
+@media (pointer: coarse) {
+  .md,
+  .sm,
+  .lg {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}

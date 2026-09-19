@@ -509,6 +509,24 @@ export class QuotesService {
    * Only DRAFT is refused. A draft has not been sent to anyone, so a link to
    * one would expose a figure the contractor is still working on.
    */
+  /**
+   * Resolve ONLY the businessId behind a share token, for the public logo
+   * route. Same draft/unknown-token collapse as findByShareToken — a wrong
+   * token and a draft's token must be indistinguishable, or the 404 vs "no
+   * logo" split would leak which tokens are real. Never returns anything
+   * about the quote itself; the logo route has no other use for this.
+   */
+  async resolveBusinessIdByShareToken(token: string): Promise<string> {
+    const quote = await this.prisma.quote.findFirst({
+      where: { shareToken: token, deletedAt: null },
+      select: { businessId: true, status: true },
+    });
+    if (!quote || quote.status === QuoteStatus.DRAFT) {
+      throw new NotFoundException("Quote not found");
+    }
+    return quote.businessId;
+  }
+
   async findByShareToken(token: string): Promise<PublicQuoteView> {
     const quote = await this.prisma.quote.findFirst({
       where: { shareToken: token, deletedAt: null },

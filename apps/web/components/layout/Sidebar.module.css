@@ -134,6 +134,13 @@
     cursor: pointer;
     flex: none;
   }
+
+  @media (pointer: coarse) {
+    .hamburger {
+      width: 44px;
+      height: 44px;
+    }
+  }
   .hamburger span {
     display: block;
     height: 2px;
@@ -159,6 +166,14 @@
   .sidebar.sidebarOpen {
     left: 0;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Keyboard/AT focus ring for the drawer's own focusable children,
+     using the theme's accent token rather than the browser default. */
+  .sidebar a:focus-visible,
+  .sidebar button:focus-visible {
+    outline: 2px solid var(--jq-accent);
+    outline-offset: 2px;
   }
 
   .backdrop {

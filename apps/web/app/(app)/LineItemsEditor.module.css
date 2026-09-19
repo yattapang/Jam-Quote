@@ -7,6 +7,14 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  /* Container query on the editor's OWN width (not the viewport) so the
+     10-column grid stacks whenever there isn't room for it — whether that's
+     a narrow phone or a tablet/laptop viewport squeezed by the 220px
+     sidebar. This fixes the 768–~1200px overflow the old viewport-only
+     breakpoint missed. @supports fallback below covers browsers without
+     container query support. */
+  container-type: inline-size;
+  container-name: lineItems;
 }
 
 .lineRow {
@@ -43,6 +51,13 @@
   cursor: pointer;
 }
 
+@media (pointer: coarse) {
+  .iconButton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 .saveFavButton {
   composes: iconButton;
   color: var(--jq-accent);
@@ -77,7 +92,7 @@
   white-space: nowrap;
 }
 
-@media (max-width: 767px) {
+@container lineItems (max-width: 959px) {
   .lineRow {
     grid-template-columns: 1fr 1fr;
     gap: 10px;
@@ -111,6 +126,48 @@
     justify-content: flex-end;
     gap: 8px;
     margin-top: 2px;
+  }
+}
+
+/* Fallback for browsers without container query support: stack based on
+   viewport width using the same 1200px threshold the audit called for
+   (fixed grid is ~914px + 220px sidebar + gutters). */
+@supports not (container-type: inline-size) {
+  @media (max-width: 1199px) {
+    .lineRow {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--jq-border);
+      border-radius: 10px;
+      background: var(--jq-surface-alt);
+    }
+
+    .fieldCell {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .fieldCell.full {
+      grid-column: 1 / -1;
+    }
+
+    .mobileLabel {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--jq-text-muted);
+    }
+
+    .actionsCell {
+      display: flex;
+      grid-column: 1 / -1;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 2px;
+    }
   }
 }
 

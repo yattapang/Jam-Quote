@@ -1,7 +1,8 @@
 import { formatJmd, invoiceSettlement, formatTrn } from "@jamquote/core";
-import { getSharedInvoice } from "@/lib/public-invoice";
+import { getSharedInvoice, getSharedInvoiceLogo } from "@/lib/public-invoice";
 import type { PublicQuoteLine } from "@/lib/public-quote";
 import { lineUnitLabel } from "@/lib/quote-totals";
+import { dateLabel } from "@/lib/api-client";
 import styles from "../../q/[token]/shared-quote.module.css";
 import PrintButton from "../../q/[token]/PrintButton";
 
@@ -38,6 +39,9 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
   }
 
   const { business } = invoice;
+  // Same pattern as the quote page: fetched server-side from the API's
+  // public, invoice-share-token-scoped logo route.
+  const logo = await getSharedInvoiceLogo(params.token);
   const address = [business.addressLine, business.town, business.parish].filter(Boolean).join(", ");
   const allLines: { heading: string | null; lines: PublicQuoteLine[] }[] = [
     ...(invoice.lineItems.length > 0 ? [{ heading: null, lines: invoice.lineItems }] : []),
@@ -57,6 +61,14 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
   return (
     <main className={styles.page}>
       <div className={styles.card}>
+        {logo && (
+          <div className={styles.logoRow}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a data
+                URI can't go through next/image's remote loader, and this is a
+                one-off logo on a page with no other images to optimize. */}
+            <img className={styles.logo} src={logo.dataUri} alt={`${business.name} logo`} />
+          </div>
+        )}
         <header className={styles.header}>
           <div>
             <div className={styles.business}>{business.name}</div>
@@ -65,9 +77,12 @@ export default async function SharedInvoicePage({ params }: { params: { token: s
           </div>
           <div className={styles.numberBlock}>
             <div className={styles.number}>{invoice.number}</div>
-            <div className={styles.muted}>Issued {invoice.issueDate.slice(0, 10)}</div>
+            {/* Same dateLabel() the PDF's dueDateLabel is built from (see
+                mapInvoice in lib/api-client.ts) — this page and the PDF must
+                never disagree on a date for the same invoice. */}
+            <div className={styles.muted}>{dateLabel(invoice.issueDate, "Issued ")}</div>
             {invoice.dueDate && (
-              <div className={styles.muted}>Due {invoice.dueDate.slice(0, 10)}</div>
+              <div className={styles.muted}>{dateLabel(invoice.dueDate, "Due ")}</div>
             )}
           </div>
         </header>

@@ -45,6 +45,13 @@
   padding: 2px 6px;
   border-radius: 6px;
 }
+
+@media (pointer: coarse) {
+  .close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 .close:hover {
   background: var(--jq-surface-alt);
   color: var(--jq-text);
@@ -60,6 +67,15 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+/* Below ~420px two 1fr columns leave inputs around 140px wide, too narrow
+   to use comfortably; stack them instead. Threshold covers 375px phones
+   with the .card's 8vh/16px backdrop padding subtracted. */
+@media (max-width: 420px) {
+  .row2 {
+    grid-template-columns: 1fr;
+  }
 }
 
 .actions {

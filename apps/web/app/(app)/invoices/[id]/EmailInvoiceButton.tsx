@@ -74,7 +74,7 @@ export default function EmailInvoiceButton({
       {/* Stated in the open, not just as a tooltip: on a phone there is no
           hover, and a disabled button with no explanation reads as a bug. */}
       {unavailableReason && (
-        <span style={{ fontSize: 11.5, color: "var(--muted)", maxWidth: 260, lineHeight: 1.35 }}>
+        <span style={{ fontSize: 11.5, color: "var(--jq-text-muted)", maxWidth: 260, lineHeight: 1.35 }}>
           {unavailableReason}
         </span>
       )}

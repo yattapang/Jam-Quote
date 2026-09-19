@@ -5,24 +5,72 @@
  * on a phone, arriving from a WhatsApp message. It borrows none of the app
  * shell's chrome, so nothing here can be broken by a change to the signed-in
  * layout — and there is nothing to click except the PDF.
+ *
+ * MATCHES THE PDF, on purpose: the owner's decision is that a client should
+ * not be able to tell the web page and the emailed/downloaded PDF apart. The
+ * PDF (lib/pdf/QuotePdf.tsx) uses the gold brand palette from
+ * packages/ui/src/tokens.ts's `light` theme, hand-inlined there as hex because
+ * react-pdf can't read CSS variables. This file redefines the SAME `--jq-*`
+ * variables the rest of the app uses, but scoped to `.page` with their LIGHT
+ * values hardcoded — never `var(--jq-bg)` inherited from :root, which flips
+ * dark under the signed-in app's `prefers-color-scheme`/`data-theme` rules
+ * (see app/layout.tsx). A client's phone in system dark mode must still see
+ * this document exactly as the PDF prints it, so `.page` also pins
+ * `color-scheme: light` to stop the browser from dark-styling form controls
+ * and scrollbars underneath it.
+ *
+ * Contrast (WCAG AA, computed against the values below):
+ *  - text #26221C on bg #F6F3EC: 14.3:1
+ *  - text #26221C on surface #FFFFFF: 15.8:1
+ *  - textMuted #6B6357 on surface #FFFFFF: 5.9:1
+ *  - accent #9C6E1B bg with white text (download button): 4.5:1
+ *  - good #2E7D46 bg with white text (accept button): 5.1:1
+ *  - crit #B23A2E text on white (decision error): 5.9:1
+ * All meet or exceed the 4.5:1 AA threshold for the text sizes used here.
  */
 
 .page {
+  --jq-bg: #f6f3ec;
+  --jq-surface: #ffffff;
+  --jq-surface-alt: #efeae0;
+  --jq-border: #ddd5c4;
+  --jq-text: #26221c;
+  --jq-text-muted: #6b6357;
+  --jq-accent: #9c6e1b;
+  --jq-accent-soft: #f1e4c6;
+  --jq-on-accent: #ffffff;
+  --jq-good: #2e7d46;
+  --jq-good-soft: #deefe1;
+  --jq-crit: #b23a2e;
+  --jq-crit-soft: #f7dedb;
+
+  color-scheme: light;
   min-height: 100vh;
   padding: 20px 14px 48px;
-  background: #f5f5f4;
-  color: #1c1917;
+  background: var(--jq-bg);
+  color: var(--jq-text);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 .card {
   max-width: 640px;
   margin: 0 auto;
-  background: #fff;
-  border: 1px solid #e7e5e4;
+  background: var(--jq-surface);
+  border: 1px solid var(--jq-border);
   border-radius: 14px;
   padding: 24px 22px 28px;
   box-shadow: 0 1px 3px rgb(0 0 0 / 6%);
+}
+
+.logoRow {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.logo {
+  max-width: 180px;
+  max-height: 56px;
+  object-fit: contain;
 }
 
 .header {
@@ -30,7 +78,7 @@
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  border-bottom: 1px solid #e7e5e4;
+  border-bottom: 1px solid var(--jq-border);
   padding-bottom: 16px;
   margin-bottom: 16px;
 }
@@ -53,7 +101,7 @@
 
 .muted {
   font-size: 12.5px;
-  color: #78716c;
+  color: var(--jq-text-muted);
   line-height: 1.45;
 }
 
@@ -71,7 +119,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #78716c;
+  color: var(--jq-text-muted);
   margin: 0 0 8px;
 }
 
@@ -83,7 +131,7 @@
 
 .table td {
   padding: 8px 0;
-  border-bottom: 1px solid #f5f5f4;
+  border-bottom: 1px solid var(--jq-bg);
   vertical-align: top;
 }
 
@@ -94,7 +142,7 @@
 /* The quantity rides with the description rather than getting its own column:
    at 360px a three-column table wraps into an unreadable stack. */
 .qty {
-  color: #78716c;
+  color: var(--jq-text-muted);
   font-size: 13px;
 }
 
@@ -106,7 +154,7 @@
 
 .totals {
   margin: 20px 0 0;
-  border-top: 1px solid #e7e5e4;
+  border-top: 1px solid var(--jq-border);
   padding-top: 14px;
 }
 
@@ -129,7 +177,7 @@
 .grand {
   font-weight: 700;
   font-size: 16px !important;
-  border-top: 1px solid #e7e5e4;
+  border-top: 1px solid var(--jq-border);
   margin-top: 6px;
   padding-top: 10px !important;
 }
@@ -145,14 +193,16 @@
   white-space: pre-wrap;
 }
 
-/* Full width and finger-sized: on a phone this is the only thing to press. */
+/* Full width and finger-sized: on a phone this is the only thing to press.
+   Brand gold, matching the PDF's accent — this is the one branded action on
+   the page besides accepting the quote. */
 .download {
   display: block;
   margin-top: 24px;
   padding: 13px 16px;
   border-radius: 10px;
-  background: #1c1917;
-  color: #fff;
+  background: var(--jq-accent);
+  color: var(--jq-on-accent);
   text-align: center;
   font-weight: 600;
   font-size: 14.5px;
@@ -167,7 +217,7 @@
 .footer {
   margin: 18px 0 0;
   font-size: 12.5px;
-  color: #78716c;
+  color: var(--jq-text-muted);
   text-align: center;
 }
 
@@ -179,9 +229,9 @@
 .decision {
   margin-top: 24px;
   padding: 18px 16px;
-  border: 1px solid #e7e5e4;
+  border: 1px solid var(--jq-border);
   border-radius: 12px;
-  background: #fafaf9;
+  background: var(--jq-surface-alt);
 }
 
 .decisionActions {
@@ -201,24 +251,28 @@
   font-family: inherit;
 }
 
+/* Stays GREEN by owner decision, independent of the gold restyle above — the
+   accept action keeps its own semantic "good" meaning rather than being
+   folded into the brand accent. Uses the same --jq-good token StatusPill and
+   MoneyText use elsewhere in the app, just pinned to its light value here. */
 .accept {
-  background: #15803d;
-  color: #fff;
+  background: var(--jq-good);
+  color: var(--jq-on-accent);
 }
 
 /* Declining is a legitimate answer, not a danger. Styled as a quiet
    alternative rather than in alarm red, which would make an honest no feel
    like a mistake the client was about to make. */
 .decline {
-  background: #fff;
-  border-color: #d6d3d1 !important;
-  color: #44403c;
+  background: var(--jq-surface);
+  border-color: var(--jq-border) !important;
+  color: var(--jq-text);
 }
 
 .decisionCancel {
   background: transparent;
-  border-color: #d6d3d1 !important;
-  color: #57534e;
+  border-color: var(--jq-border) !important;
+  color: var(--jq-text-muted);
 }
 
 .decisionForm {
@@ -229,7 +283,7 @@
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #44403c;
+  color: var(--jq-text);
   margin-bottom: 12px;
 }
 
@@ -238,31 +292,33 @@
   width: 100%;
   margin-top: 6px;
   padding: 11px 12px;
-  border: 1px solid #d6d3d1;
+  border: 1px solid var(--jq-border);
   border-radius: 8px;
   font-size: 15px;
   font-family: inherit;
   box-sizing: border-box;
+  background: var(--jq-surface);
+  color: var(--jq-text);
 }
 
 .decisionNote {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
-  color: #78716c;
+  color: var(--jq-text-muted);
 }
 
 .decisionError {
   margin: 10px 0 0;
   font-size: 13px;
-  color: #b91c1c;
+  color: var(--jq-crit);
 }
 
 .decisionDone {
   margin: 0;
   font-size: 14.5px;
   font-weight: 600;
-  color: #15803d;
+  color: var(--jq-good);
   text-align: center;
 }
 
