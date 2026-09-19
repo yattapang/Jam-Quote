@@ -95,7 +95,11 @@ export default function DeleteRowButton({
         // Some rows (e.g. quotes) are themselves click-to-navigate; stop the
         // modal's clicks (including a backdrop dismiss) from bubbling into it.
         <div onClick={(e) => e.stopPropagation()}>
-          <Modal title="Delete?" onClose={() => (saving ? null : setOpen(false))}>
+          {/* "Delete?" named nothing — with several rows on screen a
+              contractor could not tell which item this dialog was about to
+              remove. The title is now the caller's own message, e.g.
+              "Delete quote Q-0012?", so it names the item by itself. */}
+          <Modal title={confirmMessage} onClose={() => (saving ? null : setOpen(false))}>
             <div className={modalStyles.form}>
               <p>{confirmMessage}</p>
               {error && <span className={modalStyles.error}>{error}</span>}

@@ -76,3 +76,41 @@ describe("Sidebar mobile drawer", () => {
     expect(inactiveLink).not.toHaveAttribute("aria-current");
   });
 });
+
+/**
+ * 2026-09-18 owner decision (PLANNING.md "Sidebar order"): money screens
+ * (Quotes, Invoices, Reports) move up; the catalogue (Materials, Labour,
+ * Equipment, Jobs) groups below its own "Catalogue" heading.
+ */
+describe("Sidebar nav order", () => {
+  it("puts the money screens ahead of the catalogue, grouped under a heading", () => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    });
+    render(<Sidebar session={null} />);
+
+    const navList = screen.getByTestId("sidebar-nav-list");
+    const labels = Array.from(navList.children).map((el) => el.textContent?.trim());
+
+    expect(labels).toEqual([
+      "Dashboard",
+      "Quotes",
+      "Invoices",
+      "Reports",
+      "Clients",
+      "Projects",
+      "Catalogue",
+      "Materials",
+      "Labour",
+      "Equipment",
+      "Jobs",
+      "Settings",
+    ]);
+  });
+});

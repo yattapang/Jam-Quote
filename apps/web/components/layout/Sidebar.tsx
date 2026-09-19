@@ -11,17 +11,28 @@ export interface SidebarSession {
   businessName: string;
 }
 
-const NAV_ITEMS = [
+/**
+ * Order follows the 2026-09-18 owner decision (PLANNING.md "Sidebar order"):
+ * the money screens (Quotes, Invoices, Reports) sit near the top, and the
+ * catalogue (Materials, Labour, Equipment, Jobs) — reference data the
+ * contractor sets up once and rarely opens day to day — groups below its own
+ * heading. Clients/Projects stay between the two: relationship data, not
+ * money and not catalogue.
+ */
+type NavEntry = { href: string; label: string } | { heading: string };
+
+const NAV_ITEMS: NavEntry[] = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/quotes", label: "Quotes" },
+  { href: "/invoices", label: "Invoices" },
+  { href: "/reports", label: "Reports" },
   { href: "/clients", label: "Clients" },
   { href: "/projects", label: "Projects" },
+  { heading: "Catalogue" },
   { href: "/materials", label: "Materials" },
   { href: "/labour", label: "Labour" },
   { href: "/equipment", label: "Equipment" },
   { href: "/jobs", label: "Jobs" },
-  { href: "/invoices", label: "Invoices" },
-  { href: "/reports", label: "Reports" },
   { href: "/settings", label: "Settings" },
 ];
 
@@ -105,8 +116,15 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
           <div className={styles.brandName}>JamQuote</div>
         </div>
 
-        <div className={styles.nav}>
+        <div className={styles.nav} data-testid="sidebar-nav-list">
           {NAV_ITEMS.map((item) => {
+            if ("heading" in item) {
+              return (
+                <div key={item.heading} className={styles.navSectionHeading}>
+                  {item.heading}
+                </div>
+              );
+            }
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link

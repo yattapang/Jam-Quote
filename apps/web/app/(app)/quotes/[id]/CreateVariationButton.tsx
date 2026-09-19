@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { createQuoteVariation } from "@/lib/api-client";
+import { useSingleFlight } from "@/lib/use-single-flight";
 
 /**
  * "Add extra work" on a quote the client has already accepted.
@@ -20,11 +21,11 @@ import { createQuoteVariation } from "@/lib/api-client";
 export default function CreateVariationButton({ quoteId }: { quoteId: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function confirm() {
-    setBusy(true);
+  // A double click here would raise two empty variations against the same
+  // accepted quote — a create, so single-flight rather than `busy` alone.
+  const { run: confirm, pending: busy } = useSingleFlight(async () => {
     setError("");
     try {
       const variation = await createQuoteVariation(quoteId);
@@ -34,9 +35,8 @@ export default function CreateVariationButton({ quoteId }: { quoteId: string }) 
       router.push(`/quotes/${variation.id}/edit`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't create the variation.");
-      setBusy(false);
     }
-  }
+  });
 
   return (
     <>
@@ -59,7 +59,7 @@ export default function CreateVariationButton({ quoteId }: { quoteId: string }) 
               <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>
                 Cancel
               </Button>
-              <Button variant="primary" onClick={confirm} disabled={busy}>
+              <Button variant="primary" onClick={() => void confirm()} disabled={busy}>
                 {busy ? "Creating…" : "Create variation"}
               </Button>
             </div>

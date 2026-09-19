@@ -10,6 +10,11 @@ import type { ApiLabourEntry, ApiPurchase } from "@/lib/api-client";
  * rejected delete left no error on screen, and a double click could send two
  * delete requests. This renders the real component with mocked API calls and
  * asserts both behaviourally.
+ *
+ * The row "Remove" button now opens a ConfirmModal (the same pattern
+ * DeleteRowButton uses, see apps/web/components/ui/ConfirmModal.tsx) instead
+ * of `window.confirm` — so these tests open the dialog, then act on ITS
+ * "Remove" button, which is the actual trigger for the API call.
  */
 
 const refresh = vi.fn();
@@ -55,12 +60,19 @@ function labourEntry(overrides: Partial<ApiLabourEntry> = {}): ApiLabourEntry {
 
 beforeEach(() => {
   refresh.mockReset();
-  window.confirm = vi.fn().mockReturnValue(true);
 });
 
 afterEach(() => {
   vi.clearAllMocks();
 });
+
+/** The row trigger and the modal's confirm button are both labelled "Remove",
+ * so a name query matches two once the modal is open — the confirm is the
+ * later one in the document (same pattern as DeleteRowButton.test.tsx). */
+function confirmButton() {
+  const buttons = screen.getAllByRole("button", { name: /^remove$/i });
+  return buttons[buttons.length - 1]!;
+}
 
 describe("ProjectCosts — Remove purchase", () => {
   it("shows an error when the delete is rejected", async () => {
@@ -78,17 +90,19 @@ describe("ProjectCosts — Remove purchase", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(confirmButton());
     expect(await screen.findByText("Network down")).toBeInTheDocument();
   });
 
-  it("sends only one delete when two clicks land before React re-renders", async () => {
-    // userEvent.dblClick yields between clicks, so React re-renders the button as
-    // disabled and a state-only guard passes. Real taps on a slow phone can both land
-    // first; firing both clicks synchronously reproduces that, and only the ref holds.
+  it("sends only one delete when two confirm clicks land before React re-renders", async () => {
+    // A real tap on a slow phone can land twice before React re-renders the
+    // confirm button disabled; firing both clicks synchronously in one act()
+    // reproduces that, and only the useSingleFlight ref (not the `pending`
+    // state) can stop it.
     const { deletePurchase } = await import("@/lib/api-client");
     vi.mocked(deletePurchase).mockReset();
     vi.mocked(deletePurchase).mockImplementation(() => new Promise(() => {}));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const user = userEvent.setup();
     render(
       <ProjectCosts
         projectId="proj-1"
@@ -98,7 +112,8 @@ describe("ProjectCosts — Remove purchase", () => {
         usedCategories={[]}
       />,
     );
-    const button = screen.getByRole("button", { name: "Remove" });
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    const button = confirmButton();
     act(() => {
       button.click();
       button.click();
@@ -123,10 +138,47 @@ describe("ProjectCosts — Remove purchase", () => {
       />,
     );
 
-    await user.dblClick(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.dblClick(confirmButton());
     resolveDelete();
 
     expect(deletePurchase).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancel sends nothing", async () => {
+    const { deletePurchase } = await import("@/lib/api-client");
+    const user = userEvent.setup();
+    render(
+      <ProjectCosts
+        projectId="proj-1"
+        purchases={[purchase({ description: "Cement" })]}
+        labour={[]}
+        labourRates={[]}
+        usedCategories={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getAllByText(/Remove "Cement"\?/).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+
+    expect(deletePurchase).not.toHaveBeenCalled();
+  });
+
+  it("names the item being removed in the confirm dialog", async () => {
+    const user = userEvent.setup();
+    render(
+      <ProjectCosts
+        projectId="proj-1"
+        purchases={[purchase({ description: "20 bags of cement" })]}
+        labour={[]}
+        labourRates={[]}
+        usedCategories={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getAllByText(/Remove "20 bags of cement"\?/).length).toBeGreaterThan(0);
   });
 });
 
@@ -146,6 +198,7 @@ describe("ProjectCosts — Remove labour", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(confirmButton());
     expect(await screen.findByText("Server error")).toBeInTheDocument();
   });
 
@@ -166,7 +219,8 @@ describe("ProjectCosts — Remove labour", () => {
       />,
     );
 
-    await user.dblClick(screen.getByRole("button", { name: "Remove" }));
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.dblClick(confirmButton());
     resolveDelete();
 
     expect(deleteLabourEntry).toHaveBeenCalledTimes(1);

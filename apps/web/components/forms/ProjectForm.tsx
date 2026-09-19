@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import ClientSelectField from "./ClientSelectField";
 import type { NewProjectInput, UpdateProjectInput } from "@/lib/api-client";
 import type { ProjectDetail } from "@/lib/mock-data";
@@ -130,29 +131,29 @@ export default function ProjectForm({
 }) {
   const [values, setValues] = useState<ProjectFormValues>(initial);
   const [localClients, setLocalClients] = useState<ClientOption[]>(clients);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const set = <K extends keyof ProjectFormValues>(key: K, value: ProjectFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!values.name.trim()) return setError("Job name is required.");
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
       await onSubmit(values);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <Input
         label="Project name"
         value={values.name}

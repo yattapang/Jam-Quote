@@ -16,6 +16,7 @@ import ProjectSelectField from "@/components/forms/ProjectSelectField";
 import type { ClientOption, ProjectOption } from "@/components/forms/types";
 import type { EquipmentItem, Job, LabourRate, MaterialFavourite } from "@/lib/types";
 import { errorMessage } from "@/lib/error-message";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import {
   clearDraft,
   draftAge,
@@ -153,7 +154,6 @@ export default function QuoteBuilder({
   const [lines, setLines] = useState<DraftLine[]>(() => linesFromInitial(initial));
   // Only read on the line editor's first render, to seed its heading dropdown.
   const initialCustomHeadings = useMemo(() => customHeadingsFromInitial(initial), [initial]);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Set when save() fails with the API's 402 FREE_LIMIT_REACHED response, so
   // the error banner can add an "Upgrade to Pro" link to /settings.
@@ -266,7 +266,7 @@ export default function QuoteBuilder({
     [lines, discountPct, depositInput, depositMode, gctRatePct],
   );
 
-  async function save() {
+  const { run: save, pending: saving } = useSingleFlight(async () => {
     // Refuse rather than silently discard. A line the contractor worked on but
     // left incomplete used to be filtered out on save and discovered missing
     // when they reopened the document — indistinguishable from the app losing
@@ -289,7 +289,6 @@ export default function QuoteBuilder({
       return setError("Valid for (days) must be at least 1.");
     }
 
-    setSaving(true);
     setError("");
     setLimitReached(false);
 
@@ -338,9 +337,8 @@ export default function QuoteBuilder({
         );
         setLimitReached(false);
       }
-      setSaving(false);
     }
-  }
+  });
 
   return (
     <div className={shared.page}>
@@ -510,7 +508,7 @@ export default function QuoteBuilder({
         <Button href={backHref} variant="ghost">
           Cancel
         </Button>
-        <Button variant="primary" onClick={save}>
+        <Button variant="primary" onClick={() => void save()} disabled={saving}>
           {saving ? "Saving…" : isEdit ? "Save changes" : "Create quote"}
         </Button>
       </div>

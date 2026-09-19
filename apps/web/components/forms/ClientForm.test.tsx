@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { act } from "react";
 import userEvent from "@testing-library/user-event";
 import ClientForm, {
   emptyClientForm,
@@ -171,5 +172,33 @@ describe("clientPayloadFromValues (create) vs clientEditPayloadFromValues (edit)
     expect(payload.town).toBeNull();
     expect(payload.parish).toBeNull();
     expect(payload.addressLine).toBeNull();
+  });
+});
+
+describe("ClientForm — double submit", () => {
+  it("creates the client once when the form is submitted twice with no render between", async () => {
+    let resolveSubmit!: () => void;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSubmit = resolve;
+        }),
+    );
+    render(<ClientForm initial={emptyClientForm} onCancel={() => {}} onSubmit={onSubmit} />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/first name/i), "Marcia");
+
+    const form = screen.getByLabelText(/first name/i).closest("form")!;
+
+    // Two submits with no render/await between — `disabled={saving}` alone
+    // cannot stop this, since both fire before React re-renders the button.
+    await act(async () => {
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      resolveSubmit();
+    });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

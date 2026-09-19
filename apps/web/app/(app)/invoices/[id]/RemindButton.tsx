@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { sendInvoiceReminder, type InvoiceReminder } from "@/lib/api-client";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import { toIntlPhone } from "../../quotes/[id]/WhatsAppButton";
 
 /**
@@ -36,7 +37,6 @@ export default function RemindButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const hasPhone = Boolean(clientPhone?.trim());
@@ -51,8 +51,9 @@ export default function RemindButton({
   const whyNoEmail =
     emailUnavailableReason ?? (hasEmail ? null : "No email address on file for this client.");
 
-  async function chase(channel: "EMAIL" | "WHATSAPP") {
-    setBusy(true);
+  // A reminder is a real message to the client — a double click sending it
+  // twice is the harmful case this guards against.
+  const { run: chase, pending: busy } = useSingleFlight(async (channel: "EMAIL" | "WHATSAPP") => {
     setError("");
     try {
       const { body } = await sendInvoiceReminder(invoiceId, channel);
@@ -69,10 +70,8 @@ export default function RemindButton({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't send the reminder.");
-    } finally {
-      setBusy(false);
     }
-  }
+  });
 
   return (
     <>
@@ -108,7 +107,7 @@ export default function RemindButton({
               </Button>
               <Button
                 variant="secondary"
-                onClick={() => chase("EMAIL")}
+                onClick={() => void chase("EMAIL")}
                 disabled={busy || Boolean(whyNoEmail)}
                 title={whyNoEmail ?? undefined}
               >
@@ -116,7 +115,7 @@ export default function RemindButton({
               </Button>
               <Button
                 variant="primary"
-                onClick={() => chase("WHATSAPP")}
+                onClick={() => void chase("WHATSAPP")}
                 disabled={busy || !hasPhone}
                 title={whyNoWhatsApp ?? undefined}
               >

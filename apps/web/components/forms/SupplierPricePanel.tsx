@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
 import Select from "@/components/ui/Select";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import fieldStyles from "@/components/ui/Field.module.css";
 import {
   createMaterialPrice,
@@ -25,6 +26,7 @@ import {
 import { relativeTime } from "@/lib/relative-time";
 import { cheapestPriceCents, priceDollarsToCents } from "@/lib/supplier-prices";
 import { errorMessage } from "@/lib/error-message";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import styles from "./SupplierPricePanel.module.css";
 
 const parishOptions = [{ value: "", label: "Parish (optional)" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
@@ -55,11 +57,11 @@ export default function SupplierPricePanel({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [removingId, setRemovingId] = useState("");
+  const [removingPrice, setRemovingPrice] = useState<ApiSupplierPrice | null>(null);
 
   const [supplierId, setSupplierId] = useState("");
   const [priceDollars, setPriceDollars] = useState("");
   const [note, setNote] = useState("");
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
   const [addingSupplier, setAddingSupplier] = useState(false);
@@ -101,18 +103,23 @@ export default function SupplierPricePanel({
     void loadSuppliers();
   }, [loadSuppliers]);
 
-  async function remove(id: string) {
-    setRemovingId(id);
+  // A price-history row is a delete, so a double click must not fire it
+  // twice against two different rows racing each other's setRemovingId.
+  const { run: confirmRemove, pending: removing } = useSingleFlight(async () => {
+    const p = removingPrice;
+    if (!p) return;
+    setRemovingId(p.id);
     setError("");
     try {
-      await deleteMaterialPrice(id);
+      await deleteMaterialPrice(p.id);
+      setRemovingPrice(null);
       await load();
     } catch (err) {
       setError(errorMessage(err, "Couldn't remove that price — check your connection and try again."));
     } finally {
       setRemovingId("");
     }
-  }
+  });
 
   /**
    * Quick-add for a merchant that isn't in the list yet. Suppliers are
@@ -149,13 +156,14 @@ export default function SupplierPricePanel({
     }
   }
 
-  async function recordPrice(e: React.FormEvent) {
+  // Recording a price is a create — a double submit would log the same quote
+  // twice, throwing off "cheapest" and the price history both.
+  const { run: recordPrice, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierId) return setFormError("Pick a supplier.");
     const priceCents = priceDollarsToCents(priceDollars);
     if (priceCents <= 0) return setFormError("Enter the price you were quoted.");
 
-    setSaving(true);
     setFormError("");
     try {
       await createMaterialPrice({
@@ -169,10 +177,8 @@ export default function SupplierPricePanel({
       await load();
     } catch (err) {
       setFormError(errorMessage(err, "Couldn't record that price — check your connection and try again."));
-    } finally {
-      setSaving(false);
     }
-  }
+  });
 
   const cheapest = cheapestPriceCents(prices);
 
@@ -223,18 +229,7 @@ export default function SupplierPricePanel({
                   <button
                     type="button"
                     className={styles.remove}
-                    onClick={() => {
-                      // One click used to delete a price-history row outright,
-                      // with nothing else on this panel confirming a delete.
-                      if (
-                        !window.confirm(
-                          `Remove the ${p.supplierName} price of ${formatJmd(p.priceCents)}? This cannot be undone.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void remove(p.id);
-                    }}
+                    onClick={() => setRemovingPrice(p)}
                     disabled={removingId === p.id}
                   >
                     {removingId === p.id ? "Removing…" : "Remove"}
@@ -246,7 +241,7 @@ export default function SupplierPricePanel({
         </ul>
       )}
 
-      <form className={styles.recordForm} onSubmit={recordPrice}>
+      <form className={styles.recordForm} onSubmit={(e) => void recordPrice(e)}>
         <div className={styles.recordFields}>
           <Select
             label="Record a price at"
@@ -344,6 +339,17 @@ export default function SupplierPricePanel({
           </Button>
         </div>
       </form>
+
+      {removingPrice && (
+        <ConfirmModal
+          message={`Remove the ${removingPrice.supplierName} price of ${formatJmd(removingPrice.priceCents)}? This cannot be undone.`}
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          pending={removing}
+          onConfirm={() => void confirmRemove()}
+          onCancel={() => setRemovingPrice(null)}
+        />
+      )}
     </section>
   );
 }

@@ -391,14 +391,25 @@ Plan, in order:
    two deletes - the busy state disables the button only after React re-renders, and two
    fast taps both land first. The existing test used userEvent.dblClick, which yields
    between clicks, so it could never see it. Fixed with a synchronous ref; the new test
-   fires both clicks before a render and fails without the ref. **Open:** other forms that
-   rely on `disabled={saving}` alone likely share this race - sweep queued.
+   fires both clicks before a render and fails without the ref. **Swept the same day:**
+   one `useSingleFlight` hook (a synchronous ref) now guards every HARMFUL double action -
+   record payment, create client/project/catalog item/job, new invoice, variation, chase
+   email, supplier price, quote save (which had no guard at all). Idempotent PATCHes were
+   listed and left. `ConfirmModal` replaces `window.confirm` on contractor screens;
+   `DeleteRowButton` is red by default (5.94:1 light, 5.06:1 dark) and its title names the
+   item. I planted the hook's guard away: the hook, client and payment tests all fail.
 4. Client-facing documents - DONE (owner chose 4a, green accept). Brand palette forced
    light on /q and /i (all text and buttons AA), the business logo served by a
    share-token-scoped route that 404s like the document reads, PDF-identical dates, and
    calm branded error pages. The recurring 14-16 test failures both agents reported were
    CPU contention: the full suite is green twice with nothing else running.
-5. Screen hierarchy (one primary action per quote status, sidebar order) - NEEDS OWNER.
+5. Screen hierarchy - DONE (owner decisions). One primary per quote status: Draft Send
+   (a chooser over WhatsApp / Email / Mark as sent that drives the existing buttons, so
+   each channel still lives in one place), Sent/Viewed Mark accepted, Accepted Convert to
+   invoice, terminal states none; Delete set apart. Invoices already had one primary.
+   Sidebar: Dashboard, Quotes, Invoices, Reports, Clients, Projects, then "Catalogue"
+   (Materials, Labour, Equipment, Jobs), Settings. The send-gate guard caught the new
+   chooser offering Email with no client address; fixed.
 6. Token hygiene (date helper, PDF importing tokens, radius/spacing) - objective, later.
 
 ## Owner decisions implemented (2026-09-18)

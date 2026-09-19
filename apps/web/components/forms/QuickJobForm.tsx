@@ -4,6 +4,7 @@ import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import { BOUNDS } from "@jamquote/core";
 import { emptyQuickJobForm, type QuickJobFormValues } from "@/lib/line-editor";
 
@@ -34,30 +35,30 @@ export default function QuickJobForm({
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [values, setValues] = useState<QuickJobFormValues>(emptyQuickJobForm);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const set = <K extends keyof QuickJobFormValues>(key: K, value: QuickJobFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!values.name.trim()) return setError("Name is required.");
     if (!values.unit.trim()) return setError("Unit is required (e.g. sq ft, hour, job).");
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
       await onSubmit(values);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <Input
         label="Name"
         placeholder="e.g. Interior wall painting"

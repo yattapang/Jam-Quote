@@ -8,6 +8,7 @@ import Modal, { modalStyles } from "@/components/ui/Modal";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import { createInvoice } from "@/lib/api-client";
 import { errorMessage } from "@/lib/error-message";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import type { ClientOption } from "@/components/forms/types";
 
 /**
@@ -29,12 +30,12 @@ export default function NewInvoiceButton({ clients }: { clients: ClientOption[] 
   const [options, setOptions] = useState(clients);
   const [clientId, setClientId] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  async function submit(e: React.FormEvent) {
+  // Creating an invoice is not idempotent — a double submit would raise two
+  // draft invoices for the same job.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
     setError("");
     try {
       const invoice = await createInvoice({
@@ -47,9 +48,8 @@ export default function NewInvoiceButton({ clients }: { clients: ClientOption[] 
       router.push(`/invoices/${invoice.id}/edit`);
     } catch (err) {
       setError(errorMessage(err, "Couldn't create the invoice — check your connection and try again."));
-      setSaving(false);
     }
-  }
+  });
 
   return (
     <>
@@ -59,7 +59,7 @@ export default function NewInvoiceButton({ clients }: { clients: ClientOption[] 
 
       {open && (
         <Modal title="New invoice" onClose={() => (saving ? undefined : setOpen(false))}>
-          <form className={modalStyles.form} onSubmit={submit}>
+          <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
             <ClientSelectField
               clients={options}
               value={clientId}

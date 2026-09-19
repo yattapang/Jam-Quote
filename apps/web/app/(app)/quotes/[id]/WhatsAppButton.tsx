@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, forwardRef, useImperativeHandle } from "react";
 import { formatJmd } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import { shareQuote } from "@/lib/api-client";
@@ -26,6 +26,14 @@ interface WhatsAppButtonProps {
   totalCents: number;
 }
 
+/** Imperative handle exposed via ref: lets the Send chooser in QuoteActions
+ * trigger the exact same WhatsApp flow this button uses, instead of
+ * reimplementing it. */
+export interface WhatsAppButtonHandle {
+  open: () => void;
+  disabled: boolean;
+}
+
 /**
  * Click-to-chat on WhatsApp — free, no Business API, no service to pay for.
  *
@@ -35,13 +43,10 @@ interface WhatsAppButtonProps {
  * arrived. The same silent non-delivery the email path had, on the channel
  * most Jamaican contractors actually use.
  */
-export default function WhatsAppButton({
-  quoteId,
-  quoteNum,
-  clientName,
-  clientPhone,
-  totalCents,
-}: WhatsAppButtonProps) {
+const WhatsAppButton = forwardRef<WhatsAppButtonHandle, WhatsAppButtonProps>(function WhatsAppButton(
+  { quoteId, quoteNum, clientName, clientPhone, totalCents },
+  ref,
+) {
   const hasPhone = Boolean(clientPhone && clientPhone.trim());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +76,11 @@ export default function WhatsAppButton({
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    open: handleClick,
+    disabled: !hasPhone || busy,
+  }));
+
   return (
     <>
       <Button
@@ -87,4 +97,6 @@ export default function WhatsAppButton({
       )}
     </>
   );
-}
+});
+
+export default WhatsAppButton;

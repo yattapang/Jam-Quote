@@ -13,8 +13,6 @@ import {
 } from "@/lib/quote-totals";
 import { getQuote, getClients, getBusiness } from "@/lib/api-server";
 import QuoteActions from "./QuoteActions";
-import WhatsAppButton from "./WhatsAppButton";
-import EmailQuoteButton from "./EmailQuoteButton";
 import CreateVariationButton from "./CreateVariationButton";
 import { emailSendingStatus } from "@/lib/email-sending";
 import buttonStyles from "@/components/ui/Button.module.css";
@@ -88,26 +86,22 @@ export default async function QuoteDetailPage({ params }: { params: { id: string
           >
             Download PDF
           </a>
-          <WhatsAppButton
-            quoteId={quote.id}
-            quoteNum={quote.num}
-            clientName={client?.name}
-            clientPhone={client?.phone}
-            totalCents={totals.totalCents}
-          />
           {/* Only on a quote the client has actually agreed to. Varying a
               draft or a sent quote is just editing it, and Revise already
               does that. */}
           {(quote.status === "ACCEPTED" || quote.status === "INVOICED") && (
             <CreateVariationButton quoteId={quote.id} />
           )}
-          <EmailQuoteButton
-            quoteId={quote.id}
-            clientEmail={client?.email}
+          <QuoteActions
+            id={quote.id}
             status={quote.status}
-            unavailableReason={sending.configured ? undefined : sending.reason}
+            quoteNum={quote.num}
+            clientName={client?.name}
+            clientPhone={client?.phone}
+            clientEmail={client?.email}
+            totalCents={totals.totalCents}
+            emailUnavailableReason={sending.configured ? undefined : sending.reason}
           />
-          <QuoteActions id={quote.id} status={quote.status} />
         </div>
       </header>
 

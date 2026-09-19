@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { act } from "react";
 import userEvent from "@testing-library/user-event";
 
 /**
@@ -116,6 +117,28 @@ describe("RemindButton — email", () => {
 
     expect(sendInvoiceReminder).toHaveBeenCalledWith("inv1", "EMAIL");
     expect(window.open).not.toHaveBeenCalled();
+  });
+
+  it("sends the email reminder once when clicked twice with no render between", async () => {
+    let resolveSend!: (v: { body: string; subject: string }) => void;
+    sendInvoiceReminder.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+    const user = renderButton();
+    await user.click(screen.getByRole("button", { name: /send reminder/i }));
+    const emailButton = screen.getByRole("button", { name: /^email$/i });
+
+    // Two clicks with no render/await between — the shape `disabled={busy}`
+    // alone cannot stop, since both fire before React re-renders it disabled.
+    await act(async () => {
+      fireEvent.click(emailButton);
+      fireEvent.click(emailButton);
+      resolveSend({ body: "Hi Marcia, ...", subject: "s" });
+    });
+
+    expect(sendInvoiceReminder).toHaveBeenCalledTimes(1);
   });
 });
 

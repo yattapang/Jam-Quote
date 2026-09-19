@@ -1,31 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { QuoteStatus } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import DeleteRowButton from "@/components/ui/DeleteRowButton";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
+import WhatsAppButton, { type WhatsAppButtonHandle } from "./WhatsAppButton";
+import EmailQuoteButton, { type EmailQuoteButtonHandle } from "./EmailQuoteButton";
 
 import { errorMessage } from "@/lib/error-message";
 /**
- * Header actions for the quote detail page. DRAFT quotes can be edited,
- * marked as sent (DRAFT -> SENT), or deleted; any other status can be revised
- * into a new DRAFT copy (see ALLOWED_TRANSITIONS / revise in
- * quotes.service.ts).
+ * Header actions for the quote detail page.
  *
- * "Mark as sent" here is bookkeeping ONLY — it emails nothing. Emailing lives
- * in EmailQuoteButton and advances the status itself (#35). The two used to
- * both be called "Send", so whichever one a contractor picked, half the job
- * silently did not happen. An
- * ACCEPTED quote also offers "Convert to invoice", which creates a DRAFT
- * invoice from it and lands the user in that invoice's editor. Every
- * state-changing action confirms via a Modal before calling the API.
+ * One PRIMARY action per status (2026-09-18 owner decision — PLANNING.md
+ * "Quote screen actions"), everything else secondary, Delete set apart from
+ * the group entirely (see DeleteRowButton, styled on its own):
+ *
+ *   DRAFT              -> Send (opens a chooser: WhatsApp / email / mark as
+ *                          sent by another channel — see the "Send" comment
+ *                          below for why a chooser and not one channel)
+ *   SENT, VIEWED        -> Mark accepted (the next money-forward step; only
+ *                          an ACCEPTED quote can be converted to an invoice)
+ *   ACCEPTED            -> Convert to invoice
+ *   DECLINED, EXPIRED,
+ *   INVOICED            -> none (terminal for this screen — only Revise,
+ *                          secondary, applies)
+ *
+ * "Mark as sent" bookkeeping-only vs. actually emailing/WhatsApping (#35) is
+ * unchanged: emailing still advances DRAFT -> SENT itself via
+ * EmailQuoteButton, WhatsApp still does not (it has no delivery receipt to
+ * hang a status flip on). The Send chooser does not reimplement either flow —
+ * it drives the exact same WhatsAppButton/EmailQuoteButton instances through
+ * an imperative handle, so there is exactly one place each channel's logic
+ * lives.
  */
-export default function QuoteActions({ id, status }: { id: string; status: QuoteStatus }) {
+export default function QuoteActions({
+  id,
+  status,
+  quoteNum,
+  clientName,
+  clientPhone,
+  clientEmail,
+  totalCents,
+  emailUnavailableReason,
+}: {
+  id: string;
+  status: QuoteStatus;
+  quoteNum: string;
+  clientName?: string;
+  clientPhone?: string;
+  clientEmail?: string;
+  totalCents: number;
+  emailUnavailableReason?: string;
+}) {
   const router = useRouter();
-  const [sendOpen, setSendOpen] = useState(false);
+  const whatsappRef = useRef<WhatsAppButtonHandle>(null);
+  const emailRef = useRef<EmailQuoteButtonHandle>(null);
+
+  const [sendChooserOpen, setSendChooserOpen] = useState(false);
+  const [markSentOpen, setMarkSentOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [reviseOpen, setReviseOpen] = useState(false);
@@ -52,12 +87,13 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
     }
   }
 
-  async function confirmSend() {
+  async function confirmMarkSent() {
     setSending(true);
     setSendError("");
     try {
       await setQuoteStatus(id, QuoteStatus.SENT);
-      setSendOpen(false);
+      setMarkSentOpen(false);
+      setSendChooserOpen(false);
       router.refresh();
     } catch (err) {
       setSendError(errorMessage(err, "Couldn't send — check your connection and try again."));
@@ -79,42 +115,105 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
     }
   }
 
+  // Shared everywhere: a contractor may re-send by WhatsApp or email from
+  // any status, not only DRAFT (a re-sent quote is common after a client
+  // asks "can you send that again?").
+  const channelButtons = (
+    <>
+      <WhatsAppButton
+        ref={whatsappRef}
+        quoteId={id}
+        quoteNum={quoteNum}
+        clientName={clientName}
+        clientPhone={clientPhone}
+        totalCents={totalCents}
+      />
+      <EmailQuoteButton
+        ref={emailRef}
+        quoteId={id}
+        clientEmail={clientEmail}
+        status={status}
+        unavailableReason={emailUnavailableReason}
+      />
+    </>
+  );
+
+  const deleteButton = (
+    <DeleteRowButton
+      kind="quote"
+      id={id}
+      confirmMessage="Delete this quote? This can't be undone."
+      redirectTo="/quotes"
+    />
+  );
+
   if (status === QuoteStatus.DRAFT) {
     return (
       <>
-        <Button href={`/quotes/${id}/edit`} variant="outlineAccent" size="sm">
+        <Button href={`/quotes/${id}/edit`} variant="secondary" size="sm">
           Edit
         </Button>
-        {/* Deliberately NOT "Send": emailing the quote is what sends it, and
-            that now advances the status by itself (#35). This is the record-
-            keeping path for a quote delivered some other way — WhatsApp and
-            hand delivery are primary channels in this market, so a contractor
-            needs to mark those sent without the app pretending it emailed
-            anything. */}
-        <Button variant="outlineAccent" size="sm" onClick={() => setSendOpen(true)}>
-          Mark as sent
+        {channelButtons}
+        {/* THE primary action for a draft: getting it in front of the
+            client. WhatsApp and hand delivery are the primary channels in
+            this market, email is the formal alternative, and "sent some
+            other way" still needs recording — so Send opens a chooser
+            rather than guessing one channel and hiding the other two behind
+            equal-weight buttons. */}
+        <Button variant="primary" size="sm" onClick={() => setSendChooserOpen(true)}>
+          Send
         </Button>
-        <DeleteRowButton
-          kind="quote"
-          id={id}
-          confirmMessage="Delete this quote? This can't be undone."
-          redirectTo="/quotes"
-        />
-        {sendOpen && (
-          <Modal title="Mark as sent?" onClose={() => (sending ? undefined : setSendOpen(false))}>
+        {deleteButton}
+        {sendChooserOpen && (
+          <Modal title="Send this quote" onClose={() => setSendChooserOpen(false)}>
+            <div className={modalStyles.form}>
+              <p>Choose how to send it. Any of these will do.</p>
+              {sendError && <span className={modalStyles.error}>{sendError}</span>}
+              <div className={modalStyles.actions} style={{ flexDirection: "column", alignItems: "stretch" }}>
+                <Button
+                  variant="secondary"
+                  disabled={whatsappRef.current?.disabled}
+                  onClick={() => {
+                    setSendChooserOpen(false);
+                    whatsappRef.current?.open();
+                  }}
+                >
+                  WhatsApp
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!clientEmail?.trim() || !!emailUnavailableReason}
+                  onClick={() => {
+                    setSendChooserOpen(false);
+                    emailRef.current?.open();
+                  }}
+                >
+                  Email
+                </Button>
+                <Button variant="secondary" onClick={() => setMarkSentOpen(true)}>
+                  Mark as sent (sent another way)
+                </Button>
+                <Button variant="ghost" onClick={() => setSendChooserOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+        {markSentOpen && (
+          <Modal title="Mark as sent?" onClose={() => (sending ? undefined : setMarkSentOpen(false))}>
             <div className={modalStyles.form}>
               <p>
                 Use this if you sent the quote yourself — by WhatsApp, in person, or
-                any other way. <strong>Nothing is emailed.</strong> To email it, use
-                Send by email instead.
+                any other way. <strong>Nothing is emailed.</strong>
               </p>
               <p>It moves out of Draft and can no longer be edited directly.</p>
               {sendError && <span className={modalStyles.error}>{sendError}</span>}
               <div className={modalStyles.actions}>
-                <Button variant="ghost" onClick={() => setSendOpen(false)} disabled={sending}>
+                <Button variant="ghost" onClick={() => setMarkSentOpen(false)} disabled={sending}>
                   Cancel
                 </Button>
-                <Button variant="primary" onClick={confirmSend} disabled={sending}>
+                <Button variant="primary" onClick={confirmMarkSent} disabled={sending}>
                   {sending ? "Saving…" : "Mark as sent"}
                 </Button>
               </div>
@@ -147,12 +246,16 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
 
   return (
     <>
+      {channelButtons}
       {awaitingAnswer && (
         <>
+          {/* Primary: the money-forward step. Declining is the real, valid
+              alternative outcome, so it stays available — just secondary,
+              not fighting Accept for attention. */}
           <Button variant="primary" size="sm" onClick={() => setOutcome(QuoteStatus.ACCEPTED)}>
             Mark accepted
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setOutcome(QuoteStatus.DECLINED)}>
+          <Button variant="secondary" size="sm" onClick={() => setOutcome(QuoteStatus.DECLINED)}>
             Mark declined
           </Button>
         </>
@@ -185,9 +288,11 @@ export default function QuoteActions({ id, status }: { id: string; status: Quote
           {converting ? "Converting…" : "Convert to invoice"}
         </Button>
       )}
-      <Button variant="outlineAccent" size="sm" onClick={() => setReviseOpen(true)}>
+      <Button variant="secondary" size="sm" onClick={() => setReviseOpen(true)}>
         Revise
       </Button>
+      {/* Delete stays DRAFT-only — the API itself rejects deleting any other
+          status, so it is intentionally not rendered here. */}
       {convertError && <span style={{ color: "var(--jq-crit)", fontSize: 12.5 }}>{convertError}</span>}
       {reviseOpen && (
         <Modal title="Create a revision?" onClose={() => (revising ? undefined : setReviseOpen(false))}>

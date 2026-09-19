@@ -85,6 +85,26 @@ async function confirmDelete(user: ReturnType<typeof userEvent.setup>) {
   await user.click(buttons[buttons.length - 1]!);
 }
 
+describe("DeleteRowButton — the confirm dialog names the item", () => {
+  it("uses the caller's message as the dialog title, not a bare 'Delete?'", async () => {
+    // "Delete?" named nothing — with several rows on screen there was no way
+    // to tell which item the dialog was about to remove.
+    const user = renderDelete({ confirmMessage: "Delete quote Q-0012?" });
+    await user.click(screen.getByRole("button", { name: /delete/i }));
+    expect(screen.getByRole("heading", { name: "Delete quote Q-0012?" })).toBeInTheDocument();
+  });
+});
+
+describe("DeleteRowButton — styled as destructive", () => {
+  it("carries the trigger class that colors it with --jq-crit by default, not just on hover", () => {
+    renderDelete();
+    // Phones have no hover, so a hover-only red is invisible there — the
+    // trigger must be red-by-default, asserted via its own CSS module class
+    // rather than a computed style jsdom cannot resolve module CSS for.
+    expect(screen.getByRole("button", { name: /delete/i }).className).toMatch(/trigger/);
+  });
+});
+
 describe("DeleteRowButton — confirming first", () => {
   it("does not delete on the first click", async () => {
     const user = renderDelete();

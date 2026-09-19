@@ -8,6 +8,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
 import Modal, { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import MaterialForm, { materialPayloadFromValues } from "@/components/forms/MaterialForm";
 import LabourRateForm, { labourRatePayloadFromValues } from "@/components/forms/LabourRateForm";
 import EquipmentForm, { equipmentPayloadFromValues } from "@/components/forms/EquipmentForm";
@@ -449,7 +450,6 @@ export default function JobForm({
   const duplicateKeys = duplicateComponentKeys(values.components);
   const mergeDuplicates = () =>
     setValues((v) => ({ ...v, components: mergeDuplicateComponents(v.components) }));
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const set = <K extends keyof JobFormValues>(key: K, value: JobFormValues[K]) =>
@@ -510,7 +510,10 @@ export default function JobForm({
   }, [costInputComponents, markupPct]);
   const markupCents = unitCostCents - subtotalCents;
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!values.name.trim()) return setError("Name is required.");
     if (!values.unit.trim()) return setError("Unit is required (e.g. sq ft, hour, job).");
@@ -525,21 +528,19 @@ export default function JobForm({
       return setError("Add at least one component with a description and quantity.");
     }
     if (costError) return setError(costError);
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
       await onSubmit(values);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
     <>
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <div className={modalStyles.row2}>
         <Input
           label="Name"

@@ -1,7 +1,11 @@
 .trigger {
   border: none;
   background: transparent;
-  color: var(--jq-text-muted);
+  /* Destructive by default, not just on hover — phones have no hover, so a
+     hover-only red left this looking like any other muted row action until
+     tapped. #B23A2E on white is ~5.9:1, #E2695A on the dark surface is
+     ~5.1:1: both clear WCAG AA (4.5:1) for normal text. */
+  color: var(--jq-crit);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -10,8 +14,7 @@
   font-family: var(--jq-font-body);
 }
 .trigger:hover:not(:disabled) {
-  background: var(--jq-surface-alt);
-  color: var(--jq-crit);
+  background: var(--jq-crit-soft);
 }
 .trigger:disabled {
   opacity: 0.5;

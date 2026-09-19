@@ -7,6 +7,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import {
   ADD_NEW_OPTION_VALUE,
   compareCatalogRows,
@@ -228,7 +229,6 @@ export default function MaterialForm({
 }) {
   const { schema, loading, failed } = useMaterialSchema();
   const [values, setValues] = useState<MaterialFormValues>(initial);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [droppedWarning, setDroppedWarning] = useState("");
   const listId = useId();
@@ -370,7 +370,10 @@ export default function MaterialForm({
     setUnitNote(alreadyKnown ? `Already on your list — selected ${created.label}.` : "");
   }
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!effectiveName.trim()) {
       return setError(
@@ -386,7 +389,6 @@ export default function MaterialForm({
     if (!values.priceDollars.trim()) {
       return setError("Price is required.");
     }
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
@@ -403,13 +405,12 @@ export default function MaterialForm({
       );
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <Select
         label="Category"
         options={[

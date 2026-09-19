@@ -7,9 +7,11 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal, { modalStyles } from "@/components/ui/Modal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import MoneyText from "@/components/ui/MoneyText";
 import fieldStyles from "@/components/ui/Field.module.css";
 import { recordManualPayment, voidPayment, type InvoicePayment } from "@/lib/api-client";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import styles from "./PaymentsPanel.module.css";
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -57,9 +59,9 @@ export default function PaymentsPanel({
   const [method, setMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
   const [reference, setReference] = useState("");
   const [paidAt, setPaidAt] = useState(todayLocal());
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [voidingId, setVoidingId] = useState("");
+  const [voidTarget, setVoidTarget] = useState<InvoicePayment | null>(null);
 
   // A DRAFT invoice hasn't been issued to anyone yet, so there is nothing to
   // have been paid against. The API would accept it; offering it invites
@@ -76,7 +78,10 @@ export default function PaymentsPanel({
     setOpen(true);
   }
 
-  async function submit(e: React.FormEvent) {
+  // Recording a payment moves real money on the customer's statement — a
+  // double submit (fast double click/Enter, both landing before `pending`
+  // re-renders the button disabled) would record it twice.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     const amountCents = Math.round((Number(amountDollars) || 0) * 100);
     if (amountCents <= 0) {
@@ -84,7 +89,6 @@ export default function PaymentsPanel({
       return;
     }
 
-    setSaving(true);
     setError("");
     try {
       await recordManualPayment(invoiceId, {
@@ -99,32 +103,24 @@ export default function PaymentsPanel({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't record that payment.");
-    } finally {
-      setSaving(false);
     }
-  }
+  });
 
-  async function removePayment(p: InvoicePayment) {
-    // Confirmed because it moves money on the customer's statement, and for a
-    // card payment the wording has to be honest: this corrects the book, it
-    // does not send anybody their money back.
-    const warning =
-      p.method === PaymentMethod.CARD
-        ? "Void this card payment? This corrects your records only — it does NOT refund the customer."
-        : "Void this payment? It will be removed from the invoice balance.";
-    if (!window.confirm(warning)) return;
-
+  const { run: confirmVoid, pending: voiding } = useSingleFlight(async () => {
+    const p = voidTarget;
+    if (!p) return;
     setVoidingId(p.id);
     setError("");
     try {
       await voidPayment(p.id);
+      setVoidTarget(null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't void that payment.");
     } finally {
       setVoidingId("");
     }
-  }
+  });
 
   const overpaying = Math.round((Number(amountDollars) || 0) * 100) > balanceDueCents;
 
@@ -165,7 +161,7 @@ export default function PaymentsPanel({
                 <button
                   type="button"
                   className={styles.void}
-                  onClick={() => void removePayment(p)}
+                  onClick={() => setVoidTarget(p)}
                   disabled={voidingId === p.id}
                 >
                   {voidingId === p.id ? "Voiding…" : "Void"}
@@ -180,7 +176,7 @@ export default function PaymentsPanel({
 
       {open && (
         <Modal title="Record payment" onClose={() => (saving ? undefined : setOpen(false))}>
-          <form className={modalStyles.form} onSubmit={submit}>
+          <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
             <div className={modalStyles.row2}>
               <Input
                 label="Amount $"
@@ -230,6 +226,24 @@ export default function PaymentsPanel({
             </div>
           </form>
         </Modal>
+      )}
+
+      {voidTarget && (
+        // Confirmed because it moves money on the customer's statement, and for
+        // a card payment the wording has to be honest: this corrects the book,
+        // it does not send anybody their money back.
+        <ConfirmModal
+          message={
+            voidTarget.method === PaymentMethod.CARD
+              ? "Void this card payment? This corrects your records only — it does NOT refund the customer."
+              : "Void this payment? It will be removed from the invoice balance."
+          }
+          confirmLabel="Void"
+          pendingLabel="Voiding…"
+          pending={voiding}
+          onConfirm={() => void confirmVoid()}
+          onCancel={() => setVoidTarget(null)}
+        />
       )}
     </>
   );

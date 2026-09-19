@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import RateUnitField from "@/components/forms/RateUnitField";
 import { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import TradeSelectField from "@/components/forms/TradeSelectField";
 import type { NewLabourRateInput, Trade, UpdateLabourRateInput } from "@/lib/api-client";
 import type { LabourRate } from "@/lib/types";
@@ -89,29 +90,29 @@ export default function LabourRateForm({
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [values, setValues] = useState<LabourRateFormValues>(initial);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const set = <K extends keyof LabourRateFormValues>(key: K, value: LabourRateFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!values.trade.trim()) return setError("Trade is required.");
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
       await onSubmit(values);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <TradeSelectField trades={trades} value={values.trade} onChange={(name) => set("trade", name)} />
       <Input
         label="Skill tier"

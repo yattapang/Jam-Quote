@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import { modalStyles } from "@/components/ui/Modal";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import type { NewClientInput, UpdateClientInput } from "@/lib/api-client";
 import type { Client } from "@/lib/types";
 
@@ -105,13 +106,15 @@ export default function ClientForm({
   onBusyChange?: (busy: boolean) => void;
 }) {
   const [values, setValues] = useState<ClientFormValues>(initial);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const set = <K extends keyof ClientFormValues>(key: K, value: ClientFormValues[K]) =>
     setValues((v) => ({ ...v, [key]: value }));
 
-  async function submit(e: React.FormEvent) {
+  // A double submit (fast double click/Enter, no render between) would
+  // create the record twice — guarded with the shared single-flight hook
+  // rather than the `saving` state alone.
+  const { run: submit, pending: saving } = useSingleFlight(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!values.firstName.trim()) return setError("First name is required.");
     // Mirrors trnSchema in packages/core/src/types/validators.ts (same digit
@@ -121,20 +124,18 @@ export default function ClientForm({
     if (trnDigits.length > 0 && trnDigits.length !== 9) {
       return setError("TRN must be 9 digits");
     }
-    setSaving(true);
     onBusyChange?.(true);
     setError("");
     try {
       await onSubmit(values);
     } catch (err) {
       setError(errorMessage(err, "Couldn't save — check your connection and try again."));
-      setSaving(false);
       onBusyChange?.(false);
     }
-  }
+  });
 
   return (
-    <form className={modalStyles.form} onSubmit={submit}>
+    <form className={modalStyles.form} onSubmit={(e) => void submit(e)}>
       <div className={modalStyles.row2}>
         <Input label="First name" value={values.firstName} onChange={(e) => set("firstName", e.target.value)} autoFocus maxLength={80} />
         <Input label="Last name" value={values.lastName} onChange={(e) => set("lastName", e.target.value)} maxLength={80} />

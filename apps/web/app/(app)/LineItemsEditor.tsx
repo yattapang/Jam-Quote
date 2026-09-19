@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { BOUNDS, QuoteDetailLevel, type GctTreatment } from "@jamquote/core";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -525,6 +525,14 @@ export default function LineItemsEditor({
   // in-progress document.
   const [favourites, setFavourites] = useState<MaterialFavourite[]>(initialFavourites);
   const [savingFavKey, setSavingFavKey] = useState<string | null>(null);
+  // `savingFavKey` alone does not stop a fast double click on the same
+  // star: both clicks can fire before React re-renders it disabled, and the
+  // existing-favourite lookup in saveFavourite would then race — both calls
+  // seeing "not found yet" and creating two favourites for the same
+  // material. Different lines can legitimately save in parallel (that's why
+  // this isn't the single global useSingleFlight), so the guard is a set of
+  // in-flight KEYS, written synchronously like useSingleFlight's ref.
+  const savingFavKeys = useRef(new Set<string>());
   const [favError, setFavError] = useState("");
   const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
   const [addingMaterialBusy, setAddingMaterialBusy] = useState(false);
@@ -695,12 +703,14 @@ export default function LineItemsEditor({
    *     (re-saving the same picked material to update its price).
    */
   const saveFavourite = async (key: string) => {
+    if (savingFavKeys.current.has(key)) return;
     const line = lines.find((l) => l.key === key);
     if (!line) return;
     const name = line.description.trim();
     const priceCents = toCents(line.unitPriceDollars);
     if (!name || priceCents === 0) return;
 
+    savingFavKeys.current.add(key);
     setSavingFavKey(key);
     setFavError("");
     try {
@@ -718,6 +728,7 @@ export default function LineItemsEditor({
     } catch (err) {
       setFavError(errorMessage(err, "Couldn't save the material — check your connection and try again."));
     } finally {
+      savingFavKeys.current.delete(key);
       setSavingFavKey(null);
     }
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BOUNDS, formatJmd, groupByCategory, mergeCategoryOptions } from "@jamquote/core";
 import { lineUnitLabel } from "@/lib/quote-totals";
@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Modal from "@/components/ui/Modal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import {
   createPurchase,
   deletePurchase,
@@ -17,6 +18,7 @@ import {
   type ApiPurchase,
   type ApiLabourEntry,
 } from "@/lib/api-client";
+import { useSingleFlight } from "@/lib/use-single-flight";
 import type { LabourRate } from "@/lib/types";
 import shared from "../../shared.module.css";
 import styles from "./ProjectCosts.module.css";
@@ -57,15 +59,10 @@ export default function ProjectCosts({
 
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [removingPurchaseId, setRemovingPurchaseId] = useState<string | null>(null);
-  const [removingLabourId, setRemovingLabourId] = useState<string | null>(null);
-  // The disabled prop alone does not stop a fast double click: both clicks can run
-  // before React re-renders the button as disabled, sending two deletes. A ref is
-  // updated synchronously, so the second click sees the first is already in flight.
-  const removingRef = useRef(new Set<string>());
+  const [removingPurchase, setRemovingPurchase] = useState<ApiPurchase | null>(null);
+  const [removingLabour, setRemovingLabour] = useState<ApiLabourEntry | null>(null);
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -97,8 +94,10 @@ export default function ProjectCosts({
     if (!who.trim()) setWho(r.skillTier ? `${r.trade} — ${r.skillTier}` : r.trade);
   }
 
-  async function saveLabour() {
-    setBusy(true);
+  // A double submit (fast double click/Enter with no render between) would
+  // log the same cost or labour entry twice — a create, not an idempotent
+  // update, so it needs the single-flight guard, not just a busy flag.
+  const { run: saveLabour, pending: savingLabour } = useSingleFlight(async () => {
     setError(null);
     try {
       await createLabourEntry({
@@ -118,18 +117,15 @@ export default function ProjectCosts({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save that.");
-    } finally {
-      setBusy(false);
     }
-  }
+  });
 
   const labourTotal = labour.reduce(
     (n, l) => n + Math.round(Number(l.quantity) * l.rateCents),
     0,
   );
 
-  async function save() {
-    setBusy(true);
+  const { run: save, pending: savingPurchase } = useSingleFlight(async () => {
     setError(null);
     try {
       await createPurchase({
@@ -155,10 +151,38 @@ export default function ProjectCosts({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save that.");
-    } finally {
-      setBusy(false);
     }
-  }
+  });
+
+  const { run: confirmRemovePurchase, pending: removingPurchasePending } = useSingleFlight(
+    async () => {
+      const p = removingPurchase;
+      if (!p) return;
+      setError(null);
+      try {
+        await deletePurchase(p.id);
+        setRemovingPurchase(null);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't remove that.");
+      }
+    },
+  );
+
+  const { run: confirmRemoveLabour, pending: removingLabourPending } = useSingleFlight(
+    async () => {
+      const l = removingLabour;
+      if (!l) return;
+      setError(null);
+      try {
+        await deleteLabourEntry(l.id);
+        setRemovingLabour(null);
+        router.refresh();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't remove that.");
+      }
+    },
+  );
 
   return (
     <section className={shared.section}>
@@ -212,25 +236,10 @@ export default function ProjectCosts({
                 <Button
                   variant="ghost"
                   size="sm"
-                  disabled={removingPurchaseId === p.id}
-                  onClick={async () => {
-                    if (removingRef.current.has(`purchase:${p.id}`)) return;
-                    if (!window.confirm(`Remove "${p.description}"?`)) return;
-                    removingRef.current.add(`purchase:${p.id}`);
-                    setRemovingPurchaseId(p.id);
-                    setError(null);
-                    try {
-                      await deletePurchase(p.id);
-                      router.refresh();
-                    } catch (err) {
-                      setError(err instanceof Error ? err.message : "Couldn't remove that.");
-                    } finally {
-                      removingRef.current.delete(`purchase:${p.id}`);
-                      setRemovingPurchaseId(null);
-                    }
-                  }}
+                  disabled={removingPurchase?.id === p.id}
+                  onClick={() => setRemovingPurchase(p)}
                 >
-                  {removingPurchaseId === p.id ? "Removing…" : "Remove"}
+                  {removingPurchase?.id === p.id ? "Removing…" : "Remove"}
                 </Button>
               </div>
             ))}
@@ -275,25 +284,10 @@ export default function ProjectCosts({
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={removingLabourId === l.id}
-                    onClick={async () => {
-                      if (removingRef.current.has(`labour:${l.id}`)) return;
-                    if (!window.confirm(`Remove "${l.description}"?`)) return;
-                    removingRef.current.add(`labour:${l.id}`);
-                      setRemovingLabourId(l.id);
-                      setError(null);
-                      try {
-                        await deleteLabourEntry(l.id);
-                        router.refresh();
-                      } catch (err) {
-                        setError(err instanceof Error ? err.message : "Couldn't remove that.");
-                      } finally {
-                        removingRef.current.delete(`labour:${l.id}`);
-                        setRemovingLabourId(null);
-                      }
-                    }}
+                    disabled={removingLabour?.id === l.id}
+                    onClick={() => setRemovingLabour(l)}
                   >
-                    {removingLabourId === l.id ? "Removing…" : "Remove"}
+                    {removingLabour?.id === l.id ? "Removing…" : "Remove"}
                   </Button>
                 </div>
               ))}
@@ -303,12 +297,12 @@ export default function ProjectCosts({
       </Card>
 
       {labourOpen && (
-        <Modal title="Log time" onClose={() => (busy ? undefined : setLabourOpen(false))}>
+        <Modal title="Log time" onClose={() => (savingLabour ? undefined : setLabourOpen(false))}>
           <form
             className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
-              if (busy || !who.trim() || !qty.trim() || !rate.trim()) return;
+              if (savingLabour || !who.trim() || !qty.trim() || !rate.trim()) return;
               void saveLabour();
             }}
           >
@@ -368,15 +362,15 @@ export default function ProjectCosts({
             />
             {error && <span className={styles.formError}>{error}</span>}
             <div className={styles.formActions}>
-              <Button variant="ghost" type="button" onClick={() => setLabourOpen(false)} disabled={busy}>
+              <Button variant="ghost" type="button" onClick={() => setLabourOpen(false)} disabled={savingLabour}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 type="submit"
-                disabled={busy || !who.trim() || !qty.trim() || !rate.trim()}
+                disabled={savingLabour || !who.trim() || !qty.trim() || !rate.trim()}
               >
-                {busy ? "Saving…" : "Log time"}
+                {savingLabour ? "Saving…" : "Log time"}
               </Button>
             </div>
           </form>
@@ -384,12 +378,12 @@ export default function ProjectCosts({
       )}
 
       {open && (
-        <Modal title="Log a cost" onClose={() => (busy ? undefined : setOpen(false))}>
+        <Modal title="Log a cost" onClose={() => (savingPurchase ? undefined : setOpen(false))}>
           <form
             className={styles.form}
             onSubmit={(e) => {
               e.preventDefault();
-              if (busy || !description.trim() || !amount.trim()) return;
+              if (savingPurchase || !description.trim() || !amount.trim()) return;
               void save();
             }}
           >
@@ -474,19 +468,40 @@ export default function ProjectCosts({
             />
             {error && <span className={styles.formError}>{error}</span>}
             <div className={styles.formActions}>
-              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={busy}>
+              <Button variant="ghost" type="button" onClick={() => setOpen(false)} disabled={savingPurchase}>
                 Cancel
               </Button>
               <Button
                 variant="primary"
                 type="submit"
-                disabled={busy || !description.trim() || !amount.trim()}
+                disabled={savingPurchase || !description.trim() || !amount.trim()}
               >
-                {busy ? "Saving…" : "Log cost"}
+                {savingPurchase ? "Saving…" : "Log cost"}
               </Button>
             </div>
           </form>
         </Modal>
+      )}
+
+      {removingPurchase && (
+        <ConfirmModal
+          message={`Remove "${removingPurchase.description}"?`}
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          pending={removingPurchasePending}
+          onConfirm={() => void confirmRemovePurchase()}
+          onCancel={() => setRemovingPurchase(null)}
+        />
+      )}
+      {removingLabour && (
+        <ConfirmModal
+          message={`Remove "${removingLabour.description}"?`}
+          confirmLabel="Remove"
+          pendingLabel="Removing…"
+          pending={removingLabourPending}
+          onConfirm={() => void confirmRemoveLabour()}
+          onCancel={() => setRemovingLabour(null)}
+        />
       )}
     </section>
   );
