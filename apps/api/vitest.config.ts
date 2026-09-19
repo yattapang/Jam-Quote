@@ -17,8 +17,19 @@ import { defineConfig } from "vitest/config";
  */
 process.env.TZ = "America/Jamaica";
 
+/**
+ * The cross-section integration suite (src/integration) is EXCLUDED here and runs as its
+ * own turbo task (`test:integration`).
+ *
+ * It boots a real Postgres (PGlite) behind a wire-protocol bridge and drives the real
+ * services, which is CPU-hungry: run alongside apps/web under turbo it starved the web
+ * suite past vitest's 5s default, and the victim moved between runs - a flaky gate that
+ * teaches people to re-run rather than to look. Its own task keeps `npm test` honest,
+ * and `npm run test:all` runs both.
+ */
 export default defineConfig({
   test: {
     environment: "node",
+    exclude: ["**/node_modules/**", "**/dist/**", "src/integration/**"],
   },
 });

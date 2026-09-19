@@ -143,6 +143,32 @@ describe("Modal accessibility and focus behaviour", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("does not close on Escape while an IME composition is in progress", async () => {
+    const onClose = vi.fn();
+    render(
+      <Modal title="Edit client" onClose={onClose}>
+        <button>Save</button>
+      </Modal>,
+    );
+    // userEvent has no built-in way to flag a key event as part of an IME
+    // composition, so dispatch the raw event the browser would send: Escape
+    // with isComposing true. Some browsers (older Safari) instead send
+    // keyCode 229 with isComposing left false for the same case.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true, composed: true, isComposing: true }),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, bubbles: true, cancelable: true } as KeyboardEventInit),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    // A real, non-composing Escape afterwards still closes it.
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("nested modals: Escape closes only the TOP modal, and outer's trap is inert while inner is open", async () => {
     const onCloseOuter = vi.fn();
     const onCloseInner = vi.fn();

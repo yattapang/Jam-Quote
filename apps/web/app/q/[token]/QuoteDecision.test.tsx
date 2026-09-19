@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * Accept or decline, as a CLIENT meets it.
@@ -147,9 +148,11 @@ describe("QuoteDecision — answering", () => {
 
 describe("QuoteDecision — when the API refuses", () => {
   it("shows the API's own sentence, not a guess about the network", async () => {
-    // A second person opening the same link needs THIS message.
+    // A second person opening the same link needs THIS message. A real
+    // ApiError, not a bare Error — errorMessage() only ever surfaces the
+    // server's OWN deliberate sentence, never a raw transport message.
     submitQuoteDecision.mockRejectedValue(
-      new Error("This quote has already been answered. Contact the contractor to change it."),
+      new ApiError("This quote has already been answered. Contact the contractor to change it.", 409),
     );
     const user = renderDecision();
     await user.click(screen.getByRole("button", { name: /accept this quote/i }));
@@ -160,7 +163,7 @@ describe("QuoteDecision — when the API refuses", () => {
   });
 
   it("does not claim success when the send failed", async () => {
-    submitQuoteDecision.mockRejectedValue(new Error("This quote has already been answered."));
+    submitQuoteDecision.mockRejectedValue(new ApiError("This quote has already been answered.", 409));
     const user = renderDecision();
     await user.click(screen.getByRole("button", { name: /accept this quote/i }));
     await user.type(screen.getByLabelText(/your name/i), "Someone Else");

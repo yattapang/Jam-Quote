@@ -123,7 +123,12 @@ async function serverRequest<T>(path: string): Promise<T> {
     } catch {
       body = undefined;
     }
-    throw new ApiError(body?.message || `Request to ${path} failed`, res.status, body);
+    // See api-client.ts's request(): no server message means no user-facing
+    // text on the ApiError either, so errorMessage() falls back to plain
+    // wording instead of this technical string. The path is logged, not carried
+    // as `message`.
+    if (!body?.message) console.error(`Request to ${path} failed with status ${res.status}`);
+    throw new ApiError(body?.message ?? "", res.status, body, path);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;

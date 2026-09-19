@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { createQuoteVariation } from "@/lib/api-client";
 import { useSingleFlight } from "@/lib/use-single-flight";
+import { errorMessage } from "@/lib/error-message";
 
 /**
  * "Add extra work" on a quote the client has already accepted.
@@ -34,7 +35,7 @@ export default function CreateVariationButton({ quoteId }: { quoteId: string }) 
       // wondering what happened.
       router.push(`/quotes/${variation.id}/edit`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't create the variation.");
+      setError(errorMessage(err, "Couldn't create the variation — check your connection and try again."));
     }
   });
 

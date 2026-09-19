@@ -6,7 +6,7 @@ import { getReports } from "@/lib/api-server";
 import { REPORT_PERIODS, customRange, isReportPeriod, periodRange, type ReportPeriod } from "@/lib/report-periods";
 import PrintReportButton from "./PrintReportButton";
 import { projectStagePill } from "@/lib/status";
-import { JAMAICA_UTC_OFFSET_MS, PROJECT_STAGES, type SalesGranularity } from "@jamquote/core";
+import { formatJamaicaDateLabel, PROJECT_STAGES, type SalesGranularity } from "@jamquote/core";
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
 
@@ -64,15 +64,15 @@ function exportDates(fromIso: string, toIso: string): { from: string; to: string
 }
 
 function rangeCaption(fromIso: string, toIso: string): string {
-  const fmt = (d: Date) =>
-    new Date(d.getTime() + JAMAICA_UTC_OFFSET_MS).toLocaleDateString("en-JM", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  const lastDay = new Date(new Date(toIso).getTime() - 24 * 60 * 60 * 1000);
-  return `${fmt(new Date(fromIso))} to ${fmt(lastDay)}`;
+  // Delegates to core's formatJamaicaDateLabel — the ONE Jamaica-zoned date
+  // formatter shared by the web app, the PDF and the public share pages —
+  // instead of a hand-rolled fixed +/-offset shift onto a "UTC"-zoned format
+  // call. The fixed offset happens to equal America/Jamaica's real offset
+  // today (Jamaica observes no DST), so this was not currently producing a
+  // wrong date, but it duplicated the timezone math in a second place with
+  // no guarantee the two stayed equal.
+  const lastDayIso = new Date(new Date(toIso).getTime() - 24 * 60 * 60 * 1000).toISOString();
+  return `${formatJamaicaDateLabel(fromIso, "", { year: true })} to ${formatJamaicaDateLabel(lastDayIso, "", { year: true })}`;
 }
 
 export default async function ReportsPage({

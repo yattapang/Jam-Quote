@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { updateAdminRulePack } from "./api-client";
+import { ApiError, updateAdminRulePack } from "./api-client";
 import { buildRulePackPatch } from "./rulepack-patch";
 import {
   createClient,
@@ -1126,5 +1126,37 @@ describe("updateAdminRulePack sends the patch body", () => {
     // The wrapper's own shape must not appear.
     expect(sent).not.toHaveProperty("nominal");
     expect(sent).not.toHaveProperty("patch");
+  });
+});
+
+describe("ApiError carries no technical message when the server sent none (item 6)", () => {
+  it("a non-JSON failure (e.g. a 502 fronted by an HTML error page) throws an ApiError with an EMPTY message, not the technical 'Request to X failed' string", async () => {
+    const spy = vi.fn(async () => ({ ok: false, status: 502, text: async () => "<html>Bad Gateway</html>" }) as unknown as Response);
+    vi.stubGlobal("fetch", spy);
+    let caught: unknown;
+    try {
+      await createClient({ firstName: "Jane", lastName: "Doe", phone: "876 000 0000" });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ApiError);
+    const err = caught as ApiError;
+    // Before the fix this was `Request to /clients failed` — a developer
+    // string that then rendered verbatim in errorMessage(), since a non-empty
+    // ApiError.message is treated as the server's own deliberate sentence.
+    expect(err.message).toBe("");
+    // The path is still available, just not on `message` — for logging only.
+    expect(err.requestPath).toBe("/clients");
+    expect(err.status).toBe(502);
+  });
+
+  it("still carries the server's own deliberate message when it sent one", async () => {
+    const spy = vi.fn(
+      async () => ({ ok: false, status: 409, text: async () => JSON.stringify({ message: "Client is referenced by an open quote" }) }) as unknown as Response,
+    );
+    vi.stubGlobal("fetch", spy);
+    await expect(createClient({ firstName: "Jane", lastName: "Doe", phone: "876 000 0000" })).rejects.toMatchObject({
+      message: "Client is referenced by an open quote",
+    });
   });
 });

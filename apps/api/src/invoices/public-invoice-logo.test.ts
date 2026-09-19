@@ -54,8 +54,15 @@ describe("PublicInvoicesController.logo", () => {
     await expect(controller.logo("tok_wrong", res as any)).rejects.toThrow(NotFoundException);
   });
 
-  it("returns 404 for a draft invoice's token, same as an unknown token", async () => {
-    const { controller, res } = build({ businessId: "biz_1", status: InvoiceStatus.DRAFT }, null);
+  it("returns 404 for a draft invoice's token, same as an unknown token — even when the business DOES have a logo", async () => {
+    // The business here HAS a logo (unlike the fixture below), so this proves
+    // the DRAFT check itself refuses the token — not the controller's
+    // separate "no logo" branch, which would 404 anyway and let a deleted
+    // DRAFT guard pass unnoticed.
+    const { controller, res } = build(
+      { businessId: "biz_1", status: InvoiceStatus.DRAFT },
+      { bytes: Buffer.from("PNGDATA"), contentType: "image/png" },
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await expect(controller.logo("tok_draft", res as any)).rejects.toThrow(NotFoundException);
   });
@@ -66,24 +73,30 @@ describe("PublicInvoicesController.logo", () => {
     await expect(controller.logo("tok_valid", res as any)).rejects.toThrow(NotFoundException);
   });
 
-  it("uses the identical not-found message for an unknown token and a valid token with no logo (item 6)", async () => {
+  it("uses the identical not-found message for an unknown token, a draft invoice's token, and a valid token with no logo (item 6)", async () => {
     const unknown = build(null, null);
+    // Given a logo, same reasoning as the test above: without it, this case
+    // would pass on the controller's "no logo" 404 alone even if the DRAFT
+    // check in resolveBusinessIdByShareToken were deleted.
+    const draft = build({ businessId: "biz_1", status: InvoiceStatus.DRAFT }, { bytes: Buffer.from("PNGDATA"), contentType: "image/png" });
     const noLogo = build({ businessId: "biz_1", status: InvoiceStatus.INVOICED }, null);
-    let unknownMessage = "";
-    let noLogoMessage = "";
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await unknown.controller.logo("tok_wrong", unknown.res as any);
-    } catch (e) {
-      unknownMessage = (e as NotFoundException).message;
+
+    async function messageOf(target: ReturnType<typeof build>, token: string): Promise<string> {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await target.controller.logo(token, target.res as any);
+      } catch (e) {
+        return (e as NotFoundException).message;
+      }
+      throw new Error("expected logo() to throw");
     }
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await noLogo.controller.logo("tok_valid", noLogo.res as any);
-    } catch (e) {
-      noLogoMessage = (e as NotFoundException).message;
-    }
+
+    const unknownMessage = await messageOf(unknown, "tok_wrong");
+    const draftMessage = await messageOf(draft, "tok_draft");
+    const noLogoMessage = await messageOf(noLogo, "tok_valid");
+
     expect(unknownMessage).not.toBe("");
+    expect(draftMessage).toBe(unknownMessage);
     expect(noLogoMessage).toBe(unknownMessage);
   });
 });

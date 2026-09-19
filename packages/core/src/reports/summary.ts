@@ -184,12 +184,17 @@ export function startOfJamaicaDayMs(ms: number): number {
  * above) so the label is the same no matter where the API, the web server,
  * or the reader's browser happens to run.
  */
-export function formatJamaicaDateLabel(iso: string, prefix = ""): string {
+export function formatJamaicaDateLabel(
+  iso: string,
+  prefix = "",
+  opts: { year?: boolean } = {},
+): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const formatted = new Intl.DateTimeFormat("en-JM", {
     month: "short",
     day: "numeric",
+    ...(opts.year ? { year: "numeric" as const } : {}),
     timeZone: "America/Jamaica",
   }).format(d);
   return `${prefix}${formatted}`;

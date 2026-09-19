@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Modal, { modalStyles } from "@/components/ui/Modal";
-import { sendInvoiceReminder, type InvoiceReminder } from "@/lib/api-client";
+import { sendInvoiceReminder, dateLabel, type InvoiceReminder } from "@/lib/api-client";
 import { useSingleFlight } from "@/lib/use-single-flight";
+import { errorMessage } from "@/lib/error-message";
 import { toIntlPhone } from "../../quotes/[id]/WhatsAppButton";
 
 /**
@@ -69,7 +70,7 @@ export default function RemindButton({
       setOpen(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't send the reminder.");
+      setError(errorMessage(err, "Couldn't send the reminder — check your connection and try again."));
     }
   });
 
@@ -82,7 +83,7 @@ export default function RemindButton({
           they already chased this one. */}
       {last && (
         <span style={{ fontSize: 11.5, opacity: 0.75 }}>
-          Reminded {reminders.length}×, last {new Date(last.sentAt).toLocaleDateString()}
+          Reminded {reminders.length}×, last {dateLabel(last.sentAt, "", { year: true })}
         </span>
       )}
       {open && (

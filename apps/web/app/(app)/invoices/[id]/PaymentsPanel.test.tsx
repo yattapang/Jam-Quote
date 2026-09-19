@@ -24,6 +24,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }
 vi.mock("@/lib/api-client", () => ({
   recordManualPayment: vi.fn(),
   voidPayment: vi.fn(),
+  ApiError: class ApiError extends Error {},
 }));
 
 import PaymentsPanel from "./PaymentsPanel";

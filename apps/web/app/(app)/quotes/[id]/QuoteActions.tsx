@@ -9,6 +9,7 @@ import Modal, { modalStyles } from "@/components/ui/Modal";
 import { createInvoiceFromQuote, reviseQuote, setQuoteStatus } from "@/lib/api-client";
 import WhatsAppButton, { type WhatsAppButtonHandle } from "./WhatsAppButton";
 import EmailQuoteButton, { type EmailQuoteButtonHandle } from "./EmailQuoteButton";
+import { useSingleFlight } from "@/lib/use-single-flight";
 
 import { errorMessage } from "@/lib/error-message";
 /**
@@ -66,26 +67,39 @@ export default function QuoteActions({
   const [reviseOpen, setReviseOpen] = useState(false);
   const [revising, setRevising] = useState(false);
   const [reviseError, setReviseError] = useState("");
-  const [converting, setConverting] = useState(false);
   const [convertError, setConvertError] = useState("");
+  // Kept true after a successful convert until this component unmounts (the
+  // navigation away). useSingleFlight's own `pending` clears in its `finally`
+  // right after `router.push` is CALLED, not after the navigation actually
+  // completes — Next's client-side transition is asynchronous, so there was a
+  // real window, between that `finally` and the route swap, where the button
+  // was enabled again and a second click could create a second invoice from
+  // the same accepted quote. This flag has no reset path other than unmount:
+  // once true it stays true for the rest of this component's life.
+  const [navigating, setNavigating] = useState(false);
   const [outcome, setOutcome] = useState<QuoteStatus | null>(null);
   const [recording, setRecording] = useState(false);
   const [outcomeError, setOutcomeError] = useState("");
 
-  async function convertToInvoice() {
-    setConverting(true);
+  // A double click here would create two invoices from the same accepted
+  // quote — single-flight rather than `converting` alone (state lags a render
+  // behind, which two synchronous clicks both beat).
+  const { run: convertToInvoice, pending: converting } = useSingleFlight(async () => {
     setConvertError("");
     try {
       const { id: invoiceId } = await createInvoiceFromQuote(id);
+      // Set BEFORE calling push, and never cleared: closes the window where
+      // useSingleFlight's `pending` would otherwise flip back to false while
+      // the route transition is still in flight.
+      setNavigating(true);
       router.push(`/invoices/${invoiceId}/edit`);
     } catch (err) {
       // The API's own message names the reason (e.g. "quote is not
       // ACCEPTED" or "already converted to an invoice") — surface it as-is
       // rather than a generic failure text.
       setConvertError(errorMessage(err, "Couldn't convert to invoice — check your connection and try again."));
-      setConverting(false);
     }
-  }
+  });
 
   async function confirmMarkSent() {
     setSending(true);
@@ -172,7 +186,7 @@ export default function QuoteActions({
               <div className={modalStyles.actions} style={{ flexDirection: "column", alignItems: "stretch" }}>
                 <Button
                   variant="secondary"
-                  disabled={whatsappRef.current?.disabled}
+                  disabled={!clientPhone?.trim()}
                   onClick={() => {
                     setSendChooserOpen(false);
                     whatsappRef.current?.open();
@@ -284,7 +298,7 @@ export default function QuoteActions({
         </Modal>
       )}
       {status === QuoteStatus.ACCEPTED && (
-        <Button variant="primary" size="sm" onClick={convertToInvoice} disabled={converting}>
+        <Button variant="primary" size="sm" onClick={() => void convertToInvoice()} disabled={converting || navigating}>
           {converting ? "Converting…" : "Convert to invoice"}
         </Button>
       )}

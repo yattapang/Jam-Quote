@@ -58,8 +58,9 @@ export default function BrandingSection() {
       setMeta(await uploadLogo(await fileToBase64(file)));
     } catch (e) {
       // The API's own message is the useful one ("SVG is not accepted
-      // because…"), so surface it rather than a generic failure.
-      setError(e instanceof Error ? e.message : "Couldn't upload that image.");
+      // because…"), so surface it — errorMessage() only ever returns an
+      // ApiError's deliberate message, never a raw transport failure.
+      setError(errorMessage(e, "Couldn't upload that image — check your connection and try again."));
     } finally {
       setBusy(false);
       // Clear the input so picking the SAME file again still fires onChange.

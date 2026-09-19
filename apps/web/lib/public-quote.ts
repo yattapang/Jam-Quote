@@ -1,5 +1,5 @@
 import type { PublicQuoteLineWire, PublicQuoteWire } from "@jamquote/core";
-import { API_BASE_URL } from "@/lib/api-client";
+import { API_BASE_URL, ApiError } from "@/lib/api-client";
 
 /**
  * Fetching a quote by its public share token.
@@ -104,7 +104,13 @@ export async function submitQuoteDecision(
     const message =
       payload && typeof payload === "object" && "message" in payload
         ? String((payload as { message: unknown }).message)
-        : "Couldn't send your answer. Please try again.";
-    throw new Error(message);
+        : "";
+    // A real ApiError, not a bare Error — QuoteDecision.tsx's errorMessage()
+    // only ever surfaces an ApiError's message (the server's own deliberate
+    // sentence, e.g. "This quote has already been answered..."). A plain
+    // Error here was invisible to that check, so the CLIENT always saw the
+    // generic fallback instead of the one message that actually explains
+    // what happened.
+    throw new ApiError(message, res.status, payload && typeof payload === "object" ? (payload as Record<string, unknown>) : undefined);
   }
 }

@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import MoneyText from "@/components/ui/MoneyText";
 import Modal, { modalStyles } from "@/components/ui/Modal";
 import { setInvoiceRetentionReleased } from "@/lib/api-client";
+import { errorMessage } from "@/lib/error-message";
 import shared from "../../shared.module.css";
 
 /**
@@ -47,7 +48,7 @@ export default function RetentionPanel({
       setOpen(false);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't update retention.");
+      setError(errorMessage(err, "Couldn't update retention — check your connection and try again."));
     } finally {
       setBusy(false);
     }

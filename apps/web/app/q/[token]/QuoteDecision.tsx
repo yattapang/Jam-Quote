@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { submitQuoteDecision } from "@/lib/public-quote";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./shared-quote.module.css";
 
 /**
@@ -70,7 +71,7 @@ export default function QuoteDecision({
       });
       setDone(decision);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't send your answer.");
+      setError(errorMessage(err, "We couldn't record your response — please try again."));
     } finally {
       setBusy(false);
     }

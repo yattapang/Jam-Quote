@@ -2,7 +2,7 @@
   "name": "jamquote",
   "private": true,
   "version": "0.1.0",
-  "description": "JamQuote — estimating & invoicing for Jamaican contractors (Android + Web)",
+  "description": "JamQuote \u2014 estimating & invoicing for Jamaican contractors (Android + Web)",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -12,7 +12,9 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "test:integration": "turbo run test:integration",
+    "test:all": "turbo run test && turbo run test:integration"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

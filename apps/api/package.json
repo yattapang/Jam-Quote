@@ -16,7 +16,8 @@
     "db:seed": "prisma db seed",
     "db:clean-seed": "tsx prisma/cleanup-seed.ts",
     "db:clean-demo-tenants": "tsx prisma/cleanup-demo-tenants.ts",
-    "db:promote-admin": "tsx prisma/promote-admin.ts"
+    "db:promote-admin": "tsx prisma/promote-admin.ts",
+    "test:integration": "vitest run --dir src/integration"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

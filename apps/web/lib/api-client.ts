@@ -40,6 +40,12 @@ export class ApiError extends Error {
     /** Parsed error body, when the response had one — lets callers branch on
      * `body?.code` (e.g. FREE_LIMIT_REACHED) instead of re-parsing. */
     public body?: ApiErrorBody,
+    /** The request path, kept SEPARATE from `message` so it can be logged
+     * (e.g. `console.error`) without ever reaching `errorMessage()`, which
+     * trusts a non-empty `message` to be a deliberate, server-authored
+     * sentence. A technical "Request to /x failed" string in `message` would
+     * pass that trust check and render to a contractor — see item 6. */
+    public requestPath?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -82,7 +88,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         window.location.assign("/account-required");
       }
     }
-    throw new ApiError(body?.message || `Request to ${path} failed`, res.status, body);
+    // No message → carry NO user-facing text at all, so errorMessage() falls
+    // back to the caller's plain wording rather than showing this technical
+    // string (e.g. a 502 fronted by an HTML error page has no JSON body, so
+    // body?.message is undefined here). The path goes on requestPath instead,
+    // for logging, never on message.
+    if (!body?.message) console.error(`Request to ${path} failed with status ${res.status}`);
+    throw new ApiError(body?.message ?? "", res.status, body, path);
   }
   // DELETE (and any Promise<void> handler) comes back with a 200 and no body.
   const text = await res.text();
@@ -324,8 +336,8 @@ export function initialsOf(name: string): string {
 // same quote. Delegates to core's formatJamaicaDateLabel, which fixes the
 // timezone to America/Jamaica so a UTC-midnight date can't render as the day
 // before depending on where the browser or server happens to be (item 8).
-export function dateLabel(iso: string, prefix = ""): string {
-  return formatJamaicaDateLabel(iso, prefix);
+export function dateLabel(iso: string, prefix = "", opts?: { year?: boolean }): string {
+  return formatJamaicaDateLabel(iso, prefix, opts);
 }
 
 export function mapClient(c: ApiClientRow): Client {

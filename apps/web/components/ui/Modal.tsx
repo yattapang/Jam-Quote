@@ -116,6 +116,13 @@ export default function Modal({
     function onKeyDown(e: KeyboardEvent) {
       if (!isTopModal(id)) return;
 
+      // An IME (e.g. composing Japanese/Chinese/Korean text) uses Escape to
+      // cancel the current composition, not to close the surrounding UI.
+      // `isComposing` is the standard signal; `keyCode === 229` is the
+      // fallback some browsers (notably older Safari) send instead for a
+      // composition-related key.
+      if (e.isComposing || e.keyCode === 229) return;
+
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();

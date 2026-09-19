@@ -19,6 +19,7 @@ import {
   type ApiLabourEntry,
 } from "@/lib/api-client";
 import { useSingleFlight } from "@/lib/use-single-flight";
+import { errorMessage } from "@/lib/error-message";
 import type { LabourRate } from "@/lib/types";
 import shared from "../../shared.module.css";
 import styles from "./ProjectCosts.module.css";
@@ -116,7 +117,7 @@ export default function ProjectCosts({
       setRateId("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save that.");
+      setError(errorMessage(err, "Couldn't save that — check your connection and try again."));
     }
   });
 
@@ -150,7 +151,7 @@ export default function ProjectCosts({
       setReference("");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save that.");
+      setError(errorMessage(err, "Couldn't save that — check your connection and try again."));
     }
   });
 
@@ -164,7 +165,7 @@ export default function ProjectCosts({
         setRemovingPurchase(null);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't remove that.");
+        setError(errorMessage(err, "Couldn't remove that — check your connection and try again."));
       }
     },
   );
@@ -179,7 +180,7 @@ export default function ProjectCosts({
         setRemovingLabour(null);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Couldn't remove that.");
+        setError(errorMessage(err, "Couldn't remove that — check your connection and try again."));
       }
     },
   );

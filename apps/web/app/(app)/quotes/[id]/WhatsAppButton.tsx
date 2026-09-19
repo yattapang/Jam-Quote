@@ -4,6 +4,8 @@ import { useState, forwardRef, useImperativeHandle } from "react";
 import { formatJmd } from "@jamquote/core";
 import Button from "@/components/ui/Button";
 import { shareQuote } from "@/lib/api-client";
+import { errorMessage } from "@/lib/error-message";
+import { useSingleFlight } from "@/lib/use-single-flight";
 
 /**
  * Normalizes a Jamaican phone number to the intl digits wa.me expects
@@ -31,7 +33,6 @@ interface WhatsAppButtonProps {
  * reimplementing it. */
 export interface WhatsAppButtonHandle {
   open: () => void;
-  disabled: boolean;
 }
 
 /**
@@ -48,11 +49,14 @@ const WhatsAppButton = forwardRef<WhatsAppButtonHandle, WhatsAppButtonProps>(fun
   ref,
 ) {
   const hasPhone = Boolean(clientPhone && clientPhone.trim());
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleClick() {
-    setBusy(true);
+  // A double tap (or the imperative `open` fired twice by the Send chooser)
+  // must not mint two share links and open two tabs — single-flight guards
+  // re-entry synchronously, and the phone check happens before anything async
+  // starts so a phoneless client can never reach the API call at all.
+  const { run: handleClick, pending: busy } = useSingleFlight(async () => {
+    if (!hasPhone) return;
     setError(null);
     try {
       const { shareToken } = await shareQuote(quoteId);
@@ -60,7 +64,7 @@ const WhatsAppButton = forwardRef<WhatsAppButtonHandle, WhatsAppButtonProps>(fun
       const message =
         `Hi ${clientName || "there"}, here's your quote ${quoteNum} for ${formatJmd(totalCents)}. ` +
         `View it here: ${quoteLink}`;
-      const intlPhone = hasPhone ? toIntlPhone(clientPhone!) : "";
+      const intlPhone = toIntlPhone(clientPhone!);
       // Opened only AFTER the link exists. Opening first and filling in the
       // message later would hand the contractor a half-written chat if the
       // share call failed.
@@ -69,16 +73,13 @@ const WhatsAppButton = forwardRef<WhatsAppButtonHandle, WhatsAppButtonProps>(fun
         "_blank",
         "noopener,noreferrer",
       );
-    } catch {
-      setError("Couldn't create the share link. Try again.");
-    } finally {
-      setBusy(false);
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't create the share link — check your connection and try again."));
     }
-  }
+  });
 
   useImperativeHandle(ref, () => ({
-    open: handleClick,
-    disabled: !hasPhone || busy,
+    open: () => void handleClick(),
   }));
 
   return (
@@ -86,7 +87,7 @@ const WhatsAppButton = forwardRef<WhatsAppButtonHandle, WhatsAppButtonProps>(fun
       <Button
         variant="secondary"
         size="sm"
-        onClick={handleClick}
+        onClick={() => void handleClick()}
         disabled={!hasPhone || busy}
         title={hasPhone ? undefined : "No phone number on file for this client"}
       >

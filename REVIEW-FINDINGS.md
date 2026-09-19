@@ -352,9 +352,48 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Cross-section flow suite, and five defects only it could find (2026-09-19)
+
+`apps/api/src/integration/` drives the REAL services against a REAL Postgres (PGlite
+behind a wire-protocol bridge, every migration applied); only Resend and the card
+gateway are stubbed. 38 tests, ~18s. An independent agent then planted one real defect
+per flow and confirmed the matching flow fails: a stale job price into a quote, a
+convert dropping GCT, settlement compared by hand, a tenancy check missing `businessId`,
+a renewal counted from `renewsAt` instead of the ledger, a public route serving a draft.
+One flow was weak - the payment ladder never entered the window where a hand-written
+`>= totalCents` and core's rule disagree, so it passed with the defect planted; it now
+tests that boundary. The drift guard's allow-list was keyed as a SET, so an exempt
+function could grow more restatements silently; it is now keyed to exact counts.
+
+**It made `npm test` flaky** (CPU starvation timed out a MOVING victim in apps/web), so
+I gave it its own task: `npm test` is the everyday gate, `npm run test:integration` runs
+the flows, `npm run test:all` runs both. Default gate green twice: web 926, api 1061.
+
+**Five real defects found, NOT fixed - queued:**
+1. `Invoice.quoteId` has an index but no unique constraint: two concurrent converts both
+   commit, so one quote becomes two invoices.
+2. `exports.service.ts#invoicesIssued` writes `totalCents - paidCents` unclamped, so an
+   overpaid invoice exports a NEGATIVE amount due (also a live restatement of core's rule).
+3. `setRetentionReleased` writes `retentionReleasedAt` and never re-derives `status`, so
+   an invoice can stay PARTIAL after release makes it settled.
+4. `recordManualPayment` has no DRAFT gate, though `startCardPayment` does: a draft
+   invoice can take a manual payment.
+5. A quote line's `jobId` is not ownership-checked, so it can name another tenant's job.
+
+**Lesson:** every one of these sits at a seam between modules, and every module's own
+tests passed. Mocked-Prisma unit tests cannot see a seam.
+
 ## Review of 6d8772d + 179c903 (2026-09-19) - safe on main; plain-errors item NOT closed
 
-- **HIGH, CONFIRMED - raw `err.message` still reaches the screen at 11 sites** that skip
+- **FIXED 2026-09-19:** all 11 sites route through `errorMessage`, the client page gets a
+  real `ApiError` so the server's "already answered" message still reaches the client
+  (the first fix HID it, and its test mocked the wrong error type), and the guard now
+  follows the DATA FLOW: wrappers (`as`, `!`, parens, `?.`), `||`/`??`/ternary, template
+  spans, object destructuring, `.catch`/`.then` rejection parameters, a one-hop helper,
+  and sinks beyond `set*` (`dispatch`, the toast from `useToast`, JSX). Each allow-listed
+  admin site is now verified to discriminate on `instanceof ApiError`. I planted five
+  shapes myself: four failed at once, `err?.message ?? "x"` needed the final fix and now
+  fails too. Was: **HIGH, CONFIRMED - raw `err.message` still reaches the screen at 11 sites** that skip
   `errorMessage()` (PaymentsPanel x2, RemindButton, RetentionPanel, ProjectCosts x4,
   CreateVariationButton, BrandingSection, and the CLIENT-facing QuoteDecision): offline,
   a contractor sees "Failed to fetch". The guard exempts thrown `Error` messages and

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { GctTreatment, LineCategory, QuoteDetailLevel, RateUnit } from "@jamquote/core";
 import type { DraftLine } from "@/lib/line-editor";
 import { LineKind } from "@/lib/line-editor";
@@ -29,6 +29,7 @@ vi.mock("@/lib/api-client", () => ({
 
 import LineItemsEditor from "./LineItemsEditor";
 import { BOUNDS } from "@jamquote/core";
+import { createMaterialFavourite } from "@/lib/api-client";
 
 function baseLine(overrides: Partial<DraftLine> = {}): DraftLine {
   return {
@@ -80,5 +81,83 @@ describe("LineItemsEditor — numeric input steps", () => {
     );
     const measured = screen.getByLabelText(/measured quantity, in sq ft/i);
     expect(measured).toHaveAttribute("step", String(BOUNDS.quantity.step));
+  });
+});
+
+describe("LineItemsEditor — favourite-save lock is keyed by material identity", () => {
+  it("two DIFFERENT lines that name the SAME material create only one favourite when saved back-to-back", async () => {
+    vi.mocked(createMaterialFavourite).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ id: "fav-new", name: "Cement", priceCents: 1000 } as never), 5)),
+    );
+
+    // Two separate LINE keys, same freehand description and price — the
+    // real-world case is the same material entered twice on one document.
+    // Before the fix the lock was keyed by line `key`, so both lines' saves
+    // passed the "not found yet" check and both created a favourite.
+    const lines = [baseLine({ key: "l1", description: "Cement", unitPriceDollars: "10" }), baseLine({ key: "l2", description: "Cement", unitPriceDollars: "10" })];
+
+    render(
+      <LineItemsEditor
+        documentNoun="quote"
+        lines={lines}
+        onLinesChange={() => {}}
+        detailLevel={QuoteDetailLevel.SUMMARY}
+        onDetailLevelChange={() => {}}
+      />,
+    );
+
+    const saveButtons = screen.getAllByRole("button", { name: "Save as favourite material" });
+    expect(saveButtons).toHaveLength(2);
+
+    // Synchronous, no await between them — the same race a fast double click
+    // produces, and the exact shape useSingleFlight-style locks exist to close.
+    fireEvent.click(saveButtons[0]!);
+    fireEvent.click(saveButtons[1]!);
+
+    // Let both in-flight promises settle.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createMaterialFavourite).toHaveBeenCalledTimes(1);
+  });
+
+  it("two DIFFERENT materials saved back-to-back are NOT blocked by each other's lock", async () => {
+    vi.mocked(createMaterialFavourite).mockClear();
+    vi.mocked(createMaterialFavourite).mockImplementation(
+      (input: unknown) =>
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve({ id: `fav-${(input as { name: string }).name}`, ...(input as object), priceCents: 1000 } as never),
+            5,
+          ),
+        ),
+    );
+
+    // Two DIFFERENT materials — the identity key (materialFavouriteId, or
+    // `desc:${name}` for a freehand line) differs between them, so this must
+    // NOT hit the same-material lock the test above exists to prove closes.
+    const lines = [
+      baseLine({ key: "l1", description: "Cement", unitPriceDollars: "10" }),
+      baseLine({ key: "l2", description: "Sand", unitPriceDollars: "8" }),
+    ];
+
+    render(
+      <LineItemsEditor
+        documentNoun="quote"
+        lines={lines}
+        onLinesChange={() => {}}
+        detailLevel={QuoteDetailLevel.SUMMARY}
+        onDetailLevelChange={() => {}}
+      />,
+    );
+
+    const saveButtons = screen.getAllByRole("button", { name: "Save as favourite material" });
+    expect(saveButtons).toHaveLength(2);
+
+    fireEvent.click(saveButtons[0]!);
+    fireEvent.click(saveButtons[1]!);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(createMaterialFavourite).toHaveBeenCalledTimes(2);
   });
 });

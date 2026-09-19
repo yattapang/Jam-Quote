@@ -10,9 +10,10 @@ import Modal, { modalStyles } from "@/components/ui/Modal";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import MoneyText from "@/components/ui/MoneyText";
 import fieldStyles from "@/components/ui/Field.module.css";
-import { recordManualPayment, voidPayment, type InvoicePayment } from "@/lib/api-client";
+import { recordManualPayment, voidPayment, dateLabel, type InvoicePayment } from "@/lib/api-client";
 import { useToast } from "@/components/ui/ToastProvider";
 import { useSingleFlight } from "@/lib/use-single-flight";
+import { errorMessage } from "@/lib/error-message";
 import styles from "./PaymentsPanel.module.css";
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -105,7 +106,7 @@ export default function PaymentsPanel({
       // rather than patching local state and risking a different answer.
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't record that payment.");
+      setError(errorMessage(err, "Couldn't record that payment — check your connection and try again."));
     }
   });
 
@@ -119,7 +120,7 @@ export default function PaymentsPanel({
       setVoidTarget(null);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't void that payment.");
+      setError(errorMessage(err, "Couldn't void that payment — check your connection and try again."));
     } finally {
       setVoidingId("");
     }
@@ -151,11 +152,7 @@ export default function PaymentsPanel({
               <div className={styles.rowMain}>
                 <span className={styles.method}>{METHOD_LABEL[p.method] ?? p.method}</span>
                 <span className={styles.meta}>
-                  {new Date(p.paidAt).toLocaleDateString("en-JM", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
+                  {dateLabel(p.paidAt, "", { year: true })}
                   {p.reference ? ` · ${p.reference}` : ""}
                 </span>
               </div>

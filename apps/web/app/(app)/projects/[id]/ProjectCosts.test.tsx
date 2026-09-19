@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
 import userEvent from "@testing-library/user-event";
-import type { ApiLabourEntry, ApiPurchase } from "@/lib/api-client";
+import { ApiError, type ApiLabourEntry, type ApiPurchase } from "@/lib/api-client";
 
 /**
  * Remove (purchases and labour) had no try/catch and no busy state: a
@@ -25,6 +25,7 @@ vi.mock("@/lib/api-client", () => ({
   deletePurchase: vi.fn(),
   createLabourEntry: vi.fn(),
   deleteLabourEntry: vi.fn(),
+  ApiError: class ApiError extends Error {},
 }));
 
 import ProjectCosts from "./ProjectCosts";
@@ -75,9 +76,12 @@ function confirmButton() {
 }
 
 describe("ProjectCosts — Remove purchase", () => {
-  it("shows an error when the delete is rejected", async () => {
+  it("shows the API's own deliberate message when the delete is rejected", async () => {
     const { deletePurchase } = await import("@/lib/api-client");
-    vi.mocked(deletePurchase).mockRejectedValueOnce(new Error("Network down"));
+    // A deliberate ApiError, not a bare transport Error: errorMessage() only
+    // ever surfaces the server's OWN sentence, never a raw "Network down"-
+    // style transport message (a contractor offline must not see that text).
+    vi.mocked(deletePurchase).mockRejectedValueOnce(new ApiError("Purchase is locked", 409));
     const user = userEvent.setup();
     render(
       <ProjectCosts
@@ -91,7 +95,27 @@ describe("ProjectCosts — Remove purchase", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await user.click(confirmButton());
-    expect(await screen.findByText("Network down")).toBeInTheDocument();
+    expect(await screen.findByText("Purchase is locked")).toBeInTheDocument();
+  });
+
+  it("shows a plain fallback, not the raw transport error, when the delete fails offline", async () => {
+    const { deletePurchase } = await import("@/lib/api-client");
+    vi.mocked(deletePurchase).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const user = userEvent.setup();
+    render(
+      <ProjectCosts
+        projectId="proj-1"
+        purchases={[purchase()]}
+        labour={[]}
+        labourRates={[]}
+        usedCategories={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    await user.click(confirmButton());
+    expect(await screen.findByText(/couldn't remove that/i)).toBeInTheDocument();
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
   });
 
   it("sends only one delete when two confirm clicks land before React re-renders", async () => {
@@ -183,9 +207,9 @@ describe("ProjectCosts — Remove purchase", () => {
 });
 
 describe("ProjectCosts — Remove labour", () => {
-  it("shows an error when the delete is rejected", async () => {
+  it("shows the API's own deliberate message when the delete is rejected", async () => {
     const { deleteLabourEntry } = await import("@/lib/api-client");
-    vi.mocked(deleteLabourEntry).mockRejectedValueOnce(new Error("Server error"));
+    vi.mocked(deleteLabourEntry).mockRejectedValueOnce(new ApiError("Labour entry is locked", 409));
     const user = userEvent.setup();
     render(
       <ProjectCosts
@@ -199,7 +223,7 @@ describe("ProjectCosts — Remove labour", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
     await user.click(confirmButton());
-    expect(await screen.findByText("Server error")).toBeInTheDocument();
+    expect(await screen.findByText("Labour entry is locked")).toBeInTheDocument();
   });
 
   it("sends only one delete on a double click", async () => {

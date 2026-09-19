@@ -36,6 +36,7 @@ vi.mock("@/lib/api-client", () => ({
   ApiError: class ApiError extends Error {},
 }));
 
+import { createInvoiceFromQuote } from "@/lib/api-client";
 import QuoteActions from "./QuoteActions";
 
 function renderFor(status: QuoteStatus) {
@@ -122,6 +123,30 @@ describe("QuoteActions — Delete is set apart from the primary/secondary group"
   it("only appears for DRAFT quotes (the API rejects deleting any other status)", () => {
     renderFor(QuoteStatus.SENT);
     expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("QuoteActions — Convert to invoice stays disabled through navigation (item 4)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => cleanup());
+
+  it("a further click after a successful convert sends no second createInvoiceFromQuote call", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    vi.mocked(createInvoiceFromQuote).mockResolvedValue({ id: "inv-new" } as never);
+    renderFor(QuoteStatus.ACCEPTED);
+    const user = userEvent.setup();
+    const button = screen.getByRole("button", { name: /convert to invoice/i });
+
+    await user.click(button);
+    // The convert has resolved (createInvoiceFromQuote's promise settled and
+    // router.push was called), but this component has not unmounted — a real
+    // app would still be mid-navigation here. Before the fix, useSingleFlight's
+    // `pending` had already flipped back to false at this point, re-enabling
+    // the button.
+    expect(button).toBeDisabled();
+
+    await user.click(button);
+    expect(createInvoiceFromQuote).toHaveBeenCalledTimes(1);
   });
 });
 

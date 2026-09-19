@@ -531,9 +531,18 @@ export default function LineItemsEditor({
   // star: both clicks can fire before React re-renders it disabled, and the
   // existing-favourite lookup in saveFavourite would then race — both calls
   // seeing "not found yet" and creating two favourites for the same
-  // material. Different lines can legitimately save in parallel (that's why
-  // this isn't the single global useSingleFlight), so the guard is a set of
-  // in-flight KEYS, written synchronously like useSingleFlight's ref.
+  // material. Different MATERIALS can legitimately save in parallel (that's
+  // why this isn't the single global useSingleFlight), so the guard is a set
+  // of in-flight MATERIAL IDENTITIES, written synchronously like
+  // useSingleFlight's ref.
+  //
+  // Keyed by material identity, not by line key: two separate LINE keys can
+  // point at the same material (materialFavouriteId, or the same composed
+  // description for a freehand line) — e.g. the same item entered twice on
+  // one quote. Locking per line key let both lines' saves race through the
+  // "not found yet" window at once and created two favourites for one
+  // material; locking per identity (see favouriteIdentity below) closes that
+  // window regardless of how many lines share it.
   const savingFavKeys = useRef(new Set<string>());
   const [favError, setFavError] = useState("");
   const [addingMaterialKey, setAddingMaterialKey] = useState<string | null>(null);
@@ -705,14 +714,20 @@ export default function LineItemsEditor({
    *     (re-saving the same picked material to update its price).
    */
   const saveFavourite = async (key: string) => {
-    if (savingFavKeys.current.has(key)) return;
     const line = lines.find((l) => l.key === key);
     if (!line) return;
     const name = line.description.trim();
     const priceCents = toCents(line.unitPriceDollars);
     if (!name || priceCents === 0) return;
 
-    savingFavKeys.current.add(key);
+    // The MATERIAL's identity, not the line's — see the comment on
+    // savingFavKeys above. This is exactly the same identity the lookup
+    // below uses, so the lock and the lookup can never disagree about which
+    // material two lines refer to.
+    const identity = line.materialFavouriteId ?? `desc:${name}`;
+    if (savingFavKeys.current.has(identity)) return;
+
+    savingFavKeys.current.add(identity);
     setSavingFavKey(key);
     setFavError("");
     try {
@@ -730,7 +745,7 @@ export default function LineItemsEditor({
     } catch (err) {
       setFavError(errorMessage(err, "Couldn't save the material — check your connection and try again."));
     } finally {
-      savingFavKeys.current.delete(key);
+      savingFavKeys.current.delete(identity);
       setSavingFavKey(null);
     }
   };

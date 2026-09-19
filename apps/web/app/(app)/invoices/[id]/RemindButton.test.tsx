@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { act } from "react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@/lib/api-client";
 
 /**
  * The chase button, as a contractor meets it.
@@ -28,13 +29,19 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push: vi.fn() }),
 }));
 
-vi.mock("@/lib/api-client", () => ({
-  sendInvoiceReminder: (...args: unknown[]) => sendInvoiceReminder(...args),
-  // `toIntlPhone` lives in WhatsAppButton, which imports this module; stubbing
-  // the module keeps the component tree loadable without a network layer.
-  shareQuote: vi.fn(),
-  ApiError: class ApiError extends Error {},
-}));
+// `dateLabel` is a real, pure function (no network) — the "chase history"
+// test needs its actual formatting to assert on, so it is spread from the
+// real module rather than re-stubbed.
+vi.mock("@/lib/api-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api-client")>();
+  return {
+    ...actual,
+    sendInvoiceReminder: (...args: unknown[]) => sendInvoiceReminder(...args),
+    // `toIntlPhone` lives in WhatsAppButton, which imports this module; stubbing
+    // the module keeps the component tree loadable without a network layer.
+    shareQuote: vi.fn(),
+  };
+});
 
 import RemindButton from "./RemindButton";
 
@@ -165,7 +172,9 @@ describe("RemindButton — when the API refuses", () => {
   it("shows the API's own reason rather than blaming the network", async () => {
     // "Nothing is outstanding on this invoice" is a deliberate rule. Reporting
     // it as "is the API running?" sent the owner to check a healthy server.
-    sendInvoiceReminder.mockRejectedValue(new Error("Nothing is outstanding on this invoice."));
+    // A real ApiError, not a bare Error: errorMessage() only ever surfaces the
+    // server's OWN deliberate sentence, never a raw transport message.
+    sendInvoiceReminder.mockRejectedValue(new ApiError("Nothing is outstanding on this invoice.", 400));
     const user = renderButton();
     await user.click(screen.getByRole("button", { name: /send reminder/i }));
     await user.click(screen.getByRole("button", { name: /whatsapp/i }));
