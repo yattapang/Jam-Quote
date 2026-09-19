@@ -834,7 +834,10 @@ WHERE s.id IS NULL OR s."businessId" IS NULL OR s."businessId" <> r.owner_busine
 GROUP BY 1, 2 ORDER BY 2, 1;
 ```
 
-**Status: NOT RUN.** No one here has touched a real database. Record the date and the
+**Status: CLOSED 2026-09-18 - not needed.** The owner confirmed JamQuote has no live
+users yet, so no production data predates the S7 fix; there is nothing to audit. Keep the
+query: if a pre-launch dataset is ever imported, run it once before go-live.
+Was: **Status: NOT RUN.** No one here has touched a real database. Record the date and the
 verdict counts when it is run. If any `CROSS_TENANT` row appears, do not edit that document
 until the owner decides between clearing the line's supplier, repointing it at the correct
 business's supplier, or leaving it read-only.
@@ -2139,6 +2142,8 @@ Then the guard corrections, because each one is a fix that can silently come
 undone.
 
 ## Dual-role admins (decision 4b)
+
+**No live users as of 2026-09-18, so no existing dual-role admins to resolve.** Run the query below once before launch if any admin was promoted from a real contractor account.
 
 `promoteAdmin` (apps/api/src/admin/admin.service.ts) now clears the promoted
 user's `businessId` going forward — or refuses the promotion outright when
