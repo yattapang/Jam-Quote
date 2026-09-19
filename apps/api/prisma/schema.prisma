@@ -161,6 +161,10 @@ model Business {
   currency       String     @default("JMD") // ISO 4217
   entityType     EntityType @default(SOLE_TRADER)
   trn            String? // taxpayer id (TRN in JM), validated per jurisdiction
+  /// Registered with TAJ to charge GCT — the owner's explicit answer. NOT
+  /// inferred from `trn`: every Jamaican has a TRN, so having one says nothing
+  /// about registration. Gates whether input tax is netted off job cost.
+  gctRegistered  Boolean    @default(false)
   logoUrl        String?
   /// Where renewal and receipt mail goes. Maintained by the SUBSCRIBER in
   /// their own Settings, not by staff — whoever owns the login is often not

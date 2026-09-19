@@ -2175,6 +2175,19 @@ export default function AdminConsole({
                                 </span>
                                 {a.email && <span style={{ fontSize: 12, color: "var(--muted)" }}>{a.email}</span>}
                                 {a.isSuperAdmin && <span style={{ ...pill("accent"), marginTop: 4, alignSelf: "flex-start" }}>Super-admin</span>}
+                                {/* Decision 4b: this admin ALSO still has a businessId — either a
+                                    legacy dual-role account from before promoteAdmin started
+                                    clearing it, or something that slipped past the refusal. Not
+                                    auto-fixed here (no migration access) — see REVIEW-FINDINGS.md,
+                                    "Dual-role admins (decision 4b)", for the manual query. */}
+                                {a.businessId && (
+                                  <span
+                                    title="This admin still has a businessId set — they can also act as a contractor. See REVIEW-FINDINGS.md."
+                                    style={{ ...pill("critical"), marginTop: 4, alignSelf: "flex-start" }}
+                                  >
+                                    Dual-role (has businessId)
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td style={{ ...td, padding: "13px 16px", verticalAlign: "top" }}>

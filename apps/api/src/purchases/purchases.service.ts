@@ -167,15 +167,13 @@ export class PurchasesService {
         where: { businessId, projectId, deletedAt: null },
         select: { quantity: true, rateCents: true },
       }),
-      this.prisma.business.findUnique({ where: { id: businessId }, select: { trn: true } }),
+      this.prisma.business.findUnique({ where: { id: businessId }, select: { gctRegistered: true } }),
     ]);
 
-    // A TRN is the practical signal that a contractor is GCT-registered and so
-    // reclaims input tax. Imperfect — registration and having a TRN are not
-    // identical — but it is the only signal the app holds, and the alternative
-    // is silently assuming every tenant reclaims, which overstates the margin
-    // for every sole trader who does not.
-    const registeredForGct = Boolean(business?.trn?.trim());
+    // The owner's explicit answer in Settings. NOT inferred from the TRN: every
+    // Jamaican has one, and treating a personal TRN as registration netted input
+    // tax off for sole traders who reclaim nothing — overstating every margin.
+    const registeredForGct = business?.gctRegistered === true;
 
     // Wages carry NO reclaimable GCT — they are not a supply. A subcontractor
     // who invoices with GCT is a Purchase, not a labour entry, which is why

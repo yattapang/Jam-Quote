@@ -273,4 +273,7 @@ export interface Business {
    * the API falls back to the owner's address. */
   billingContactName: string;
   billingContactEmail: string;
+  /** Registered with TAJ to charge GCT — the owner's explicit answer, never
+   * inferred from `trn` (every Jamaican has a TRN). */
+  gctRegistered: boolean;
 }

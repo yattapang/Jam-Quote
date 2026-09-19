@@ -8,6 +8,7 @@ function build(opts: {
   purchases?: unknown[];
   labour?: unknown[];
   trn?: string | null;
+  gctRegistered?: boolean;
   supplier?: unknown;
 } = {}) {
   const prisma = {
@@ -32,7 +33,13 @@ function build(opts: {
       findFirst: vi.fn().mockResolvedValue("supplier" in opts ? opts.supplier : { id: "sup-1" }),
     },
     business: {
-      findUnique: vi.fn().mockResolvedValue({ trn: "trn" in opts ? opts.trn : "102-458-963" }),
+      // Default registered, so the pre-existing cases keep their meaning. The
+      // TRN is returned too, so a derivation that reads it instead of the flag
+      // has something to (wrongly) find.
+      findUnique: vi.fn().mockResolvedValue({
+        trn: "trn" in opts ? opts.trn : "102-458-963",
+        gctRegistered: opts.gctRegistered ?? true,
+      }),
     },
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,24 +216,56 @@ describe("did this job make money?", () => {
   // GCT, because it is collected for TAJ and never the contractor's money.
   const invoiced = { status: "INVOICED", totalCents: 500_000, paidCents: 200_000, gctCents: 0 };
 
-  it("nets reclaimable GCT off cost when the business has a TRN", async () => {
+  it("nets reclaimable GCT off cost when the business is GCT-registered", async () => {
     const { svc } = build({
       invoices: [invoiced],
       purchases: [{ amountCents: 115_000, gctCents: 15_000 }],
       trn: "102-458-963",
+      gctRegistered: true,
     });
     const p = await svc.projectProfit("biz-1", "proj-1");
     expect(p.costExGctCents).toBe(100_000);
     expect(p.netProfitCents).toBe(400_000);
   });
 
-  it("does NOT net it off for a contractor with no TRN", async () => {
+  it("does NOT net it off for a sole trader with a personal TRN who is not registered", async () => {
+    // Every Jamaican has a TRN. Having one is not being registered with TAJ,
+    // and treating it as such overstated this contractor's margin on every job.
+    const { svc } = build({
+      invoices: [invoiced],
+      purchases: [{ amountCents: 115_000, gctCents: 15_000 }],
+      trn: "102-458-963",
+      gctRegistered: false,
+    });
+    const p = await svc.projectProfit("biz-1", "proj-1");
+    expect(p.registeredForGct).toBe(false);
+    expect(p.inputTaxCents).toBe(15_000);
+    expect(p.costExGctCents).toBe(115_000);
+    expect(p.netProfitCents).toBe(385_000);
+  });
+
+  it("nets it off for a registered business even with no TRN on file", async () => {
+    // The flag is the owner's answer; the TRN field is not consulted at all.
+    const { svc } = build({
+      invoices: [invoiced],
+      purchases: [{ amountCents: 115_000, gctCents: 15_000 }],
+      trn: null,
+      gctRegistered: true,
+    });
+    const p = await svc.projectProfit("biz-1", "proj-1");
+    expect(p.registeredForGct).toBe(true);
+    expect(p.costExGctCents).toBe(100_000);
+    expect(p.netProfitCents).toBe(400_000);
+  });
+
+  it("does NOT net it off for an unregistered contractor with no TRN", async () => {
     // They never reclaim it, so treating it as recoverable would overstate the
     // margin on every job they do.
     const { svc } = build({
       invoices: [invoiced],
       purchases: [{ amountCents: 115_000, gctCents: 15_000 }],
       trn: null,
+      gctRegistered: false,
     });
     const p = await svc.projectProfit("biz-1", "proj-1");
     expect(p.costExGctCents).toBe(115_000);

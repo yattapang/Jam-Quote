@@ -79,6 +79,7 @@ const EMPTY_BUSINESS: Business = {
   name: "",
   billingContactName: "",
   billingContactEmail: "",
+  gctRegistered: false,
   trn: "",
   town: "",
   parish: "" as Business["parish"],

@@ -2,7 +2,7 @@ import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Unauthor
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { UserRole } from "@prisma/client";
-import type { AdminCapability } from "@jamquote/core";
+import { expandAdminCapabilities, type AdminCapability } from "@jamquote/core";
 import type { Request } from "express";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { ADMIN_CAPABILITY_KEY } from "./require-capability.decorator.js";
@@ -17,10 +17,14 @@ import type { AuthTokenPayload } from "./auth.service.js";
  *
  * On top of the role check, a route may declare a required admin capability
  * with @RequireCapability(...). A super-admin implicitly holds every
- * capability; a regular admin must have it in User.adminCapabilities or the
- * request is Forbidden. The resolved authorization is attached to
- * req.adminContext for controllers/services that need to know who is acting
- * (e.g. admin-management self-lockout guards).
+ * capability; a regular admin must have it in their EFFECTIVE capability set
+ * — User.adminCapabilities run through expandAdminCapabilities (@jamquote/core),
+ * which backfills IMPERSONATE_TENANTS for anyone who already holds
+ * MANAGE_TENANTS (decision 5b split the two; see enums.ts) — or the request
+ * is Forbidden. The resolved authorization (including the expanded
+ * capability list) is attached to req.adminContext for controllers/services
+ * that need to know who is acting (e.g. admin-management self-lockout
+ * guards).
  *
  * Use on any platform-level route that reads across tenants (see
  * AdminController) — never rely on "not linked in the UI" as access control.
@@ -66,12 +70,14 @@ export class AdminGuard implements CanActivate {
       throw new ForbiddenException("Admin access required");
     }
 
+    const effectiveCapabilities = expandAdminCapabilities(user.adminCapabilities);
+
     // Route-level capability gate. Absent → any admin may proceed (basic reads).
     const required = this.reflector.getAllAndOverride<AdminCapability | undefined>(ADMIN_CAPABILITY_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
-    if (required && !user.isSuperAdmin && !user.adminCapabilities.includes(required)) {
+    if (required && !user.isSuperAdmin && !effectiveCapabilities.includes(required)) {
       throw new ForbiddenException(`Missing required admin capability: ${required}`);
     }
 
@@ -79,7 +85,7 @@ export class AdminGuard implements CanActivate {
     req.adminContext = {
       userId: user.id,
       isSuperAdmin: user.isSuperAdmin,
-      capabilities: user.adminCapabilities,
+      capabilities: effectiveCapabilities,
     };
     return true;
   }

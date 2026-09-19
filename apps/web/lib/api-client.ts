@@ -640,6 +640,7 @@ export function mapBusiness(b: ApiBusiness): Business {
     currency: b.currency ?? "JMD",
     billingContactName: b.billingContactName ?? "",
     billingContactEmail: b.billingContactEmail ?? "",
+    gctRegistered: b.gctRegistered,
   };
 }
 
@@ -952,6 +953,8 @@ export interface UpdateBusinessInput {
   parish?: string;
   tradeType?: string;
   defaultGctRatePct?: number;
+  /** Registered with TAJ to charge GCT. Sent as a real boolean, so false CLEARS it. */
+  gctRegistered?: boolean;
 }
 export async function updateBusiness(id: string, input: UpdateBusinessInput): Promise<{ id: string }> {
   const { defaultGctRatePct, ...rest } = input;
@@ -1221,13 +1224,15 @@ export interface AdminMe {
   isSuperAdmin: boolean;
   capabilities: string[];
 }
-/** One internal staff admin (GET /admin/admins). */
+/** One internal staff admin (GET /admin/admins). `businessId` non-null means
+ * this admin is dual-role (decision 4b) — see AdminConsole's warning badge. */
 export interface AdminUser {
   id: string;
   email: string | null;
   fullName: string | null;
   isSuperAdmin: boolean;
   capabilities: string[];
+  businessId: string | null;
   createdAt: string;
 }
 /** One statutory payroll contribution in the effective rule-pack. Split rates

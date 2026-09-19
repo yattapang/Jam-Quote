@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Prisma, type Business } from "@prisma/client";
 import { businessWire } from "@jamquote/core";
+import { updateBusinessSchema } from "./business.dto.js";
 
 /**
  * Seam 1 in `CONTRACTS.md`, for the business row. Same double coupling as
@@ -35,6 +36,7 @@ const sample: Business = {
   nextQuoteSeq: 1,
   nextInvoiceSeq: 1,
   lastOverdueDigestOn: null,
+  gctRegistered: false,
   createdAt: new Date("2026-01-05T00:00:00.000Z"),
   updatedAt: new Date("2026-01-05T00:00:00.000Z"),
   deletedAt: null,
@@ -81,5 +83,28 @@ describe("the business wire contract", () => {
   it("REJECTS a response missing a promised field", () => {
     const { countryCode: _dropped, ...without } = overTheWire(sample);
     expect(() => businessWire.parse(without)).toThrow(/countryCode/);
+  });
+});
+
+describe("gctRegistered — the owner's explicit answer, not inferred from the TRN", () => {
+  it("is carried on the wire as a real boolean", () => {
+    const parsed = businessWire.parse(overTheWire({ ...sample, gctRegistered: true }));
+    expect(parsed.gctRegistered).toBe(true);
+    // A row without it is a contract break, not a silent `false`.
+    const { gctRegistered: _dropped, ...without } = overTheWire({ ...sample, gctRegistered: false });
+    expect(() => businessWire.parse(without)).toThrow(/gctRegistered/);
+  });
+
+  it("is accepted by the update DTO in both directions, so it can be cleared", () => {
+    expect(updateBusinessSchema.parse({ gctRegistered: true })).toEqual({ gctRegistered: true });
+    expect(updateBusinessSchema.parse({ gctRegistered: false })).toEqual({ gctRegistered: false });
+    // Omitted means "leave it alone" — not a write of false.
+    expect(updateBusinessSchema.parse({ name: "B" })).not.toHaveProperty("gctRegistered");
+  });
+
+  it("rejects anything that is not a boolean", () => {
+    // "false" is truthy; coercing it would register the contractor.
+    expect(updateBusinessSchema.safeParse({ gctRegistered: "false" }).success).toBe(false);
+    expect(updateBusinessSchema.safeParse({ gctRegistered: 1 }).success).toBe(false);
   });
 });

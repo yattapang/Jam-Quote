@@ -27,7 +27,7 @@ import EditBusinessButton from "./EditBusinessButton";
 // full parallel run; this was intermittently timing out, a harness limit, not behaviour.
 vi.setConfig({ testTimeout: 30_000 });
 
-function business(): Business {
+function business(over: Partial<Business> = {}): Business {
   return {
     id: "biz-1",
     name: "Marcia's Construction",
@@ -41,6 +41,8 @@ function business(): Business {
     currency: "JMD",
     billingContactName: "",
     billingContactEmail: "",
+    gctRegistered: false,
+    ...over,
   };
 }
 
@@ -77,5 +79,47 @@ describe("EditBusinessButton — Save", () => {
     await user.dblClick(save);
 
     expect(updateBusiness).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("EditBusinessButton — GCT registered", () => {
+  const question = () => screen.getByRole("combobox", { name: /registered to charge gct/i });
+
+  it("explains that a TRN alone is not registration", async () => {
+    const user = userEvent.setup();
+    render(<EditBusinessButton business={business()} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByText(/having a trn alone does not mean you are registered/i)).toBeInTheDocument();
+  });
+
+  it("pre-fills No for a business with a TRN that is not registered, and saves false", async () => {
+    const { updateBusiness } = await import("@/lib/api-client");
+    const user = userEvent.setup();
+    render(<EditBusinessButton business={business({ trn: "102458963", gctRegistered: false })} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(question()).toHaveValue("no");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(updateBusiness).toHaveBeenCalledWith("biz-1", expect.objectContaining({ gctRegistered: false }));
+  });
+
+  it("turns it on", async () => {
+    const { updateBusiness } = await import("@/lib/api-client");
+    const user = userEvent.setup();
+    render(<EditBusinessButton business={business({ gctRegistered: false })} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    await user.selectOptions(question(), "yes");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(updateBusiness).toHaveBeenCalledWith("biz-1", expect.objectContaining({ gctRegistered: true }));
+  });
+
+  it("turns it OFF again — the answer can be cleared, not only set", async () => {
+    const { updateBusiness } = await import("@/lib/api-client");
+    const user = userEvent.setup();
+    render(<EditBusinessButton business={business({ gctRegistered: true })} />);
+    await user.click(screen.getByRole("button", { name: "Edit" }));
+    expect(question()).toHaveValue("yes");
+    await user.selectOptions(question(), "no");
+    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    expect(updateBusiness).toHaveBeenCalledWith("biz-1", expect.objectContaining({ gctRegistered: false }));
   });
 });

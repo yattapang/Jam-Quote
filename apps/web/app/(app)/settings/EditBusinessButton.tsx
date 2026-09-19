@@ -12,6 +12,10 @@ import { BOUNDS, PARISHES, formatTrn, formatTrnInput } from "@jamquote/core";
 import type { Business } from "@/lib/types";
 
 import { errorMessage } from "@/lib/error-message";
+const gctRegisteredOptions = [
+  { value: "no", label: "No" },
+  { value: "yes", label: "Yes" },
+];
 const parishOptions = [{ value: "", label: "Select parish…" }, ...PARISHES.map((p) => ({ value: p, label: p }))];
 
 /** Header action on the settings page — mirrors EditClientButton: pre-fills a
@@ -39,6 +43,9 @@ export default function EditBusinessButton({
   const [tradeType, setTradeType] = useState(business.tradeType);
   const [addressLine, setAddressLine] = useState(business.addressLine);
   const [gctPct, setGctPct] = useState(String(business.defaultGctRatePct));
+  // An explicit answer, never inferred from the TRN: every Jamaican has one.
+  // Held as "yes"/"no" for the Select; always sent, so "no" clears it.
+  const [gctRegistered, setGctRegistered] = useState(business.gctRegistered ? "yes" : "no");
   // Subscription mail goes here rather than to whoever owns the login — the
   // person who runs the business is often not the one who pays its bills.
   const [billingName, setBillingName] = useState(business.billingContactName);
@@ -64,6 +71,7 @@ export default function EditBusinessButton({
         tradeType: tradeType.trim() || undefined,
         addressLine: addressLine.trim() || undefined,
         defaultGctRatePct: gctPct.trim() === "" ? undefined : gctValue,
+        gctRegistered: gctRegistered === "yes",
         // Sent even when empty: "" is how the field is CLEARED, and the API
         // stores NULL so the fallback to the owner's address applies again.
         billingContactName: billingName.trim(),
@@ -113,6 +121,14 @@ export default function EditBusinessButton({
                 onChange={(e) => setGctPct(e.target.value)}
               />
             </div>
+            <Select
+              id="business-gct-registered"
+              label="Registered to charge GCT?"
+              hint="Are you registered with TAJ to charge GCT? Having a TRN alone does not mean you are registered."
+              options={gctRegisteredOptions}
+              value={gctRegistered}
+              onChange={(e) => setGctRegistered(e.target.value)}
+            />
             <Input label="Address" value={addressLine} onChange={(e) => setAddressLine(e.target.value)} />
             <div style={{ marginTop: 4 }}>
               <Input

@@ -403,6 +403,7 @@ describe("every NON_FINANCIAL_AUDIT_ACTIONS writer's real details contains no mo
       isSuperAdmin: false,
       adminCapabilities: [] as string[],
       fullName: "Ada Admin",
+      businessId: null as string | null,
       createdAt: new Date(),
     });
     const adminUser = () => ({ ...user(), role: "ADMIN", email: "a@b.com" });

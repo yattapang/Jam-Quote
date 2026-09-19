@@ -43,6 +43,7 @@ export const fixtureBusiness: Business = {
   name: businessProfile.name,
   billingContactName: "",
   billingContactEmail: "",
+  gctRegistered: false,
   trn: businessProfile.trn,
   town: "",
   parish: businessProfile.parish,

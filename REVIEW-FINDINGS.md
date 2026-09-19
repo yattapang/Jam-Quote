@@ -352,6 +352,28 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Owner decisions implemented (2026-09-18)
+
+- **GCT registration:** `Business.gctRegistered` (migration `20260918120000_business_gct_registered`,
+  backfilled from today's TRN rule so no margin changes on deploy; new businesses default
+  to false). Job profit reads the flag; every other `trn` use was checked and is display
+  or validation only. The settings form has a Yes/No with TAJ help text. Migration run
+  against an in-process Postgres in a test.
+- **OPEN, needs the owner - GCT is CHARGED regardless of registration:** every business
+  gets the rule pack's 15% default at signup, and quotes/invoices use it, so an
+  unregistered sole trader bills clients GCT unless they zero the rate themselves.
+  Not changed - it alters what customers are billed.
+- **Impersonation (5b):** `IMPERSONATE_TENANTS` gates the route and the service; existing
+  `MANAGE_TENANTS` holders get it by code-level expansion (no data migration), and it can
+  then be removed per admin.
+- **Dual-role admins (4b):** promotion clears the business link, or is refused for a sole
+  owner. **I changed one part:** the agent made the tenant guard refuse EVERY admin-role
+  user, which would have locked any existing dual-role admin - quite possibly the owner -
+  out of their own business on deploy, against the recorded decision. Legacy dual-role
+  admins are grandfathered, badged in the console and listed by the query below.
+- Verified by me: gate green; planted impersonation gated on MANAGE_TENANTS again (2
+  tests fail) and the profit rule back to "always registered" (2 fail).
+
 ## Review of 06da235 (2026-09-18) - FIXED
 
 All six fixed: the job DTO refuses a cost outside Int32 using core's own cost function, so
@@ -2108,3 +2130,50 @@ write through a by-reference accessor.
 
 Then the guard corrections, because each one is a fix that can silently come
 undone.
+
+## Dual-role admins (decision 4b)
+
+`promoteAdmin` (apps/api/src/admin/admin.service.ts) now clears the promoted
+user's `businessId` going forward — or refuses the promotion outright when
+they are a business's sole OWNER — so a NEW admin can no longer also be a
+contractor for their own business. This is a forward-only fix: it does not
+touch or migrate existing rows (no migrations-folder access from this change,
+and a data rewrite of `User` is out of scope for it regardless). Any admin
+promoted BEFORE this fix landed may still carry a non-null `businessId`.
+
+Read-only query to find them, for manual review/cleanup by whoever owns the
+`User` table and migrations:
+
+```sql
+SELECT id, email, "fullName", "businessId", "isSuperAdmin", "adminCapabilities"
+FROM "User"
+WHERE role = 'ADMIN' AND "businessId" IS NOT NULL
+ORDER BY "createdAt" ASC;
+```
+
+The admin console (apps/web/app/admin/AdminConsole.tsx) renders a "Dual-role
+(has businessId)" warning badge on any admin row where this is true, so this
+is also visible without running the query. `TenantAuthGuard`
+(apps/api/src/auth/tenant-auth.guard.ts) refuses ANY admin-role user on
+tenant-scoped routes regardless of whether `businessId` happens to still be
+set, so a leftover dual-role row from before this fix cannot use its own
+token to reach a tenant's data — the only exposure is that such a row still
+exists in the table, not that it grants tenant access.
+
+## Capability backfill (decision 5b)
+
+Decision 5b split `IMPERSONATE_TENANTS` out of `MANAGE_TENANTS`
+(packages/core/src/types/enums.ts). Capabilities are stored as a plain
+`String[]` column (`User.adminCapabilities`) with no other derivation layer
+and no migrations-folder access available from this change, so the backward
+compatibility requirement — every admin who already had `MANAGE_TENANTS`
+keeps impersonation access — is implemented as a CODE-LEVEL derivation
+(`expandAdminCapabilities` in `packages/core/src/types/enums.ts`) rather than
+a SQL backfill: `AdminGuard` (apps/api/src/auth/admin.guard.ts) and
+`AdminService`'s admin-facing reads (`adminMe`, `listAdmins` via
+`toAdminUser`, apps/api/src/admin/admin.service.ts) all run stored
+capabilities through it before authorizing or displaying them, so
+`MANAGE_TENANTS` implies `IMPERSONATE_TENANTS` everywhere it matters without
+rewriting a single row. No SQL statement is needed here as a result — this
+section exists to record that the "or write SQL here" fallback path was
+considered and not taken, and why.

@@ -170,15 +170,25 @@ export function projectStageTracksProgress(stage: ProjectStage): boolean {
 // listed would offer admins a permission that grants nothing.
 export const AdminCapability = {
   /**
-   * Suspend / restore / hard-delete tenants, change their plan, record and
-   * void subscription payments, and impersonate a tenant (a 30-minute
-   * read-only session over their entire book — see
-   * AdminController.impersonateTenant, which itself calls this "the most
-   * sensitive capability in the console"). All of that rides on this one
-   * capability today; splitting impersonation into its own capability is a
-   * product decision that has not been made, not an oversight.
+   * Suspend / restore / hard-delete tenants, change their plan, and record
+   * and void subscription payments.
+   *
+   * Decision 5b split impersonation ("view as tenant") out into its own
+   * capability, IMPERSONATE_TENANTS, below — it is no longer covered here.
+   * Every admin who already held MANAGE_TENANTS before that split keeps
+   * impersonation access (see expandAdminCapabilities in this file and its
+   * callers in apps/api/src/auth/admin.guard.ts and
+   * apps/api/src/admin/admin.service.ts), so nobody silently lost it.
    */
   MANAGE_TENANTS: "MANAGE_TENANTS",
+  /**
+   * "View as tenant": mint a 30-minute, read-only session over a tenant's
+   * entire book (AdminController.impersonateTenant). Split out from
+   * MANAGE_TENANTS in decision 5b because it is a materially different kind
+   * of access (reading a contractor's private data end-to-end) from the
+   * suspend/plan/payment operations MANAGE_TENANTS still covers.
+   */
+  IMPERSONATE_TENANTS: "IMPERSONATE_TENANTS",
   /** Edit platform subscription pricing. */
   MANAGE_PRICING: "MANAGE_PRICING",
   /** View the subscription & revenue (financials) screen. */
@@ -199,13 +209,40 @@ export const ADMIN_CAPABILITY_META: Record<AdminCapability, { label: string; des
   MANAGE_TENANTS: {
     label: "Manage tenants",
     description:
-      "Suspend, restore, delete businesses, change their plan, record/void subscription payments, and impersonate a tenant (view their account read-only for 30 minutes)",
+      "Suspend, restore, delete businesses, change their plan, and record/void subscription payments. Does not include impersonation — see \"Impersonate tenants\"",
+  },
+  IMPERSONATE_TENANTS: {
+    label: "Impersonate tenants",
+    description: "View a tenant's account read-only for 30 minutes (\"view as tenant\")",
   },
   MANAGE_PRICING: { label: "Manage pricing", description: "Edit subscription plan pricing" },
   VIEW_FINANCIALS: { label: "View financials", description: "See subscription revenue and renewals" },
   MANAGE_RULEPACK: { label: "Manage rule-packs", description: "Edit jurisdiction tax/regulatory rules" },
   MANAGE_ADMINS: { label: "Manage admins", description: "Add admins and set their capabilities" },
 };
+
+/**
+ * Expands a stored capability list to the EFFECTIVE set a caller actually
+ * holds, for backward compatibility across decision 5b's MANAGE_TENANTS ->
+ * IMPERSONATE_TENANTS split: capabilities are stored as a plain string[]
+ * column (User.adminCapabilities) with no other derivation layer, and there
+ * is no migrations-folder access available to backfill that column for every
+ * existing admin. Deriving it here, at every read, means an admin who was
+ * granted MANAGE_TENANTS before the split keeps impersonation access without
+ * a data migration, and a superadmin's implicit "every capability" already
+ * covers both regardless of this list.
+ *
+ * Every caller that authorizes or displays admin capabilities (AdminGuard,
+ * AdminService's admin-facing reads) must run stored capabilities through
+ * this function rather than reading User.adminCapabilities directly.
+ */
+export function expandAdminCapabilities(stored: readonly string[]): string[] {
+  const expanded = new Set(stored);
+  if (expanded.has(AdminCapability.MANAGE_TENANTS)) {
+    expanded.add(AdminCapability.IMPERSONATE_TENANTS);
+  }
+  return Array.from(expanded);
+}
 
 /** The 14 parishes of Jamaica. */
 export const PARISHES = [

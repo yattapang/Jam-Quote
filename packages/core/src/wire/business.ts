@@ -36,6 +36,9 @@ export const businessWire = z.object({
   currency: z.string(),
 
   trn: z.string().nullable(),
+  /** Registered with TAJ to charge GCT. Separate from `trn` on purpose: every
+   * Jamaican has a TRN, so its presence is not evidence of registration. */
+  gctRegistered: z.boolean(),
   addressLine: z.string().nullable(),
   town: z.string().nullable(),
   parish: z.string().nullable(),

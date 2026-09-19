@@ -75,6 +75,31 @@ describe("TenantAuthGuard", () => {
     await expect(guard.canActivate(makeContext(req))).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  // Decision 4b: an admin-role user must be refused tenant-scoped routes on
+  // their own token even in the legacy dual-role case — a businessId left
+  // over from before promoteAdmin started clearing it must not grant tenant
+  // access just because it happens to still be set and point at a real,
+  // non-deleted business.
+  it("grandfathers a LEGACY dual-role admin into their own tenant (decision 4b is forward-only)", async () => {
+    const jwt = { verify: vi.fn().mockReturnValue({ sub: "admin-dual", businessId: "biz-1", role: "ADMIN" }) };
+    const prisma = {
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: "admin-dual",
+          role: "ADMIN",
+          businessId: "biz-1",
+          business: { id: "biz-1", deletedAt: null },
+        }),
+      },
+    };
+    const guard = new TenantAuthGuard(jwt as any, prisma as any);
+    const req = makeReq({ headers: { authorization: "Bearer admin.token" } });
+
+    // Refusing here would lock the owner out of their own business on deploy.
+    await expect(guard.canActivate(makeContext(req))).resolves.toBe(true);
+    expect(req).toHaveProperty("businessId", "biz-1");
+  });
+
   it("throws Forbidden when the user's business has been soft-deleted (suspended)", async () => {
     const jwt = { verify: vi.fn().mockReturnValue({ sub: "u1", businessId: "biz-1", role: "OWNER" }) };
     const prisma = {

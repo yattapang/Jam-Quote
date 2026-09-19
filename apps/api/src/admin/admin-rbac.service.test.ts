@@ -81,6 +81,96 @@ describe("AdminService.promoteAdmin", () => {
     );
     expect(record).toHaveBeenCalledWith(expect.objectContaining({ action: "admin.promote", targetId: "u-9" }));
   });
+
+  // Decision 4b: an admin must not also be a contractor for their business.
+  it("clears businessId when promoting a user who is not a business's sole owner", async () => {
+    const prisma = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "u-staff",
+          isSuperAdmin: false,
+          businessId: "biz-1",
+          role: "STAFF",
+        }),
+        count: vi.fn(),
+        update: vi.fn().mockResolvedValue({
+          id: "u-staff",
+          email: "staff2@jamquote.com",
+          fullName: "Staff Two",
+          isSuperAdmin: false,
+          adminCapabilities: [],
+          businessId: null,
+          createdAt: new Date("2026-07-30T00:00:00.000Z"),
+        }),
+      },
+    };
+    const { svc } = make(prisma);
+
+    const result = await svc.promoteAdmin({ email: "staff2@jamquote.com", capabilities: [] }, SUPER);
+
+    expect(result.businessId).toBeNull();
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "u-staff" },
+        data: expect.objectContaining({ businessId: null }),
+      }),
+    );
+    // STAFF can never orphan a business, so the sole-owner count is never even checked.
+    expect(prisma.user.count).not.toHaveBeenCalled();
+  });
+
+  it("refuses to promote a business's sole OWNER, leaving businessId untouched", async () => {
+    const prisma = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "u-owner",
+          isSuperAdmin: false,
+          businessId: "biz-1",
+          role: "OWNER",
+        }),
+        count: vi.fn().mockResolvedValue(1),
+        update: vi.fn(),
+      },
+    };
+    const { svc } = make(prisma);
+
+    await expect(
+      svc.promoteAdmin({ email: "owner@jamquote.com", capabilities: [] }, SUPER),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.user.count).toHaveBeenCalledWith({ where: { businessId: "biz-1", role: "OWNER" } });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("clears businessId when promoting an OWNER who shares ownership with another OWNER", async () => {
+    const prisma = {
+      user: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "u-owner2",
+          isSuperAdmin: false,
+          businessId: "biz-2",
+          role: "OWNER",
+        }),
+        count: vi.fn().mockResolvedValue(2),
+        update: vi.fn().mockResolvedValue({
+          id: "u-owner2",
+          email: "owner2@jamquote.com",
+          fullName: "Co-owner",
+          isSuperAdmin: false,
+          adminCapabilities: [],
+          businessId: null,
+          createdAt: new Date("2026-07-30T00:00:00.000Z"),
+        }),
+      },
+    };
+    const { svc } = make(prisma);
+
+    const result = await svc.promoteAdmin({ email: "owner2@jamquote.com", capabilities: [] }, SUPER);
+
+    expect(result.businessId).toBeNull();
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ businessId: null }) }),
+    );
+  });
 });
 
 describe("AdminService.updateAdmin", () => {
@@ -198,5 +288,53 @@ describe("AdminService.revokeAdmin", () => {
     };
     const { svc } = make(prisma);
     await expect(svc.revokeAdmin("u-4", SUPER)).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// Decision 5b: "view as tenant" is gated on IMPERSONATE_TENANTS, not
+// MANAGE_TENANTS. AdminGuard/@RequireCapability already enforce this at the
+// route, but AdminService.impersonateTenant re-checks it itself (defense in
+// depth for the console's single most sensitive action).
+describe("AdminService.impersonateTenant — capability re-check", () => {
+  const business = { id: "biz-1", name: "Acme", deletedAt: null };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const makeWithAuth = (issueImpersonationToken = vi.fn()) => {
+    const prisma = {
+      business: { findUnique: vi.fn().mockResolvedValue(business) },
+      user: { findUnique: vi.fn().mockResolvedValue({ id: "admin-1", role: "ADMIN" }) },
+    };
+    const record = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const svc = new AdminService(prisma as any, {} as any, { record } as any, { issueImpersonationToken } as any);
+    return { svc, prisma, record, issueImpersonationToken };
+  };
+
+  it("refuses an actor with MANAGE_TENANTS but not IMPERSONATE_TENANTS", async () => {
+    const { svc, prisma, issueImpersonationToken } = makeWithAuth();
+    const actor: AdminActor = { userId: "admin-1", isSuperAdmin: false, capabilities: ["MANAGE_TENANTS"] };
+
+    await expect(svc.impersonateTenant("biz-1", "admin-1", actor)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.business.findUnique).not.toHaveBeenCalled();
+    expect(issueImpersonationToken).not.toHaveBeenCalled();
+  });
+
+  it("allows an actor with IMPERSONATE_TENANTS", async () => {
+    const issueImpersonationToken = vi.fn().mockReturnValue({ token: "tok", expiresAt: "later" });
+    const { svc } = makeWithAuth(issueImpersonationToken);
+    const actor: AdminActor = { userId: "admin-1", isSuperAdmin: false, capabilities: ["IMPERSONATE_TENANTS"] };
+
+    const result = await svc.impersonateTenant("biz-1", "admin-1", actor);
+
+    expect(result.token).toBe("tok");
+    expect(issueImpersonationToken).toHaveBeenCalled();
+  });
+
+  it("allows a super-admin regardless of their explicit capability list", async () => {
+    const issueImpersonationToken = vi.fn().mockReturnValue({ token: "tok", expiresAt: "later" });
+    const { svc } = makeWithAuth(issueImpersonationToken);
+    const actor: AdminActor = { userId: "admin-1", isSuperAdmin: true, capabilities: [] };
+
+    await expect(svc.impersonateTenant("biz-1", "admin-1", actor)).resolves.toMatchObject({ token: "tok" });
   });
 });

@@ -27,22 +27,28 @@ import type { AuthTokenPayload } from "./auth.service.js";
  * old token can't grant access to a different business than the one the
  * user is presently assigned to.
  *
- * NOT an invariant this guard can rely on: "an admin has businessId: null."
- * AdminService.promoteAdmin sets role: ADMIN without clearing businessId, and
- * that console route is the only way admins are made — so every admin
- * promoted through it keeps whatever businessId they had before (typically
- * their own, if they were a tenant owner). issueToken then copies that
- * businessId into their token verbatim. The result: a promoted admin is a
- * user for whom AdminGuard grants the platform API AND this guard grants
- * their own tenant, on the same token — dual-role staff, not the
- * businessId-is-null admin this docblock used to describe. Whether that
- * dual-role case is intended is a product question; this comment states what
- * the code does, not what it should do.
+ * Decision 4b: a platform admin must not also be able to act as a
+ * contractor. AdminService.promoteAdmin now clears the promoted user's
+ * businessId as part of promotion (refusing the promotion instead if doing
+ * so would orphan a business by removing its sole OWNER) — see
+ * admin.service.ts. That closes the gap going forward, but it is a
+ * forward-only fix: existing admins promoted before this change may still
+ * carry a businessId (see REVIEW-FINDINGS.md, "Dual-role admins (decision
+ * 4b)", for the read-only query that lists them). This guard does not rely
+ * on promoteAdmin having done the right thing — role ADMIN is refused
+ * below regardless of whether businessId happens to be set, so a leftover
+ * dual-role row from before this fix is grandfathered on purpose (see the
+ * comment in canActivate) until the owner resolves it.
  *
  * Use @UseGuards(TenantAuthGuard) at the controller class level for every
  * tenant-scoped route (anything using @BusinessId()). A user with no
  * business at all (businessId: null) is expected to get a clear 403 here,
  * not a confusing 401 — they authenticate fine, they just aren't a tenant.
+ * A legacy dual-role admin is NOT refused (see canActivate). The one
+ * sanctioned way for an admin to reach tenant-scoped routes is impersonation
+ * (allowImpersonatedRead below), which uses its own token shape
+ * (payload.impersonatedBusinessId) and its own checks, entirely separate
+ * from this per-request role refusal.
  */
 @Injectable()
 export class TenantAuthGuard implements CanActivate {
@@ -74,6 +80,7 @@ export class TenantAuthGuard implements CanActivate {
       where: { id: payload.sub },
       select: {
         id: true,
+        role: true,
         businessId: true,
         business: { select: { id: true, deletedAt: true } },
       },
@@ -83,6 +90,15 @@ export class TenantAuthGuard implements CanActivate {
       // treat identically to any other invalid credential.
       throw new UnauthorizedException("Invalid or expired token");
     }
+
+    // Decision 4b is forward-only. A LEGACY dual-role admin (promoted before
+    // promoteAdmin began clearing businessId) is deliberately still allowed into
+    // their own tenant: refusing here would lock the owner out of their own
+    // business on deploy, which the decision explicitly rules out ("listed for
+    // review, not changed automatically"). They are listed by the query in
+    // REVIEW-FINDINGS.md and badged in the admin console; the owner resolves each
+    // one by hand. A new admin never reaches this with a businessId, because
+    // promotion clears it or is refused.
 
     if (!user.businessId || !user.business) {
       // Admins are deliberately issued businessId: null (see issueToken).

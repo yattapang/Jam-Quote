@@ -4,6 +4,9 @@ import { BOUNDS, PARISHES, boundedNumber, trnSchema } from "@jamquote/core";
 export const createBusinessSchema = z.object({
   name: z.string().trim().min(1).max(200),
   trn: trnSchema.optional(),
+  /** Registered with TAJ to charge GCT. Explicit, never derived from `trn`. A
+   * strict boolean: the string "false" is truthy and must not register anyone. */
+  gctRegistered: z.boolean().optional(),
   logoUrl: z.string().url().optional(),
   addressLine: z.string().max(200).optional(),
   // Free text: no authoritative town list exists to validate against.

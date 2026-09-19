@@ -104,17 +104,20 @@ export class AdminController {
 
   /**
    * Mint a 30-minute, read-only token for viewing this tenant's own screens.
-   * Gated on MANAGE_TENANTS — the same authorization as suspending them —
-   * because reading a contractor's entire book of business is at least as
-   * consequential as closing their account. Audited as tenant.impersonate.
+   * Gated on IMPERSONATE_TENANTS (decision 5b split this out of
+   * MANAGE_TENANTS: reading a contractor's entire book of business is a
+   * materially different, more sensitive action than suspending/plan-changing
+   * their account, and deserves its own grant). Audited as tenant.impersonate.
+   * The service method re-checks the capability itself (defense in depth,
+   * not solely relying on the route decorator).
    */
   @Post("tenants/:id/impersonate")
-  @RequireCapability(AdminCapability.MANAGE_TENANTS)
+  @RequireCapability(AdminCapability.IMPERSONATE_TENANTS)
   impersonateTenant(
     @Param("id") id: string,
     @Req() req: Request,
   ): Promise<{ token: string; expiresAt: string; business: { id: string; name: string } }> {
-    return this.admin.impersonateTenant(id, req.user!.sub);
+    return this.admin.impersonateTenant(id, req.user!.sub, req.adminContext!);
   }
 
   /** Undoes a suspend — clears Business.deletedAt. */

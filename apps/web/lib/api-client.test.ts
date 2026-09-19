@@ -229,6 +229,8 @@ const apiBusiness = {
   countryCode: "JM",
   currency: "JMD",
   trn: "102-458-963",
+  // true, not the default false, so a mapper that hardcodes false fails.
+  gctRegistered: true,
   addressLine: "12 Barbican Road, Kingston 8",
   parish: "St. Catherine",
   tradeType: "General contractor & masonry",
@@ -362,6 +364,7 @@ describe("pure mappers", () => {
       // controlled input from the first render.
       billingContactName: "",
       billingContactEmail: "",
+      gctRegistered: true,
     });
   });
 

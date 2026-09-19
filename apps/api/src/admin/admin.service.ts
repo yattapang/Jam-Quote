@@ -1,10 +1,12 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { UserRole, type Business } from "@prisma/client";
 import {
+  AdminCapability,
   SubscriptionStanding,
   subscriptionStanding,
   supportedJurisdictions,
   nextTermEnd,
+  expandAdminCapabilities,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { startOfJamaicaMonth } from "../common/month.util.js";
@@ -20,19 +22,29 @@ import type {
 
 /** The acting admin's authorization, from AdminGuard's req.adminContext.
  * Passed into admin-management methods so they can enforce super-admin-only
- * rules and prevent self-lockout. */
+ * rules and prevent self-lockout. `capabilities`, when present, is the
+ * EFFECTIVE (already-expanded, see expandAdminCapabilities) list — optional
+ * because some existing call sites/tests construct an actor without needing
+ * a capability-gated method. */
 export interface AdminActor {
   userId: string;
   isSuperAdmin: boolean;
+  capabilities?: string[];
 }
 
-/** One internal staff admin, as returned by the admin-management endpoints. */
+/** One internal staff admin, as returned by the admin-management endpoints.
+ * `businessId` is decision 4b's dual-role signal: non-null here means this
+ * admin ALSO still has a tenant link (either a legacy admin promoted before
+ * promoteAdmin started clearing it, or — should the refusal below ever be
+ * bypassed some other way — a new one). The console renders a warning badge
+ * for it; see REVIEW-FINDINGS.md, "Dual-role admins (decision 4b)". */
 export interface AdminUser {
   id: string;
   email: string | null;
   fullName: string | null;
   isSuperAdmin: boolean;
   capabilities: string[];
+  businessId: string | null;
   createdAt: Date;
 }
 import { AuditService } from "./audit.service.js";
@@ -277,7 +289,20 @@ export class AdminService {
   async impersonateTenant(
     id: string,
     actorUserId: string,
+    actor?: AdminActor,
   ): Promise<{ token: string; expiresAt: string; business: { id: string; name: string } }> {
+    // Decision 5b: IMPERSONATE_TENANTS, not MANAGE_TENANTS, gates this route.
+    // AdminGuard already enforces this via @RequireCapability on the
+    // controller, but re-checking here is deliberate defense in depth — this
+    // is, per the docblock above, the most sensitive capability in the
+    // console, and it should not depend solely on a decorator never being
+    // dropped in a future refactor. `actor` is optional only so existing
+    // direct-service-call tests that predate this check keep compiling;
+    // every real caller (AdminController) passes req.adminContext.
+    if (actor && !actor.isSuperAdmin && !actor.capabilities?.includes(AdminCapability.IMPERSONATE_TENANTS)) {
+      throw new ForbiddenException(`Missing required admin capability: ${AdminCapability.IMPERSONATE_TENANTS}`);
+    }
+
     const business = await this.prisma.business.findUnique({ where: { id } });
     if (!business) throw new NotFoundException("Business not found");
     if (business.deletedAt) throw new BadRequestException("Tenant is suspended");
@@ -781,6 +806,7 @@ export class AdminService {
     fullName: string | null;
     isSuperAdmin: boolean;
     adminCapabilities: string[];
+    businessId: string | null;
     createdAt: Date;
   }): AdminUser {
     return {
@@ -788,7 +814,11 @@ export class AdminService {
       email: u.email,
       fullName: u.fullName,
       isSuperAdmin: u.isSuperAdmin,
-      capabilities: u.adminCapabilities,
+      // Effective, not raw: backfills IMPERSONATE_TENANTS for anyone who
+      // already held MANAGE_TENANTS before decision 5b split them. See
+      // expandAdminCapabilities (@jamquote/core).
+      capabilities: expandAdminCapabilities(u.adminCapabilities),
+      businessId: u.businessId,
       createdAt: u.createdAt,
     };
   }
@@ -799,6 +829,7 @@ export class AdminService {
     fullName: true,
     isSuperAdmin: true,
     adminCapabilities: true,
+    businessId: true,
     createdAt: true,
   } as const;
 
@@ -810,7 +841,7 @@ export class AdminService {
     });
     return {
       isSuperAdmin: user?.isSuperAdmin ?? false,
-      capabilities: user?.adminCapabilities ?? [],
+      capabilities: expandAdminCapabilities(user?.adminCapabilities ?? []),
     };
   }
 
@@ -834,6 +865,24 @@ export class AdminService {
    * internal admin with the given capabilities. Only a super-admin may grant
    * super-admin status. We deliberately never create a brand-new account here
    * (that needs a password) — the person must sign up first, then be promoted.
+   *
+   * Decision 4b: a platform admin must not also be a contractor. This
+   * clears the promoted user's businessId as part of promotion — UNLESS
+   * doing so would orphan a business, i.e. the user is that business's SOLE
+   * OWNER (role OWNER, and no other User row shares that businessId with
+   * role OWNER). Ownership here is modeled entirely on User.role/businessId
+   * — there is no separate membership/ownership join table in this schema —
+   * so "sole owner" is exactly "the only OWNER-role row for that
+   * businessId". In that case the promotion is refused outright rather than
+   * silently promoted-but-still-linked (the bug this decision fixes) or
+   * promoted-with-an-orphaned-business (a worse bug): the owner must
+   * transfer ownership to another user on the account first, or use a
+   * separate login for admin duties.
+   *
+   * This is a forward-only fix. Existing admins already promoted before this
+   * change may still carry a businessId — see REVIEW-FINDINGS.md, "Dual-role
+   * admins (decision 4b)", for the read-only query that lists them; changing
+   * their data is out of scope here (no migration access).
    */
   async promoteAdmin(input: PromoteAdminInput, actor: AdminActor): Promise<AdminUser> {
     if (input.isSuperAdmin && !actor.isSuperAdmin) {
@@ -843,7 +892,7 @@ export class AdminService {
     const email = input.email.trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: { email: { equals: email, mode: "insensitive" } },
-      select: { id: true, isSuperAdmin: true },
+      select: { id: true, isSuperAdmin: true, businessId: true, role: true },
     });
     if (!user) {
       throw new NotFoundException("No user with that email — ask them to sign up first, then promote them.");
@@ -859,12 +908,32 @@ export class AdminService {
       throw new ForbiddenException("Only a super-admin can modify a super-admin.");
     }
 
+    let clearBusinessId = false;
+    if (user.businessId) {
+      if (user.role === UserRole.OWNER) {
+        const ownerCount = await this.prisma.user.count({
+          where: { businessId: user.businessId, role: UserRole.OWNER },
+        });
+        if (ownerCount <= 1) {
+          throw new BadRequestException(
+            "This user is the sole owner of a business — promoting them to admin would leave that business without an owner. " +
+              "Transfer ownership to another user on the account first, or have them use a separate login for admin duties.",
+          );
+        }
+      }
+      // STAFF (or a role other than OWNER) never orphans a business by
+      // losing its businessId, so promotion clears the link unconditionally
+      // in that case.
+      clearBusinessId = true;
+    }
+
     const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: {
         role: UserRole.ADMIN,
         adminCapabilities: input.capabilities,
         isSuperAdmin: input.isSuperAdmin ?? user.isSuperAdmin,
+        ...(clearBusinessId ? { businessId: null } : {}),
       },
       select: this.ADMIN_SELECT,
     });
