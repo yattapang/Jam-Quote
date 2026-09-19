@@ -1,5 +1,6 @@
 import { getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates,
   getEquipment, getBusiness, getTrades } from "@/lib/api-server";
+import { newDocumentGctPrefill } from "@/lib/gct-prefill";
 import QuoteBuilder from "./QuoteBuilder";
 
 export const metadata = { title: "New quote · JamQuote" };
@@ -17,8 +18,10 @@ export default async function NewQuotePage() {
   ]);
   // Never hardcode GCT — use the business's own default rate, falling back
   // to 15% only if it's unavailable/unreadable (e.g. the API is unreachable
-  // and getBusiness() returned its empty fallback).
-  const gctRatePct = Number.isFinite(business.defaultGctRatePct) ? business.defaultGctRatePct : 15;
+  // and getBusiness() returned its empty fallback). An unregistered business
+  // prefills 0%, matching what quotes.service.create() actually saves when no
+  // rate is supplied — what the contractor sees must match what gets billed.
+  const gctRatePct = newDocumentGctPrefill(business);
   return (
     <QuoteBuilder
       clients={clients.map((c) => ({ id: c.id, name: c.name }))}
@@ -29,6 +32,7 @@ export default async function NewQuotePage() {
       equipment={equipment}
       trades={trades}
       gctRatePct={gctRatePct}
+      gctRegistered={business.gctRegistered}
     />
   );
 }

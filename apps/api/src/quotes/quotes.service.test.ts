@@ -27,7 +27,7 @@ const line = {
 describe("QuotesService.create", () => {
   it("persists totals computed by @jamquote/core, never hand-rolled", async () => {
     const businessService = {
-      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15, gctRegistered: true }),
       reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
     };
     const tx = {
@@ -63,6 +63,66 @@ describe("QuotesService.create", () => {
         }),
       }),
     );
+  });
+});
+
+/**
+ * Owner decision "a": an unregistered business must not silently charge GCT
+ * on a document it creates with no explicit rate. See REVIEW-FINDINGS.md,
+ * "GCT is CHARGED regardless of registration".
+ */
+describe("QuotesService.create — GCT default depends on gctRegistered", () => {
+  function harness(business: { defaultGctRate: number; gctRegistered: boolean }) {
+    const businessService = {
+      findById: vi.fn().mockResolvedValue(business),
+      reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
+    };
+    let createdQuoteData: any;
+    const tx = {
+      quote: {
+        create: vi.fn((args: any) => {
+          createdQuoteData = args.data;
+          return Promise.resolve({ id: "q1" });
+        }),
+      },
+      quoteSection: { create: vi.fn() },
+      quoteLineItem: { create: vi.fn() },
+    };
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
+      quote: {
+        findFirst: vi.fn(() =>
+          Promise.resolve({ id: "q1", ...createdQuoteData, lineItems: [], sections: [] }),
+        ),
+      },
+    };
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+    return { svc };
+  }
+
+  it("defaults an unregistered business to 0% when no rate is supplied", async () => {
+    const { svc } = harness({ defaultGctRate: 15, gctRegistered: false });
+    const quote = await svc.create("b1", { sections: [], lineItems: [line] } as any);
+    expect(quote.gctRate).toBe(0);
+  });
+
+  it("defaults a registered business to its own default rate when no rate is supplied", async () => {
+    const { svc } = harness({ defaultGctRate: 15, gctRegistered: true });
+    const quote = await svc.create("b1", { sections: [], lineItems: [line] } as any);
+    expect(quote.gctRate).toBe(15);
+  });
+
+  it("honours an explicit rate for an unregistered business", async () => {
+    const { svc } = harness({ defaultGctRate: 15, gctRegistered: false });
+    const quote = await svc.create("b1", { sections: [], lineItems: [line], gctRatePct: 10 } as any);
+    expect(quote.gctRate).toBe(10);
+  });
+
+  it("honours an explicit rate for a registered business", async () => {
+    const { svc } = harness({ defaultGctRate: 15, gctRegistered: true });
+    const quote = await svc.create("b1", { sections: [], lineItems: [line], gctRatePct: 0 } as any);
+    expect(quote.gctRate).toBe(0);
   });
 });
 
@@ -110,7 +170,7 @@ describe("QuotesService.create — job lines + detail level", () => {
    * read-back reflects what was written — enough to assert a round-trip. */
   function harness() {
     const businessService = {
-      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15, gctRegistered: true }),
       reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
     };
     const createdLineItems: any[] = [];
@@ -200,7 +260,7 @@ describe("QuotesService.create free-tier gating", () => {
   /** Builds a full create() harness; `plan`/`quotesThisMonth` drive the gate. */
   function harness(plan: "free" | "pro", quotesThisMonth: number) {
     const businessService = {
-      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15, gctRegistered: true }),
       reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
     };
     const pricingService = {
@@ -740,7 +800,7 @@ describe("what the free allowance counts", () => {
       subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "free" }) },
     };
     const businessService = {
-      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true }),
       reserveQuoteNumber: vi.fn().mockResolvedValue("Q-0001"),
     };
     const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: 5 }) };
@@ -1037,7 +1097,7 @@ describe("the below-cap path: one clientless chain cannot mint unlimited sendabl
     const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: limit }) };
     const businessService = {
       reserveQuoteNumber: vi.fn().mockResolvedValue("Q-9999"),
-      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true }),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
@@ -1330,7 +1390,7 @@ describe("the allowance gate covers every path that mints a quote", () => {
 describe("QuotesService — supplierId on line items is not a capability (S7)", () => {
   function createHarness() {
     const businessService = {
-      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15 }),
+      findById: vi.fn().mockResolvedValue({ defaultGctRate: 15, gctRegistered: true }),
       reserveQuoteNumber: vi.fn().mockResolvedValue("QT-0001"),
     };
     const tx = {
@@ -1580,5 +1640,58 @@ describe("QuotesService.update — validUntil is only re-checked when it changes
   it("omitting validUntil entirely never triggers the past-date check", async () => {
     const { svc } = updateHarness(draftWithPastValidUntil);
     await expect(svc.update("b1", "q2", { discountPct: 8 } as never)).resolves.toBeDefined();
+  });
+});
+
+describe("QuotesService.update — never re-derives GCT from the business", () => {
+  it("keeps the quote's stored rate when no rate is supplied on update", async () => {
+    const existing = {
+      id: "q2",
+      businessId: "b1",
+      status: "DRAFT",
+      clientId: null,
+      projectId: null,
+      parentQuoteId: null,
+      variationOfQuoteId: null,
+      version: 1,
+      gctRate: 15,
+      discountPct: 0,
+      depositCents: 0,
+      detailLevel: "SUMMARY",
+      validUntil: null,
+      terms: null,
+      lineItems: [],
+      sections: [],
+    };
+    const quoteUpdate = vi.fn().mockResolvedValue({});
+    const prisma = {
+      subscription: { findUnique: vi.fn().mockResolvedValue({ plan: "pro" }) },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) =>
+        cb({
+          quoteLineItem: { deleteMany: vi.fn(), create: vi.fn() },
+          quoteSection: { deleteMany: vi.fn(), create: vi.fn() },
+          quote: { update: quoteUpdate },
+        }),
+      ),
+      quote: {
+        findFirst: vi.fn().mockResolvedValue(existing),
+        count: vi.fn().mockResolvedValue(0),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      supplier: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    // findById would return an unregistered business with a 0 default — if
+    // update() ever re-derived the rate from the business, this would flip an
+    // existing 15%-rated quote to 0% under it, silently re-taxing a document a
+    // client may already have seen.
+    const businessService = { findById: vi.fn().mockResolvedValue({ defaultGctRate: 0, gctRegistered: false }) };
+    const svc = new QuotesService(prisma as any, businessService as any, {} as any);
+
+    await svc.update("b1", "q2", { discountPct: 5 } as never);
+
+    expect(quoteUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ gctRate: 15 }) }),
+    );
+    expect(businessService.findById).not.toHaveBeenCalled();
   });
 });

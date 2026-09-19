@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import MoneyText from "@/components/ui/MoneyText";
+import AlertBanner from "@/components/layout/AlertBanner";
 import { createQuote, updateQuote, ApiError, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import ProjectSelectField from "@/components/forms/ProjectSelectField";
@@ -105,6 +106,7 @@ export default function QuoteBuilder({
   quoteId,
   initial,
   gctRatePct = DEFAULT_GCT_RATE,
+  gctRegistered = true,
 }: {
   clients: ClientOption[];
   projects: ProjectOption[];
@@ -130,6 +132,10 @@ export default function QuoteBuilder({
    * the default here only covers the case where the business is
    * unavailable (see getBusiness()'s EMPTY_BUSINESS fallback). */
   gctRatePct?: number;
+  /** Business.gctRegistered — drives the "charging GCT while unregistered"
+   * warning below. Defaults true so callers that omit it (none currently do)
+   * don't get a spurious warning. */
+  gctRegistered?: boolean;
 }) {
   const router = useRouter();
   const isEdit = mode === "edit" && !!quoteId;
@@ -465,6 +471,14 @@ export default function QuoteBuilder({
               <span>GCT ({gctRatePct}% on standard)</span>
               <MoneyText cents={totals.gctCents} tone="muted" weight={600} />
             </div>
+            {gctRatePct > 0 && !gctRegistered && (
+              <AlertBanner
+                severity="warn"
+                message="You're charging GCT but your profile says you're not GCT registered. Check with your accountant, or update your profile in Settings."
+                href="/settings"
+                cta="Settings"
+              />
+            )}
             <div className={shared.totalRowGrand}>
               <span>Total</span>
               <MoneyText cents={totals.totalCents} tone="accent" />

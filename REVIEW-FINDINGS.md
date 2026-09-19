@@ -359,7 +359,14 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
   to false). Job profit reads the flag; every other `trn` use was checked and is display
   or validation only. The settings form has a Yes/No with TAJ help text. Migration run
   against an in-process Postgres in a test.
-- **OPEN, needs the owner - GCT is CHARGED regardless of registration:** every business
+- **DECIDED a+c and FIXED 2026-09-18:** a new quote or invoice from an unregistered
+  business defaults to 0% GCT (an explicit rate is honoured; updates and quote-to-invoice
+  conversion never change a document's rate), the builders prefill the same default, and
+  a non-blocking warning shows when a document charges GCT while the business is not
+  registered. Signup still stores the rule-pack rate, so ticking "registered" later
+  restores it without re-entry. I planted the old default: the quote tests fail.
+  Residue: the web prefill helper restates the API's rule - a twin to fold into core.
+  Was: **OPEN, needs the owner - GCT is CHARGED regardless of registration:** every business
   gets the rule pack's 15% default at signup, and quotes/invoices use it, so an
   unregistered sole trader bills clients GCT unless they zero the rate themselves.
   Not changed - it alters what customers are billed.

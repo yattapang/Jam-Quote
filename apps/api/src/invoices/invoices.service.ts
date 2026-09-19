@@ -328,7 +328,12 @@ export class InvoicesService {
     // reasoning as convertFromQuote).
     const number = await this.businessService.reserveInvoiceNumber(businessId);
 
-    const gctRatePct = input.gctRatePct ?? Number(business.defaultGctRate);
+    // Unregistered businesses default to 0% GCT on new documents: an explicit
+    // rate from the contractor is still honoured, but an omitted rate must not
+    // silently charge GCT the business isn't registered to collect. This only
+    // applies at creation — update() and convertFromQuote() never re-derive the
+    // rate from the business's registration status.
+    const gctRatePct = input.gctRatePct ?? (business.gctRegistered ? Number(business.defaultGctRate) : 0);
     const allLines = [...input.lineItems, ...input.sections.flatMap((sec) => sec.lineItems)];
     const totals = computeTotals({
       lines: allLines.map((li) => ({

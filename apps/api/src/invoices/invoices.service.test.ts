@@ -59,7 +59,7 @@ function harness(quote = acceptedQuote()) {
   const businessService = {
     reserveInvoiceNumber: vi.fn().mockResolvedValue("INV-0001"),
     // create() reads the business's own GCT rate rather than hardcoding one.
-    findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15 }),
+    findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true }),
   };
   const createdLineItems: any[] = [];
   const createdSections: any[] = [];
@@ -133,6 +133,45 @@ function harness(quote = acceptedQuote()) {
   const svc = new InvoicesService(prisma as any, businessService as any);
   return { svc, prisma, businessService, tx, createdInvoiceData: () => createdInvoiceData, createdLineItems };
 }
+
+/**
+ * Owner decision "a": an unregistered business must not silently charge GCT
+ * on a document it creates with no explicit rate. See REVIEW-FINDINGS.md,
+ * "GCT is CHARGED regardless of registration".
+ */
+describe("InvoicesService.create — GCT default depends on gctRegistered", () => {
+  it("defaults an unregistered business to 0% when no rate is supplied", async () => {
+    const { svc, businessService, createdInvoiceData } = harness();
+    businessService.findById.mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: false });
+
+    await svc.create("b1", { discountPct: 0, depositCents: 0, sections: [], lineItems: [line] });
+    expect(createdInvoiceData().gctRate).toBe(0);
+  });
+
+  it("defaults a registered business to its own default rate when no rate is supplied", async () => {
+    const { svc, businessService, createdInvoiceData } = harness();
+    businessService.findById.mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true });
+
+    await svc.create("b1", { discountPct: 0, depositCents: 0, sections: [], lineItems: [line] });
+    expect(createdInvoiceData().gctRate).toBe(15);
+  });
+
+  it("honours an explicit rate for an unregistered business", async () => {
+    const { svc, businessService, createdInvoiceData } = harness();
+    businessService.findById.mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: false });
+
+    await svc.create("b1", { gctRatePct: 10, discountPct: 0, depositCents: 0, sections: [], lineItems: [line] });
+    expect(createdInvoiceData().gctRate).toBe(10);
+  });
+
+  it("honours an explicit rate for a registered business", async () => {
+    const { svc, businessService, createdInvoiceData } = harness();
+    businessService.findById.mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true });
+
+    await svc.create("b1", { gctRatePct: 0, discountPct: 0, depositCents: 0, sections: [], lineItems: [line] });
+    expect(createdInvoiceData().gctRate).toBe(0);
+  });
+});
 
 describe("InvoicesService.create — an invoice with no source quote", () => {
   it("starts DRAFT, reserves a number, and leaves quoteId unset", async () => {
@@ -232,6 +271,17 @@ describe("InvoicesService.convertFromQuote", () => {
     expect(invoice.subtotalCents).toBe(expected.subtotalCents);
     expect(invoice.gctCents).toBe(expected.gctCents);
     expect(invoice.totalCents).toBe(expected.totalCents);
+  });
+
+  it("keeps the quote's own GCT rate even when the business's current default differs", async () => {
+    // A client may already have seen the quote at its own rate. Converting
+    // must copy that rate verbatim, never re-derive it from the business's
+    // CURRENT default/registration status (which may have changed since).
+    const { svc, businessService } = harness(acceptedQuote({ status: QuoteStatus.ACCEPTED }));
+    businessService.findById.mockResolvedValue({ id: "b1", defaultGctRate: 0, gctRegistered: false });
+
+    const invoice = await svc.convertFromQuote("b1", "q1");
+    expect(invoice.gctRate).toBe(15); // the quote's own rate from acceptedQuote()
   });
 
   it("carries each line's sold-by unit onto the invoice", async () => {
@@ -366,6 +416,19 @@ describe("InvoicesService.update", () => {
         gctCents: expected.gctCents,
         totalCents: expected.totalCents,
       }),
+    });
+  });
+
+  it("never changes the GCT rate on update, even when none is supplied and the business default has since changed", async () => {
+    // A client may already have seen this invoice. update() must preserve
+    // its stored rate rather than re-deriving one from the business.
+    const { svc, tx } = existingInvoiceHarness(draftInvoice({ gctRate: 15 }));
+
+    await svc.update("b1", "inv1", { discountPct: 10 });
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: "inv1" },
+      data: expect.objectContaining({ gctRate: 15 }),
     });
   });
 

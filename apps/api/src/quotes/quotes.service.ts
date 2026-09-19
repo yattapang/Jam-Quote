@@ -378,7 +378,12 @@ export class QuotesService {
     await this.assertCanCreateQuote(businessId);
 
     const business = await this.businessService.findById(businessId);
-    const gctRatePct = input.gctRatePct ?? Number(business.defaultGctRate);
+    // Unregistered businesses default to 0% GCT on new documents: an explicit
+    // rate from the contractor is still honoured, but an omitted rate must not
+    // silently charge GCT the business isn't registered to collect. This only
+    // applies at creation — update() below never re-derives the rate from the
+    // business's registration status.
+    const gctRatePct = input.gctRatePct ?? (business.gctRegistered ? Number(business.defaultGctRate) : 0);
     const discountPct = input.discountPct ?? 0;
     const depositCents = input.depositCents ?? 0;
     const detailLevel = input.detailLevel ?? QuoteDetailLevel.SUMMARY;

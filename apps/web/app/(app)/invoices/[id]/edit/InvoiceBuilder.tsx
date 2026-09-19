@@ -7,6 +7,7 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import MoneyText from "@/components/ui/MoneyText";
+import AlertBanner from "@/components/layout/AlertBanner";
 import { updateInvoice, type Trade } from "@/lib/api-client";
 import ClientSelectField from "@/components/forms/ClientSelectField";
 import type { ClientOption } from "@/components/forms/types";
@@ -90,6 +91,7 @@ export default function InvoiceBuilder({
   equipment = [],
   trades = [],
   clients: initialClients = [],
+  gctRegistered = true,
 }: {
   invoiceId: string;
   invoiceNumber: string;
@@ -107,6 +109,10 @@ export default function InvoiceBuilder({
   /** Trades list, threaded through to the line editor's "+ Add new labour
    * rate…" modal (LabourRateForm's trade picker). */
   trades?: Trade[];
+  /** Business.gctRegistered — drives the "charging GCT while unregistered"
+   * warning below. Defaults true so callers that omit it don't get a
+   * spurious warning. */
+  gctRegistered?: boolean;
 }) {
   const router = useRouter();
   const backHref = `/invoices/${invoiceId}`;
@@ -358,6 +364,14 @@ export default function InvoiceBuilder({
                 onChange={(e) => setDepositDollars(e.target.value)}
               />
             </div>
+            {gctRatePctNum > 0 && !gctRegistered && (
+              <AlertBanner
+                severity="warn"
+                message="You're charging GCT but your profile says you're not GCT registered. Check with your accountant, or update your profile in Settings."
+                href="/settings"
+                cta="Settings"
+              />
+            )}
           </div>
         </Card>
         <Card>

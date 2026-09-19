@@ -103,6 +103,7 @@ export default async function EditQuotePage({ params }: { params: { id: string }
       equipment={equipment}
       trades={trades}
       gctRatePct={gctRatePct}
+      gctRegistered={business.gctRegistered}
     />
   );
 }

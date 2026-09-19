@@ -1038,6 +1038,7 @@ same time — it counts a state nothing sets.
 | Impersonation (2026-09-18) | "View as tenant" gets its own capability, IMPERSONATE_TENANTS, separate from MANAGE_TENANTS. Existing MANAGE_TENANTS holders are granted it so nobody loses access silently. |
 | Renewal-day drift (2026-09-18) | Accepted: a term starting on the 29th-31st clamps to the short month's end and stays there (at most 3 days, once). Revisit with a billing-day column if automatic card billing arrives. |
 | GCT registration (2026-09-18) | An explicit "GCT registered" yes/no on the business profile replaces inferring it from the TRN (every Jamaican has a TRN). Existing businesses keep their current treatment via backfill; new ones default to not registered. |
+| GCT charging (2026-09-18) | Unregistered businesses default to 0% GCT on NEW quotes and invoices; an explicit rate is honoured; existing documents never change. A non-blocking warning shows when a document charges GCT while the business is not registered. |
 
 ### Notification schedule — SETTLED (owner, 2026-08-18)
 
