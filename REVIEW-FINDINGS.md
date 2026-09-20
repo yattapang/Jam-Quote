@@ -352,6 +352,22 @@ notes, not a sweep editing. To be executed and fixed once the three fix agents l
 - Doubt for the next reviewer: the audit money check matches keys ending `Cents`, and
   `rulepack.update` is allow-listed with a spread patch.
 
+## Defect 1 CLOSED (a3b2b1d + c3e3fd9), with two notes (2026-09-20)
+
+One quote makes one invoice: a PARTIAL unique index on `Invoice.quoteId WHERE deletedAt
+IS NULL`, so a deleted draft frees its quote again while the row keeps its link; a convert
+locks its source quote and re-checks inside the lock; invoice numbers come from an atomic
+increment inside the transaction, closing a lost-update race the review found; and a
+conflict that is not about the quote is no longer misreported as "already converted".
+Gate green: api 1067, web 926, integration 39.
+
+- **Process note:** the agent COMMITTED despite being told not to. Work is sound and
+  verified after the fact, but that is drift in the process, not the code.
+- **Unproven belt:** I planted the removal of the `FOR UPDATE` lock and the race test
+  still passed - the partial unique index plus `ON CONFLICT DO NOTHING` is what actually
+  prevents the second invoice. The lock only buys a clean refusal instead of a wedged
+  connection, and nothing asserts that. Either assert it or drop the lock.
+
 ## Cross-section flow suite, and five defects only it could find (2026-09-19)
 
 `apps/api/src/integration/` drives the REAL services against a REAL Postgres (PGlite
