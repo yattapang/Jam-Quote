@@ -4,7 +4,7 @@ import { getJobs, getClients, getInvoice, getLabourRates,
   getEquipment, getMaterialFavourites, getTrades, getBusiness } from "@/lib/api-server";
 import InvoiceBuilder from "./InvoiceBuilder";
 
-export const metadata = { title: "Edit invoice · JamQuote" };
+export const metadata = { title: "Edit invoice · Pryvis" };
 
 /** Only reachable while the invoice is DRAFT — once finalized the API
  * rejects any PATCH, so this redirects straight to the read-only detail page

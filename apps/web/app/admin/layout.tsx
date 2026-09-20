@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 
-export const metadata = { title: "JamQuote Staff Console · internal" };
+export const metadata = { title: "Pryvis Staff Console · internal" };
 
 // The staff console renders its own full-screen chrome; no shared layout.
 //

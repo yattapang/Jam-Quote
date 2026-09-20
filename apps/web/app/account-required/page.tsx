@@ -28,7 +28,7 @@ export default async function AccountRequiredPage({
   return (
     <main className={styles.wrap}>
       <div className={styles.card}>
-        <h1 className={styles.title}>This account can&apos;t open JamQuote</h1>
+        <h1 className={styles.title}>This account can&apos;t open Pryvis</h1>
         <p className={styles.body}>
           {searchParams.reason ||
             "Your account doesn't have a business profile associated with it, so there's nothing to show here."}

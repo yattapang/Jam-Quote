@@ -6,7 +6,7 @@ import { getClients, getQuotes } from "@/lib/api-server";
 import AddClientButton from "./AddClientButton";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Clients · JamQuote" };
+export const metadata = { title: "Clients · Pryvis" };
 
 export default async function ClientsPage() {
   const [clients, quotes] = await Promise.all([getClients(), getQuotes()]);

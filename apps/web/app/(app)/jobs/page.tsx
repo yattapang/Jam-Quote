@@ -3,7 +3,7 @@ import AddJobButton from "./AddJobButton";
 import JobsListClient from "./JobsListClient";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Jobs · JamQuote" };
+export const metadata = { title: "Jobs · Pryvis" };
 
 export default async function AssembliesPage() {
   const [jobs, materials, labourRates, trades, equipment] = await Promise.all([

@@ -86,7 +86,7 @@ export default function BillingCard({
         <Modal title="Upgrade to Pro" onClose={() => setOpen(false)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 13.5, lineHeight: 1.55 }}>
             <p>
-              Automated upgrades aren&apos;t live yet — to move to Pro, contact JamQuote and we&apos;ll switch
+              Automated upgrades aren&apos;t live yet — to move to Pro, contact Pryvis and we&apos;ll switch
               your plan on our end.
             </p>
             {plans && (

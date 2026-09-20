@@ -40,7 +40,7 @@ export default function JobsListClient({
           <p style={{ margin: "0 0 8px" }}>
             A job is work you sell over and over, priced by the unit. Say you paint interior
             walls: add the paint from your materials and the painter from your labour rates, set
-            the unit to <strong>sq ft</strong>, and JamQuote works out the rate.
+            the unit to <strong>sq ft</strong>, and Pryvis works out the rate.
           </p>
           <p style={{ margin: 0 }}>
             Next time that work comes up, put the job on a quote, type the square footage, and the

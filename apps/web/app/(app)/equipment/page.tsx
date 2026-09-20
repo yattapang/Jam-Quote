@@ -7,7 +7,7 @@ import EditEquipmentButton from "./EditEquipmentButton";
 import shared from "../shared.module.css";
 import { lineUnitLabel } from "@/lib/quote-totals";
 
-export const metadata = { title: "Equipment · JamQuote" };
+export const metadata = { title: "Equipment · Pryvis" };
 
 export default async function EquipmentPage() {
   const equipment = await getEquipment();

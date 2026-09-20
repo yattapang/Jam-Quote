@@ -120,7 +120,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
       withLogo,
     });
     return resend.emails.send({
-      from: process.env.QUOTE_FROM_EMAIL ?? "JamQuote <onboarding@resend.dev>",
+      from: process.env.QUOTE_FROM_EMAIL ?? "Pryvis <onboarding@resend.dev>",
       to,
       replyTo: process.env.QUOTE_REPLY_TO || undefined,
       subject,

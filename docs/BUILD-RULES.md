@@ -1,6 +1,7 @@
 # Build rules
 
-These rules govern every change to JamQuote from 2026-09-20 onward. They exist because two
+These rules govern every change to Pryvis (the product formerly built as JamQuote - ADR
+0009) from 2026-09-20 onward. They exist because two
 things are now certain: **other people will maintain this codebase**, and **it will run in
 more than one country**. Both fail the same way — someone makes a reasonable local change
 that silently breaks a rule they could not see.
@@ -148,7 +149,68 @@ Agreed with the owner on 2026-09-20.
    test, an independent review by an agent that did not write it, and the register
    (`REVIEW-FINDINGS.md`) updated with what the change does *not* prove.
 
-## 9. Verification standard (standing)
+## 9. Independent review per module, and a test at every seam
+
+Agreed with the owner on 2026-09-20. Rule 10 (the standing verification standard) says what
+verification means; this rule says WHEN it is owed and what counts as done. The register is
+[`docs/MODULE-SEAMS.md`](MODULE-SEAMS.md), updated in the same commit as the work.
+
+### 9.1 A module is not complete until someone else has attacked it
+
+**Trigger.** A module is "complete" when its own surface is finished: its endpoints, its
+rules, its screens. Not when the last line is typed.
+
+**Who.** A reviewer who did not build it. In this project that means a different agent,
+briefed to attack rather than read, and in a review the author never sees first.
+
+**What they must do, at minimum:**
+- write the module's own target defect into the real source, run the tests, and confirm they
+  fail — a module whose tests pass with its defect restored has no tests;
+- attack the module's boundary: a foreign id, a missing id, the wrong tenant, an amount at
+  the column's limit, a value the UI cannot type but the API accepts;
+- check the module's claims: every comment saying "this is safe because…" is a hypothesis
+  until executed;
+- report what the module does NOT prove, which goes into `REVIEW-FINDINGS.md`.
+
+**Done means** the findings are fixed or recorded with a reason, and the module's row in
+`MODULE-SEAMS.md` names the review.
+
+### 9.2 Every dependency between modules is tested at the seam
+
+**Trigger.** Module A trusts module B's output — a price, an id, a status, a total, a
+tenant scope, a date. That is a seam, and it gets its own test.
+
+**What a seam test must be:**
+- **Real, not mocked.** It drives the real services against a real Postgres
+  (`apps/api/src/integration/`). A mock cannot disagree with the database, and every seam
+  defect found here so far passed both modules' own unit tests.
+- **About the invariant, not the path.** State what must hold across the boundary — "the
+  quote line equals the job cost to the cent", "a second tenant's id is refused exactly as a
+  made-up one" — and assert that, not the sequence of calls.
+- **Proved.** Plant a defect in the real product code on ONE side of the seam and confirm
+  the seam test fails. If it passes, the test is describing the path rather than the
+  invariant, and it is not finished.
+- **Registered.** Add the seam and its test to the table in `MODULE-SEAMS.md`. A seam with
+  a blank in that column is work owed.
+
+**Both directions count.** When A calls B, test that A survives B's refusals, empty answers
+and errors — not only the happy answer.
+
+### 9.3 Contract drift between surfaces is a seam too
+
+The web app and the mobile app hold mirrors of the API's shapes. A mirror that compiles is
+not a mirror that matches: proving a type is *referenced* says nothing about whether its
+fields still match the endpoint. Treat each mirror as a seam with its own check.
+
+### 9.4 What this rule costs, stated honestly
+
+Seam tests are slower to write and slower to run than unit tests, which is why the flow
+suite is its own task. The trade is deliberate: of the defects that reached a customer in
+this codebase, the expensive ones were seams — a stale price into a quote, a placeholder
+cost becoming a quoted price, a supplier crossing tenants, a renewal date that two screens
+computed differently. Every one passed its module's own tests.
+
+## 10. Verification standard (standing)
 
 - **Each section** is reviewed independently, by attacking it, not reading it.
 - **The seams between sections** are tested with real services against a real database.

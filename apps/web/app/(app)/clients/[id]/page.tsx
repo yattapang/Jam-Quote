@@ -12,7 +12,7 @@ import EditClientButton from "./EditClientButton";
 import shared from "../../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
 
-export const metadata = { title: "Client · JamQuote" };
+export const metadata = { title: "Client · Pryvis" };
 
 export default async function ClientDetailPage({ params }: { params: { id: string } }) {
   const client = await getClient(params.id);

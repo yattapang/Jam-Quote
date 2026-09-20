@@ -3,7 +3,7 @@ import { getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates
 import { newDocumentGctPrefill } from "@/lib/gct-prefill";
 import QuoteBuilder from "./QuoteBuilder";
 
-export const metadata = { title: "New quote · JamQuote" };
+export const metadata = { title: "New quote · Pryvis" };
 
 export default async function NewQuotePage() {
   const [clients, projects, favourites, jobs, labourRates, equipment, business, trades] = await Promise.all([

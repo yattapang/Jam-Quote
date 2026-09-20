@@ -26,7 +26,7 @@ import buttonStyles from "@/components/ui/Button.module.css";
 import PaymentsPanel from "./PaymentsPanel";
 import RetentionPanel from "./RetentionPanel";
 
-export const metadata = { title: "Invoice · JamQuote" };
+export const metadata = { title: "Invoice · Pryvis" };
 
 export default async function InvoiceDetailPage({ params }: { params: { id: string } }) {
   const invoice = await getInvoice(params.id);

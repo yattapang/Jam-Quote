@@ -24,7 +24,7 @@ import EditProjectButton from "./EditProjectButton";
 import shared from "../../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
 
-export const metadata = { title: "Project · JamQuote" };
+export const metadata = { title: "Project · Pryvis" };
 
 export default async function JobDetailPage({ params }: { params: { id: string } }) {
   const project = await getProject(params.id);

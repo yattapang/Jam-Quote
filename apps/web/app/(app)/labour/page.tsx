@@ -7,7 +7,7 @@ import EditLabourRateButton from "./EditLabourRateButton";
 import shared from "../shared.module.css";
 import { lineUnitLabel } from "@/lib/quote-totals";
 
-export const metadata = { title: "Labour · JamQuote" };
+export const metadata = { title: "Labour · Pryvis" };
 
 export default async function LabourPage() {
   const [labourRates, trades] = await Promise.all([getLabourRates(), getTrades()]);

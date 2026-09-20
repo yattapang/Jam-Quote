@@ -89,8 +89,8 @@ export default function LoginScreen() {
             </Text>
             <Text style={{ fontSize: 13.5, color: colors.textMuted, marginTop: 4 }}>
               {isRegister
-                ? "Set up your contractor business on JamQuote."
-                : "Sign in to your JamQuote business."}
+                ? "Set up your contractor business on Pryvis."
+                : "Sign in to your Pryvis business."}
             </Text>
           </View>
 
@@ -162,7 +162,7 @@ export default function LoginScreen() {
 
           <Pressable onPress={() => { setError(""); setMode(isRegister ? "login" : "register"); }} style={{ alignItems: "center", paddingVertical: 6 }}>
             <Text style={{ fontSize: 13, color: colors.textMuted }}>
-              {isRegister ? "Already have an account? " : "New to JamQuote? "}
+              {isRegister ? "Already have an account? " : "New to Pryvis? "}
               <Text style={{ color: colors.accent, fontFamily: resolveFontFamily("body", "700") }}>
                 {isRegister ? "Sign in" : "Create one"}
               </Text>

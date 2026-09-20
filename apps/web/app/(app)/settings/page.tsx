@@ -19,7 +19,7 @@ import CatalogVocabularySection from "./CatalogVocabularySection";
 import shared from "../shared.module.css";
 import { formatAddress } from "@/lib/format-address";
 
-export const metadata = { title: "Settings · JamQuote" };
+export const metadata = { title: "Settings · Pryvis" };
 
 export default async function SettingsPage() {
   const [
@@ -124,7 +124,7 @@ export default async function SettingsPage() {
             <span>Not available yet</span>
           </div>
           <div className={shared.statHint}>
-            Sending quotes straight from JamQuote over WhatsApp or email is coming in a later
+            Sending quotes straight from Pryvis over WhatsApp or email is coming in a later
             release. For now, share a quote using the buttons on the quote itself.
           </div>
         </div>

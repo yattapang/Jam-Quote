@@ -98,7 +98,7 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
         </button>
         <div className={styles.topbarBrand}>
           <BrandMark />
-          <div className={styles.brandName}>JamQuote</div>
+          <div className={styles.brandName}>Pryvis</div>
         </div>
       </header>
 
@@ -113,7 +113,7 @@ export default function Sidebar({ session }: { session: SidebarSession | null })
       >
         <div className={styles.brand}>
           <BrandMark />
-          <div className={styles.brandName}>JamQuote</div>
+          <div className={styles.brandName}>Pryvis</div>
         </div>
 
         <div className={styles.nav} data-testid="sidebar-nav-list">

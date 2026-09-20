@@ -3,7 +3,7 @@ import AddMaterialButton from "./AddMaterialButton";
 import MaterialsListClient from "./MaterialsListClient";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Materials · JamQuote" };
+export const metadata = { title: "Materials · Pryvis" };
 
 export default async function MaterialsPage() {
   const materials = await getMaterialFavourites();

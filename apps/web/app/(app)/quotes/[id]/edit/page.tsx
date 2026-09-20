@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { getQuote, getClients, getProjects, getMaterialFavourites, getJobs, getLabourRates, getEquipment, getBusiness, getTrades } from "@/lib/api-server";
 import QuoteBuilder from "../../new/QuoteBuilder";
 
-export const metadata = { title: "Edit quote · JamQuote" };
+export const metadata = { title: "Edit quote · Pryvis" };
 
 export default async function EditQuotePage({ params }: { params: { id: string } }) {
   const quote = await getQuote(params.id);

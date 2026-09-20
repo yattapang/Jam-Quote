@@ -24,7 +24,7 @@ export default async function LoginPage({
     <main className={styles.wrap}>
       <div className={styles.card}>
         <div className={styles.brand}>
-          <h1 className={styles.title}>JamQuote</h1>
+          <h1 className={styles.title}>Pryvis</h1>
           <p className={styles.subtitle}>Estimating &amp; invoicing for Jamaican contractors</p>
         </div>
 

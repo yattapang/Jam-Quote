@@ -20,7 +20,7 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "JamQuote",
+  title: "Pryvis",
   description: "Estimating & invoicing for Jamaican contractors",
 };
 

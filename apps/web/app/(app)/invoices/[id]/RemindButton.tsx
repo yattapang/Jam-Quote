@@ -90,7 +90,7 @@ export default function RemindButton({
         <Modal title="Send a payment reminder" onClose={() => (busy ? undefined : setOpen(false))}>
           <div className={modalStyles.form}>
             <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>
-              JamQuote writes the message — it names what is still owed, not the invoice total, and
+              Pryvis writes the message — it names what is still owed, not the invoice total, and
               never accuses, since the client may have paid this morning. It includes a link to the
               invoice, so &ldquo;send it again&rdquo; does not become the reason you wait another
               week.

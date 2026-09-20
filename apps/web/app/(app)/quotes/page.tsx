@@ -1,7 +1,7 @@
 import { getQuotes, getClients } from "@/lib/api-server";
 import QuotesListClient from "./QuotesListClient";
 
-export const metadata = { title: "Quotes · JamQuote" };
+export const metadata = { title: "Quotes · Pryvis" };
 
 export default async function QuotesPage() {
   const [quotes, clients] = await Promise.all([getQuotes(), getClients()]);

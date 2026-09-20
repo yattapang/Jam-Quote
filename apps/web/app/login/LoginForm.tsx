@@ -56,7 +56,7 @@ export default function LoginForm({ redirectTo }: { redirectTo?: string }) {
       <SubmitButton label={isRegister ? "Create account" : "Sign in"} />
 
       <p className={styles.switch}>
-        {isRegister ? "Already have an account?" : "New to JamQuote?"}
+        {isRegister ? "Already have an account?" : "New to Pryvis?"}
         <button
           type="button"
           className={styles.switchButton}

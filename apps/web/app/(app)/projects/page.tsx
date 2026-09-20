@@ -9,7 +9,7 @@ import { getProjects, getClients } from "@/lib/api-server";
 import AddProjectButton from "./AddProjectButton";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Projects · JamQuote" };
+export const metadata = { title: "Projects · Pryvis" };
 
 export default async function ProjectsPage() {
   const [projects, clients] = await Promise.all([getProjects(), getClients()]);

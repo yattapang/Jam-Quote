@@ -840,7 +840,7 @@ export default function AdminConsole({
   }
 
   const titles: Record<Screen, [string, string]> = {
-    overview: ["Platform overview", "Health of the JamQuote platform at a glance"],
+    overview: ["Platform overview", "Health of the Pryvis platform at a glance"],
     tenants: ["Tenants", `${ov ? ov.businesses.toLocaleString() : "—"} contractor businesses across ${jm.regions.length} parishes`],
     regulatory: ["Regulatory review queue", "Tax & regulation changes awaiting human review"],
     rulepack: ["Jurisdiction rule-pack verification", "Versioned, provenance-tracked tax rules per country"],
@@ -1096,7 +1096,7 @@ export default function AdminConsole({
           <span />
           <span />
         </button>
-        <div style={{ ...archivo, fontWeight: 800, fontSize: 15 }}>JamQuote staff</div>
+        <div style={{ ...archivo, fontWeight: 800, fontSize: 15 }}>Pryvis staff</div>
       </header>
 
       {navOpen && <div className={styles.backdrop} onClick={closeNav} aria-hidden="true" />}
@@ -1108,7 +1108,7 @@ export default function AdminConsole({
             <svg width="19" height="19" viewBox="0 0 24 24" {...iconStroke} strokeWidth={2.4}><path d="M4 20V7l8-4 8 4v13" /><path d="M9 20v-6h6v6" /></svg>
           </div>
           <div style={{ lineHeight: 1.1 }}>
-            <div style={{ ...archivo, fontWeight: 800, fontSize: 16, letterSpacing: "-.01em" }}>JamQuote</div>
+            <div style={{ ...archivo, fontWeight: 800, fontSize: 16, letterSpacing: "-.01em" }}>Pryvis</div>
             <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, letterSpacing: ".03em" }}>STAFF CONSOLE</div>
           </div>
         </div>
@@ -2119,7 +2119,7 @@ export default function AdminConsole({
               <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 14, padding: "16px 18px", boxShadow: "var(--shadow)", marginBottom: 16 }}>
                 <div style={{ ...archivo, fontWeight: 700, fontSize: 14.5, marginBottom: 4 }}>+ Add admin</div>
                 <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
-                  Promote an existing JamQuote user by email — they must have signed up first. Choose which capabilities to grant.
+                  Promote an existing Pryvis user by email — they must have signed up first. Choose which capabilities to grant.
                 </div>
                 <form onSubmit={submitPromote} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div className={styles.formRow}>

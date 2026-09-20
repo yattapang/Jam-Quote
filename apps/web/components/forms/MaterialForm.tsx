@@ -560,7 +560,7 @@ export default function MaterialForm({
           Example: tile measured in <strong>m²</strong>, sold by the{" "}
           <strong>{soldByUnit ? soldByUnit.label : "box"}</strong>, where one{" "}
           {soldByUnit ? soldByUnit.label : "box"} covers <strong>4</strong> m², with{" "}
-          <strong>10</strong>% waste. On a quote you then type 40 m² and JamQuote
+          <strong>10</strong>% waste. On a quote you then type 40 m² and Pryvis
           works out 11 {soldByUnit ? `${soldByUnit.label}es` : "boxes"} — 40 plus 10%
           is 44, divided by 4, rounded up.
         </span>

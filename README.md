@@ -1,4 +1,4 @@
-# JamQuote
+# Pryvis
 
 Estimating & invoicing for Jamaican contractors — build itemized construction
 quotes, price against real Jamaican suppliers, and send branded PDFs over

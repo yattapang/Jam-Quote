@@ -72,7 +72,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
 
   const resend = new Resend(process.env.RESEND_API_KEY);
   const { error } = await resend.emails.send({
-    from: process.env.QUOTE_FROM_EMAIL ?? "JamQuote <onboarding@resend.dev>",
+    from: process.env.QUOTE_FROM_EMAIL ?? "Pryvis <onboarding@resend.dev>",
     to: client.email,
     replyTo: process.env.QUOTE_REPLY_TO || undefined,
     subject: `Quote ${quote.num} from ${business.name}`,

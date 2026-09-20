@@ -4,7 +4,7 @@ import { getSession } from "@/lib/session";
 import { API_BASE_URL } from "@/lib/api-client";
 import { apiEnvironment } from "@/lib/api-environment";
 
-export const metadata = { title: "JamQuote Staff Console" };
+export const metadata = { title: "Pryvis Staff Console" };
 
 // Internal staff-only console (gated to ADMIN by app/admin/layout.tsx). Reads
 // the platform /admin endpoints; the profile chip shows the real signed-in

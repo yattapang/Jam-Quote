@@ -10,7 +10,7 @@ import { formatJamaicaDateLabel, PROJECT_STAGES, type SalesGranularity } from "@
 import shared from "../shared.module.css";
 import styles from "./reports.module.css";
 
-export const metadata = { title: "Reports · JamQuote" };
+export const metadata = { title: "Reports · Pryvis" };
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

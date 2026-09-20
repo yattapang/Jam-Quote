@@ -7,7 +7,7 @@ import styles from "../login/login.module.css";
 // Lives OUTSIDE the /admin segment so it isn't caught by the admin layout's
 // gate (which would otherwise redirect here in a loop).
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Staff Console — Sign in · JamQuote" };
+export const metadata = { title: "Staff Console — Sign in · Pryvis" };
 
 export default async function AdminLoginPage() {
   // Already an admin? Straight to the console.
@@ -18,7 +18,7 @@ export default async function AdminLoginPage() {
     <main className={styles.wrap}>
       <div className={styles.card}>
         <div className={styles.brand}>
-          <h1 className={styles.title}>JamQuote Staff</h1>
+          <h1 className={styles.title}>Pryvis Staff</h1>
           <p className={styles.subtitle}>Sign in to the internal staff console</p>
         </div>
 
