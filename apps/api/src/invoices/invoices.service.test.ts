@@ -71,6 +71,15 @@ function harness(quote = acceptedQuote()) {
         createdInvoiceData = args.data;
         return Promise.resolve({ id: "inv1" });
       }),
+      // convertFromQuote inserts via createManyAndReturn + skipDuplicates
+      // (see invoices.service.ts) so a losing race gets an empty result
+      // instead of a thrown P2002 that could leave a real connection
+      // wedged mid-transaction. These unit tests never race, so it always
+      // "wins": one row in, one row back.
+      createManyAndReturn: vi.fn((args: any) => {
+        createdInvoiceData = args.data[0];
+        return Promise.resolve([{ id: "inv1" }]);
+      }),
       update: vi.fn().mockResolvedValue({}),
     },
     invoiceSection: {
@@ -666,14 +675,18 @@ describe("InvoicesService.remove", () => {
     expect(prisma.invoice.update).not.toHaveBeenCalled();
   });
 
-  it("soft-deletes a DRAFT invoice", async () => {
+  it("soft-deletes a DRAFT invoice AND detaches its source quote", async () => {
     const { svc, prisma } = existingInvoiceHarness(draftInvoice());
 
     await svc.remove("b1", "inv1");
 
+    // `Invoice.quoteId` is unique, and a unique index counts soft-deleted rows while
+    // convertFromQuote's pre-check filters them out. Left attached, a deleted draft
+    // would make its quote permanently unconvertible — see the "converted again" flow
+    // test in src/integration.
     expect(prisma.invoice.update).toHaveBeenCalledWith({
       where: { id: "inv1" },
-      data: { deletedAt: expect.any(Date) },
+      data: { deletedAt: expect.any(Date), quoteId: null },
     });
   });
 });

@@ -418,32 +418,56 @@ export class InvoicesService {
     });
 
     const invoiceId = await this.prisma.$transaction(async (tx) => {
-      const invoice = await tx.invoice.create({
-        data: {
-          businessId,
-          clientId: quote.clientId,
-          // Carry the job across, or job costing only ever sees invoices that
-          // predate this line: the migration backfilled history from the
-          // source quote, but without this every NEW conversion would arrive
-          // unattached and quietly drop out of "did this job make money?".
-          projectId: quote.projectId,
-          // Retention defaults FROM the job but is then owned by this invoice,
-          // so changing the job's terms later cannot restate a document the
-          // client is already holding.
-          ...(await this.retentionForProject(tx, quote.projectId, totals.totalCents)),
-          quoteId: quote.id,
-          number,
-          status: InvoiceStatus.DRAFT,
-          detailLevel: quote.detailLevel,
-          gctRate: quote.gctRate,
-          discountPct: quote.discountPct,
-          depositCents: quote.depositCents,
-          terms: quote.terms,
-          subtotalCents: totals.subtotalCents,
-          gctCents: totals.gctCents,
-          totalCents: totals.totalCents,
-        },
+      // Insert via createManyAndReturn + skipDuplicates rather than a plain
+      // create(): a losing race now hits the @unique constraint on
+      // Invoice.quoteId (schema.prisma), and letting THAT raise inside an
+      // interactive transaction is worse than a 500 here — Prisma's
+      // automatic ROLLBACK for a failed statement does not reliably clear
+      // the session back to usable on every backend this runs against, so a
+      // caught P2002 could still leave the connection wedged for the very
+      // next query. skipDuplicates turns the conflict into an empty result
+      // instead of an error, so nothing here ever needs a rollback.
+      const [invoice] = await tx.invoice.createManyAndReturn({
+        data: [
+          {
+            businessId,
+            clientId: quote.clientId,
+            // Carry the job across, or job costing only ever sees invoices that
+            // predate this line: the migration backfilled history from the
+            // source quote, but without this every NEW conversion would arrive
+            // unattached and quietly drop out of "did this job make money?".
+            projectId: quote.projectId,
+            // Retention defaults FROM the job but is then owned by this invoice,
+            // so changing the job's terms later cannot restate a document the
+            // client is already holding.
+            ...(await this.retentionForProject(tx, quote.projectId, totals.totalCents)),
+            quoteId: quote.id,
+            number,
+            status: InvoiceStatus.DRAFT,
+            detailLevel: quote.detailLevel,
+            gctRate: quote.gctRate,
+            discountPct: quote.discountPct,
+            depositCents: quote.depositCents,
+            terms: quote.terms,
+            subtotalCents: totals.subtotalCents,
+            gctCents: totals.gctCents,
+            totalCents: totals.totalCents,
+          },
+        ],
+        skipDuplicates: true,
       });
+
+      if (!invoice) {
+        // Lost the race: another convert committed first. Report the SAME
+        // clear message the pre-check above gives when it wins the read,
+        // never a raw constraint error.
+        const winner = await tx.invoice.findFirst({ where: { quoteId: quote.id, businessId, deletedAt: null } });
+        throw new BadRequestException(
+          winner
+            ? `Quote has already been converted to invoice ${winner.number}`
+            : "Quote has already been converted to an invoice",
+        );
+      }
 
       const sectionIdMap = new Map<string, string>();
       for (const section of quote.sections) {
@@ -1011,7 +1035,18 @@ export class InvoicesService {
     if (invoice.status !== InvoiceStatus.DRAFT) {
       throw new BadRequestException("Only DRAFT invoices can be deleted");
     }
-    await this.prisma.invoice.update({ where: { id }, data: { deletedAt: new Date() } });
+    // Detach the source quote as well as soft-deleting.
+    //
+    // `Invoice.quoteId` is `@unique` so two concurrent converts cannot both
+    // commit — but a unique index counts soft-deleted rows, while the
+    // "already converted?" pre-check in convertFromQuote filters
+    // `deletedAt: null`. Left attached, a deleted draft would make its quote
+    // permanently unconvertible: the check says go, the constraint says no,
+    // and the contractor is told the quote "has already been converted" to an
+    // invoice they can no longer see. Only a DRAFT can be deleted (above) and
+    // only `finalize` reads `quoteId` (to flip the quote to INVOICED), so a
+    // deleted draft's link records nothing that is still true.
+    await this.prisma.invoice.update({ where: { id }, data: { deletedAt: new Date(), quoteId: null } });
   }
 
   /**

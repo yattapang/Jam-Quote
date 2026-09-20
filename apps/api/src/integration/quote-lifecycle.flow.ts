@@ -209,14 +209,17 @@ describe("quote lifecycle", () => {
   });
 
   /**
-   * KNOWN DEFECT D1 — invoices.service.ts `convertFromQuote` checks "already converted"
-   * with a read OUTSIDE its transaction, and `Invoice.quoteId` carries no unique
-   * constraint (schema.prisma). Two converts in flight (a double-click) both pass the
-   * check and both commit: two invoices, two numbers, for one quote. Reproduced here on
-   * a single-connection pool, so it needs no parallel database access to happen.
-   * `it.fails` keeps the suite green over a reported defect; flip it when fixed.
+   * FIXED D1 — invoices.service.ts `convertFromQuote` checks "already converted" with a
+   * read outside its transaction, so two converts in flight (a double-click, a retry, an
+   * offline replay, two devices) could both pass the check before either committed.
+   * `Invoice.quoteId` is now `@unique` (migration 20260919204301_invoice_quote_id_unique),
+   * and the loser's unique-violation is caught and turned back into the same
+   * "already converted to invoice N" BadRequestException the winning race's pre-check
+   * gives, rather than a raw 500. Reproduced here on a single-connection pool: no
+   * parallel database access is needed, only two calls left unawaited before the first
+   * insert.
    */
-  it.fails("KNOWN DEFECT D1: CONCURRENT converts of one quote produce one invoice", async () => {
+  it("CONCURRENT converts of one quote produce one invoice", async () => {
     const { svc } = env;
     const { a } = await env.tenants();
     const { quote } = await draftQuote(a.id);
@@ -232,6 +235,39 @@ describe("quote lifecycle", () => {
       fulfilled: 1,
       invoices: 1,
     });
+
+    // The loser gets the SAME clear message the pre-check gives a second convert
+    // outside a race (see "refuses a second convert" above) — never a raw 500 from
+    // the unique-constraint violation underneath it.
+    const rejected = results.find((r) => r.status === "rejected");
+    expect(rejected).toBeDefined();
+    const reason = (rejected as PromiseRejectedResult).reason as { getStatus?: () => number; message: string };
+    expect(reason.getStatus?.()).toBe(400);
+    expect(reason.message).toBe(`Quote has already been converted to invoice ${invoices[0]!.number}`);
+  });
+
+  /**
+   * The other half of D1's fix. A unique index counts SOFT-DELETED rows, while
+   * `convertFromQuote`'s pre-check filters `deletedAt: null` — so attaching the quote to
+   * a deleted draft would make that quote permanently unconvertible: the check says go,
+   * the constraint says no, and the contractor is told the quote was "already converted"
+   * to an invoice they cannot see. `remove()` therefore detaches `quoteId` as it deletes.
+   */
+  it("a quote whose only invoice was deleted can be converted again", async () => {
+    const { svc } = env;
+    const { a } = await env.tenants();
+    const { quote } = await draftQuote(a.id);
+    await svc.quotes.updateStatus(a.id, quote.id, QuoteStatus.SENT);
+    await svc.quotes.updateStatus(a.id, quote.id, QuoteStatus.ACCEPTED);
+
+    const first = await svc.invoices.convertFromQuote(a.id, quote.id);
+    await svc.invoices.remove(a.id, first.id);
+
+    const second = await svc.invoices.convertFromQuote(a.id, quote.id);
+    expect(second.id).not.toBe(first.id);
+    // Exactly one LIVE invoice carries the quote; the deleted one no longer claims it.
+    const live = await env.prisma.invoice.findMany({ where: { quoteId: quote.id } });
+    expect(live.map((i) => i.id)).toEqual([second.id]);
   });
 
   it("revise copies every line, and supplier ids are re-checked on revise and convert", async () => {

@@ -370,8 +370,18 @@ I gave it its own task: `npm test` is the everyday gate, `npm run test:integrati
 the flows, `npm run test:all` runs both. Default gate green twice: web 926, api 1061.
 
 **Five real defects found, NOT fixed - queued:**
-1. `Invoice.quoteId` has an index but no unique constraint: two concurrent converts both
-   commit, so one quote becomes two invoices.
+1. **FIXED 2026-09-19.** `Invoice.quoteId` is now `@unique` (migration
+   `20260919204301_invoice_quote_id_unique`); the loser of a race is caught and given the
+   same "already converted to invoice N" message, never a raw constraint 500. A variation
+   and a revision each mint a NEW quote, so neither collides.
+   **A regression I caught before it landed:** a unique index counts SOFT-DELETED rows,
+   while `convertFromQuote`'s pre-check filters them - so deleting a draft invoice would
+   have made its quote permanently unconvertible (the check says go, the constraint says
+   no, and the contractor is told it was converted to an invoice they cannot see).
+   `remove()` now detaches `quoteId` as it deletes; only `finalize` reads that link, and a
+   deleted DRAFT was never finalised. Both halves planted and caught: re-attach the quote
+   on delete and the re-convert flow fails; drop the index from the migration and the
+   race flow fails.
 2. `exports.service.ts#invoicesIssued` writes `totalCents - paidCents` unclamped, so an
    overpaid invoice exports a NEGATIVE amount due (also a live restatement of core's rule).
 3. `setRetentionReleased` writes `retentionReleasedAt` and never re-derives `status`, so

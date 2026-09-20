@@ -1,0 +1,18 @@
+-- Two concurrent converts of one ACCEPTED quote could both pass the
+-- application-level "already converted" check before either committed,
+-- producing two invoices for one quote (Invoice.quoteId had an @@index but
+-- no uniqueness). This closes it at the database, which is the only place a
+-- race between two requests can actually be stopped.
+--
+-- Full (not partial) unique constraint: Postgres already treats every NULL
+-- as distinct from every other NULL, so manually-created invoices (quoteId
+-- left null — see invoices.service.ts create()) can coexist without limit;
+-- only a non-null quoteId is ever forced unique. A variation
+-- (createVariation) and a revision (revise) each mint a brand-new Quote row
+-- before anything is converted, so they get their own quoteId and are not
+-- constrained against the quote they descended from — one quote still maps
+-- to at most one invoice, which is the only relationship this model has.
+--
+-- No backfill: the owner confirmed there are no live users, so no existing
+-- row can violate this.
+CREATE UNIQUE INDEX "Invoice_quoteId_key" ON "Invoice"("quoteId");

@@ -901,7 +901,13 @@ model Invoice {
   /// ad-hoc extras are often what decides whether a job made money.
   projectId     String?
   project       Project?         @relation("InvoiceProject", fields: [projectId], references: [id])
-  quoteId       String?
+  // Unique (not just indexed): a quote converts to at most one invoice. A
+  // variation or a revision is a NEW Quote row (createVariation/revise both
+  // mint a fresh id), so they get their own quoteId and never collide here —
+  // this constraint is per source-quote, not per job. Postgres treats each
+  // NULL as distinct, so manually-created invoices (quoteId left null) never
+  // collide with each other either. No backfill: no live users yet.
+  quoteId       String?          @unique
   quote         Quote?           @relation(fields: [quoteId], references: [id])
   number        String // e.g. INV-0007
   // DRAFT = editable before finalize; finalizing flips to INVOICED (and the
