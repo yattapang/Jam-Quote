@@ -267,7 +267,68 @@ scheme allow-list in core, not by looking for "http".
 needed and what it can reach. An applied migration is never edited. A destructive migration
 states what it deletes and is run behind a read-only audit query first.
 
-### 10.2 What a module must ship to be called secure
+### 10.2 Authentication: who is asking, and is that still true
+
+Authorisation (10.1) decides what an identity may do. This decides whether the identity is
+real, and it is the half that is easiest to get subtly wrong. Every rule below names what the
+code does today, so a maintainer can tell the rule from the aspiration.
+
+**Every route is one of three kinds, declared, never inferred:**
+1. **Authenticated** - a session token identifies a user and a tenant.
+2. **Share-token addressed** - no user at all. The token IS the authorisation, so it must be
+   unguessable, revocable, scoped to exactly one document, and must never widen what that
+   surface returns (10.1). A share token is not a login and must never mint a session.
+3. **Deliberately public** - health, marketing, the sign-up path. Listed explicitly, and each
+   one says why it needs no identity.
+
+**Passwords.** Hashed with bcrypt, never logged, never returned, never compared in
+application code. One shared minimum and maximum (8 and `PASSWORD_MAX_LENGTH`) applied on
+every path that sets or checks one - a password a user can set but not log in with is a
+lockout, and that defect has already happened here once. Never trim a password.
+
+**Sessions.** The API issues a signed JWT; the web app holds it in an httpOnly, `sameSite`
+cookie, `secure` in production, so no browser script can read it. Tokens carry an expiry (30
+days today) and the guard re-reads the user and the tenant from the database on every
+request, so a suspended tenant or a demoted admin loses access without waiting for the token
+to expire.
+
+**A token's power is re-checked, not trusted.** A role, a capability or a tenant in a token
+is a hint; the guard resolves the truth from the database. This is why an admin promoted or
+revoked in the console takes effect immediately.
+
+**Password reset.** A single-use token with an expiry, invalidated on use, and every other
+outstanding token for that user invalidated with it. The request path must not reveal whether
+an address exists.
+
+**Enumeration and brute force.** Login, registration and reset are throttled per identity
+(8 attempts a minute on login today) on top of the global throttle. A wrong password and an
+unknown account answer the same way, in the same time, with the same wording.
+
+**Impersonation ("view as tenant") is a separate, narrower identity.** Its own capability, a
+short expiry (30 minutes today), read-only by HTTP method, refused by more than one guard,
+audited before the token is minted, and it keeps the admin's own subject so the audit trail
+never loses who acted. It must not be reachable with a tenant session.
+
+**Mobile and offline.** A device stores its token in the platform's secure store, never in
+plain preferences, and an offline replay still proves its identity on sync: the server, not
+the device, decides whose data a queued write belongs to.
+
+**Leaving.** Signing out clears the cookie server-side. Changing a password invalidates the
+other outstanding reset tokens. A future step is a session version on the user so a password
+change can invalidate live sessions too; today it does not, and that is written here rather
+than assumed.
+
+**Weak today, stated honestly:** no second factor anywhere, including the platform admin
+console, which is the highest-value login in the system; a 30-day session with no refresh or
+rotation; and no way to invalidate an issued session other than suspending the tenant or
+revoking the admin. Each is recorded as owed in `docs/MODULE-SEAMS.md`.
+
+**What an authentication change must ship with:** a test that the unauthenticated case is
+refused, a test that an expired or tampered token is refused, a test that the identity is
+re-resolved rather than trusted, and - for anything touching passwords or reset - a test that
+the response does not reveal whether an account exists.
+
+### 10.3 What a module must ship to be called secure
 
 1. **A stated threat note in the module's own docblock:** what an attacker would want here,
    and which rule above stops them. One short paragraph, not a document.
@@ -279,9 +340,10 @@ states what it deletes and is run behind a read-only audit query first.
 4. **An independent attack pass** (rule 9.1) that includes the security surface: the
    reviewer tries the foreign id, the missing guard, the oversized value, the hostile
    upload, the leaked message.
-5. **A row in `docs/MODULE-SEAMS.md`** recording that the security pass happened.
+5. **A row in `docs/MODULE-SEAMS.md`** recording that the security pass happened, including
+   the authentication cases from 10.2 where the module has any.
 
-### 10.3 Enforcement, and where it is weak today
+### 10.4 Enforcement, and where it is weak today
 
 - A guard asserts that every API route declares a guard or is on the explicit public list,
   and that admin routes declare a capability. Extend it with each new controller.

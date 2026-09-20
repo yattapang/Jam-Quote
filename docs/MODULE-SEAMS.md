@@ -76,6 +76,10 @@ database cannot see these; every defect that reached a customer here lived in th
 3. **Field-level web/API contract drift** has no guard: the mirrored-shape guard proves a
    type is referenced, not that its fields still match the endpoint.
 4. **`reports`** has only been reviewed through another sweep, not on its own.
-5. **No dependency-vulnerability check and no secret scan in the gate** (rule 10.3).
-6. **`payments` has no DRAFT gate on recording a manual payment**, though the card path has
+5. **No dependency-vulnerability check and no secret scan in the gate** (rule 10.4).
+6. **Authentication gaps (rule 10.2):** no second factor anywhere, including the admin
+   console - the highest-value login here; a 30-day session with no rotation; and no way to
+   invalidate a live session short of suspending the tenant or revoking the admin. A session
+   version on the user would close the last one.
+7. **`payments` has no DRAFT gate on recording a manual payment**, though the card path has
    one - register defect 4.
