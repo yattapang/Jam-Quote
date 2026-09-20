@@ -1,5 +1,26 @@
 # JamQuote — Working Plan
 
+## Governing documents (added 2026-09-20)
+
+The product is **Pryvis** (pryvis.com); JamQuote was the working name - ADR 0009.
+
+- **`docs/BUILD-RULES.md`** - the rules every change follows: naming and folder structure,
+  comments that state WHY, the ADR requirement, the three test layers, compliance as data,
+  currency and localisation abstracted, a tenant- and country-aware model, and the
+  one-feature-at-a-time release process. Each rule names what enforces it.
+- **`docs/adr/`** - the architecture decision log: context, decision, alternatives,
+  consequences. Nine decisions recorded, including tiers and entitlements (0007) and the
+  rename (0009).
+- **`docs/TIERS.md`** - where the product stands against the multi-country objectives, the
+  Free/Pro/Business ladder with feature groupings, and ten further features in the order I
+  would ship them.
+- **`REVIEW-FINDINGS.md`** - the defect and review register, including what each guard does
+  NOT prove.
+
+Owner decisions 2026-09-20: three tiers (Free, Pro, Business); entitlements enforced
+server-side with existing users grandfathered; features shipped one at a time, tiers first;
+Trinidad & Tobago is the next market.
+
 **Last updated:** 2026-09-08
 **Status:** feature-complete for a first commercial test. Audit closed;
 subscription billing built (§4e–4f A–C); quote delivery works end to end via
