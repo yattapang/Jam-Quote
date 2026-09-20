@@ -210,7 +210,90 @@ this codebase, the expensive ones were seams — a stale price into a quote, a p
 cost becoming a quoted price, a supplier crossing tenants, a renewal date that two screens
 computed differently. Every one passed its module's own tests.
 
-## 10. Verification standard (standing)
+## 10. Security is part of every module, from its first commit
+
+Agreed with the owner on 2026-09-20. Security is not a phase before launch and not a
+separate module; it is a property each module either has on its first commit or never gets.
+A module that stores money, a tenant's client list, or a document a client will open is a
+security surface even when it looks like plumbing.
+
+### 10.1 The rules a module must satisfy
+
+**Authorisation is default-deny.** Every route declares how it is protected. A route with no
+guard is a bug, not a public route; a genuinely public route says so explicitly and is
+listed. Admin capability, tenant scope and impersonation are separate decisions and are each
+stated per route.
+
+**Tenant scope comes from the token, never from the request.** `businessId` is read from the
+authenticated context. A body, a query string or a header may not choose whose data is
+touched. Any caller-supplied id is ownership-checked before it is stored or read
+(`common/assert-owned.ts`), and a foreign id is answered exactly as a non-existent one - no
+403-versus-404 oracle, no timing difference worth reading.
+
+**Input is validated at the boundary, by a schema.** Every endpoint's body and query go
+through a DTO that bounds length, range, scale and shape. Cents fields are capped at the
+column's limit. A value the screen cannot type is still refused by the API, because the
+screen is not the boundary.
+
+**Output is projected, not filtered.** A public or lower-privilege surface builds its own
+narrow shape and returns only what that surface needs. "Take the row and delete a field"
+leaks the next field someone adds. This is why the share-token pages have their own
+projection and why financial details in the audit trail are withheld by capability.
+
+**Secrets live in the environment.** No key, token or password in code, in a migration, in a
+log line, or in a test fixture that looks real. Passwords are hashed with bcrypt and never
+logged; share tokens are unguessable, revocable, scoped to one document, and never reused
+across documents.
+
+**Errors say what the user needs and nothing more.** No stack trace, no SQL, no internal
+path, no raw upstream message on a user-facing surface. The plain-English rule (rule 6) and
+the error-flow guard exist for this reason as much as for tone.
+
+**Rate limits are on by default.** The API applies an identity-aware throttle globally;
+anything that can be brute-forced or abused for cost - login, registration, password reset,
+public token reads, email and card-payment endpoints - declares a tighter limit of its own
+and says why.
+
+**Every mutation of money, permissions or tenancy is audited.** Who, what, which tenant,
+when. Audit rows are written in the same transaction as the change where the database
+allows it, and audit reads respect the same capability rules as the data they describe.
+
+**Uploads and external content are hostile until proven otherwise.** Type, size and
+dimensions are validated server-side; a rendered document is built from validated values,
+never from a client-supplied URL or markup. Any link we render is checked against the
+scheme allow-list in core, not by looking for "http".
+
+**Dependencies and migrations are reviewed like code.** A new dependency states why it is
+needed and what it can reach. An applied migration is never edited. A destructive migration
+states what it deletes and is run behind a read-only audit query first.
+
+### 10.2 What a module must ship to be called secure
+
+1. **A stated threat note in the module's own docblock:** what an attacker would want here,
+   and which rule above stops them. One short paragraph, not a document.
+2. **Negative tests, not only happy paths:** for each route, a test that the wrong tenant,
+   the missing capability and the absent session are each refused - and refused identically
+   to a non-existent record where that matters.
+3. **A seam test for anything it trusts** (rule 9.2), including what it does when the other
+   side refuses.
+4. **An independent attack pass** (rule 9.1) that includes the security surface: the
+   reviewer tries the foreign id, the missing guard, the oversized value, the hostile
+   upload, the leaked message.
+5. **A row in `docs/MODULE-SEAMS.md`** recording that the security pass happened.
+
+### 10.3 Enforcement, and where it is weak today
+
+- A guard asserts that every API route declares a guard or is on the explicit public list,
+  and that admin routes declare a capability. Extend it with each new controller.
+- The tenancy flow drives every id-taking method with a second tenant's id.
+- The error-flow guard keeps raw error text off the screen.
+- `helmet` sets the API's headers; the throttle guard is global.
+- **Weak today, stated honestly:** there is no automated dependency-vulnerability check in
+  the gate, no secret-scanning hook, and `sync` - the one module that replays writes the
+  server did not originate - has neither an independent review nor a seam test. These are
+  recorded in `docs/MODULE-SEAMS.md` as owed.
+
+## 11. Verification standard (standing)
 
 - **Each section** is reviewed independently, by attacking it, not reading it.
 - **The seams between sections** are tested with real services against a real database.
