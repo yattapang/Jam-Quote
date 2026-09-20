@@ -382,6 +382,21 @@ the flows, `npm run test:all` runs both. Default gate green twice: web 926, api 
    deleted DRAFT was never finalised. Both halves planted and caught: re-attach the quote
    on delete and the re-convert flow fails; drop the index from the migration and the
    race flow fails.
+   **Review of that fix found it introduced a worse bug:** `skipDuplicates` is
+   `ON CONFLICT DO NOTHING` with NO target, so a duplicate (businessId, number) - which
+   the unlocked read-modify-write in `reserveInvoiceNumber` could produce - silently
+   created nothing and reported "already converted" about a quote that never was.
+   Fixed: numbers are reserved by an atomic increment (both sequences on Business audited;
+   no other counter has that shape), reserved INSIDE the transaction so a lost race
+   returns the number, and the conflict is now targeted.
+   **I changed the mechanism again after the agent's version failed the FLOW suite:**
+   catching P2002 means the losing INSERT aborts the transaction, and on a single
+   connection (PGlite, or a pool of one) that wedges every later query - nine flows
+   failed. `convertFromQuote` now takes `SELECT ... FOR UPDATE` on the source quote and
+   re-checks inside the lock, so the second convert waits and refuses cleanly; the unique
+   index and the P2002 catch remain as backstops. Honest limit: PGlite is single-connection,
+   so the flow test cannot prove the lock orders two real connections - it proves the
+   invariant (one invoice, clear message) and that removing the unique index breaks it.
 2. `exports.service.ts#invoicesIssued` writes `totalCents - paidCents` unclamped, so an
    overpaid invoice exports a NEGATIVE amount due (also a live restatement of core's rule).
 3. `setRetentionReleased` writes `retentionReleasedAt` and never re-derives `status`, so

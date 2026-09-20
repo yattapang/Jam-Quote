@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import {
   computeTotals,
   GctTreatment,
@@ -81,6 +82,9 @@ function harness(quote = acceptedQuote()) {
         return Promise.resolve([{ id: "inv1" }]);
       }),
       update: vi.fn().mockResolvedValue({}),
+      // Re-checked inside the quote's row lock: null means no convert won the
+      // race while this one waited.
+      findFirst: vi.fn().mockResolvedValue(null),
     },
     invoiceSection: {
       create: vi.fn((args: any) => {
@@ -99,6 +103,10 @@ function harness(quote = acceptedQuote()) {
     },
     quote: { update: vi.fn().mockResolvedValue({}) },
     supplier: { findMany: vi.fn().mockResolvedValue([]) },
+    // convertFromQuote takes a row lock on the source quote (SELECT ... FOR
+    // UPDATE) before reserving a number, so the fake transaction client must
+    // answer $queryRaw. It returns the row it locked; nothing reads the value.
+    $queryRaw: vi.fn().mockResolvedValue([{ id: "q1" }]),
   };
   const prisma = {
     // A client the caller owns. create/update now prove a caller-supplied
@@ -250,11 +258,15 @@ describe("InvoicesService.create — an invoice with no source quote", () => {
 
 describe("InvoicesService.convertFromQuote", () => {
   it("copies sections + line items from an ACCEPTED quote, computes totals, and starts DRAFT", async () => {
-    const { svc, businessService, createdLineItems } = harness();
+    const { svc, businessService, createdLineItems, tx } = harness();
 
     const invoice = await svc.convertFromQuote("b1", "q1");
 
-    expect(businessService.reserveInvoiceNumber).toHaveBeenCalledWith("b1");
+    // Reserved WITH the transaction client, not the top-level one: defect 4
+    // fix — folding the reservation into this $transaction means a rollback
+    // (e.g. a losing race below) also gives the number back, instead of it
+    // being burned by a reservation that already committed outside.
+    expect(businessService.reserveInvoiceNumber).toHaveBeenCalledWith("b1", tx);
     expect(invoice.status).toBe(InvoiceStatus.DRAFT);
     expect(invoice.number).toBe("INV-0001");
     expect(invoice.quoteId).toBe("q1");
@@ -321,6 +333,75 @@ describe("InvoicesService.convertFromQuote", () => {
       expect(err.message).toContain("INV-0000");
     });
     expect(businessService.reserveInvoiceNumber).not.toHaveBeenCalled();
+  });
+
+  // Defect 1 (HIGH): createManyAndReturn + skipDuplicates is `ON CONFLICT DO
+  // NOTHING` with NO conflict target, so it swallows ANY unique violation —
+  // including a duplicate (businessId, number) that has nothing to do with
+  // "already converted" — and reports the same false "already converted"
+  // message regardless. The fix uses a plain create() so Postgres raises the
+  // SPECIFIC constraint that fired, and only a `quoteId` conflict is treated
+  // as "someone else's convert won the race".
+  describe("a losing race during the insert", () => {
+    function p2002(target: string[]) {
+      const err = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+        code: "P2002",
+        clientVersion: "test",
+        meta: { target },
+      });
+      return err;
+    }
+
+    it("reports a quoteId conflict as already converted, naming the winner", async () => {
+      const { svc, tx, prisma } = harness();
+      tx.invoice.create = vi.fn().mockRejectedValue(p2002(["quoteId"]));
+      // The winner lookup runs on the top-level connection (the transaction
+      // that hit the conflict has already been rolled back by Prisma), so it
+      // reads `prisma.invoice.findFirst`, not `tx.invoice.findFirst`.
+      prisma.invoice.findFirst = vi
+        .fn()
+        .mockResolvedValueOnce(null) // pre-check: no existing invoice yet
+        .mockResolvedValueOnce({ id: "inv-winner", number: "INV-0099" }); // post-conflict winner lookup
+
+      const rejection = svc.convertFromQuote("b1", "q1");
+      await expect(rejection).rejects.toBeInstanceOf(BadRequestException);
+      await rejection.catch((err: BadRequestException) => {
+        expect(err.message).toContain("INV-0099");
+      });
+    });
+
+    it("does NOT report a duplicate NUMBER as already converted — it surfaces as itself", async () => {
+      // This is the exact bug: rewind the sequence so two converts mint the
+      // same INV number for DIFFERENT quotes. A duplicate (businessId,
+      // number) must never be told to the caller as "already converted" —
+      // nothing was converted, and the real problem (a broken counter) would
+      // be invisible if it were swallowed here as if it were normal.
+      const { svc, tx } = harness();
+      tx.invoice.create = vi.fn().mockRejectedValue(p2002(["businessId", "number"]));
+
+      const rejection = svc.convertFromQuote("b1", "q1");
+      await expect(rejection).rejects.not.toBeInstanceOf(BadRequestException);
+      await rejection.catch((err: Error) => {
+        expect(err.message).not.toContain("already been converted");
+      });
+    });
+
+    // Defect 3 + 5: the fallback for "conflict, but no live winner is
+    // visible" (e.g. the winning invoice was soft-deleted by remove() in the
+    // window between the conflict and this lookup) must not claim a
+    // conversion happened, and must not name a deleted invoice.
+    it("gives an honest message when the quoteId conflict's winner is not visible", async () => {
+      const { svc, tx, prisma } = harness();
+      tx.invoice.create = vi.fn().mockRejectedValue(p2002(["quoteId"]));
+      prisma.invoice.findFirst = vi.fn().mockResolvedValue(null); // pre-check AND winner lookup: nothing visible
+
+      const rejection = svc.convertFromQuote("b1", "q1");
+      await expect(rejection).rejects.toBeInstanceOf(BadRequestException);
+      await rejection.catch((err: BadRequestException) => {
+        expect(err.message).not.toContain("already been converted");
+        expect(err.message).not.toMatch(/INV-\d/); // never names an invoice number
+      });
+    });
   });
 
   // S-review fix: a supplierId copied forward from the quote is no longer

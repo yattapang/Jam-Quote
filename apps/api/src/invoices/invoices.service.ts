@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
   computeTotals,
   InvoiceStatus,
@@ -405,11 +405,6 @@ export class InvoicesService {
       );
     }
 
-    // Reserve the number before opening the transaction below: it runs its
-    // own $transaction, and nesting a second interactive transaction inside
-    // this one isn't safe (mirrors quotes.service.ts revise()).
-    const number = await this.businessService.reserveInvoiceNumber(businessId);
-
     const totals = computeTotals({
       lines: existingLinesForTotals(quote as QuoteForConvert),
       gctRatePct: Number(quote.gctRate),
@@ -417,19 +412,56 @@ export class InvoicesService {
       depositCents: quote.depositCents,
     });
 
-    const invoiceId = await this.prisma.$transaction(async (tx) => {
-      // Insert via createManyAndReturn + skipDuplicates rather than a plain
-      // create(): a losing race now hits the @unique constraint on
-      // Invoice.quoteId (schema.prisma), and letting THAT raise inside an
-      // interactive transaction is worse than a 500 here — Prisma's
-      // automatic ROLLBACK for a failed statement does not reliably clear
-      // the session back to usable on every backend this runs against, so a
-      // caught P2002 could still leave the connection wedged for the very
-      // next query. skipDuplicates turns the conflict into an empty result
-      // instead of an error, so nothing here ever needs a rollback.
-      const [invoice] = await tx.invoice.createManyAndReturn({
-        data: [
-          {
+    let invoiceId: string;
+    try {
+      invoiceId = await this.prisma.$transaction(async (tx) => {
+        // The number is reserved INSIDE this transaction (not before it, the
+        // way quotes.service.ts revise() does it): reserveInvoiceNumber is a
+        // single atomic `UPDATE ... increment` statement, not its own nested
+        // $transaction, so folding it in here is safe (see business.service.ts).
+        // That matters because a plain create() below can still fail — a
+        // losing race hits the @unique constraint on Invoice.quoteId — and
+        // when it does, the whole transaction rolls back. If the number had
+        // been reserved outside this transaction, that rollback could not
+        // give it back and nextInvoiceSeq would permanently skip it. Numbers
+        // still are not perfectly gap-free (a crash between commit and the
+        // caller observing it is not undoable by anything), but a LOST RACE —
+        // the one case this method can actually detect — no longer burns one.
+        // Serialise on the SOURCE QUOTE's row before doing anything else.
+        //
+        // The @unique on Invoice.quoteId is the backstop, but letting a losing
+        // race actually HIT it is a poor primary mechanism: a failed statement
+        // aborts the transaction, and on a single-connection Postgres (the
+        // integration suite's PGlite, and any pool of one) the connection is
+        // then wedged for every later query — nine flow tests failed exactly
+        // that way. A row lock makes the second convert WAIT for the first to
+        // commit, so it sees the invoice on the re-check below and refuses
+        // cleanly, with no aborted statement anywhere.
+        await tx.$queryRaw`SELECT id FROM "Quote" WHERE id = ${quote.id} FOR UPDATE`;
+
+        // Re-check INSIDE the lock: the pre-check above ran before it, so a
+        // convert that started earlier may have committed in between.
+        const raced = await tx.invoice.findFirst({
+          where: { quoteId: quote.id, businessId, deletedAt: null },
+          select: { number: true },
+        });
+        if (raced) {
+          throw new BadRequestException(`Quote has already been converted to invoice ${raced.number}`);
+        }
+
+        const number = await this.businessService.reserveInvoiceNumber(businessId, tx);
+
+        // Plain create(), not createManyAndReturn + skipDuplicates: that
+        // translates to `ON CONFLICT DO NOTHING` with NO conflict target,
+        // which swallows ANY unique violation on the row — including a
+        // duplicate (businessId, number) pair, a real bug — and reports it
+        // as "already converted", even though nothing was created and the
+        // number was never actually taken. A plain create() lets Postgres
+        // raise the specific constraint that actually fired, which the catch
+        // below inspects via `e.meta.target` so only a quoteId collision is
+        // ever reported as "already converted".
+        const invoice = await tx.invoice.create({
+          data: {
             businessId,
             clientId: quote.clientId,
             // Carry the job across, or job costing only ever sees invoices that
@@ -453,76 +485,96 @@ export class InvoicesService {
             gctCents: totals.gctCents,
             totalCents: totals.totalCents,
           },
-        ],
-        skipDuplicates: true,
-      });
+        });
 
-      if (!invoice) {
-        // Lost the race: another convert committed first. Report the SAME
-        // clear message the pre-check above gives when it wins the read,
-        // never a raw constraint error.
-        const winner = await tx.invoice.findFirst({ where: { quoteId: quote.id, businessId, deletedAt: null } });
-        throw new BadRequestException(
-          winner
-            ? `Quote has already been converted to invoice ${winner.number}`
-            : "Quote has already been converted to an invoice",
+        const sectionIdMap = new Map<string, string>();
+        for (const section of quote.sections) {
+          const newSection = await tx.invoiceSection.create({
+            data: { invoiceId: invoice.id, title: section.title, sort: section.sort },
+          });
+          sectionIdMap.set(section.id, newSection.id);
+        }
+
+        const allOriginalLines = [
+          ...quote.lineItems,
+          ...quote.sections.flatMap((s) => s.lineItems),
+        ];
+
+        // Copying supplierId forward from the quote must not propagate a
+        // legacy foreign id silently — validate against the same
+        // grandfathered-but-checked rule a normal update applies, rather than
+        // trusting an id because it was already on a quote this business owns.
+        const quoteSupplierIds = allOriginalLines.map((li) => li.supplierId);
+        await assertSuppliersOwned(
+          tx,
+          businessId,
+          quoteSupplierIds,
+          new Set(quoteSupplierIds.filter((v): v is string => Boolean(v))),
         );
+
+        for (const li of allOriginalLines) {
+          await tx.invoiceLineItem.create({
+            data: {
+              invoiceId: invoice.id,
+              sectionId: li.sectionId ? sectionIdMap.get(li.sectionId) : undefined,
+              category: li.category,
+              description: li.description,
+              quantity: li.quantity,
+              rateUnit: li.rateUnit,
+              unitLabel: li.unitLabel ?? undefined,
+              unitPriceCents: li.unitPriceCents,
+              priceSource: li.priceSource,
+              supplierId: li.supplierId ?? undefined,
+              gctTreatment: li.gctTreatment,
+              markupPct: li.markupPct ?? undefined,
+              overrideNote: li.overrideNote ?? undefined,
+              jobId: li.jobId ?? undefined,
+              jobName: li.jobName ?? undefined,
+              jobUnit: li.jobUnit ?? undefined,
+              jobComponents: (li.jobComponents ?? undefined) as
+                | Prisma.InputJsonValue
+                | undefined,
+              sort: li.sort,
+            },
+          });
+        }
+
+        return invoice.id;
+      });
+    } catch (e) {
+      // A plain create() (see comment above) lets a real unique violation
+      // raise as itself. Only a collision on `quoteId` means "someone else's
+      // convert won the race" — a duplicate (businessId, number), for
+      // instance, is a different, real bug and must not be reported as
+      // "already converted" (that used to be true of ANY conflict, including
+      // this one, back when this used skipDuplicates with no target).
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        const target = e.meta?.target;
+        const isQuoteIdConflict = Array.isArray(target)
+          ? target.includes("quoteId")
+          : typeof target === "string" && target.includes("quoteId");
+        if (isQuoteIdConflict) {
+          // The transaction that hit this has already been rolled back by
+          // Prisma, so this read runs against the top-level connection, not
+          // the dead `tx` — querying `tx` again here would be the "wedged
+          // connection" failure mode the old comment worried about.
+          const winner = await this.prisma.invoice.findFirst({
+            where: { quoteId: quote.id, businessId, deletedAt: null },
+          });
+          throw new BadRequestException(
+            winner
+              ? `Quote has already been converted to invoice ${winner.number}`
+              : // Only reachable if the winner was soft-deleted (invoices.remove())
+                // between the conflict and this read — a real conversion did happen,
+                // it just is not visible under `deletedAt: null` any more. Naming a
+                // deleted invoice would be worse than this: honest and unhelpful
+                // beats specific and wrong.
+                "Couldn't create the invoice — please try again",
+          );
+        }
       }
-
-      const sectionIdMap = new Map<string, string>();
-      for (const section of quote.sections) {
-        const newSection = await tx.invoiceSection.create({
-          data: { invoiceId: invoice.id, title: section.title, sort: section.sort },
-        });
-        sectionIdMap.set(section.id, newSection.id);
-      }
-
-      const allOriginalLines = [
-        ...quote.lineItems,
-        ...quote.sections.flatMap((s) => s.lineItems),
-      ];
-
-      // Copying supplierId forward from the quote must not propagate a
-      // legacy foreign id silently — validate against the same
-      // grandfathered-but-checked rule a normal update applies, rather than
-      // trusting an id because it was already on a quote this business owns.
-      const quoteSupplierIds = allOriginalLines.map((li) => li.supplierId);
-      await assertSuppliersOwned(
-        tx,
-        businessId,
-        quoteSupplierIds,
-        new Set(quoteSupplierIds.filter((v): v is string => Boolean(v))),
-      );
-
-      for (const li of allOriginalLines) {
-        await tx.invoiceLineItem.create({
-          data: {
-            invoiceId: invoice.id,
-            sectionId: li.sectionId ? sectionIdMap.get(li.sectionId) : undefined,
-            category: li.category,
-            description: li.description,
-            quantity: li.quantity,
-            rateUnit: li.rateUnit,
-            unitLabel: li.unitLabel ?? undefined,
-            unitPriceCents: li.unitPriceCents,
-            priceSource: li.priceSource,
-            supplierId: li.supplierId ?? undefined,
-            gctTreatment: li.gctTreatment,
-            markupPct: li.markupPct ?? undefined,
-            overrideNote: li.overrideNote ?? undefined,
-            jobId: li.jobId ?? undefined,
-            jobName: li.jobName ?? undefined,
-            jobUnit: li.jobUnit ?? undefined,
-            jobComponents: (li.jobComponents ?? undefined) as
-              | Prisma.InputJsonValue
-              | undefined,
-            sort: li.sort,
-          },
-        });
-      }
-
-      return invoice.id;
-    });
+      throw e;
+    }
 
     return this.findOne(businessId, invoiceId);
   }
@@ -1043,9 +1095,11 @@ export class InvoicesService {
     // `deletedAt: null`. Left attached, a deleted draft would make its quote
     // permanently unconvertible: the check says go, the constraint says no,
     // and the contractor is told the quote "has already been converted" to an
-    // invoice they can no longer see. Only a DRAFT can be deleted (above) and
-    // only `finalize` reads `quoteId` (to flip the quote to INVOICED), so a
-    // deleted draft's link records nothing that is still true.
+    // invoice they can no longer see. Only a DRAFT can be deleted (above).
+    // `quoteId` is also read by convertFromQuote's pre-check and winner
+    // lookup (to name the invoice a quote converted to) and by `finalize`
+    // (to flip the quote to INVOICED) — all three only care about a LIVE
+    // link, so a deleted draft's link records nothing that is still true.
     await this.prisma.invoice.update({ where: { id }, data: { deletedAt: new Date(), quoteId: null } });
   }
 
