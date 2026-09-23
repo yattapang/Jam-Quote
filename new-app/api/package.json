@@ -1,0 +1,14 @@
+{
+  "name": "@pryvis/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Pryvis API. Modules own their features; core holds what every module trusts (ADR 0012).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

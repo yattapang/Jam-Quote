@@ -15,7 +15,8 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "test:integration": "turbo run test:integration"
+    "test:integration": "turbo run test:integration",
+    "contract:generate": "npm run contract:generate -w @pryvis/contract"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.17",
