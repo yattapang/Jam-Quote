@@ -314,6 +314,31 @@ The register never contains a credential. It records *where* a secret lives, nev
 **Enforcement.** Review, and the register's own "what this says about our exposure" section,
 which is where a dependency with no substitute has to be admitted rather than discovered later.
 
+## 19. The brief is the plan of record, and it is kept true (owner requirement)
+
+`docs/DEVELOPMENT-BRIEF.md` is what we agreed to build and in what order. Drift is not usually a
+decision; it is what happens when nobody checks. So:
+
+- **Every task states where it sits in the brief** — which phase, which step of the delivery
+  order — before it starts. Work that sits outside the brief is either a deliberate, recorded
+  change to the plan or it is drift.
+- **`docs/BRIEF-STATUS.md` is the tracker**, section by section: done, partly done, not started,
+  with the evidence and the gaps. It is read at the start of a task and updated in the same change
+  that moves it. A status file nobody updates is worse than none, because it reassures.
+- **A phase's deliverables are not skipped silently.** Building ahead of the paper — a PRD, a
+  domain model, a threat model — is sometimes the right call, and when it happens it is **named**
+  in the status file and to the owner, not discovered later. If I notice we are ahead of the plan,
+  saying so is part of the work.
+- **When reality diverges from the brief, the brief changes** — as proposed edits for the owner's
+  approval, never edited silently and never left stale. The brief's own instruction to propose
+  edits after Phase 0 is an example, and it was missed once already.
+- **A step that the brief requires and we have not done is stated plainly**, in the status file and
+  in the answer to "where are we?" — including when nobody asked.
+
+**Enforcement.** Rule 0 makes this file read at the start of every task, and this rule points at
+the tracker. The honesty is the control: a tracker that only ever says "on plan" is not being
+maintained.
+
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the

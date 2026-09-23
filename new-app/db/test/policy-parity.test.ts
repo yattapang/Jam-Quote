@@ -8,9 +8,11 @@
  * 1. Someone edits db/policies/001-tenant-isolation.sql to fix or improve the
  *    isolation rule, feels done, and never writes the migration. The file now
  *    documents a control that is not in any database.
- * 2. Someone adds a tenant-owned table in a migration and forgets the policy. The
- *    table has a tenant_id column, looks isolated, and is readable by every
- *    tenant.
+ * 2. Someone adds a table in a migration and forgets the policy — whether or not it has
+ *    a tenant_id. The second guard below therefore asks about EVERY table: each one must
+ *    be tenant-protected or named as an exemption with the reason it is safe. It used to
+ *    ask only about tables carrying a tenant_id, which made a table without one
+ *    invisible to it; the MFA tables made that gap concrete.
  *
  * WHAT THESE GUARDS DO NOT PROVE
  *
@@ -63,104 +65,126 @@ describe("the readable policy file and the applied migrations agree", () => {
   });
 });
 
-describe("every tenant-owned table is covered by a policy", () => {
-  it("finds no table with a tenant_id column and no row-level security", async () => {
+describe("every table is either tenant-protected or exempt with a reason", () => {
+  it("finds no table that is neither", async () => {
     const db = new PGlite();
     try {
       await applyMigrations(db);
 
-      // Discovery, not a hand-written list (Rule 8): the guard asks the database
-      // which tables carry a tenant column, so a table added next year is
-      // included without anyone remembering to add it here.
-      const tenantOwned = await db.query<{ table_name: string }>(`
+      // STRENGTHENED on 2026-09-24. This guard used to ask only about tables carrying a
+      // tenant_id, which meant a table WITHOUT one was invisible to it — the silent
+      // case, and the worse one. Adding the MFA tables made that concrete: they hold
+      // per-user credentials, have no tenant_id, and the old guard would have said
+      // nothing at all.
+      //
+      // Now every table in the public schema must be one of two things, and there is no
+      // third option: tenant-protected, or named here with a reason.
+      const all = await db.query<{ table_name: string }>(`
         SELECT c.relname AS table_name
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        WHERE n.nspname = 'public'
-          AND c.relkind = 'r'
-          AND a.attname = 'tenant_id'
-          AND a.attnum > 0
-          AND NOT a.attisdropped
+        WHERE n.nspname = 'public' AND c.relkind = 'r'
         ORDER BY c.relname
       `);
 
-      // The tenant table itself is tenant-owned without having a tenant_id — it
-      // IS the tenant — so it is named explicitly. Every other table must be
-      // discovered by the query above.
-      //
-      // EXEMPTIONS are listed here, with a reason each, and nowhere else. An
-      // exemption is a hole in the isolation rule; it should be hard to add and
-      // impossible to add silently.
+      // EXEMPTIONS live here and nowhere else, each with the reason it is safe. An
+      // exemption is a hole in the isolation rule: it should be hard to add, impossible
+      // to add silently, and readable as a list.
       const EXEMPT: Record<string, string> = {
-        app_credential:
-          "The other half of the authentication bootstrap: sign-in must find a user BY EMAIL " +
-          "before any tenant is known, and app_user is behind RLS. Thin by design (an email, a " +
-          "hash, and who it belongs to) and, like app_session, the tenant it yields is then used " +
-          "to satisfy RLS for every read that follows. Keeping the hash here also means app_user " +
-          "— the row every module reads — carries no password at all.",
         app_session:
           "Read before any tenant is known, because it is what establishes app.tenant_id. " +
           "A policy requiring a tenant would make it unreadable exactly when it is needed. " +
-          "Kept safe by being thin (ids, a version, timestamps — no name, email or document) " +
-          "and by the fact that every read after it, including the user's own role, happens " +
-          "under RLS with the tenant this row supplied.",
+          "Thin by design (ids, a version, timestamps) and every read after it — including " +
+          "the user's own role — happens under RLS with the tenant this row supplied.",
+        app_credential:
+          "The other half of the authentication bootstrap: sign-in must find a user BY EMAIL " +
+          "before any tenant is known, and app_user is behind RLS. Keeping the hash here also " +
+          "means app_user, the row every module reads, carries no password at all.",
+        rate_limit_bucket:
+          "Consulted before anyone is identified, which is its purpose. Holds no tenant data " +
+          "and no personal data: keys are an action plus an IP or a hashed email.",
+        mfa_totp:
+          "A second factor is checked during authentication, before a tenant is in scope. " +
+          "Holds no tenant data; the secret itself is encrypted at rest (ADR 0017) so the row " +
+          "is useless without the key, which is never in the database.",
+        mfa_recovery_code:
+          "Same authentication phase as mfa_totp, and the same reasoning. Stores only a hash " +
+          "of a code we generated.",
+        platform_capability:
+          "What our own staff may do, resolved during authentication and deliberately NOT " +
+          "tenant-scoped: a platform capability is not a fact about any tenant. Written only " +
+          "by an audited grant.",
+        // _prisma_migrations is deliberately NOT listed. It exists in a real database,
+        // where Prisma creates it, but not here: this guard replays the migration SQL
+        // directly, so listing it would be a stale exemption — and the stale-exemption
+        // check below caught exactly that on the first run.
       };
 
-      const mustBeProtected = ["tenant", ...tenantOwned.rows.map((r) => r.table_name)].filter(
-        (table) => !(table in EXEMPT),
-      );
+      const unprotected: string[] = [];
+      for (const { table_name: table } of all.rows) {
+        if (table in EXEMPT) continue;
 
-      // Each exemption must still exist. A stale exemption is worse than none: it
-      // silently covers whatever table later takes that name.
-      const exemptFound = await db.query<{ table_name: string }>(
-        `SELECT c.relname AS table_name FROM pg_class c
-         JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`,
-        [Object.keys(EXEMPT)],
-      );
-      expect(
-        exemptFound.rows.map((r) => r.table_name).sort(),
-        "an exemption names a table that does not exist — remove it before it covers a future table of that name",
-      ).toEqual(Object.keys(EXEMPT).sort());
+        const state = await db.query<{
+          has_tenant_column: boolean;
+          rls_enabled: boolean;
+          rls_forced: boolean;
+          policy_count: number;
+        }>(
+          `
+          SELECT EXISTS (
+                   SELECT 1 FROM pg_attribute a
+                    WHERE a.attrelid = c.oid AND a.attname = 'tenant_id'
+                      AND a.attnum > 0 AND NOT a.attisdropped
+                 ) AS has_tenant_column,
+                 c.relrowsecurity        AS rls_enabled,
+                 c.relforcerowsecurity   AS rls_forced,
+                 (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid)::int AS policy_count
+          FROM pg_class c
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = 'public' AND c.relname = $1
+          `,
+          [table],
+        );
+        const row = state.rows[0];
+        if (!row) {
+          unprotected.push(`${table}: could not be inspected`);
+          continue;
+        }
 
+        // The tenant table is the tenant, so it has no tenant_id and is still protected.
+        const expectsTenantColumn = table !== "tenant";
+        if (expectsTenantColumn && !row.has_tenant_column) {
+          unprotected.push(
+            `${table} has no tenant_id column. Either give it one (and a policy), or add it to ` +
+              `EXEMPT in this file with the reason it is safe. A table that is neither is a table ` +
+              `nothing protects.`,
+          );
+          continue;
+        }
+        if (!row.rls_enabled) unprotected.push(`${table} has no row-level security`);
+        // FORCE matters as much as ENABLE: without it the table's owner — the role that
+        // ran the migrations — is exempt from the policy, so isolation is switched on and
+        // doing nothing for exactly the connection that matters.
+        else if (!row.rls_forced) {
+          unprotected.push(`${table} has RLS enabled but not FORCED, so its owner bypasses it`);
+        } else if (row.policy_count === 0) unprotected.push(`${table} has RLS but no policy`);
+      }
+
+      expect(unprotected, unprotected.join("; ")).toEqual([]);
+
+      // Prove the guard had subjects, and that it actually protected some of them —
+      // a run where everything was exempt would pass while proving nothing.
+      const protectedCount = all.rows.filter((r) => !(r.table_name in EXEMPT)).length;
       expect(
-        mustBeProtected.length,
-        "the discovery query found no tenant-owned tables, so this guard proved nothing",
+        protectedCount,
+        "every table was exempt, so this guard checked nothing",
       ).toBeGreaterThan(1);
 
-      const state = await db.query<{
-        table_name: string;
-        rls_enabled: boolean;
-        rls_forced: boolean;
-        policy_count: number;
-      }>(
-        `
-        SELECT c.relname       AS table_name,
-               c.relrowsecurity AS rls_enabled,
-               c.relforcerowsecurity AS rls_forced,
-               (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid)::int AS policy_count
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)
-        `,
-        [mustBeProtected],
-      );
-
-      expect(state.rows.map((r) => r.table_name).sort()).toEqual([...mustBeProtected].sort());
-
-      for (const row of state.rows) {
-        expect(row.rls_enabled, `${row.table_name} has no row-level security`).toBe(true);
-        // FORCE matters as much as ENABLE: without it the table's owner — which
-        // is the role that ran the migrations — is exempt from the policy, so
-        // isolation would be switched on and doing nothing for exactly the
-        // connection that matters.
-        expect(
-          row.rls_forced,
-          `${row.table_name} has RLS enabled but not FORCED, so its owner bypasses it`,
-        ).toBe(true);
-        expect(row.policy_count, `${row.table_name} has RLS but no policy`).toBeGreaterThan(0);
-      }
+      // A stale exemption is worse than none: it silently covers whatever table later
+      // takes that name.
+      const existing = new Set(all.rows.map((r) => r.table_name));
+      const stale = Object.keys(EXEMPT).filter((table) => !existing.has(table));
+      expect(stale, `exemptions naming tables that do not exist: ${stale.join(", ")}`).toEqual([]);
     } finally {
       await db.close();
     }
