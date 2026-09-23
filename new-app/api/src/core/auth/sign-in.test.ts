@@ -26,7 +26,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DbCallerResolver, type Queryable } from "./db-caller-resolver.js";
 import { hashPassword } from "./password.js";
-import { SIGN_IN_FAILED_MESSAGE, SignInService, type SignInFailure } from "./sign-in.js";
+import { PostgresRateLimiter, type RateLimitStore } from "../rate-limit/rate-limiter.js";
+import {
+  SIGN_IN_FAILED_MESSAGE,
+  SIGN_IN_RATE_LIMITED_MESSAGE,
+  SignInService,
+  type SignInFailure,
+} from "./sign-in.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = join(HERE, "..", "..", "..", "..", "db", "migrations");
@@ -41,6 +47,10 @@ const PASSWORD = "correct horse battery staple";
 let db: PGlite;
 let signIn: SignInService;
 let failures: { email: string; reason: SignInFailure }[];
+let clock: Date;
+
+/** Every attempt in these tests comes from one address unless a test says otherwise. */
+const FROM = { ip: "203.0.113.4" } as const;
 
 function adapt(pg: PGlite): Queryable {
   const client: Queryable = {
@@ -112,9 +122,14 @@ beforeEach(async () => {
 
   await db.exec(`SET ROLE ${APP_ROLE};`);
   failures = [];
-  signIn = new SignInService(adapt(db), {
-    failed: (email, reason) => failures.push({ email, reason }),
-  });
+  clock = new Date("2026-09-23T12:00:00.000Z");
+  const limiter = new PostgresRateLimiter(adapt(db) as RateLimitStore, () => clock);
+  signIn = new SignInService(
+    adapt(db),
+    { failed: (email, reason) => failures.push({ email, reason }) },
+    limiter,
+    () => clock,
+  );
 });
 
 afterEach(async () => {
@@ -123,7 +138,7 @@ afterEach(async () => {
 
 describe("a correct sign-in", () => {
   it("issues a session carrying the user's current version", async () => {
-    const result = await signIn.signIn(EMAIL, PASSWORD);
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -135,7 +150,7 @@ describe("a correct sign-in", () => {
   it("accepts the email in any case, with surrounding whitespace", async () => {
     // Addresses are case-insensitive in practice, and a phone keyboard capitalises.
     // Normalisation happens in one place, so the unique index means what it looks like.
-    const result = await signIn.signIn(`  ${EMAIL.toUpperCase()} `, PASSWORD);
+    const result = await signIn.signIn(`  ${EMAIL.toUpperCase()} `, PASSWORD, FROM);
 
     expect(result.ok).toBe(true);
   });
@@ -144,14 +159,19 @@ describe("a correct sign-in", () => {
     // The asymmetry is deliberate: an email has a canonical form, a password is the
     // bytes the user chose. Trimming a password means accepting one at sign-up and
     // rejecting it at sign-in.
-    expect(await signIn.signIn(EMAIL, ` ${PASSWORD}`)).toMatchObject({ ok: false });
+    expect(await signIn.signIn(EMAIL, ` ${PASSWORD}`, FROM)).toMatchObject({ ok: false });
   });
 
   it("expires the session in twelve hours, not thirty days", async () => {
     const fixed = new Date("2026-09-23T12:00:00.000Z");
-    const service = new SignInService(adapt(db), { failed: () => undefined }, () => fixed);
+    const service = new SignInService(
+      adapt(db),
+      { failed: () => undefined },
+      new PostgresRateLimiter(adapt(db) as RateLimitStore, () => fixed),
+      () => fixed,
+    );
 
-    const result = await service.signIn(EMAIL, PASSWORD);
+    const result = await service.signIn(EMAIL, PASSWORD, FROM);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -179,9 +199,9 @@ describe("every failure looks the same to the caller", () => {
     );
 
     const results = [
-      await signIn.signIn("nobody@example.com", PASSWORD),
-      await signIn.signIn(EMAIL, "wrong password entirely"),
-      await signIn.signIn("suspended@example.com", PASSWORD),
+      await signIn.signIn("nobody@example.com", PASSWORD, FROM),
+      await signIn.signIn(EMAIL, "wrong password entirely", FROM),
+      await signIn.signIn("suspended@example.com", PASSWORD, FROM),
     ];
 
     for (const result of results) {
@@ -198,7 +218,7 @@ describe("every failure looks the same to the caller", () => {
   it("refuses a deactivated user who types the right password", async () => {
     await asOwner(`UPDATE app_user SET deactivated_at = now() WHERE id = $1`, [USER]);
 
-    expect(await signIn.signIn(EMAIL, PASSWORD)).toEqual({
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toEqual({
       ok: false,
       message: SIGN_IN_FAILED_MESSAGE,
     });
@@ -206,8 +226,8 @@ describe("every failure looks the same to the caller", () => {
   });
 
   it("issues no session when it refuses", async () => {
-    await signIn.signIn(EMAIL, "wrong password entirely");
-    await signIn.signIn("nobody@example.com", PASSWORD);
+    await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+    await signIn.signIn("nobody@example.com", PASSWORD, FROM);
 
     const sessions = await asOwner(`SELECT id FROM app_session`);
     expect(sessions.rows).toHaveLength(0);
@@ -218,7 +238,7 @@ describe("every failure looks the same to the caller", () => {
     // no improvement. This asserts the decoy path actually runs.
     const spy = vi.spyOn(await import("./password.js"), "verifyPassword");
 
-    await signIn.signIn("definitely-not-registered@example.com", PASSWORD);
+    await signIn.signIn("definitely-not-registered@example.com", PASSWORD, FROM);
 
     expect(spy).toHaveBeenCalledOnce();
     spy.mockRestore();
@@ -233,7 +253,7 @@ describe("the cost is raised when it can be", () => {
     const weak = await weakHashOf(PASSWORD);
     await asOwner(`UPDATE app_credential SET password_hash = $1 WHERE user_id = $2`, [weak, USER]);
 
-    expect(await signIn.signIn(EMAIL, PASSWORD)).toMatchObject({ ok: true });
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
 
     const after = await asOwner(
       `SELECT password_hash FROM app_credential WHERE user_id = $1`,
@@ -244,7 +264,7 @@ describe("the cost is raised when it can be", () => {
     expect(stored.split("$")[1]).toBe("65536");
 
     // And the user can still sign in with the same password afterwards.
-    expect(await signIn.signIn(EMAIL, PASSWORD)).toMatchObject({ ok: true });
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
   });
 
   it("leaves a current hash alone", async () => {
@@ -252,7 +272,7 @@ describe("the cost is raised when it can be", () => {
       `SELECT password_hash FROM app_credential WHERE user_id = $1`,
       [USER],
     );
-    await signIn.signIn(EMAIL, PASSWORD);
+    await signIn.signIn(EMAIL, PASSWORD, FROM);
     const after = await asOwner(
       `SELECT password_hash FROM app_credential WHERE user_id = $1`,
       [USER],
@@ -269,7 +289,7 @@ describe("the seam: a session sign-in issues is one the resolver accepts", () =>
     // Two classes written separately, agreeing only by convention about the version
     // snapshot. A mocked test of either would never notice them disagree — and this is
     // exactly where the previous application's costly defects lived.
-    const result = await signIn.signIn(EMAIL, PASSWORD);
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -282,7 +302,7 @@ describe("the seam: a session sign-in issues is one the resolver accepts", () =>
   });
 
   it("stops resolving the moment session_version is bumped", async () => {
-    const result = await signIn.signIn(EMAIL, PASSWORD);
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -312,3 +332,108 @@ async function weakHashOf(password: string): Promise<string> {
   });
   return ["scrypt", 16_384, 8, 1, salt.toString("base64"), hash.toString("base64")].join("$");
 }
+
+describe("rate limiting protects the expensive path", () => {
+  it("stops accepting attempts for an address once its bucket is empty", async () => {
+    // Ten wrong passwords are allowed (a real person does fumble); the eleventh is not.
+    for (let attempt = 1; attempt <= 10; attempt += 1) {
+      const result = await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+      expect(result).toMatchObject({ ok: false, message: SIGN_IN_FAILED_MESSAGE });
+    }
+
+    const limited = await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+
+    expect(limited.ok).toBe(false);
+    if (limited.ok) return;
+    expect(limited.message).toBe(SIGN_IN_RATE_LIMITED_MESSAGE);
+    expect(limited.retryAfterSeconds).toBeGreaterThan(0);
+    expect(failures.at(-1)?.reason).toBe("rate-limited-email");
+  });
+
+  it("refuses the CORRECT password once the limit is hit, and does not issue a session", async () => {
+    // The point of a limiter: it must not be possible to grind through a wordlist and
+    // be let in on the attempt that happens to be right.
+    for (let i = 0; i < 10; i += 1) await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
+
+    expect(result).toMatchObject({ ok: false, message: SIGN_IN_RATE_LIMITED_MESSAGE });
+    const sessions = await asOwner(`SELECT id FROM app_session`);
+    expect(sessions.rows).toHaveLength(0);
+  });
+
+  it("lets the address try again once the bucket has refilled", async () => {
+    for (let i = 0; i < 10; i += 1) await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({
+      message: SIGN_IN_RATE_LIMITED_MESSAGE,
+    });
+
+    // One token every thirty seconds.
+    clock = new Date(clock.getTime() + 30_000);
+
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
+  });
+
+  it("clears the address's bucket after a success, so fumbling is not remembered", async () => {
+    for (let i = 0; i < 9; i += 1) await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
+
+    // Back to a full bucket: nine more wrong attempts are tolerated again.
+    for (let i = 0; i < 9; i += 1) {
+      expect(await signIn.signIn(EMAIL, "wrong password entirely", FROM)).toMatchObject({
+        message: SIGN_IN_FAILED_MESSAGE,
+      });
+    }
+  });
+
+  it("limits an unknown address too, so waiting does not confirm an account exists", async () => {
+    // If the limit only applied to registered addresses, being told to wait would be an
+    // enumeration oracle — the exact thing the single failure message closes.
+    for (let i = 0; i < 10; i += 1) {
+      await signIn.signIn("nobody@example.com", PASSWORD, FROM);
+    }
+
+    const limited = await signIn.signIn("nobody@example.com", PASSWORD, FROM);
+    expect(limited).toMatchObject({ message: SIGN_IN_RATE_LIMITED_MESSAGE });
+  });
+
+  it("caps attempts per IP across many different addresses", async () => {
+    // Varying the email defeats the per-email limit entirely, which is why there are
+    // two dimensions. Thirty attempts from one address, then it stops.
+    for (let i = 0; i < 30; i += 1) {
+      const result = await signIn.signIn(`nobody-${i}@example.com`, PASSWORD, FROM);
+      expect(result).toMatchObject({ ok: false, message: SIGN_IN_FAILED_MESSAGE });
+    }
+
+    const limited = await signIn.signIn("nobody-31@example.com", PASSWORD, FROM);
+
+    expect(limited).toMatchObject({ message: SIGN_IN_RATE_LIMITED_MESSAGE });
+    expect(failures.at(-1)?.reason).toBe("rate-limited-ip");
+  });
+
+  it("delays, but does not lock out, a user targeted by a flood from elsewhere", async () => {
+    // THIS TEST DISPROVED A CLAIM I HAD WRITTEN IN A COMMENT. I had asserted that
+    // checking the IP limit first prevented a flood from draining the target's email
+    // bucket. It does not, and no per-email limit can: attempts from anywhere count
+    // against the address being attacked.
+    //
+    // So the honest property is not "cannot be locked out", it is "cannot be locked out
+    // for long". That is the trade every per-account limiter makes, and it is worth
+    // making — the alternative is an account that can be guessed at indefinitely.
+    for (let i = 0; i < 40; i += 1) {
+      await signIn.signIn(EMAIL, "wrong password entirely", { ip: "198.51.100.9" });
+    }
+
+    // The real user, from their own address, is refused right now.
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({
+      ok: false,
+      message: SIGN_IN_RATE_LIMITED_MESSAGE,
+    });
+
+    // But only for seconds: one token returns every thirty.
+    clock = new Date(clock.getTime() + 30_000);
+
+    expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
+  });
+});

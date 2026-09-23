@@ -107,7 +107,7 @@ is sent back.
   invalidate.
 - **Reset tokens:** single-use, expiring, and the request path never reveals whether an
   address exists.
-- **Multi-factor authentication** available to tenants and mandatory for our own staff.
+- **Multi-factor authentication** available to tenants and **mandatory** for our own staff and administrators — see the baseline below.
 - **Input validated at the boundary by a schema**; output **projected**, not filtered.
 - **Secrets in configuration**, never in code, logs, migrations or fixtures. No personal data
   in logs.
@@ -119,6 +119,42 @@ is sent back.
   or raw upstream messages.
 - OWASP guidance, least privilege, dependency scanning, encrypted backups with **tested
   restores**, and a written incident and breach response plan.
+
+### 5.1 Staff and administrator accounts — the higher bar (owner requirement, 2026-09-23)
+
+Our own employees and platform administrators hold the most dangerous access in the system: the
+admin console can suspend a tenant, change pricing, read audit detail and **impersonate a
+tenant**. One compromised staff account is worth more than any single tenant's. So staff accounts
+meet a stricter baseline than tenants, and these are minimums rather than aspirations:
+
+- **MFA is mandatory, not offered.** A staff account without a second factor cannot sign in —
+  enrolment happens before first use, not "soon". TOTP at minimum; a hardware key is preferred for
+  anyone who can impersonate. Recovery codes are issued once, shown once, and stored hashed.
+- **A longer password minimum than tenants** (20 characters against 12), and the same hashing
+  rules. Length, not character classes: "one symbol" reliably produces `Password1!`.
+- **Named individual accounts. No shared logins, ever**, and no shared credentials in a password
+  manager note. An action must attribute to a person, or the audit log is decoration.
+- **Short sessions with a hard expiry, and re-authentication for dangerous actions** —
+  impersonation, changing a plan or price, reading unredacted money detail, changing another
+  person's access. Re-authentication means the second factor again, not just a password.
+- **Least privilege by named capability.** No "admin" role that means everything; a person holds
+  the capabilities their job needs, and gaining one is an audited grant by someone else.
+- **Impersonation is exceptional, visible and bounded:** a recorded reason, a time limit, an entry
+  the tenant can see, and never a route to a credential or a payment instrument.
+- **No standing access to production data.** Access is requested, time-limited, logged, and
+  reviewed — and never to satisfy curiosity about a tenant's business.
+- **Offboarding the same day**, with every session invalidated immediately (the session-version
+  counter in ADR 0013 makes that one update) and capabilities revoked before the exit conversation
+  is over.
+- **Every staff action is audited with the actor, the tenant, the action and the time**, and staff
+  cannot edit or delete the audit trail.
+- **Enforced by the system, not by policy.** Each of the above is a check in code with a test, not
+  a paragraph in a handbook. A rule only staff goodwill upholds is not a control.
+
+**Where we stand today, plainly (Rule 17):** none of this is built. The admin console exists in
+`original-app/` with a password, a 30-day session, no second factor and impersonation. **MFA for
+staff is a launch blocker**, not a later improvement, and it is the largest single security gap in
+the product.
 
 ## 6. Data integrity
 

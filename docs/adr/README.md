@@ -28,3 +28,4 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0013](0013-default-deny-auth-and-session-revocation.md) | Routes declare their protection and default to refusal; identity re-resolved per request; sessions revocable by version | Accepted |
 | [0014](0014-password-hashing.md) | Passwords hashed with Node's scrypt, parameters stored in the hash, rehash on successful sign-in | Accepted |
 | [0015](0015-credentials-and-self-service-signup.md) | Credentials in their own table outside RLS; sign-in email globally unique; tenants sign themselves up free and upgrade by card | Accepted |
+| [0016](0016-rate-limiting.md) | Token buckets in Postgres, per IP and per hashed email, checked before the expensive hash | Accepted |

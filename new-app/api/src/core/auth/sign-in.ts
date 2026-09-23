@@ -25,6 +25,12 @@
 import { randomUUID } from "node:crypto";
 
 import { type SessionRef } from "./caller.js";
+import {
+  RATE_LIMITS,
+  type RateLimiter,
+  emailKey,
+  ipKey,
+} from "../rate-limit/rate-limiter.js";
 import { hashPassword, needsRehash, verifyPassword } from "./password.js";
 import { type Queryable } from "./db-caller-resolver.js";
 import { withTenant, withoutTenant } from "../tenancy/tenant-context.js";
@@ -37,16 +43,39 @@ import { withTenant, withoutTenant } from "../tenancy/tenant-context.js";
  */
 export const SIGN_IN_FAILED_MESSAGE = "Email or password is wrong.";
 
+/**
+ * What a rate-limited caller is told.
+ *
+ * Necessarily different from the message above — a person who has genuinely mistyped
+ * six times needs to know that waiting will help, or they will keep trying and
+ * conclude the product is broken. It is safe to distinguish because the limit is
+ * consumed for unknown addresses too, so this sentence says nothing about whether an
+ * account exists.
+ */
+export const SIGN_IN_RATE_LIMITED_MESSAGE =
+  "Too many sign-in attempts. Please wait a moment and try again.";
+
 export type SignInResult =
   | { readonly ok: true; readonly session: SessionRef; readonly expiresAt: Date }
-  | { readonly ok: false; readonly message: string };
+  | {
+      readonly ok: false;
+      readonly message: string;
+      /**
+       * Present only when a limit was hit, for a Retry-After header. It reveals
+       * nothing about the account: the limit is consumed for unknown addresses too,
+       * so being told to wait does not confirm anyone is registered.
+       */
+      readonly retryAfterSeconds?: number;
+    };
 
 /** Why a sign-in failed. For the log and the audit trail — never for the response. */
 export type SignInFailure =
   | "unknown-email"
   | "wrong-password"
   | "user-deactivated"
-  | "tenant-suspended";
+  | "tenant-suspended"
+  | "rate-limited-email"
+  | "rate-limited-ip";
 
 /**
  * How long a session lasts without being used.
@@ -94,6 +123,13 @@ export class SignInService {
   constructor(
     private readonly db: Queryable,
     private readonly log: SignInLog,
+    /**
+     * Not optional. Sign-in costs ~67 MB and ~150 ms by design (ADR 0014) on an
+     * unauthenticated endpoint, so a few hundred concurrent attempts would exhaust
+     * the instance without guessing a single password. A constructor that allowed
+     * this to be omitted would eventually be called without it.
+     */
+    private readonly limiter: RateLimiter,
     /** Injected so tests can control expiry without waiting twelve hours. */
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -110,8 +146,54 @@ export class SignInService {
     return email.trim().toLowerCase();
   }
 
-  async signIn(email: string, password: string): Promise<SignInResult> {
+  /**
+   * @param from Where the attempt came from. The IP is required rather than optional:
+   *   the per-email limit alone is trivially defeated by varying the address, and an
+   *   optional parameter is one a caller forgets.
+   */
+  async signIn(
+    email: string,
+    password: string,
+    from: { readonly ip: string },
+  ): Promise<SignInResult> {
     const normalised = SignInService.normaliseEmail(email);
+
+    // Limits are checked BEFORE the hash, which is the whole point: the expensive work
+    // must be what is being protected, not what happens first.
+    //
+    // The IP limit is checked FIRST because it is the one protecting the machine: a
+    // flooding host is cut off before we do any per-account work for it.
+    //
+    // A KNOWN WEAKNESS, found by a test that disproved an earlier claim in this
+    // comment: attempts from any address still drain the TARGET's email bucket, so an
+    // attacker can deliberately delay one user's sign-in. Ordering does not prevent
+    // that, and no per-email limit can — the choice is between "an account can be
+    // guessed at forever" and "an account can be delayed". We take the delay, and keep
+    // it SHORT: the bucket refills a token every thirty seconds, so the legitimate user
+    // is inconvenienced for seconds rather than locked out, and there is a test that
+    // holds that property. ADR 0016 records it as accepted rather than solved.
+    const ip = await this.limiter.consume(ipKey("signin", from.ip), RATE_LIMITS.signInPerIp);
+    if (!ip.allowed) {
+      this.log.failed(normalised, "rate-limited-ip");
+      return {
+        ok: false,
+        message: SIGN_IN_RATE_LIMITED_MESSAGE,
+        retryAfterSeconds: ip.retryAfterSeconds,
+      };
+    }
+
+    const perEmail = await this.limiter.consume(
+      emailKey("signin", normalised),
+      RATE_LIMITS.signInPerEmail,
+    );
+    if (!perEmail.allowed) {
+      this.log.failed(normalised, "rate-limited-email");
+      return {
+        ok: false,
+        message: SIGN_IN_RATE_LIMITED_MESSAGE,
+        retryAfterSeconds: perEmail.retryAfterSeconds,
+      };
+    }
 
     // The bootstrap read, outside row-level security. app_credential is one of exactly
     // two tables that allow this, and the reason is in its migration.
@@ -204,6 +286,12 @@ export class SignInService {
         expiresAt.toISOString(),
       ),
     );
+
+    // A successful sign-in clears this address's bucket, so yesterday's fumbling never
+    // counts against today. The IP bucket is deliberately NOT cleared: one valid
+    // account behind an address must not buy an attacker unlimited attempts at every
+    // other account behind it.
+    await this.limiter.reset(emailKey("signin", normalised));
 
     return { ok: true, session: { sessionId, version: user.session_version }, expiresAt };
   }

@@ -100,7 +100,8 @@ fails the build. `@PublicRoute` needs a real reason — that reason is what make
 open surface a glance instead of an audit. Running the api tests prints the full route inventory
 with its protection.
 
-Also built: **password hashing** (Node's scrypt, parameters stored in the hash, rehash on
+Also built: **rate limiting** (token buckets in Postgres, per IP and per hashed email, checked
+before the expensive hash — ADR 0016), **password hashing** (Node's scrypt, parameters stored in the hash, rehash on
 successful sign-in — ADR 0014) and **sign-in** (ADR 0015). Credentials live in `app_credential`,
 outside row-level security, because sign-in must find a user by email before any tenant is known;
 that is one of exactly **two** RLS exemptions, both named with their reasons in
@@ -108,17 +109,20 @@ that is one of exactly **two** RLS exemptions, both named with their reasons in
 
 Not built yet, and each is honest work owed rather than a detail:
 
-- **Rate limiting.** A sign-in costs ~67 MB and ~150 ms by design, on an unauthenticated
-  endpoint. That is a denial-of-service lever until a limiter exists. **The most urgent gap
-  here.**
 - **Sign-up.** Tenants register themselves free on the website (Rule 14, ADR 0015). It needs
   rate limiting, email verification before anything costs us money, and a duplicate registration
   that does **not** reveal the address is taken — it emails the existing owner instead. That last
   one means sign-up depends on the messaging service existing first.
 - **HTTP transport for sessions** — cookie, CSRF, rotation-on-use. Sign-in returns a session
   reference; nothing yet carries it over the wire.
-- **MFA** — the largest open gap in Rule 5. Cheap to add now: a factor check belongs in the
-  resolver's step 4.
+- **MFA — and for staff it is a launch blocker, not an improvement** (Rule 5.1). Our own
+  employees and administrators must have a second factor, a 20-character password minimum, named
+  individual accounts, short sessions with re-authentication before impersonation or a price
+  change, and same-day offboarding. None of it is built. The admin console that can impersonate a
+  tenant currently has a password and nothing else. A factor check belongs in the resolver's
+  step 4.
+- **Rate-limit housekeeping.** `rate_limit_bucket` grows until old rows are deleted. An absent
+  bucket is a full one, so nothing breaks — but the table needs a periodic sweep.
 - A guard asserting `app_user.email` and `app_credential.email` stay equal.
 - **`DefaultDenyGuard` is not yet registered globally**, because there is no application module.
   Until it is, its tests prove the logic and not the production wiring.
