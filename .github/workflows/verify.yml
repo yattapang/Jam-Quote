@@ -83,3 +83,53 @@ jobs:
       - name: Test
         if: ${{ !cancelled() }}
         run: npm test
+
+  # ---------------------------------------------------------------------------
+  # new-app is a separate workspace root (ADR 0010), so it is a separate job
+  # rather than a step: it has its own lockfile, its own dependencies, and a
+  # failure in one application should not hide the state of the other.
+  #
+  # It gates from its first commit on purpose. The Phase 0 audit's blunt finding
+  # was that the previous application had guards nothing ran, so a guard could be
+  # satisfied by an import line and nobody noticed. A guard that does not gate is
+  # a comment.
+  # ---------------------------------------------------------------------------
+  verify-new-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: new-app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22, not 20: the contract generator runs TypeScript directly via
+          # --experimental-strip-types, which needs 22.6+.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: new-app/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The database and tenancy tests replay the real migrations against PGlite,
+      # which needs no service container: it is Postgres compiled to WebAssembly,
+      # in process.
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test
+
+      # Proves the checked-in wire contract still matches the API's @wire types.
+      # Regenerating here rather than trusting the committed file is the point:
+      # drift becomes a red run instead of a client compiling against a shape the
+      # server no longer sends.
+      - name: Contract is not stale
+        if: ${{ !cancelled() }}
+        run: npm run contract:generate && git diff --exit-code -- packages/contract/src/generated
