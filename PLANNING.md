@@ -29,7 +29,9 @@ dashboard setting, not a file); tier prices per country; Pryvis brand assets.
 
 The product is **Pryvis** (pryvis.com); JamQuote was the working name - ADR 0009.
 
-- **`docs/RULES.md`** - the canonical rulebook: Rule 0 plus the 17 approved rules.
+- **`docs/RULES.md`** - the canonical rulebook: Rule 0 plus the 18 approved rules.
+- **`docs/SERVICE-REGISTER.md`** - the asset register: every service and third party, why it
+  was chosen, what it costs, what data it holds, and the exit plan if it vanishes (Rule 18).
 - **`docs/BUILD-RULES.md`** - the enforcement detail behind those rules: naming and folder structure,
   comments that state WHY, the ADR requirement, the three test layers, compliance as data,
   currency and localisation abstracted, a tenant- and country-aware model, and the

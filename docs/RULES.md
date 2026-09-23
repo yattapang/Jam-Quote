@@ -238,6 +238,28 @@ Read-only work may run alongside a single build agent, in different files. Every
 Rule 0, an explicit do-not-touch list, and must report what it planted, what it proved, and
 what it did not.
 
+## 18. Every service we depend on is recorded, with the reason (owner requirement)
+
+`docs/SERVICE-REGISTER.md` is the asset register: every external service, piece of
+infrastructure and third party, with **what it does, why it was chosen, what it costs, what data
+it holds, and what we would do if it disappeared.** A service running in production and missing
+from the register is a defect, not a paperwork oversight, and it is updated in the same change
+that adds, removes or repoints a service.
+
+It doubles as the **vendor and sub-processor register** — the *holds personal data* column is
+what a tenant is entitled to ask for, and the basis of a Record of Processing Activities if one
+is ever required.
+
+Code dependencies are **not** listed by hand. They belong in a generated **SBOM** (CycloneDX or
+SPDX) produced from the lockfile in CI, so "are we affected by this advisory?" is a query rather
+than an investigation. An SBOM nobody scans is a file, not a control, so it lands together with
+dependency-vulnerability scanning and secret scanning.
+
+The register never contains a credential. It records *where* a secret lives, never its value.
+
+**Enforcement.** Review, and the register's own "what this says about our exposure" section,
+which is where a dependency with no substitute has to be admitted rather than discovered later.
+
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
