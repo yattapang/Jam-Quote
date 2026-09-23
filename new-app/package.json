@@ -1,0 +1,31 @@
+{
+  "name": "pryvis",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pryvis — quoting and invoicing for contractors. The rebuild (ADR 0010, ADR 0012).",
+  "workspaces": [
+    "db",
+    "api",
+    "web",
+    "mobile",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "test:integration": "turbo run test:integration"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "@types/node": "^22.10.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@11.13.0"
+}

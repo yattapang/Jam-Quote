@@ -1,0 +1,16 @@
+{
+  "name": "@pryvis/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The schema, its migrations, its row-level-security policies and its synthetic seeds. The single source of truth for database structure (ADR 0012).",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prisma:generate": "prisma generate --schema schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema schema.prisma"
+  },
+  "devDependencies": {
+    "prisma": "^6.1.0"
+  }
+}

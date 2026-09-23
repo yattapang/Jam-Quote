@@ -1,0 +1,3 @@
+# Prisma records the provider here so a migration written for one database
+# cannot be replayed against another.
+provider = "postgresql"

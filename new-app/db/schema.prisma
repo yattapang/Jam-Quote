@@ -1,0 +1,109 @@
+// Pryvis — the database schema, and the single source of truth for its structure
+// (ADR 0012). Read by the api, by the migrations, by the seeds and by tooling,
+// which is why it lives in db/ and belongs to none of them.
+//
+// WHAT THIS FILE CANNOT TELL YOU
+//
+// Prisma does not model row-level security, so the isolation rule that actually
+// protects tenants is NOT visible here. It lives in db/policies/, is applied by
+// the migrations, and is what makes a forgotten `where` clause a no-op instead of
+// a breach. Read db/policies/001-tenant-isolation.sql before trusting anything in
+// this file to keep tenants apart.
+//
+// CONVENTIONS (ADR 0012)
+//
+// - Tables and columns are snake_case; Prisma models are PascalCase and map onto
+//   them explicitly, so the SQL a reviewer reads matches the SQL in the policies.
+// - The tenant column is `tenant_id` on every tenant-owned table, with no
+//   exceptions, because the policy in db/policies/ is written once against that
+//   name and a table that spells it differently is a table with no protection.
+// - Money is integer minor units in 64-bit columns, named `…_minor_units`
+//   (ADR 0011). No money exists yet in this skeleton; when it arrives it arrives
+//   as BigInt.
+// - State that grows (plan, status) is text, not a database enum (ADR 0002).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Migrations run over a direct (unpooled) connection. Prisma takes a
+  // session-level advisory lock while migrating; through a connection pooler
+  // that lock is recycled onto another connection and never released, which
+  // stranded a lock on every boot in the previous application and eventually
+  // stopped the service from starting at all. Learned the expensive way — see
+  // original-app/render.yaml.
+  directUrl = env("DIRECT_URL")
+}
+
+/// A tenant is one contracting business using Pryvis. It is the unit of
+/// isolation: every other tenant-owned row points at exactly one of these, and
+/// the row-level-security policies are written in terms of it.
+///
+/// The contractor never sees the word "tenant" — the UI says "business"
+/// (ADR 0012). The word is for us, and it is used consistently in the code so
+/// that "which business?" never has two meanings.
+model Tenant {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The trading name, as the contractor types it. Displayed on their documents.
+  name String
+
+  /// ISO 3166-1 alpha-2. Selects the jurisdiction rule pack: tax rules, taxpayer
+  /// id format, document wording, day boundary, and the money ceiling
+  /// (ADR 0011). Never branched on in product code (Rule 3) — it is a key into
+  /// data.
+  countryCode String @map("country_code") @db.Char(2)
+
+  /// ISO 4217. The currency this tenant quotes and invoices in, which is
+  /// deliberately separate from the currency Pryvis bills them in.
+  currency String @db.Char(3)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users AppUser[]
+
+  @@map("tenant")
+}
+
+/// A person who signs in. Belongs to exactly one tenant.
+///
+/// Named AppUser, mapping to "app_user", because `user` is reserved in Postgres
+/// and a table called "user" needs quoting everywhere forever — including inside
+/// the policy SQL, where an unquoted slip would be a silent failure.
+model AppUser {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The isolation key. Present on every tenant-owned table under exactly this
+  /// name (ADR 0012), because db/policies/ is written against it.
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Unique per tenant, not globally: the same person may legitimately hold an
+  /// account at two contracting businesses, and a global unique would make one
+  /// tenant's sign-up fail because of a row it is not allowed to see — leaking
+  /// the existence of another tenant's user through an error message.
+  ///
+  /// Stored already lower-cased and trimmed by core/auth, not by a database
+  /// type: citext would need a preview feature and an extension, and one
+  /// normalisation rule applied at the boundary is easier for a reader to find
+  /// than a collation they have to know to look for. The unique index below is
+  /// therefore only as good as that rule, which is why the rule has its own test.
+  email        String @db.VarChar(320)
+  passwordHash String @map("password_hash")
+
+  /// "owner" | "staff". Text, not an enum: roles grow, and a new role should not
+  /// need a migration (ADR 0002). Authorisation is default-deny and re-resolved
+  /// from this row on every request, never read from a token.
+  role String
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("app_user")
+}

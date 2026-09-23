@@ -1,7 +1,7 @@
 # 0012 — The structure of `new-app/`
 
 **Date:** 2026-09-23
-**Status:** Proposed — awaiting the owner's approval before any file lands in `new-app/`
+**Status:** Accepted — approved by the owner on 2026-09-23
 **Follows:** ADR 0010 (selective rebuild), ADR 0009 (the brand is Pryvis), the brief §4 and §7
 
 ## Context
@@ -49,6 +49,7 @@ new-app/
         audit/               who did what, to which tenant, when
         money/               the boundary conversion and the ceiling check (ADR 0011)
         errors/              what a caller is allowed to be told
+        architecture/        the guards that hold this structure in place
       modules/
         tenants/             each module: <name>.controller.ts, .service.ts, .dto.ts,
         users/                 index.ts (its public surface), colocated *.test.ts
