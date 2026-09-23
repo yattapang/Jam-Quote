@@ -44,7 +44,16 @@ function collectSourceFiles(dir: string, out: string[] = []): string[] {
     const full = path.join(dir, entry);
     const st = statSync(full);
     if (st.isDirectory()) collectSourceFiles(full, out);
-    else if (SCAN_EXTENSIONS.has(path.extname(entry)) && entry !== "brand-name-guard.test.ts") out.push(full);
+    else if (
+      SCAN_EXTENSIONS.has(path.extname(entry)) &&
+      entry !== "brand-name-guard.test.ts" &&
+      // This guard's sibling tests (layout.test.ts, lib/pdf/brand-name.test.ts,
+      // app/q/[token]/brand-name.test.ts) name "JamQuote" in their own string
+      // literals to test FOR its absence elsewhere — scanning them would report
+      // their own test assertions as the defect they exist to catch.
+      entry !== "brand-name.test.ts"
+    )
+      out.push(full);
   }
   return out;
 }

@@ -5,6 +5,16 @@ import { PaymentsService } from "./payments.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
+/**
+ * An EntitlementsService that entitles everything. Recording a payment is a Pro feature
+ * (ADR 0007), asserted at the top of recordManualPayment; these tests are about what a
+ * payment DOES, not about who may make one. The refusal itself is tested in
+ * entitlements.service.test.ts and end to end in the integration flow.
+ */
+function allowAll() {
+  return { assertFeature: vi.fn(async () => undefined) };
+}
+
 function makeWiPay(overrides: Partial<Record<string, any>> = {}) {
   return {
     verifyCallback: vi.fn().mockReturnValue(true),
@@ -28,7 +38,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
   it("ignores an unverified callback without touching the database", async () => {
     const wipay = makeWiPay({ verifyCallback: vi.fn().mockReturnValue(false) });
     const prisma = { invoice: { findUnique: vi.fn() } };
-    const svc = new PaymentsService(prisma as any, wipay as any);
+    const svc = new PaymentsService(prisma as any, wipay as any, allowAll() as any);
 
     await svc.handleWiPayCallback(successPayload);
     expect(prisma.invoice.findUnique).not.toHaveBeenCalled();
@@ -49,7 +59,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
       invoice: { findUnique: vi.fn().mockResolvedValue(invoice) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await svc.handleWiPayCallback(successPayload);
 
@@ -61,7 +71,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
       invoice: { findUnique: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await svc.handleWiPayCallback({ ...successPayload, order_id: "INV-0001" });
 
@@ -70,7 +80,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
 
   it("ignores a callback carrying no order_id", async () => {
     const prisma = { invoice: { findUnique: vi.fn() }, $transaction: vi.fn() };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await svc.handleWiPayCallback({ ...successPayload, order_id: "" });
 
@@ -98,7 +108,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
       invoice: { findUnique: vi.fn().mockResolvedValue(invoice) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await svc.handleWiPayCallback(successPayload);
 
@@ -136,7 +146,7 @@ describe("PaymentsService.handleWiPayCallback", () => {
       invoice: { findUnique: vi.fn().mockResolvedValue(invoice) },
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await svc.handleWiPayCallback(successPayload);
     expect(tx.invoice.update).not.toHaveBeenCalled();
@@ -172,7 +182,7 @@ describe("PaymentsService.recordManualPayment", () => {
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), prisma, tx };
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any), prisma, tx };
   }
 
   it("records a cash payment and marks the invoice partial", async () => {
@@ -263,7 +273,7 @@ describe("PaymentsService.recordManualPayment", () => {
       invoice: { findFirst: vi.fn().mockResolvedValue(null) },
       $transaction: vi.fn(),
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await expect(
       svc.recordManualPayment({
@@ -295,7 +305,7 @@ describe("PaymentsService.startCardPayment", () => {
       invoice: { findFirst: vi.fn().mockResolvedValue(invoice) },
       payment: { create: vi.fn().mockResolvedValue({}) },
     };
-    const svc = new PaymentsService(prisma as any, wipay as any);
+    const svc = new PaymentsService(prisma as any, wipay as any, allowAll() as any);
 
     const result = await svc.startCardPayment("biz-1", "i1");
 
@@ -316,7 +326,7 @@ describe("PaymentsService.startCardPayment", () => {
     const prisma = {
       invoice: { findFirst: vi.fn().mockResolvedValue(null) },
     };
-    const svc = new PaymentsService(prisma as any, makeWiPay() as any);
+    const svc = new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any);
 
     await expect(svc.startCardPayment("biz-attacker", "i1-belongs-to-biz-1")).rejects.toBeInstanceOf(
       NotFoundException,
@@ -344,7 +354,7 @@ describe("PaymentsService.voidPayment", () => {
       $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(tx)),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), prisma, tx };
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any), prisma, tx };
   }
 
   const PAYMENT = { id: "pay-1", amountCents: 40_000, invoiceId: "i1" };
@@ -459,7 +469,7 @@ describe("the WiPay callback settles exactly one payment", () => {
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return { svc: new PaymentsService(prisma as any, makeWiPay() as any), tx };
+    return { svc: new PaymentsService(prisma as any, makeWiPay() as any, allowAll() as any), tx };
   }
 
   it("scopes the transition by providerRef, not just invoice and status", async () => {

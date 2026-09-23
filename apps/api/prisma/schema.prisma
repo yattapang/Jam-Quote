@@ -219,6 +219,7 @@ model Business {
   materialPriceEntries     MaterialPriceEntry[]
   suppliers                Supplier[]
   logo                     BusinessLogo?
+  entitlementGrants        BusinessEntitlementGrant[]
 }
 
 /// A tenant's logo for their quote and invoice documents (#27).
@@ -1148,6 +1149,75 @@ model PricingConfig {
   proAnnualPriceCents  Int
   currency             String   @default("JMD")
   updatedAt            DateTime @updatedAt
+}
+
+// Per-country commercial layer for the tier ladder (ADR 0007). One row per
+// (country, tier). PLATFORM-WIDE, not tenant-owned: this is the price list, so
+// it deliberately carries no businessId — the BUILD-RULES rule 7 exception is
+// stated here as that rule requires.
+//
+// Every value column is NULLABLE and means "no override": what a tier INCLUDES,
+// and its baseline numeric limits, live in @jamquote/core
+// (billing/entitlements.ts) so a missing or half-migrated row can never leave a
+// tenant with no rules — the same floor-plus-overrides shape as RulePackConfig.
+// Admin-editable later (part B); seeded from PricingConfig for JM so nothing
+// changes on deploy.
+model PlanTierConfig {
+  countryCode String // ISO 3166-1 alpha-2, matches Business.countryCode
+  /// PlanTier from @jamquote/core — "free" | "pro" | "business". Plain text
+  /// beside Subscription.plan, not a database enum (BUILD-RULES rule 1).
+  tierCode    String
+
+  /// What the platform charges for this tier, per term, in the currency below.
+  /// 0 is a real price (Free); NULL means "not sold in this country yet", which
+  /// is why these are not NOT NULL DEFAULT 0 — a tier nobody has priced must be
+  /// distinguishable from a free one.
+  monthlyPriceCents Int?
+  annualPriceCents  Int?
+  /// The PLATFORM's billing currency here, which is not the tenant's
+  /// Business.currency (BUILD-RULES rule 6).
+  currency          String?
+
+  /// Numeric-limit overrides, keyed by the EntitlementLimit names in core:
+  /// quote.monthlyAllowance and user.seats. NULL falls back to core's baseline;
+  /// a stored NULL therefore cannot express "unlimited" — that is what the core
+  /// baseline says for Pro and Business, and an override that wants to REMOVE a
+  /// limit a country had is a change to the baseline, not a row edit.
+  quoteMonthlyAllowance Int?
+  usersAllowed          Int?
+
+  updatedByUserId String?
+  updatedAt       DateTime @updatedAt
+
+  @@id([countryCode, tierCode])
+}
+
+// One entitlement added to one tenant beyond what its tier includes (ADR 0007
+// §5) — the grandfathering record. A tenant's effective set is tier ∪ grants.
+//
+// A row is an assertion by a named person that this tenant may do this, so it
+// keeps who and why: "why can this tenant do that?" has an answer in the admin
+// console. Revoking is deleting the row, which is why there is no `revokedAt` —
+// a grant that has been taken away is not a permission in any state.
+model BusinessEntitlementGrant {
+  id         String   @id @default(uuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  /// Entitlement from @jamquote/core (e.g. "payment.record"). Plain text; a
+  /// name core no longer knows is IGNORED by the resolver rather than trusted.
+  feature    String
+  grantedAt  DateTime @default(now())
+  /// The staff user who granted it. NULL means the platform did — today only
+  /// the grandfathering migration, which no user performed.
+  grantedBy  String?
+  /// Why, in words, for the admin console. Required: a grant with no reason is
+  /// the thing this table exists to prevent.
+  reason     String
+
+  /// One row per business per feature: granting twice is the same permission,
+  /// and two rows would make revoking it look done while it was not.
+  @@unique([businessId, feature])
+  @@index([businessId])
 }
 
 // Admin-editable overrides on top of the static @jamquote/core jurisdiction

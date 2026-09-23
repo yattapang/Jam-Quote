@@ -8,8 +8,8 @@ import { QuotesService } from "./quotes.service.js";
 import { QuoteExpiryService } from "./quote-expiry.service.js";
 
 @Module({
-  // BillingModule exports PricingService, used by the free-tier gate on
-  // quote creation (see QuotesService.create). AuthModule exports JwtModule,
+  // BillingModule exports EntitlementsService, which owns the monthly quote
+  // allowance the free-tier gate enforces (see QuotesService.create). AuthModule exports JwtModule,
   // needed by TenantAuthGuard (applied on QuotesController) to verify tokens.
   imports: [AuthModule, BusinessModule, BillingModule],
   // PublicQuotesController is deliberately NOT behind TenantAuthGuard —

@@ -11,7 +11,7 @@ import { softLoad } from "@/lib/soft-load";
 import { computeDashboardStats, QuoteStatus, safeHref } from "@jamquote/core";
 import shared from "../shared.module.css";
 
-export const metadata = { title: "Dashboard · JamQuote" };
+export const metadata = { title: "Dashboard · Pryvis" };
 
 export default async function DashboardPage() {
   // Quotes and invoices are this page's primary data (every stat card): a

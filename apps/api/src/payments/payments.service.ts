@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   COLLECTED_PAYMENT_STATUSES,
+  Entitlement,
   InvoiceStatus,
   PaymentMethod,
   amountToRequest,
@@ -8,6 +9,7 @@ import {
   type RetainableInvoice,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { EntitlementsService } from "../billing/entitlements.service.js";
 import { WiPayService } from "./wipay.service.js";
 
 /**
@@ -35,6 +37,7 @@ export class PaymentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly wipay: WiPayService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   /**
@@ -225,9 +228,20 @@ export class PaymentsService {
     reference?: string;
     paidAt?: Date;
   }): Promise<void> {
-    // Ownership check before anything else — see the IDOR note on the
-    // controller. Only the id is needed here; paidCents is deliberately NOT
-    // read outside the transaction (see below).
+    // ENTITLEMENT FIRST, before the ownership read and before any write: recording
+    // payments is on Pro (docs/TIERS.md — invoicing is the Pro line). Refused as a 402
+    // carrying the feature and the tier that includes it, so the contractor is told what
+    // to buy rather than meeting a wall (ADR 0007 §6).
+    //
+    // Here rather than in the controller because the controller is not the boundary the
+    // mobile app and the sync endpoints come through; the service method is. A tenant
+    // grandfathered into `payment.record` passes this — every business that existed when
+    // entitlements shipped was granted it, since nothing gated it before.
+    await this.entitlements.assertFeature(input.businessId, Entitlement.PAYMENT_RECORD);
+
+    // Ownership check next — see the IDOR note on the controller. Only the id is
+    // needed here; paidCents is deliberately NOT read outside the transaction (see
+    // below).
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: input.invoiceId, businessId: input.businessId },
       select: { id: true },

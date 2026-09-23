@@ -11,8 +11,48 @@ import {
   RateUnit,
 } from "@jamquote/core";
 import { QuotesService } from "./quotes.service.js";
+import { EntitlementsService } from "../billing/entitlements.service.js";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * The gate these harnesses exercise now runs through the REAL `EntitlementsService`
+ * (ADR 0007): the monthly allowance is the named limit `quote.monthlyAllowance`, resolved
+ * as core's baseline overridden by `PlanTierConfig`.
+ *
+ * A stub entitlements object would make every test below pass while proving nothing about
+ * the resolver, so the real service is wired over the harness's own Prisma mock. Only the
+ * three reads it makes and the harness does not define are supplied here:
+ *
+ * - `business` — the country the PlanTierConfig override is keyed by.
+ * - `businessEntitlementGrant` — none, so these tests see tier entitlements only.
+ * - `planTierConfig` — the FREE row carries the harness's `freeQuotesPerMonth`, which is
+ *   what these tests vary. The row for any other tier carries no override, so a Pro tenant
+ *   resolves to core's `null` (unlimited) WITHOUT the pricing mock being read — which is
+ *   what the "never limits a Pro business" test asserts.
+ *
+ * `subscription` is left to the harness's mock, because the plan under test is its input.
+ */
+function entitlementsFor(
+  prisma: object,
+  pricingService: { get: () => Promise<{ freeQuotesPerMonth?: number }> },
+): EntitlementsService {
+  const facade = {
+    ...prisma,
+    business: { findUnique: async () => ({ countryCode: "JM" }) },
+    businessEntitlementGrant: { findMany: async () => [] },
+    planTierConfig: {
+      findUnique: async (args: { where: { countryCode_tierCode: { tierCode: string } } }) => {
+        if (args.where.countryCode_tierCode.tierCode !== "free") {
+          return { quoteMonthlyAllowance: null, usersAllowed: null };
+        }
+        const { freeQuotesPerMonth } = await pricingService.get();
+        return { quoteMonthlyAllowance: freeQuotesPerMonth ?? null, usersAllowed: null };
+      },
+    },
+  };
+  return new EntitlementsService(facade as any);
+}
 
 const line = {
   category: LineCategory.MATERIAL,
@@ -284,7 +324,7 @@ describe("QuotesService.create free-tier gating", () => {
       },
       subscription: { findUnique: vi.fn().mockResolvedValue({ plan }) },
     };
-    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    const svc = new QuotesService(prisma as any, businessService as any, entitlementsFor(prisma, pricingService) as any);
     return { svc, prisma, businessService, pricingService, tx };
   }
 
@@ -805,7 +845,7 @@ describe("what the free allowance counts", () => {
     };
     const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: 5 }) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    const svc = new QuotesService(prisma as any, businessService as any, entitlementsFor(prisma, pricingService) as any);
     return { svc, prisma };
   }
 
@@ -1100,7 +1140,7 @@ describe("the below-cap path: one clientless chain cannot mint unlimited sendabl
       findById: vi.fn().mockResolvedValue({ id: "b1", defaultGctRate: 15, gctRegistered: true }),
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const svc = new QuotesService(prisma as any, businessService as any, pricingService as any);
+    const svc = new QuotesService(prisma as any, businessService as any, entitlementsFor(prisma, pricingService) as any);
 
     function seed(over: Record<string, unknown>) {
       const id = (over.id as string) ?? `seed${++seq}`;
@@ -1366,7 +1406,7 @@ describe("the allowance gate covers every path that mints a quote", () => {
     };
     const pricingService = { get: vi.fn().mockResolvedValue({ freeQuotesPerMonth: 5 }) };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return new QuotesService(prisma as any, {} as any, pricingService as any);
+    return new QuotesService(prisma as any, {} as any, entitlementsFor(prisma, pricingService) as any);
   }
 
   it("refuses `revise` at the cap", async () => {

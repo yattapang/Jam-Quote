@@ -12,6 +12,7 @@ export * from "./quote/job-breakdown.js";
 export * from "./dashboard/stats.js";
 export * from "./reports/summary.js";
 export * from "./billing/subscription.js";
+export * from "./billing/entitlements.js";
 export * from "./costing/job-profit.js";
 export * from "./costing/expense-categories.js";
 export * from "./costing/retention.js";

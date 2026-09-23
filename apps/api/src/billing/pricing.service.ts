@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { PricingConfig } from "@prisma/client";
+import { PlanTier } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import type { UpdatePricingInput } from "./billing.dto.js";
 
@@ -90,6 +91,27 @@ export class PricingService {
       create: { id: PRICING_CONFIG_ID, ...DEFAULT_PRICING, ...patch },
       update: patch,
     });
+
+    // WRITE THROUGH to the free tier's quote allowance in PlanTierConfig.
+    //
+    // Since ADR 0007 the quote gate asks EntitlementsService, which reads
+    // PlanTierConfig.quoteMonthlyAllowance (seeded from this row) and falls back to core's
+    // baseline. This screen is still the only live control for the allowance until part B
+    // moves the editor onto PlanTierConfig per country, so without this an admin editing
+    // "free quotes per month" here would change the number the Settings card SHOWS and not
+    // the one the gate ENFORCES — the exact "3 of 5 and then a refusal" drift ADR 0004 is
+    // about, and the reason this mirror exists rather than two readers of two rows.
+    //
+    // Every country's free row, not JM's: no country literal in product code (BUILD-RULES
+    // rule 5), and this screen is not per country yet, so an edit here means "everywhere
+    // this tier is sold". Part B replaces both sides of this with a per-country editor.
+    if (patch.freeQuotesPerMonth !== undefined) {
+      await this.prisma.planTierConfig.updateMany({
+        where: { tierCode: PlanTier.FREE },
+        data: { quoteMonthlyAllowance: patch.freeQuotesPerMonth },
+      });
+    }
+
     return toSnapshot(updated);
   }
 }

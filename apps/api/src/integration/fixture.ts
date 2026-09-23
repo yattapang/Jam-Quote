@@ -22,6 +22,7 @@ import { vi } from "vitest";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BusinessService } from "../business/business.service.js";
 import { PricingService } from "../billing/pricing.service.js";
+import { EntitlementsService } from "../billing/entitlements.service.js";
 import { CatalogHiddenService } from "../catalogs/catalog-hidden.service.js";
 import { MaterialSchemaService } from "../catalogs/material-schema.service.js";
 import { MaterialFavouritesService } from "../catalogs/material-favourites.service.js";
@@ -68,6 +69,7 @@ export async function startIntegration() {
 
   const business = new BusinessService(prisma);
   const pricing = new PricingService(prisma);
+  const entitlements = new EntitlementsService(prisma);
   const hidden = new CatalogHiddenService(prisma);
   const materialSchema = new MaterialSchemaService(prisma, hidden);
   const wipay = {
@@ -77,12 +79,13 @@ export async function startIntegration() {
   };
   const mailer = { send: vi.fn(async () => true) };
   const audit = new AuditService(prisma);
-  const quotes = new QuotesService(prisma, business, pricing);
+  const quotes = new QuotesService(prisma, business, entitlements);
   const invoices = new InvoicesService(prisma, business);
 
   const svc = {
     business,
     pricing,
+    entitlements,
     materials: new MaterialFavouritesService(prisma, materialSchema, hidden),
     materialPrices: new MaterialPricesService(prisma),
     labour: new LabourRatesService(prisma, hidden),
@@ -93,7 +96,7 @@ export async function startIntegration() {
     jobs: new JobsService(prisma),
     quotes,
     invoices,
-    payments: new PaymentsService(prisma, wipay as unknown as WiPayService),
+    payments: new PaymentsService(prisma, wipay as unknown as WiPayService, entitlements),
     reports: new ReportsService(prisma),
     exports: new ExportsService(prisma),
     audit,

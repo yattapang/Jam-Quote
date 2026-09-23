@@ -1,11 +1,5 @@
 import { randomBytes } from "node:crypto";
-import {
-  BadRequestException,
-  Logger,
-  HttpException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Logger, Injectable, NotFoundException } from "@nestjs/common";
 import type { Prisma } from "@prisma/client";
 import { addressableEmail } from "../common/notify-recipient.js";
 import {
@@ -22,6 +16,7 @@ import {
   lineAmountCents,
   startOfJamaicaDayMs,
   newDocumentGctRatePct,
+  EntitlementLimit,
 } from "@jamquote/core";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { assertClientOwned, assertProjectOwned } from "../common/assert-owned.js";
@@ -29,7 +24,7 @@ import { assertSuppliersOwned } from "../common/assert-suppliers-owned.js";
 import { quoteAllowanceWhere } from "../common/quote-allowance.js";
 import { assertPublicShape } from "../common/public-view.js";
 import { BusinessService } from "../business/business.service.js";
-import { PricingService } from "../billing/pricing.service.js";
+import { EntitlementsService } from "../billing/entitlements.service.js";
 import type {
   CreateQuoteInput,
   QuoteLineItemInput,
@@ -286,7 +281,7 @@ export class QuotesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly businessService: BusinessService,
-    private readonly pricingService: PricingService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   /**
@@ -329,28 +324,37 @@ export class QuotesService {
    * the chain's client instead of by re-filing rows — see
    * `assertChainClientUnchanged`.
    */
+  /**
+   * MOVED ONTO THE ENTITLEMENT RESOLVER (ADR 0007), with no change in behaviour.
+   *
+   * What used to be here: a `Subscription.plan === "pro"` short-circuit, then
+   * `PricingConfig.freeQuotesPerMonth`. What is here now: one named limit,
+   * `quote.monthlyAllowance`, resolved per tenant as core's baseline (3, today's live
+   * value) overridden by `PlanTierConfig` for the tenant's country and tier. A tier whose
+   * allowance is `null` is unlimited — which is how Pro stops being a plan comparison in
+   * this file at all, and how a fourth tier arrives as data rather than as an edit here.
+   *
+   * The COUNT stays in this file, and stays derived from the quotes themselves (ADR 0007
+   * §4): `quoteAllowanceWhere` is the one definition of what "a job quoted" means, shared
+   * with the counter the contractor reads on the Settings card. They had different clauses
+   * once, so the number shown was not the number enforced — "3 of 5" and then a refusal.
+   * The resolver deliberately does not count: only this file knows that one lineage chain
+   * is one job (see the rule above).
+   */
   private async assertCanCreateQuote(businessId: string): Promise<void> {
-    const subscription = await this.prisma.subscription.findUnique({ where: { businessId } });
-    const plan = subscription?.plan === "pro" ? "pro" : "free";
-    if (plan === "pro") return;
+    const allowance = await this.entitlements.limit(businessId, EntitlementLimit.QUOTES_PER_MONTH);
+    if (allowance === null) return; // unlimited: no count needed, and none is made
 
-    const { freeQuotesPerMonth } = await this.pricingService.get();
-    // One definition, shared with the counter the contractor reads on the Settings
-    // card. They had different clauses, so the number shown was not the number
-    // enforced — "3 of 5" and then a refusal.
     const quotesThisMonth = await this.prisma.quote.count({
       where: quoteAllowanceWhere(businessId),
     });
-
-    if (quotesThisMonth >= freeQuotesPerMonth) {
-      throw new HttpException(
-        {
-          message: `You've reached your free plan limit of ${freeQuotesPerMonth} quotes this month. Upgrade to Pro for unlimited quotes.`,
-          code: "FREE_LIMIT_REACHED",
-        },
-        402,
-      );
-    }
+    // Refuses with the same 402, the same `FREE_LIMIT_REACHED` code and the same wording as
+    // before — the web quote builder branches on that code.
+    await this.entitlements.assertWithinLimit(
+      businessId,
+      EntitlementLimit.QUOTES_PER_MONTH,
+      quotesThisMonth,
+    );
   }
 
   /** Write sections + line items for a (just-created, or just-cleared) quote. */
