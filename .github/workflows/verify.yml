@@ -43,6 +43,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # The existing application lives in original-app/ (ADR 0010) and is its
+    # own npm-workspace root, so every step below runs from there. When
+    # new-app/ gains its own gate it becomes a second job, not a change here.
+    defaults:
+      run:
+        working-directory: original-app
+
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +57,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: original-app/package-lock.json
 
       # `npm ci` rather than `npm install`: it installs exactly what the lockfile
       # says, so a run cannot pass against different dependencies than a colleague

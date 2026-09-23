@@ -13,6 +13,18 @@ task.
 carries the owner requirement of 2026-09-23: the code is structured in a professional, standard
 way with inline comments, so that an independent person can follow it.
 
+## Owner decisions, 2026-09-23
+
+| Question | Decision | Recorded in |
+|---|---|---|
+| Is the UAE HVAC product at `jam-quote.vercel.app` ours? | **No** - unrelated product on a near-miss hostname. The single-product scope stands | `docs/PHASE-0-AUDIT.md` §6 |
+| How large must a Jamaican figure be? | **~999,999,999.99 JMD** (99,999,999,999 minor units). Money columns become 64-bit with the ceiling validated at the boundary | ADR 0011 |
+| Rebuild, evolve, or rebuild selectively? | **Rebuild selectively** - rebuild the tenancy, entitlement, auth, messaging, sync and contract layers; port core, the guards and the flow-test harness after review | ADR 0010 |
+| Reorganise the repository? | **Yes** - `original-app/` (read-only), `new-app/`, `docs/`, each app its own workspace root | ADR 0010 |
+
+Outstanding with the owner: repoint Vercel's Root Directory to `original-app/apps/web` (a
+dashboard setting, not a file); tier prices per country; Pryvis brand assets.
+
 ## Governing documents (added 2026-09-20)
 
 The product is **Pryvis** (pryvis.com); JamQuote was the working name - ADR 0009.

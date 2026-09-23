@@ -10,11 +10,19 @@ at `76c8309`) and the Vercel deployment. 40 Prisma models, 48 applied migrations
 TypeScript source files, 2,028 unit tests passing (api 1,067, web 926, mobile 35) plus 39
 cross-section flow tests against a real Postgres.
 
+**Owner decisions on this audit, 2026-09-23.** (1) The UAE HVAC product at
+`jam-quote.vercel.app` is **not** the owner's, so section 6's recommendation stands: one
+product, as currently scoped, with the commercial layer added. (2) Money must reach
+**999,999,999.99 JMD**, so finding 15 is closed by ADR 0011 — 64-bit columns with a validated
+ceiling. (3) **Selective rebuild** (option C of section 7) — ADR 0010. (4) The repository is
+**reorganised** into `original-app/`, `new-app/` and `docs/` — ADR 0010.
+
 Two facts about the brief's assumptions, established before anything else:
 
-1. **The code is not yet in `original-app/`.** The reorganisation described in section 4 of the
-   brief has not happened, so this audit reads the app where it lives today: `apps/api`,
-   `apps/web`, `apps/mobile`, `packages/*`. Nothing here depends on the move.
+1. **The code was not yet in `original-app/` when this was written.** Every path below is
+   therefore given as it stood at the time - `apps/api`, `apps/web`, `apps/mobile`,
+   `packages/*`. The reorganisation happened immediately after, in the same session, so read
+   each of those paths with `original-app/` in front of it.
 2. **There is no marketing website.** `apps/web/app/page.tsx` redirects `/` straight to
    `/dashboard`. The deployment at `https://jam-quote-web.vercel.app` is the application
    itself, behind a login, and it currently renders the name **Pryvis**. So the brief's
@@ -280,7 +288,9 @@ of the brief is entirely greenfield.
 **Data integrity (Rule 6)**
 
 14. Issued-document immutability is a convention, not a constraint.
-15. 32-bit cents columns cap a document at $21,474,836.47.
+15. 32-bit cents columns cap a document at $21,474,836.47. **Decided 2026-09-23:** the
+    owner requires figures to ~999,999,999.99 JMD (99,999,999,999 minor units), so money
+    columns become 64-bit with the ceiling validated at the boundary — ADR 0011.
 
 **Performance**
 
@@ -329,7 +339,8 @@ of the brief is entirely greenfield.
    consent.
 4. **`sync`** — outbox, client UUIDs, explicit per-entity conflict rules, and tests under bad
    networks.
-5. **Money columns** as `BigInt`, and time as per-jurisdiction day boundaries.
+5. **Money columns** as 64-bit to a validated 999,999,999.99 ceiling (ADR 0011), and time as
+   per-jurisdiction day boundaries.
 6. **The web/API contract** — generated from one definition rather than hand-mirrored.
 7. **Authentication** — default-deny routes, MFA, short sessions with rotation and
    invalidation.
@@ -432,16 +443,14 @@ Effect on tiers: none of the above changes the ladder already approved in `TIERS
 Invoicing remains the Pro line; Business remains team, roles, approvals, crews and
 consolidated reporting. Dropping the regulatory feed (#29) removes nothing a tier depends on.
 
-**One finding I cannot resolve alone.** While looking for the deployment I found
+**Resolved 2026-09-23.** While looking for the deployment I found
 `https://jam-quote.vercel.app`, live and returning a complete, polished product: *"JAM Quote —
 Instant HVAC Quotation for UAE Villas"*, priced in AED, branded **Al Arabia Electromechanical
 L.L.C.**, with instant tonnage sizing and a paid AED 150 branded PDF quotation. It is a
 different market, currency and trade from this repository, and it is not built from this code.
-If that deployment is yours, then the product-scope question in the brief has a second input
-this audit could not see, and the answer may well change — two vertical quoting products with
-a shared engine is a genuinely different strategy from one. **I have not assumed either way and
-have made no contact with it beyond reading its public page.** Please confirm whether it is
-yours before Phase 1 begins.
+**The owner has confirmed it is not theirs** — they own pryvis.com. It is an unrelated product
+on a near-miss hostname, recorded here only so nobody mistakes it for this one later, and the
+single-product recommendation above stands unchanged.
 
 ---
 
@@ -472,12 +481,11 @@ context), the commercial layer (entitlements), authentication (default-deny, MFA
 outbound messaging, `sync`, and the web/API contract. Money columns and per-country time move
 in a migration each.
 
-**My recommendation: Option C**, with the folder reorganisation still done as the brief
-describes, so `new-app/` is where the rebuilt layers land and the ported assets arrive by
+**Recommended, and chosen by the owner on 2026-09-23: Option C** (ADR 0010), with the folder
+reorganisation done as the brief describes and now complete, so `new-app/` is where the rebuilt layers land and the ported assets arrive by
 deliberate review rather than by copy. The audit found the *commercial* and *defensive* layers
 missing or thin, and the *domain* layer sound and well tested. Rebuilding the sound part buys
-nothing and costs the tests that make it trustworthy. I hold this as a recommendation, not a
-decision, and will follow the brief as written if you prefer Option A.
+nothing and costs the tests that make it trustworthy.
 
 ---
 
@@ -495,13 +503,15 @@ decision, and will follow the brief as written if you prefer Option A.
 
 ## 9. Inputs needed before Phase 1
 
-1. **Is `https://jam-quote.vercel.app` (the UAE HVAC product) yours?** It changes the
-   product-scope answer.
-2. **Option A, B or C** in section 7.
-3. **Confirmation to reorganise the repository** into `original-app/`, `new-app/`, `docs/`.
-   It must update `package.json` workspaces, `turbo.json`, `render.yaml`, the tsconfig paths
-   and any Vercel, Render or CI path reference in the same commit. I propose doing it on a
-   branch first, as one commit of tracked moves.
+Items 1 to 3 were answered on 2026-09-23; 4 and 5 remain open.
+
+1. ~~Is `jam-quote.vercel.app` yours?~~ **Answered: no.** One product, as scoped.
+2. ~~Option A, B or C in section 7.~~ **Answered: C, selective rebuild** (ADR 0010).
+3. ~~Confirmation to reorganise the repository.~~ **Answered: yes, done** on branch
+   `chore/repo-reorg` as one commit of tracked moves, with `render.yaml` and the CI workflow
+   updated in the same commit and the full gate re-run green from the new root. **One thing
+   only the owner can do:** repoint Vercel's **Root Directory** to `original-app/apps/web` —
+   it is a dashboard setting, and the web deploy fails until it changes.
 4. **Tier prices** per country, when you are ready — the model holds them as data, so this
    does not block the build.
 5. **Brand assets** (Pryvis logo and wordmark, SVG plus a square icon) to finish the

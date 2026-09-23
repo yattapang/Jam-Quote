@@ -24,8 +24,8 @@ web-build/
 !.env.example
 
 # Prisma
-apps/api/prisma/*.db
-apps/api/prisma/migrations/dev/
+original-app/apps/api/prisma/*.db
+original-app/apps/api/prisma/migrations/dev/
 
 # Logs
 *.log

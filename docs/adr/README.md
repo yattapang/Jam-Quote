@@ -22,3 +22,5 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0007](0007-subscription-tiers-and-entitlements.md) | Tiers are data; entitlements are enforced server-side and grandfathered per tenant | Accepted |
 | [0008](0008-guards-and-flow-tests.md) | Defect classes are held by parser-based guards and real-database flow tests | Accepted |
 | [0009](0009-brand-pryvis.md) | The product is **Pryvis** (pryvis.com); JamQuote was the working name | Accepted |
+| [0010](0010-selective-rebuild-and-repo-layout.md) | Rebuild selectively; the repo splits into `original-app/` and `new-app/`, each its own workspace root | Accepted |
+| [0011](0011-money-ceiling-64-bit-minor-units.md) | Money columns are 64-bit; the ceiling is 999,999,999.99, validated at the boundary | Accepted |

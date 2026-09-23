@@ -4,16 +4,25 @@ Estimating & invoicing for Jamaican contractors — build itemized construction
 quotes, price against real Jamaican suppliers, and send branded PDFs over
 WhatsApp or email. Android + Web, JMD-native, GCT-aware.
 
-## Monorepo
+## Repository layout
+
+Reorganised on 2026-09-23 (ADR 0010). Two applications, each its own npm-workspace root:
 
 | Path | What |
 |---|---|
-| `apps/api` | NestJS + Prisma backend (all business logic) |
-| `apps/web` | Next.js web app + internal Admin portal |
-| `apps/mobile` | Expo / React Native Android app |
-| `packages/core` | Shared types + tax/GCT + quote math (framework-free) |
-| `packages/ui` | Design tokens (palette, type) from the design source |
-| `docs/` | `ARCHITECTURE.md` (build spec), `PRICING.md` (scraper spec) |
+| `original-app/` | **The existing application, read-only.** Its own workspace root. See [`original-app/README.md`](original-app/README.md) |
+| `new-app/` | **The rebuild.** Empty until Phase 1 approves its structure. See [`new-app/README.md`](new-app/README.md) |
+| `docs/` | The rules, the ADR log, the development brief, the Phase 0 audit, the tier design, the module register |
+
+Inside `original-app/`: `apps/api` (NestJS + Prisma, all business logic), `apps/web` (Next.js
+web app plus the internal admin portal), `apps/mobile` (Expo / React Native),
+`packages/core` (shared types, tax/GCT and quote math, framework-free), `packages/ui`
+(design tokens), `packages/test-ast` (the parser every guard test uses).
+
+**Start here:** [`docs/RULES.md`](docs/RULES.md) - read before any task (Rule 0) -
+then [`docs/PHASE-0-AUDIT.md`](docs/PHASE-0-AUDIT.md) and [`docs/adr/`](docs/adr/README.md).
+
+Commands run from `original-app/`, not from here.
 
 ## Prerequisites
 
@@ -24,6 +33,7 @@ WhatsApp or email. Android + Web, JMD-native, GCT-aware.
 ## Getting started
 
 ```bash
+cd original-app
 npm install                       # install all workspaces
 cp apps/api/.env.example apps/api/.env   # then fill in DATABASE_URL etc.
 

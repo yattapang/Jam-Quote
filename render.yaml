@@ -9,6 +9,10 @@ services:
   - type: web
     name: jamquote-api
     runtime: node
+    # The existing application moved into original-app/ (ADR 0010), which is
+    # its own npm-workspace root. Render runs every command from rootDir, so
+    # the commands below stay exactly as they were.
+    rootDir: original-app
     plan: free
     region: oregon
     branch: main
