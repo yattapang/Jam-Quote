@@ -67,6 +67,33 @@ Notes on the boundaries, since they are the commercial decisions:
 - **WhatsApp Business sending sits on Business** because it carries a per-message cost and
   needs Meta verification; click-to-chat sharing stays on every tier.
 
+## 2a. How a tenant gets an account, and how they upgrade
+
+Owner decision, 2026-09-23. Recorded as a rule (Rule 14) and a decision (ADR 0015).
+
+**Sign-up is self-service and free.** A contractor registers on pryvis.com, on the Free tier,
+with no approval, no sales call and no waiting. Registration creates the business, its first
+owner and a Free subscription in one transaction, so a tenant never exists without a plan.
+
+**Upgrading is self-service by card.** The tenant chooses Pro or Business, pays by card
+(WiPay), and their entitlements change when the payment succeeds - no deploy, no admin step,
+because entitlements are data behind one resolver.
+
+**Paying another way is not self-service, deliberately.** A bank transfer, cheque or cash
+payment is recorded, approved by someone other than the person who activates it, and verified
+against the bank statement rather than an uploaded receipt (Rule 13). Both routes end at the
+same entitlement change; only the card route is automatic. That asymmetry is the fraud control,
+and it is the reason a manual payment takes longer.
+
+**Downgrading and lapsing** keep the tenant's data intact and remove the entitlements. What the
+tenant may still do on Free - read their old invoices, export their data - is a product decision
+owed with feature 1, and it should be generous: a contractor locked out of their own quote
+history will not come back, and will tell people why.
+
+What sign-up needs before it can face the public, none of which exists yet: rate limiting, email
+verification before anything costs us money, and a duplicate registration that does not confirm
+the address is taken (it emails the existing owner instead).
+
 ## 3. Features worth adding, in the order I would ship them
 
 Each is one feature under the one-at-a-time rule, and each lands with its entitlement.

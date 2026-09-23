@@ -100,14 +100,26 @@ fails the build. `@PublicRoute` needs a real reason — that reason is what make
 open surface a glance instead of an audit. Running the api tests prints the full route inventory
 with its protection.
 
+Also built: **password hashing** (Node's scrypt, parameters stored in the hash, rehash on
+successful sign-in — ADR 0014) and **sign-in** (ADR 0015). Credentials live in `app_credential`,
+outside row-level security, because sign-in must find a user by email before any tenant is known;
+that is one of exactly **two** RLS exemptions, both named with their reasons in
+`db/test/policy-parity.test.ts`.
+
 Not built yet, and each is honest work owed rather than a detail:
 
-- **Sign-in.** Nothing issues sessions; tests insert session rows directly. Token format, cookie
-  handling and rotation-on-use come next, behind the `SessionReader` port.
-- **Password hashing** — argon2id versus Node's scrypt is its own ADR, because a native
-  dependency affects every deployment target.
+- **Rate limiting.** A sign-in costs ~67 MB and ~150 ms by design, on an unauthenticated
+  endpoint. That is a denial-of-service lever until a limiter exists. **The most urgent gap
+  here.**
+- **Sign-up.** Tenants register themselves free on the website (Rule 14, ADR 0015). It needs
+  rate limiting, email verification before anything costs us money, and a duplicate registration
+  that does **not** reveal the address is taken — it emails the existing owner instead. That last
+  one means sign-up depends on the messaging service existing first.
+- **HTTP transport for sessions** — cookie, CSRF, rotation-on-use. Sign-in returns a session
+  reference; nothing yet carries it over the wire.
 - **MFA** — the largest open gap in Rule 5. Cheap to add now: a factor check belongs in the
   resolver's step 4.
+- A guard asserting `app_user.email` and `app_credential.email` stay equal.
 - **`DefaultDenyGuard` is not yet registered globally**, because there is no application module.
   Until it is, its tests prove the logic and not the production wiring.
 - The HTTP layer, so no OpenAPI document and no generated client — the contract generator emits

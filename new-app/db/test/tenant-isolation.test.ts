@@ -75,8 +75,10 @@ beforeEach(async () => {
       [id, name],
     );
     await db.query(
-      `INSERT INTO app_user (id, tenant_id, email, password_hash, role, updated_at)
-       VALUES (gen_random_uuid(), $1, $2, 'not-a-real-hash', 'owner', now())`,
+      // No password column here any more: credentials live in app_credential
+      // (ADR 0015), so app_user - the row every module reads - holds no hash at all.
+      `INSERT INTO app_user (id, tenant_id, email, role, updated_at)
+       VALUES (gen_random_uuid(), $1, $2, 'owner', now())`,
       [id, `owner@${id}.example`],
     );
   }
@@ -168,8 +170,8 @@ describe("row-level security on tenant-owned tables", () => {
     await expect(
       asTenant(
         TENANT_A,
-        `INSERT INTO app_user (id, tenant_id, email, password_hash, role, updated_at)
-         VALUES (gen_random_uuid(), $1, 'planted@example.com', 'x', 'owner', now())`,
+        `INSERT INTO app_user (id, tenant_id, email, role, updated_at)
+         VALUES (gen_random_uuid(), $1, 'planted@example.com', 'owner', now())`,
         [TENANT_B],
       ),
     ).rejects.toThrow(/row-level security/i);
@@ -179,8 +181,8 @@ describe("row-level security on tenant-owned tables", () => {
     await expect(
       asTenant(
         null,
-        `INSERT INTO app_user (id, tenant_id, email, password_hash, role, updated_at)
-         VALUES (gen_random_uuid(), $1, 'nobody@example.com', 'x', 'owner', now())`,
+        `INSERT INTO app_user (id, tenant_id, email, role, updated_at)
+         VALUES (gen_random_uuid(), $1, 'nobody@example.com', 'owner', now())`,
         [TENANT_A],
       ),
     ).rejects.toThrow(/row-level security/i);
@@ -192,8 +194,8 @@ describe("row-level security on tenant-owned tables", () => {
     // a database that refuses everything.
     await asTenant(
       TENANT_A,
-      `INSERT INTO app_user (id, tenant_id, email, password_hash, role, updated_at)
-       VALUES (gen_random_uuid(), $1, 'staff@example.com', 'x', 'staff', now())`,
+      `INSERT INTO app_user (id, tenant_id, email, role, updated_at)
+       VALUES (gen_random_uuid(), $1, 'staff@example.com', 'staff', now())`,
       [TENANT_A],
     );
 

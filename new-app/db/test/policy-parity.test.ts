@@ -93,6 +93,12 @@ describe("every tenant-owned table is covered by a policy", () => {
       // exemption is a hole in the isolation rule; it should be hard to add and
       // impossible to add silently.
       const EXEMPT: Record<string, string> = {
+        app_credential:
+          "The other half of the authentication bootstrap: sign-in must find a user BY EMAIL " +
+          "before any tenant is known, and app_user is behind RLS. Thin by design (an email, a " +
+          "hash, and who it belongs to) and, like app_session, the tenant it yields is then used " +
+          "to satisfy RLS for every read that follows. Keeping the hash here also means app_user " +
+          "— the row every module reads — carries no password at all.",
         app_session:
           "Read before any tenant is known, because it is what establishes app.tenant_id. " +
           "A policy requiring a tenant would make it unreadable exactly when it is needed. " +

@@ -212,6 +212,24 @@ entitlement service**, never a plan comparison at a call site. Entitlements are 
 the billing provider. A refusal names the feature and the tier that includes it, in plain
 words. Existing tenants are grandfathered by explicit, audited grants.
 
+**How a tenant gets an account (owner requirement, 2026-09-23).** A tenant **signs itself up on
+the website, free, with no approval from us** — Free is what makes the product spread, and a
+contractor who has to wait for a sales call does not come back. Registration creates the tenant,
+its first owner, and a **Free subscription in the same transaction**: a tenant never exists
+without a plan. Upgrading is **self-service when paid by card**, and entitlements change when the
+payment succeeds.
+
+**A manual payment never upgrades anyone by itself** — it is recorded, approved by someone other
+than the activator, and verified against the bank record (Rule 13). Both paths end at the same
+entitlement change; only the card path is automatic.
+
+Because registration is an **unauthenticated endpoint that creates rows**, it ships with the
+defences that make that safe: rate limiting per address and per IP, email verification before
+the account can cost us money, a bound on tenants per address, and a duplicate registration that
+**does not reveal the address is taken** — it answers exactly as a new one and emails the
+existing owner instead. Telling whoever typed it is an enumeration oracle and leaks who our
+customers are.
+
 ## 15. Claude-assisted maintenance
 
 - Claude proposes **pull requests**; CI and a human approve; nothing reaches production

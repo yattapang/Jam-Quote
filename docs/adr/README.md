@@ -26,3 +26,5 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0011](0011-money-ceiling-64-bit-minor-units.md) | Money columns are 64-bit; the ceiling is 999,999,999.99, validated at the boundary | Accepted |
 | [0012](0012-new-app-structure.md) | `new-app/` layout: modules behind a public surface, schema in `db/`, generated contract, `@pryvis/*` | Accepted |
 | [0013](0013-default-deny-auth-and-session-revocation.md) | Routes declare their protection and default to refusal; identity re-resolved per request; sessions revocable by version | Accepted |
+| [0014](0014-password-hashing.md) | Passwords hashed with Node's scrypt, parameters stored in the hash, rehash on successful sign-in | Accepted |
+| [0015](0015-credentials-and-self-service-signup.md) | Credentials in their own table outside RLS; sign-in email globally unique; tenants sign themselves up free and upgrade by card | Accepted |

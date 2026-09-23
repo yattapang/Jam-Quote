@@ -99,8 +99,9 @@ beforeEach(async () => {
       [tenant, `Tenant ${tenant.slice(0, 1)}`],
     );
     await db.query(
-      `INSERT INTO app_user (id, tenant_id, email, password_hash, role, session_version, updated_at)
-       VALUES ($1, $2, $3, 'not-a-real-hash', 'owner', 0, now())`,
+      // No password column: credentials live in app_credential (ADR 0015).
+      `INSERT INTO app_user (id, tenant_id, email, role, session_version, updated_at)
+       VALUES ($1, $2, $3, 'owner', 0, now())`,
       [user, tenant, email],
     );
   }

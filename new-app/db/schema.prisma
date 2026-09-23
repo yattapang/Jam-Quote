@@ -69,8 +69,9 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users    AppUser[]
-  sessions AppSession[]
+  users       AppUser[]
+  sessions    AppSession[]
+  credentials AppCredential[]
 
   @@map("tenant")
 }
@@ -98,8 +99,10 @@ model AppUser {
   /// normalisation rule applied at the boundary is easier for a reader to find
   /// than a collation they have to know to look for. The unique index below is
   /// therefore only as good as that rule, which is why the rule has its own test.
-  email        String @db.VarChar(320)
-  passwordHash String @map("password_hash")
+  ///
+  /// Held here for display and addressing. The email sign-in matches against lives
+  /// on AppCredential, which is globally unique (ADR 0015).
+  email String @db.VarChar(320)
 
   /// "owner" | "staff". Text, not an enum: roles grow, and a new role should not
   /// need a migration (ADR 0002). Authorisation is default-deny and re-resolved
@@ -119,7 +122,8 @@ model AppUser {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sessions AppSession[]
+  sessions   AppSession[]
+  credential AppCredential?
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -164,4 +168,47 @@ model AppSession {
 
   @@index([userId])
   @@map("app_session")
+}
+
+/// A password, and the email it is matched against.
+///
+/// THE SECOND AND LAST TABLE OUTSIDE ROW-LEVEL SECURITY. Sign-in must find a user by
+/// email before any tenant is known, and AppUser is behind RLS, so the lookup that
+/// STARTS authentication cannot read it. Same boundary as AppSession, same explicit
+/// treatment: both exemptions are named with their reasons in
+/// db/test/policy-parity.test.ts, and a third cannot appear quietly.
+///
+/// Splitting the hash out of AppUser buys something beyond making sign-in possible:
+/// the row every module reads no longer carries a password at all, so a widened
+/// SELECT in some future query cannot leak one.
+///
+/// The email here is GLOBALLY unique, unlike AppUser.email which is unique per
+/// tenant. That trade-off - one person cannot use one address at two businesses - is
+/// recorded in ADR 0015.
+model AppCredential {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// One password per user. A passkey or an OAuth identity will be its own table, not
+  /// another row here, so this model stays "the password".
+  userId String  @unique @map("user_id") @db.Uuid
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Denormalised for the same reason AppSession does it: the tenant must be known
+  /// before row-level security can be satisfied, and this is where it comes from.
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Normalised (lower-cased, trimmed) in ONE place - SignInService.normaliseEmail -
+  /// so this unique index means what it appears to mean.
+  email String @unique @db.VarChar(320)
+
+  /// scrypt$N$r$p$salt$hash. The parameters travel with the hash so the cost can be
+  /// raised on a successful sign-in, which is the only moment the plaintext exists
+  /// (ADR 0014).
+  passwordHash String @map("password_hash")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_credential")
 }
