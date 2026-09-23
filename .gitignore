@@ -55,4 +55,5 @@ extracted/.thumbnail
 
 # A review agent may leave probe files while it works. They are its scratch space,
 # not project code, and must never reach main — my own `git add -A` committed one once.
+new-app/**/zz-probe*.ts
 new-app/**/zz-review-probe*.ts
