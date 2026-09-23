@@ -24,3 +24,4 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0009](0009-brand-pryvis.md) | The product is **Pryvis** (pryvis.com); JamQuote was the working name | Accepted |
 | [0010](0010-selective-rebuild-and-repo-layout.md) | Rebuild selectively; the repo splits into `original-app/` and `new-app/`, each its own workspace root | Accepted |
 | [0011](0011-money-ceiling-64-bit-minor-units.md) | Money columns are 64-bit; the ceiling is 999,999,999.99, validated at the boundary | Accepted |
+| [0012](0012-new-app-structure.md) | `new-app/` layout: modules behind a public surface, schema in `db/`, generated contract, `@pryvis/*` | **Proposed** |
