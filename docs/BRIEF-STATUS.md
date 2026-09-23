@@ -7,7 +7,8 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 
 **Legend:** ✅ done · 🟡 partly done · ❌ not started · ⏭️ deliberately later
 
-Last reviewed: **2026-09-24**, at commit `f057400` plus the in-flight MFA work.
+Last reviewed: **2026-09-24**, at commit `2a20f7b`. Staff MFA is **paused** at a clean point (schema
+and the strengthened guard are committed; no service code was started).
 
 ---
 
@@ -44,16 +45,17 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 | Migration notes | ✅ | §5 |
 | Product & feature review from the live site | 🟡 | §6 — **there is no marketing site**, so it was derived from code and the public pages and is marked unverified |
 | Feature inventory, keep/change/drop | ✅ | §6 — 34 items |
-| Product-scope recommendation | ✅ | §6 — one product; owner confirmed the UAE HVAC app is not theirs |
-| **Proposed edits to the brief after the audit** | ❌ | **Skipped. Owed first.** |
+| Product-scope recommendation | ✅ | §6 — one product |
+| **Owner's scope DECISION** (the brief's gate on Phase 1) | ✅ | **2026-09-24: one product, built to verticalise later** — ADR 0017. Trade behaviour becomes a data pack; tier ladder unchanged |
+| **Proposed edits to the brief after the audit** | ✅ | `BRIEF-EDITS-PROPOSED.md`, 2026-09-24 — seven edits, awaiting the owner's approval before they are applied |
 
 ## Phase 1 — requirements and design (§6)
 
 | Deliverable | State | Note |
 |---|---|---|
 | PRD (users, workflows, scope for first country and release) | ❌ | Nothing written |
-| Domain model | ❌ | Entities exist in ADRs and the schema, never mapped as a whole |
-| Threat model | ❌ | The security work so far implies one; it has never been written down, so it cannot be reviewed |
+| Domain model | ❌ | Entities exist in ADRs and the schema, never mapped as a whole. **Must be written in trade-neutral language** (ADR 0017) |
+| Threat model | ✅ | `THREAT-MODEL.md`, 2026-09-24 — 9 assets, 9 adversaries, 6 trust boundaries, every control marked BUILT / PARTIAL / OWED with test evidence. It endorsed the authentication design and named five gaps, the audit log first |
 | ADRs | ✅ | 16, dated, with alternatives and consequences |
 | Target database schema for approval | 🟡 | The authentication slice is built and approved piecemeal; the product schema has not been designed or approved |
 
@@ -96,13 +98,23 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 
 ## What is owed, in the order I would do it
 
-1. **Proposed edits to the brief** (§5's final step) — the skipped item.
-2. **Threat model** (§6) — most valuable now, because it retroactively validates or challenges
-   the authentication work rather than being written after the fact.
-3. **PRD and domain model** (§6), which the first vertical slice needs anyway.
-4. **Audit log** — named in Foundations and missing.
-5. **Finish authentication:** staff MFA (Rule 5.1 calls it a launch blocker), HTTP transport,
-   sign-up, password reset.
-6. **Schema: client-generated ids and row versioning**, since §18 puts them in step 1 precisely so
+Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outranks the rest.
+
+1. ~~Proposed edits to the brief~~ ✅ — awaiting approval, then applied in one commit.
+2. ~~Threat model~~ ✅.
+3. **The independent review of `new-app`** (Rule 9). Commissioned 2026-09-24. Until it lands, **no
+   `new-app` module is complete** by the rule's own definition — every line so far was written and
+   reviewed by one author, which is the arrangement Rule 9 exists to forbid.
+4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
+   both.
+5. **Audit log** — named in Foundations, missing, and the threat model makes it the control every
+   staff safeguard depends on for detection.
+6. **Finish authentication:** staff MFA (Rule 5.1 launch blocker, paused), sign-out and session
+   rotation, HTTP transport, sign-up, password reset.
+7. **Dependency scanning, secret scanning and an SBOM** — cheap, mechanical, and the only defence
+   against a class we currently cannot see at all.
+8. **Schema: client-generated ids and row versioning**, since §18 puts them in step 1 precisely so
    sync is not a retrofit.
-7. Answer the seven open questions, each as an ADR or a PRD entry.
+9. **A `TradePack` in core** with the guard that fails on a trade branch (ADR 0017), before the
+   catalog work makes construction assumptions hard to remove.
+10. Answer the seven open questions, each as an ADR or a PRD entry.

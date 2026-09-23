@@ -67,6 +67,14 @@ Notes on the boundaries, since they are the commercial decisions:
 - **WhatsApp Business sending sits on Business** because it carries a per-message cost and
   needs Meta verification; click-to-chat sharing stays on every tier.
 
+## 2. Scope, decided 2026-09-24
+
+**One product, built to verticalise later** (ADR 0017). The ladder below is unchanged by that
+decision: one product, one set of tiers. What changes is the build - trade-specific behaviour
+(units, material attributes, labour trades, starter recipes, document wording, quoting style) is a
+**data pack**, so adding electrical or plumbing later is configuration and content rather than a
+second product or a second tier ladder. A trade is never a tier and never appears in pricing.
+
 ## 2a. How a tenant gets an account, and how they upgrade
 
 Owner decision, 2026-09-23. Recorded as a rule (Rule 14) and a decision (ADR 0015).

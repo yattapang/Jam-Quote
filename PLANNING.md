@@ -20,6 +20,7 @@ way with inline comments, so that an independent person can follow it.
 | Is the UAE HVAC product at `jam-quote.vercel.app` ours? | **No** - unrelated product on a near-miss hostname. The single-product scope stands | `docs/PHASE-0-AUDIT.md` §6 |
 | How large must a Jamaican figure be? | **~999,999,999.99 JMD** (99,999,999,999 minor units). Money columns become 64-bit with the ceiling validated at the boundary | ADR 0011 |
 | Rebuild, evolve, or rebuild selectively? | **Rebuild selectively** - rebuild the tenancy, entitlement, auth, messaging, sync and contract layers; port core, the guards and the flow-test harness after review | ADR 0010 |
+| Product scope (the brief's gate on Phase 1) | **One product, built to verticalise later** - trade behaviour is a data pack, so a second trade is configuration rather than a new codebase. Tier ladder unchanged | ADR 0017 |
 | Reorganise the repository? | **Yes** - `original-app/` (read-only), `new-app/`, `docs/`, each app its own workspace root | ADR 0010 |
 
 Outstanding with the owner: repoint Vercel's Root Directory to `original-app/apps/web` (a
