@@ -1,10 +1,24 @@
 # JamQuote — Working Plan
 
+## Rule 0 - standing instruction (owner-approved 2026-09-23)
+
+**Every task begins by reading `docs/RULES.md` and the ADRs that bear on the work, and states
+which rules apply to it.** A task that has not cited its rules has not started. This applies to
+me, to every subagent brief, and to any future maintainer. A rule that turns out to be wrong is
+changed deliberately and in writing with the owner's approval - never ignored quietly inside a
+task.
+
+`docs/RULES.md` is the canonical rulebook (17 rules plus Rule 0). It folds in
+`docs/BUILD-RULES.md`, which remains for the detailed enforcement notes behind each rule. Rule 2
+carries the owner requirement of 2026-09-23: the code is structured in a professional, standard
+way with inline comments, so that an independent person can follow it.
+
 ## Governing documents (added 2026-09-20)
 
 The product is **Pryvis** (pryvis.com); JamQuote was the working name - ADR 0009.
 
-- **`docs/BUILD-RULES.md`** - the rules every change follows: naming and folder structure,
+- **`docs/RULES.md`** - the canonical rulebook: Rule 0 plus the 17 approved rules.
+- **`docs/BUILD-RULES.md`** - the enforcement detail behind those rules: naming and folder structure,
   comments that state WHY, the ADR requirement, the three test layers, compliance as data,
   currency and localisation abstracted, a tenant- and country-aware model, and the
   one-feature-at-a-time release process. Each rule names what enforces it.
