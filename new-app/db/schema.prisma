@@ -61,10 +61,16 @@ model Tenant {
   /// deliberately separate from the currency Pryvis bills them in.
   currency String @db.Char(3)
 
+  /// Set when this tenant's access is suspended - non-payment, or an
+  /// investigation. Their data stays intact; their users stop getting in on their
+  /// next request, because core/auth re-reads this on every one.
+  suspendedAt DateTime? @map("suspended_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users AppUser[]
+  users    AppUser[]
+  sessions AppSession[]
 
   @@map("tenant")
 }
@@ -100,10 +106,62 @@ model AppUser {
   /// from this row on every request, never read from a token.
   role String
 
+  /// Bumping this makes every token already issued for this user stale on its next
+  /// request - password change, sign-out-everywhere, suspected compromise. One
+  /// UPDATE, no blacklist to maintain, nothing to wait out. The previous
+  /// application had no way to invalidate a live 30-day session at all.
+  sessionVersion Int @default(0) @map("session_version")
+
+  /// A user who may no longer sign in, without deleting the row their documents
+  /// and audit entries point at.
+  deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sessions AppSession[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("app_user")
+}
+
+/// A signed-in session.
+///
+/// THE ONE TABLE WITHOUT ROW-LEVEL SECURITY, and the migration that creates it
+/// explains why at length: it is what ESTABLISHES `app.tenant_id`, so a policy
+/// requiring a tenant would make it unreadable at exactly the moment it is needed.
+/// It is kept thin on purpose - ids, a version, timestamps, and nothing about
+/// anybody's business - and every read that follows it, including the user's own
+/// role, happens under row-level security with the tenant this row supplied.
+///
+/// The exemption is named and reasoned in db/test/policy-parity.test.ts, so a
+/// second table cannot join it quietly.
+model AppSession {
+  id String @id @default(uuid()) @db.Uuid
+
+  userId String  @map("user_id") @db.Uuid
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Denormalised from app_user deliberately: reading it from there would require a
+  /// tenant to already be set, which is the problem this table exists to solve.
+  /// This is the ONE place a tenant id enters a request, and it comes from our own
+  /// session store - never from a caller.
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// app_user.session_version at the moment this session was issued. A mismatch on
+  /// any later request means the session was superseded.
+  version Int
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// Short, and rotated on use - not the thirty days the audit found.
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  /// Revoked, never deleted: a session that was used to do something is history.
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("app_session")
 }

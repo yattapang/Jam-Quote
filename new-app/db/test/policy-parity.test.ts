@@ -88,7 +88,35 @@ describe("every tenant-owned table is covered by a policy", () => {
       // The tenant table itself is tenant-owned without having a tenant_id — it
       // IS the tenant — so it is named explicitly. Every other table must be
       // discovered by the query above.
-      const mustBeProtected = ["tenant", ...tenantOwned.rows.map((r) => r.table_name)];
+      //
+      // EXEMPTIONS are listed here, with a reason each, and nowhere else. An
+      // exemption is a hole in the isolation rule; it should be hard to add and
+      // impossible to add silently.
+      const EXEMPT: Record<string, string> = {
+        app_session:
+          "Read before any tenant is known, because it is what establishes app.tenant_id. " +
+          "A policy requiring a tenant would make it unreadable exactly when it is needed. " +
+          "Kept safe by being thin (ids, a version, timestamps — no name, email or document) " +
+          "and by the fact that every read after it, including the user's own role, happens " +
+          "under RLS with the tenant this row supplied.",
+      };
+
+      const mustBeProtected = ["tenant", ...tenantOwned.rows.map((r) => r.table_name)].filter(
+        (table) => !(table in EXEMPT),
+      );
+
+      // Each exemption must still exist. A stale exemption is worse than none: it
+      // silently covers whatever table later takes that name.
+      const exemptFound = await db.query<{ table_name: string }>(
+        `SELECT c.relname AS table_name FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relname = ANY($1)`,
+        [Object.keys(EXEMPT)],
+      );
+      expect(
+        exemptFound.rows.map((r) => r.table_name).sort(),
+        "an exemption names a table that does not exist — remove it before it covers a future table of that name",
+      ).toEqual(Object.keys(EXEMPT).sort());
 
       expect(
         mustBeProtected.length,

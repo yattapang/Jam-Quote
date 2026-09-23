@@ -89,10 +89,28 @@ here before. Every guard states what it does **not** prove; keep that habit.
 
 ## State of play
 
-Built: `db/` with proven isolation, both structural guards, `core/tenancy`, and two skeleton
-modules (`tenants`, `users`) that exist so the guards have real subjects.
+Built: `db/` with proven isolation; both structural guards; `core/tenancy`; `core/auth`
+(default-deny route protection, identity re-resolved from the database, revocable sessions —
+ADR 0013); and two skeleton modules (`tenants`, `users`) that exist so the guards have real
+subjects.
 
-Not built yet: the HTTP layer, so there is no OpenAPI document and no generated client — the
-contract generator emits types only, and grows when routes arrive. Also owed: `core/auth`,
-`core/entitlements`, `core/audit`, `core/money`, `web/`, `mobile/`, `infra/`, and the port of
-`packages/core`.
+**Route protection is mandatory.** Every route declares `@Authenticated()`,
+`@ShareTokenRoute()` or `@PublicRoute("why")`. An undeclared route is refused at runtime and
+fails the build. `@PublicRoute` needs a real reason — that reason is what makes reviewing every
+open surface a glance instead of an audit. Running the api tests prints the full route inventory
+with its protection.
+
+Not built yet, and each is honest work owed rather than a detail:
+
+- **Sign-in.** Nothing issues sessions; tests insert session rows directly. Token format, cookie
+  handling and rotation-on-use come next, behind the `SessionReader` port.
+- **Password hashing** — argon2id versus Node's scrypt is its own ADR, because a native
+  dependency affects every deployment target.
+- **MFA** — the largest open gap in Rule 5. Cheap to add now: a factor check belongs in the
+  resolver's step 4.
+- **`DefaultDenyGuard` is not yet registered globally**, because there is no application module.
+  Until it is, its tests prove the logic and not the production wiring.
+- The HTTP layer, so no OpenAPI document and no generated client — the contract generator emits
+  types only and grows when routes arrive.
+- `core/entitlements`, `core/audit`, `core/money`, `web/`, `mobile/`, `infra/`, and the port of
+  `packages/core`.

@@ -9,5 +9,6 @@
  * Keep this list short. Everything named here is a promise to other modules, and
  * a promise is harder to withdraw than to make.
  */
+export { TenantsController } from "./tenants.controller.js";
 export { TenantsService } from "./tenants.service.js";
 export type { TenantSummary } from "./tenants.service.js";
