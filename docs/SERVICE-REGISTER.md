@@ -93,8 +93,14 @@ Named here so nobody hunts, and empty of values on purpose.
 | `JWT_SECRET` | Render dashboard | The API refuses to boot in production without it, deliberately |
 | `RESEND_API_KEY` | Render dashboard | |
 | `WIPAY_API_KEY` | Render dashboard | Without it the callback hash is publicly computable, so the API rejects callbacks rather than trusting them |
+| `MFA_TOTP_KEYS` | Render dashboard | `<id>:<base64-32-bytes>` entries, newest **first**; the first is the key new secrets are sealed with, the rest stay so existing rows still open. The API refuses to start without it rather than storing second-factor secrets in plaintext (ADR 0021). A rotation is: prepend a new entry, let verifications re-seal, retire the old entry once no row names it |
 | `WEB_ORIGIN` | Render dashboard | The Vercel URL |
 | Vercel project settings | Vercel dashboard | Including **Root Directory**, which is a dashboard setting and therefore cannot be versioned — the one deploy-critical value not in this repository |
+
+There is **no key-management service**. Every secret above lives in a dashboard, which means an
+attacker holding both the database and the environment holds the second-factor secrets too. That is
+a meaningfully harder bar than one database dump and it is not the same as a KMS; it is written here
+rather than described as "encrypted at rest" and left to sound complete (ADR 0021).
 
 No secret is ever committed, logged, put in a migration, or placed in a fixture (Rule 5). Local
 development uses `.env` files, which are git-ignored, from the checked-in `.env.example`.

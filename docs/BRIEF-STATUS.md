@@ -7,8 +7,12 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 
 **Legend:** ✅ done · 🟡 partly done · ❌ not started · ⏭️ deliberately later
 
-Last reviewed: **2026-09-24**. Staff MFA is **paused** at a clean point (schema and the
-strengthened guard are committed; no service code started). The marketing site is **built and
+Last reviewed: **2026-09-24**. Staff MFA is **built** (ADR 0021): TOTP proved against RFC 6238's
+published vectors, secrets sealed with a rotatable key, enrolment that grants nothing until a code
+is produced, replay refused, a lock that follows the person rather than the session, recovery codes,
+a two-step sign-in, and enforcement in the resolver so a capability-holder without a confirmed
+factor is refused on every request. Fourteen planted defects, two controls. Next: the domain model,
+then the PRD — designed from what the product needs, not from the infrastructure tables (Rule 1.2). The marketing site is **built and
 landed** against its approved design (`docs/design/marketing-site.md`), with nine guards proved by
 planting. The independent review (Rule 9) ran, reported 15 findings, and **all 15 are now closed** —
 each with the defect planted and the fix proved (`REVIEW-FINDINGS.md`).
@@ -78,7 +82,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 
 | Item | State | Evidence |
 |---|---|---|
-| Authentication | 🟡 | Default-deny routes, identity re-resolved per request, revocable sessions, sign-in, rate limiting (ADRs 0013–0016). **Owed:** staff MFA (in flight), HTTP transport, sign-up, password reset |
+| Authentication | 🟡 | Default-deny routes, identity re-resolved per request, revocable sessions, sign-in, rate limiting, staff MFA (ADRs 0013–0016, 0021). **Owed:** HTTP transport, sign-up, password reset, sign-out and session rotation, MFA re-enrolment |
 | Tenancy with cross-tenant leak tests | ✅ | `tenant_id` + forced RLS + `withTenant`, proved against real Postgres; every table must now be protected or exempt with a reason |
 | Schema | 🟡 | **Client-generated ids, row versions and tombstones done** 2026-09-24 (ADR 0019), with partial indexes and a convention guard. **Owed:** the audit log's tables, and the product schema itself |
 | Audit log | ✅ | Built 2026-09-24 (ADR 0020): append-only by the absence of a policy, atomic with its change, tenant-readable including staff actions. **Owed:** the platform trail, capability-gated read redaction, and the retention job |
@@ -116,15 +120,21 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 1. ~~Proposed edits to the brief~~ ✅ — approved and applied to `DEVELOPMENT-BRIEF.md`. The brief now carries §5a (the portfolio review), §17a (the public website), the design-before-build gate in §3, and the Foundations status in §18.
 2. ~~Threat model~~ ✅.
 3. ~~The independent review of `new-app`~~ ✅ **done, and its register is clear.**
-3a. ~~The marketing site design~~ ✅ — `docs/design/marketing-site.md`, **Proposed**, awaiting the
-   owner. The parked implementation waits on it. Its sharpest dependency is not code: if
-   `hello@pryvis.com` does not receive mail, the site's only call to action is broken.
+3a. ~~The marketing site~~ ✅ — designed (`docs/design/marketing-site.md`), approved, and built
+   against that design. Its sharpest dependency is still not code: if **`info@pryvis.com`** does not
+   receive mail, the site's only call to action is broken. Also owner-side: approving the legal
+   wording (which removes the draft banners), setting the tier prices, and deciding the
+   aggregate-data consent clause — that last one blocks registration, not the website.
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
    both.
 5. ~~Audit log~~ ✅ **done 2026-09-24** (ADR 0020). Owed: `platform_audit_entry` for tenant-less
    staff actions, capability-gated read redaction, and the retention job that enforces the
    seven-year policy.
-6. **Finish authentication:** staff MFA (Rule 5.1 launch blocker, paused), sign-out and session
+5a. ~~Staff MFA~~ ✅ **done 2026-09-24** (ADR 0021), the last of the three Foundations gaps. Owed and
+   recorded there: the capability-gated re-enrolment path, a key-management service in place of
+   configuration, and calling the re-authentication check at each dangerous action once those
+   actions exist.
+6. **Finish authentication:** sign-out and session
    rotation, HTTP transport, sign-up, password reset.
 7. **Dependency scanning, secret scanning and an SBOM** — cheap, mechanical, and the only defence
    against a class we currently cannot see at all.

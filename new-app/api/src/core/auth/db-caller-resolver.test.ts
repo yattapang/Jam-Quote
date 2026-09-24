@@ -58,14 +58,42 @@ async function giveSession(
   userId: string,
   tenantId: string,
   version: number,
-  options: { expired?: boolean; revoked?: boolean } = {},
+  options: { expired?: boolean; revoked?: boolean; mfaPending?: boolean } = {},
 ) {
   await db.query(
-    `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, revoked_at)
+    `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, revoked_at, mfa_pending)
      VALUES ($1, $2, $3, $4,
              now() + ($5::text)::interval,
-             CASE WHEN $6::boolean THEN now() ELSE NULL END)`,
-    [id, userId, tenantId, version, options.expired ? "-1 hour" : "1 hour", options.revoked ?? false],
+             CASE WHEN $6::boolean THEN now() ELSE NULL END,
+             $7::boolean)`,
+    [
+      id,
+      userId,
+      tenantId,
+      version,
+      options.expired ? "-1 hour" : "1 hour",
+      options.revoked ?? false,
+      options.mfaPending ?? false,
+    ],
+  );
+}
+
+/** Grants a platform capability, which is what makes a second factor mandatory (Rule 5.1). */
+async function giveCapability(userId: string) {
+  await db.query(
+    `INSERT INTO platform_capability (id, user_id, capability)
+     VALUES (gen_random_uuid(), $1, 'impersonate_tenant')`,
+    [userId],
+  );
+}
+
+/** A confirmed factor. The ciphertext is never opened here, so its contents do not matter. */
+async function giveConfirmedFactor(userId: string) {
+  await db.query(
+    `INSERT INTO mfa_totp (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id,
+                           confirmed_at, updated_at)
+     VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), decode('00', 'hex'), 'k1', now(), now())`,
+    [userId],
   );
 }
 
@@ -219,5 +247,104 @@ describe("refusals", () => {
     expect(
       await resolver.resolve({ sessionId: "88888888-8888-4888-8888-888888888888", version: 0 }),
     ).toEqual({ ok: false, refusal: "unknown-session" });
+  });
+});
+
+/**
+ * Step 5: the second factor.
+ *
+ * These are resolver tests, not MFA tests — nothing here computes a code. What is under test is
+ * that a session which has not passed a factor cannot become a caller, and that the requirement is
+ * enforced HERE, on every request, rather than only in the sign-in flow. A requirement that lives
+ * only in the flow is one anybody who skipped the flow does not have.
+ */
+describe("the second factor", () => {
+  const HALF_SESSION = "99999999-9999-4999-8999-999999999999";
+
+  it("refuses a session that has not passed its factor, and says who it is", async () => {
+    await db.exec("RESET ROLE");
+    await giveConfirmedFactor(USER_A);
+    await giveSession(HALF_SESSION, USER_A, TENANT_A, 0, { mfaPending: true });
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    const result = await resolver.resolve({ sessionId: HALF_SESSION, version: 0 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal).toBe("mfa-pending");
+    // `partial` is who they are, so the code prompt knows whose factor to check. It is NOT a
+    // caller: `ok` is false, which is the only thing the guard looks at.
+    expect(result.partial).toEqual({ userId: USER_A, tenantId: TENANT_A, role: "owner" });
+  });
+
+  it("refuses a capability-holder who has no confirmed factor at all", async () => {
+    // THE HOLE THIS CLOSES. The session below already passed whatever sign-in asked of it; the
+    // capability was granted afterwards. Without step 5, a staff account that never enrolled keeps
+    // full access on a password alone, and the requirement is a sentence in a document.
+    await db.exec("RESET ROLE");
+    await giveCapability(USER_A);
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    const result = await resolver.resolve({ sessionId: SESSION_A, version: 0 });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal).toBe("mfa-required");
+  });
+
+  it("does not count an unconfirmed enrolment as a factor", async () => {
+    // A secret was issued and may never have reached a phone.
+    await db.exec("RESET ROLE");
+    await giveCapability(USER_A);
+    await db.query(
+      `INSERT INTO mfa_totp (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id,
+                             updated_at)
+       VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), decode('00', 'hex'), 'k1', now())`,
+      [USER_A],
+    );
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    const result = await resolver.resolve({ sessionId: SESSION_A, version: 0 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.refusal).toBe("mfa-required");
+  });
+
+  it("resolves a capability-holder with a confirmed factor on a verified session", async () => {
+    await db.exec("RESET ROLE");
+    await giveCapability(USER_A);
+    await giveConfirmedFactor(USER_A);
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    expect(await resolver.resolve({ sessionId: SESSION_A, version: 0 })).toEqual({
+      ok: true,
+      caller: { userId: USER_A, tenantId: TENANT_A, role: "owner" },
+    });
+  });
+
+  it("stops requiring a factor once the capability is revoked", async () => {
+    await db.exec("RESET ROLE");
+    await giveCapability(USER_A);
+    await db.query(`UPDATE platform_capability SET revoked_at = now() WHERE user_id = $1`, [USER_A]);
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    expect((await resolver.resolve({ sessionId: SESSION_A, version: 0 })).ok).toBe(true);
+  });
+
+  it("refuses a suspended tenant before saying anything about factors", async () => {
+    // Ordering, so a discarded token cannot be used to learn whether an account has MFA set up.
+    await db.exec("RESET ROLE");
+    await giveCapability(USER_A);
+    await db.query(`UPDATE tenant SET suspended_at = now() WHERE id = $1`, [TENANT_A]);
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+
+    const result = await resolver.resolve({ sessionId: SESSION_A, version: 0 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.refusal).toBe("tenant-suspended");
+  });
+
+  it("does not require a factor of a tenant user who has none", async () => {
+    // MFA is offered to tenants and required of staff. Requiring it of everybody today would lock
+    // out every existing account, which is a different decision and not this one (ADR 0021).
+    expect((await resolver.resolve({ sessionId: SESSION_A, version: 0 })).ok).toBe(true);
   });
 });

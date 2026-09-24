@@ -34,11 +34,31 @@ export type CallerRefusal =
   | "unknown-session"
   | "session-superseded"
   | "user-deactivated"
-  | "tenant-suspended";
+  | "tenant-suspended"
+  /** The password was accepted but the second factor has not been proved on this session. */
+  | "mfa-pending"
+  /** This person holds a platform capability and has no confirmed second factor (Rule 5.1). */
+  | "mfa-required";
 
 export type CallerResult =
   | { readonly ok: true; readonly caller: Caller }
-  | { readonly ok: false; readonly refusal: CallerRefusal };
+  | {
+      readonly ok: false;
+      readonly refusal: CallerRefusal;
+      /**
+       * Who this is, when the password was accepted but a factor was not.
+       *
+       * Present ONLY for `mfa-pending` and `mfa-required`, and it is not a caller: it does not
+       * authorise anything. It exists because the two routes that finish a sign-in — verifying a
+       * factor, and enrolling when none exists — need to know whose factor to check, and refusing
+       * them outright would lock a staff member out of the very page that unlocks their account.
+       *
+       * Everything else must branch on `ok` alone. The default-deny guard does, which is why this
+       * field cannot widen access by being added: a route has to reach for it deliberately, and
+       * only the two named routes may (their test asserts the set).
+       */
+      readonly partial?: Caller;
+    };
 
 /**
  * The port the guard depends on.
@@ -77,3 +97,13 @@ export interface SessionRef {
  * never into the response.
  */
 export const REFUSAL_MESSAGE = "Please sign in again.";
+
+/**
+ * The refusals that mean "you are who you say, but you have not finished".
+ *
+ * Named as a set rather than checked inline in three places, because the transport will want to
+ * send these two somewhere different from the rest — the factor prompt, or enrolment — and a
+ * fourth refusal quietly joining that redirect is how a half-authenticated session becomes a
+ * whole one.
+ */
+export const HALF_AUTHENTICATED_REFUSALS: readonly CallerRefusal[] = ["mfa-pending", "mfa-required"];

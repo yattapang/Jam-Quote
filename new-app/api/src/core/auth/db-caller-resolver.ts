@@ -22,6 +22,12 @@
  *
  * Step 3 is what makes step 1's exemption safe. Read them together or neither makes
  * sense.
+ *
+ *   5. Refuse if a second factor is required and has not been proved (Rule 5.1). Two distinct
+ *      cases, both refusals: the session is half-way through a sign-in (`mfa_pending`), or the
+ *      person holds a platform capability and has no confirmed factor at all. The second is the
+ *      one that matters: a staff account whose factor was never set up is a staff account
+ *      protected by a password alone, and a policy document does not stop that — this does.
  */
 import type { CallerResolver, CallerResult, SessionRef } from "./caller.js";
 import { type TransactionalClient, withTenant, withoutTenant } from "../tenancy/tenant-context.js";
@@ -44,6 +50,8 @@ interface SessionRow {
   version: number;
   expired: boolean;
   revoked: boolean;
+  /** True until the factor has been proved on this session. */
+  mfa_pending: boolean;
 }
 
 interface UserRow {
@@ -51,6 +59,10 @@ interface UserRow {
   session_version: number;
   deactivated: boolean;
   tenant_suspended: boolean;
+  /** Holds at least one unrevoked platform capability, and therefore must have a factor. */
+  holds_capability: boolean;
+  /** Has a CONFIRMED factor. An unconfirmed one protects nobody. */
+  has_confirmed_factor: boolean;
 }
 
 export class DbCallerResolver implements CallerResolver {
@@ -85,7 +97,8 @@ export class DbCallerResolver implements CallerResolver {
                 tenant_id,
                 version,
                 (expires_at <= $2::timestamptz) AS expired,
-                (revoked_at IS NOT NULL) AS revoked
+                (revoked_at IS NOT NULL) AS revoked,
+                mfa_pending
            FROM app_session
           WHERE id = $1`,
         sessionRef.sessionId,
@@ -115,7 +128,19 @@ export class DbCallerResolver implements CallerResolver {
         `SELECT u.role,
                 u.session_version,
                 (u.deactivated_at IS NOT NULL) AS deactivated,
-                (t.suspended_at IS NOT NULL)   AS tenant_suspended
+                (t.suspended_at IS NOT NULL)   AS tenant_suspended,
+                -- Both asked on THIS request, for the same reason the role is: a capability
+                -- granted an hour ago must require a factor now, and one revoked must stop
+                -- requiring it. Neither table is tenant-scoped (they belong to a person, not a
+                -- tenant), which is why both are named in the policy-parity exemption list.
+                EXISTS (
+                  SELECT 1 FROM platform_capability pc
+                   WHERE pc.user_id = u.id AND pc.revoked_at IS NULL
+                ) AS holds_capability,
+                EXISTS (
+                  SELECT 1 FROM mfa_totp m
+                   WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL
+                ) AS has_confirmed_factor
            FROM app_user u
            JOIN tenant  t ON t.id = u.tenant_id
           WHERE u.id = $1`,
@@ -135,6 +160,24 @@ export class DbCallerResolver implements CallerResolver {
     if (user.deactivated) return { ok: false, refusal: "user-deactivated" };
     if (user.session_version !== session.version) {
       return { ok: false, refusal: "session-superseded" };
+    }
+
+    // Step 5. Last, deliberately: a suspended tenant or a deactivated user is refused before we
+    // say anything about factors, so a discarded token cannot be used to learn whether an account
+    // has MFA set up. `partial` carries who this is, and authorises nothing — see `CallerResult`.
+    const partial = {
+      userId: session.user_id,
+      tenantId: session.tenant_id,
+      role: user.role,
+    } as const;
+
+    if (session.mfa_pending) {
+      return { ok: false, refusal: "mfa-pending", partial };
+    }
+    if (user.holds_capability && !user.has_confirmed_factor) {
+      // Not a caller, however valid the password was. Without this the requirement would live only
+      // in the enrolment flow, and anyone who skipped that flow would keep full staff access.
+      return { ok: false, refusal: "mfa-required", partial };
     }
 
     return {

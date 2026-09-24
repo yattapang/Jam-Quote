@@ -468,3 +468,94 @@ describe("what a failed sign-in writes down", () => {
     expect(failures[0]?.emailFingerprint).not.toBe(failures[1]?.emailFingerprint);
   });
 });
+
+/**
+ * The first of two steps, when a factor is in play.
+ *
+ * `ok: true` here does NOT mean signed in: the session is issued `mfa_pending`, and the resolver
+ * refuses it (its own test proves that). What is proved here is the seam — that sign-in leaves the
+ * row in the state the resolver refuses — which is exactly the class of defect F15 was.
+ */
+describe("the second factor", () => {
+  async function giveConfirmedFactor(userId: string) {
+    await asOwner(
+      `INSERT INTO mfa_totp (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id,
+                             confirmed_at, updated_at)
+       VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), decode('00', 'hex'), 'k1', now(), now())`,
+      [userId],
+    );
+  }
+
+  async function giveCapability(userId: string) {
+    await asOwner(
+      `INSERT INTO platform_capability (id, user_id, capability)
+       VALUES (gen_random_uuid(), $1, 'impersonate_tenant')`,
+      [userId],
+    );
+  }
+
+  async function pendingFlag(sessionId: string): Promise<boolean> {
+    const result = await asOwner(
+      `SELECT mfa_pending FROM app_session WHERE id = $1`,
+      [sessionId],
+    );
+    return (result!.rows[0] as { mfa_pending: boolean }).mfa_pending;
+  }
+
+  it("issues a pending session and asks for a code when a factor is confirmed", async () => {
+    await giveConfirmedFactor(USER);
+
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.secondFactor).toEqual({ required: true, enrolmentRequired: false });
+    // The seam: the row must be in the state the resolver refuses.
+    expect(await pendingFlag(result.session.sessionId)).toBe(true);
+  });
+
+  it("asks a capability-holder with no factor to enrol, and still withholds the session", async () => {
+    // A staff account that never enrolled must not get in on a password alone (Rule 5.1).
+    await giveCapability(USER);
+
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.secondFactor).toEqual({ required: true, enrolmentRequired: true });
+    expect(await pendingFlag(result.session.sessionId)).toBe(true);
+  });
+
+  it("does not count an unconfirmed enrolment", async () => {
+    // A secret was issued and may never have reached a phone. For a user with no capability, that
+    // means no second step — asking for a code from an authenticator they never set up would lock
+    // them out of their own account.
+    await asOwner(
+      `INSERT INTO mfa_totp (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id,
+                             updated_at)
+       VALUES ($1, decode('00', 'hex'), decode('00', 'hex'), decode('00', 'hex'), 'k1', now())`,
+      [USER],
+    );
+
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.secondFactor).toBeUndefined();
+    expect(await pendingFlag(result.session.sessionId)).toBe(false);
+  });
+
+  it("leaves a user with no factor and no capability alone", async () => {
+    const result = await signIn.signIn(EMAIL, PASSWORD, FROM);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.secondFactor).toBeUndefined();
+    expect(await pendingFlag(result.session.sessionId)).toBe(false);
+  });
+
+  it("still refuses the wrong password, factor or no factor", async () => {
+    // Obvious, and worth holding: a second step must never become a way past the first.
+    await giveConfirmedFactor(USER);
+    const result = await signIn.signIn(EMAIL, "not the password", FROM);
+    expect(result.ok).toBe(false);
+  });
+});

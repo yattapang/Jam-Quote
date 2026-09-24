@@ -33,3 +33,4 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0018](0018-marketing-website.md) | The marketing site is static pages in our own Next.js app on free hosting — not a site builder | Accepted |
 | [0019](0019-row-identity-and-versioning.md) | Client-generated UUIDv7 ids, a `version` compared on write, tombstones with partial indexes | Accepted |
 | [0020](0020-audit-log-and-retention.md) | The audit log is append-only by the absence of a policy, atomic with its change, kept seven years | Accepted |
+| [0021](0021-staff-second-factor.md) | A second factor: TOTP written against the RFC vectors, secrets sealed with a rotatable key, required of staff and enforced in the resolver | Accepted |

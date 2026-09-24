@@ -56,7 +56,33 @@ export const SIGN_IN_RATE_LIMITED_MESSAGE =
   "Too many sign-in attempts. Please wait a moment and try again.";
 
 export type SignInResult =
-  | { readonly ok: true; readonly session: SessionRef; readonly expiresAt: Date }
+  | {
+      readonly ok: true;
+      readonly session: SessionRef;
+      readonly expiresAt: Date;
+      /**
+       * The second step, when there is one.
+       *
+       * `ok: true` and a session, but the session is `mfa_pending` and the resolver refuses it —
+       * so this is not "signed in", it is "the password was right". The transport shows the code
+       * prompt, or the enrolment page when `enrolmentRequired`.
+       *
+       * Returned rather than throwing, and the session is issued rather than held in memory,
+       * because the alternative is a half-authenticated state living somewhere else: a signed
+       * "half token", or a server-side map. Both are new things to get wrong. This way the only
+       * record of a half-finished sign-in is the same session row, with one boolean, and every
+       * existing revocation and expiry applies to it unchanged.
+       */
+      readonly secondFactor?: {
+        /** The person must type a code from their authenticator (or a recovery code). */
+        readonly required: true;
+        /**
+         * True when a factor is required of them and they have none confirmed — a capability was
+         * granted before they enrolled. They may reach enrolment and nothing else.
+         */
+        readonly enrolmentRequired: boolean;
+      };
+    }
   | {
       readonly ok: false;
       readonly message: string;
@@ -112,6 +138,10 @@ interface UserStateRow {
   session_version: number;
   deactivated: boolean;
   tenant_suspended: boolean;
+  /** A confirmed factor. An unconfirmed one protects nobody and does not count. */
+  has_confirmed_factor: boolean;
+  /** At least one unrevoked platform capability, which makes a factor mandatory (Rule 5.1). */
+  holds_capability: boolean;
 }
 
 export interface SignInLog {
@@ -251,7 +281,19 @@ export class SignInService {
       (tx as Queryable).$queryRawUnsafe<UserStateRow>(
         `SELECT u.session_version,
                 (u.deactivated_at IS NOT NULL) AS deactivated,
-                (t.suspended_at IS NOT NULL)   AS tenant_suspended
+                (t.suspended_at IS NOT NULL)   AS tenant_suspended,
+                -- Whether a second step is needed is decided HERE, in the same statement as the
+                -- rest of the user's state, rather than after the session is issued. A session
+                -- inserted first and then marked pending would be fully valid for the width of
+                -- that gap, which is the kind of window that only ever shows up in production.
+                EXISTS (
+                  SELECT 1 FROM mfa_totp m
+                   WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL
+                ) AS has_confirmed_factor,
+                EXISTS (
+                  SELECT 1 FROM platform_capability pc
+                   WHERE pc.user_id = u.id AND pc.revoked_at IS NULL
+                ) AS holds_capability
            FROM app_user u
            JOIN tenant  t ON t.id = u.tenant_id
           WHERE u.id = $1`,
@@ -297,10 +339,20 @@ export class SignInService {
     const sessionId = randomUUID();
     const expiresAt = new Date(this.now().getTime() + SESSION_LIFETIME_MS);
 
+    /**
+     * Is a second step required?
+     *
+     * Two independent reasons, and the second is the one that closes the hole: a confirmed factor
+     * must obviously be used, but somebody holding a platform capability with NO factor must also
+     * be stopped — otherwise the requirement would live only in the enrolment flow, and anyone who
+     * skipped that flow would keep full staff access on a password alone (Rule 5.1).
+     */
+    const mfaPending = user.has_confirmed_factor || user.holds_capability;
+
     await withoutTenant(this.db, "authentication", (tx) =>
       tx.$executeRawUnsafe(
-        `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at)
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, mfa_pending)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         sessionId,
         credential.user_id,
         credential.tenant_id,
@@ -308,6 +360,7 @@ export class SignInService {
         // this session stale on its next request — see ADR 0013.
         user.session_version,
         expiresAt.toISOString(),
+        mfaPending,
       ),
     );
 
@@ -317,6 +370,18 @@ export class SignInService {
     // other account behind it.
     await this.limiter.reset(emailKey("signin", normalised));
 
-    return { ok: true, session: { sessionId, version: user.session_version }, expiresAt };
+    return {
+      ok: true,
+      session: { sessionId, version: user.session_version },
+      expiresAt,
+      ...(mfaPending
+        ? {
+            secondFactor: {
+              required: true as const,
+              enrolmentRequired: !user.has_confirmed_factor,
+            },
+          }
+        : {}),
+    };
   }
 }

@@ -199,6 +199,11 @@ model AppSession {
   /// see schema-migration-parity.test.ts, which now refuses that kind of drift.
   mfaPending Boolean @default(false) @map("mfa_pending")
 
+  /// When the factor was last proved on this session. mfaPending answers "ever"; Rule 5.1 asks for
+  /// RE-authentication before impersonation or a price change, and "ever" cannot answer that - a
+  /// laptop walked away from has a session that passed a factor hours ago.
+  mfaVerifiedAt DateTime? @map("mfa_verified_at") @db.Timestamptz(6)
+
   @@index([userId])
   @@map("app_session")
 }
@@ -311,6 +316,14 @@ model MfaTotp {
   user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   secretCiphertext Bytes @map("secret_ciphertext")
+
+  /// Which encryption key sealed this secret.
+  ///
+  /// Without it, rotating the key makes every enrolled secret undecryptable and forces every staff
+  /// member to re-enrol - so in practice the key is never rotated and "encrypted at rest" becomes
+  /// "encrypted with a key we can never change". Two keys may be live: new secrets use the current
+  /// one, existing rows decrypt with the key they name.
+  secretKeyId String @default("k1") @map("secret_key_id")
   /// Not secret, and GCM cannot detect tampering without the tag.
   secretIv  Bytes @map("secret_iv")
   secretTag Bytes @map("secret_tag")
@@ -322,6 +335,13 @@ model MfaTotp {
   /// The last 30-second step this factor was used for. A TOTP code stays valid for its whole
   /// step, so without this a captured code can be replayed inside the same window.
   lastUsedStep BigInt? @map("last_used_step")
+
+  /// Consecutive failures, and a lock that FOLLOWS THE PERSON rather than the session. The rate
+  /// limiter is the first line and bounds attempts per session and per IP; this is the second, and
+  /// it survives a new session - so an attacker cannot reset their guessing budget by signing in
+  /// again with a password they have already stolen.
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  lockedUntil    DateTime? @map("locked_until") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)

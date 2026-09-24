@@ -54,6 +54,12 @@ export type AuditAction =
   | "user.deleted"
   | "user.password_changed"
   | "user.sessions_revoked"
+  // The second factor. "enrolled" and "locked" are here rather than in a log because they are
+  // the two events somebody investigating a compromised staff account looks for first, and a
+  // recovery code used is the one signal that an authenticator was lost or taken (ADR 0021).
+  | "user.mfa_enrolled"
+  | "user.mfa_recovery_code_used"
+  | "user.mfa_locked"
   | "staff.impersonation_started"
   | "staff.impersonation_ended";
 

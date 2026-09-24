@@ -1,6 +1,8 @@
 # Design — multi-factor authentication for our own staff
 
-**Status: Proposed.** Awaiting the owner's approval (Rule 1.1). Nothing is built until then.
+**Status: Built** (2026-09-24). Approved by the owner, then built against this document; the
+decisions and their reasoning are recorded in [ADR 0021](../adr/0021-staff-second-factor.md),
+and what remains owed is listed there rather than left implied.
 
 **Brief:** §18 step 1, Foundations — the last of the three gaps.
 **Rules:** 1.2 (design from the product, not from what exists), 5, **5.1** (the staff baseline, which
