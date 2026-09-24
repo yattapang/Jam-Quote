@@ -22,9 +22,10 @@
 #
 # It does not deploy. Render and Vercel own that, from their own triggers.
 #
-# The `scan` job checks dependencies and looks for committed secrets. It does NOT
-# produce an SBOM, which the service register records as owed and which should
-# land next to these two.
+# The `scan` job checks dependencies and looks for committed secrets across the whole
+# history. It does NOT produce an SBOM, which the service register records as owed and
+# which should land beside these two. Its dependency audit is a WARNING, not a gate,
+# and the step itself records why and when that should change.
 #
 # ## Concurrency
 #
@@ -177,28 +178,40 @@ jobs:
       #
       # GitHub's own secret scanning is free on public repositories and depends on
       # the plan for private ones, so this runs regardless of what that setting
-      # turns out to be — a control whose presence depends on a dashboard checkbox
+      # turns out to be - a control whose presence depends on a dashboard checkbox
       # nobody can see from the repo is not a control we can reason about (Rule 5).
       #
-      # gitleaks is free for personal accounts and public repositories. If this ever
-      # starts demanding a licence key because the repository moves under an
-      # organisation, swap this step for the binary rather than paying for it:
+      # THE BINARY, NOT THE ACTION, AND THE REASON IS WORTH READING.
       #
-      #   curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz"       #     | tar -xz gitleaks && ./gitleaks git . --redact --exit-code 1
+      # The first version of this job used gitleaks/gitleaks-action@v2. Its own log
+      # printed the command it actually ran:
+      #
+      #   gitleaks detect --redact --exit-code=2 --log-opts=-1
+      #
+      # `--log-opts=-1` is `git log -1`: THE MOST RECENT COMMIT ONLY. So a green
+      # "No leaks detected" meant one commit was clean, while this file's comment and
+      # the pull request that introduced it both claimed the whole history had been
+      # scanned. `fetch-depth: 0` dutifully fetched a history that nothing then
+      # looked at. A control that reports more coverage than it has is worse than no
+      # control, because it stops anybody asking the question.
+      #
+      # `gitleaks git .` with no `--log-opts` scans every commit. Pinned by version,
+      # so the scope cannot change underneath us the way it just did, and `--redact`
+      # so a finding cannot print the secret into a public build log and leak it a
+      # second time in the course of reporting it.
       #
       # BLOCKING from the first run, unlike the audit below. A committed credential
       # is not a backlog item: it is valid until it is rotated, and every minute it
       # sits on a green build is a minute somebody could be using it.
-      - name: No committed secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # A summary in the run, so a finding is readable without digging through
-          # the log. Note what this does NOT do: the action prints matches, so a
-          # finding may echo the secret into the build log. That is survivable
-          # because the response to a finding is to rotate the credential anyway —
-          # but it is the reason the binary fallback above passes `--redact`.
-          GITLEAKS_ENABLE_SUMMARY: "true"
+      - name: No committed secrets, over the whole history
+        run: |
+          set -euo pipefail
+          version=8.24.3
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
+          curl -sSfL "$url" | tar -xz gitleaks
+          ./gitleaks version
+          # No --log-opts, so this is every commit rather than the tip.
+          ./gitleaks git . --redact --verbose --exit-code 1
 
       - uses: actions/setup-node@v4
         with:
