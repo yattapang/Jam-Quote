@@ -70,6 +70,8 @@ above is the entire infrastructure cost of having a front door.
 | **PGlite** (`@electric-sql/pglite`) | Real Postgres compiled to WebAssembly, in process, so migrations, policies, roles and `current_setting` behave as they do in production | It is the test harness. A mock cannot disagree with a row-level-security policy, which is the whole reason the isolation tests are trustworthy |
 | **Turborepo, Vitest, TypeScript, Prisma, ESLint, Prettier** | Build, test, typecheck, migrate, lint, format | Standard toolchain |
 | **Docker Compose** (`new-app/infra/`) | Local Postgres for development, so RLS is exercised outside CI | RLS that is only enabled in production is a rule nobody tests |
+| **gitleaks** (`gitleaks/gitleaks-action@v2`, in CI only) | Scans the full git history for committed credentials on every push and pull request | Free for personal accounts and public repositories; an organisation-owned repository needs a free licence key, and the workflow carries the pinned-binary fallback in a comment so a licence prompt never becomes a reason to drop the control. Holds no data of ours. If it disappeared: run the binary directly, same scan |
+| **`npm audit`** (built in, no new dependency) | Known vulnerabilities in what both workspace roots install | Chosen over a third-party scanner precisely because it adds nothing to install and nothing to the register. It only knows what the npm advisory database knows, which is the argument for the SBOM below rather than against the check |
 
 ## 4. Software Bill of Materials
 
@@ -78,9 +80,19 @@ within a week. They belong in a generated **SBOM** (CycloneDX or SPDX) produced 
 lockfile in CI and attached to each build, which is also what makes a vulnerability advisory
 answerable: "are we affected?" becomes a query rather than an investigation.
 
-**This does not exist yet.** It sits with the two gaps the Phase 0 audit recorded — no
-dependency-vulnerability check and no secret scan in the gate (Rule 17) — and the three should
-land together, because an SBOM nobody scans is a file, not a control.
+**This still does not exist.** Two of the three landed on 2026-09-24 — the `scan` job in
+`.github/workflows/verify.yml` runs `gitleaks` over the full history and `npm audit` over both
+workspace roots — and the SBOM is now the **only** one of the three outstanding. It should land
+next, because an advisory is only answerable against a bill of materials: without one, "are we
+affected?" is an investigation rather than a query.
+
+Two honest limits of what did land, so the register does not overstate it:
+
+- `npm audit` is **non-blocking** for now (`continue-on-error: true`), so an advisory annotates
+  the run without failing it. A gate that is red for reasons nobody can act on is one people
+  learn to ignore. **Turn it blocking once the first pass is clean, and record the date here.**
+- `gitleaks` **is** blocking from the first run. A committed credential is valid until it is
+  rotated, so it is not a backlog item.
 
 ## 5. Where the secrets live
 

@@ -443,11 +443,14 @@ reason this rule is enforceable where 16.2 alone was not.
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
-review register, and today include: no dependency-vulnerability check or secret scan in the
-gate; a long session with no rotation and no live-session invalidation; and the mobile sync
-module has neither an independent review nor a seam test. (The "no second factor anywhere" entry
-was true when written and is not now — staff MFA landed 2026-09-24, ADR 0021. A stale weakness
-list is worse than none, because it is read as current.)
+review register, and today include: no SBOM, so an advisory is answered by investigation rather
+than by a query; `npm audit` gates the build only as a warning, not a failure; a long session with
+no rotation and no live-session invalidation; and the mobile sync module has neither an independent
+review nor a seam test. (Two entries here were true when written and are not
+now: "no second factor anywhere" — staff MFA landed 2026-09-24, ADR 0021 — and "no
+dependency-vulnerability check or secret scan in the gate", both of which landed the same day. A
+stale weakness list is worse than none, because it is read as current, and a stale one that
+overstates the gaps trains the reader to discount it.)
 
 ## 18. Every service we depend on is recorded, with the reason (owner requirement)
 

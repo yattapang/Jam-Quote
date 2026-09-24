@@ -144,7 +144,11 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 6. **Finish authentication:** sign-out and session
    rotation, HTTP transport, sign-up, password reset.
 7. **Dependency scanning, secret scanning and an SBOM** — cheap, mechanical, and the only defence
-   against a class we currently cannot see at all.
+   against a class we currently cannot see at all. Two of the three are **done 2026-09-24**: the
+   `scan` job runs `gitleaks` over the full history (blocking) and `npm audit` over both workspace
+   roots (a warning for now, to be made blocking once the first pass is clean). The **SBOM is still
+   owed**, and it is the one that turns an advisory into a query. *Delegation (Rule 16.5):
+   in-session — two file edits, below the threshold where briefing a cold agent pays for itself.*
 8. ~~Schema: client-generated ids and row versioning~~ ✅ **done 2026-09-24** (ADR 0019). Owed
    with the persistence layer: a guard that every repository writes `AND version = $n`, and one
    that every query filters `deleted_at IS NULL`.
