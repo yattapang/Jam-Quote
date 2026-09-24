@@ -36,6 +36,10 @@ useDefault = true
 # ---------------------------------------------------------------------------
 [[allowlists]]
 description = "RFC 6238 Appendix B seed, published in the standard; the TOTP vectors depend on it"
+# `regexTarget = "line"` because a regex is matched against the extracted SECRET by
+# default, and what the rule extracts is not something we should have to guess at. The
+# whole line is what we actually verified by reading, so the whole line is what we match.
+regexTarget = "line"
 regexes = ['''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''']
 
 # ---------------------------------------------------------------------------
