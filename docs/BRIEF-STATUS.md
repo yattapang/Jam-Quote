@@ -80,7 +80,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 |---|---|---|
 | Authentication | 🟡 | Default-deny routes, identity re-resolved per request, revocable sessions, sign-in, rate limiting (ADRs 0013–0016). **Owed:** staff MFA (in flight), HTTP transport, sign-up, password reset |
 | Tenancy with cross-tenant leak tests | ✅ | `tenant_id` + forced RLS + `withTenant`, proved against real Postgres; every table must now be protected or exempt with a reason |
-| Schema | 🟡 | Auth tables only. **Owed:** client-generated ids and versioning for future sync, which §18 names explicitly |
+| Schema | 🟡 | **Client-generated ids, row versions and tombstones done** 2026-09-24 (ADR 0019), with partial indexes and a convention guard. **Owed:** the audit log's tables, and the product schema itself |
 | Audit log | ❌ | **Missing from step 1** |
 | CI | ✅ | Both workspaces gate on every push |
 
@@ -122,13 +122,14 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
    both.
 5. **Audit log** — named in Foundations, missing, and the threat model makes it the control every
-   staff safeguard depends on for detection.
+   staff safeguard depends on for detection. **Next.**
 6. **Finish authentication:** staff MFA (Rule 5.1 launch blocker, paused), sign-out and session
    rotation, HTTP transport, sign-up, password reset.
 7. **Dependency scanning, secret scanning and an SBOM** — cheap, mechanical, and the only defence
    against a class we currently cannot see at all.
-8. **Schema: client-generated ids and row versioning**, since §18 puts them in step 1 precisely so
-   sync is not a retrofit.
+8. ~~Schema: client-generated ids and row versioning~~ ✅ **done 2026-09-24** (ADR 0019). Owed
+   with the persistence layer: a guard that every repository writes `AND version = $n`, and one
+   that every query filters `deleted_at IS NULL`.
 9. **A `TradePack` in core** with the guard that fails on a trade branch (ADR 0017), before the
    catalog work makes construction assumptions hard to remove.
 10. Answer the seven open questions, each as an ADR or a PRD entry.

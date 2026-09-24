@@ -66,6 +66,17 @@ model Tenant {
   /// next request, because core/auth re-reads this on every one.
   suspendedAt DateTime? @map("suspended_at") @db.Timestamptz(6)
 
+  /// Compared on every write: UPDATE ... SET version = version + 1 WHERE id = ? AND version = ?.
+  /// Zero rows affected means somebody else got there first, and the caller is told rather than
+  /// having their edit vanish. Also the conflict signal offline sync needs - one column, two
+  /// jobs. NOT updated_at: clocks disagree and a backwards correction makes a stale write look
+  /// fresh.
+  version Int @default(1)
+
+  /// NULL means live. Soft delete where history matters (Rule 6), and the only way a client
+  /// that has been offline can learn a row is gone rather than not-yet-seen.
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -119,6 +130,14 @@ model AppUser {
   /// and audit entries point at.
   deactivatedAt DateTime? @map("deactivated_at") @db.Timestamptz(6)
 
+  /// See Tenant.version.
+  version Int @default(1)
+
+  /// Distinct from deactivatedAt, which means "may no longer sign in" while remaining a member
+  /// of the business. This means removed. The two answer different questions, and a user can be
+  /// deactivated without being deleted.
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -128,6 +147,11 @@ model AppUser {
   mfaTotp              MfaTotp?
   mfaRecoveryCodes     MfaRecoveryCode[]
 
+  /// The real index is PARTIAL - `WHERE deleted_at IS NULL` - so a deleted user's address is not
+  /// held hostage forever and the business can re-invite the same person. Prisma cannot express a
+  /// partial unique index, so the migration owns it and this declaration is the closest Prisma
+  /// can come. db/test/row-convention.test.ts asserts the real index is the partial one, because
+  /// a schema that cannot state the truth needs something that can.
   @@unique([tenantId, email])
   @@index([tenantId])
   @@map("app_user")
