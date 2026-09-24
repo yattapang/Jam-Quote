@@ -89,6 +89,58 @@ export function ipKey(action: string, ip: string): string {
   return `${action}:ip:${ip}`;
 }
 
+/**
+ * Thrown when a caller asks for something the limiter cannot honestly enforce.
+ *
+ * A programming error, not a caller error: it means the code asked for a limit that does not
+ * limit. Loud and immediate beats a bucket that quietly grants everything.
+ */
+export class InvalidRateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidRateLimitError";
+  }
+}
+
+/**
+ * F9 (independent review, 2026-09-24): `consume` validated neither the cost nor the rule, and a
+ * cost of ZERO was granted 1000 times out of 1000 on an exhausted bucket — because spending
+ * nothing always succeeds. A fractional cost multiplies the capacity by the same logic.
+ *
+ * Nothing reaches it with a bad value today, and the limiter's own tests never passed a cost at
+ * all, so this was a hole waiting for its first caller. Validated here rather than at the call
+ * sites, because the guarantee belongs to the limiter.
+ */
+function assertUsableCost(cost: number, rule: RateLimitRule): void {
+  if (!Number.isFinite(cost) || cost <= 0) {
+    throw new InvalidRateLimitError(
+      `A rate-limit cost must be a positive number; got ${cost}. Spending zero or less always ` +
+        `succeeds, which is a limiter that does not limit.`,
+    );
+  }
+  if (cost > rule.capacity) {
+    // Otherwise the caller is refused forever: the bucket can never hold enough, so the refusal
+    // is permanent and `retryAfterSeconds` is a promise that will not come true.
+    throw new InvalidRateLimitError(
+      `A cost of ${cost} can never be paid from a bucket of capacity ${rule.capacity}, so this ` +
+        `caller would be refused forever.`,
+    );
+  }
+}
+
+function assertUsableRule(rule: RateLimitRule): void {
+  if (!Number.isFinite(rule.capacity) || rule.capacity <= 0) {
+    throw new InvalidRateLimitError(`A rate-limit capacity must be positive; got ${rule.capacity}.`);
+  }
+  if (!Number.isFinite(rule.refillPerSecond) || rule.refillPerSecond <= 0) {
+    // A zero refill is a permanent lockout once the bucket empties, with no way back.
+    throw new InvalidRateLimitError(
+      `A refill rate must be positive; got ${rule.refillPerSecond}. A bucket that never refills ` +
+        `locks the caller out permanently.`,
+    );
+  }
+}
+
 /** The narrow query surface this needs. Structural, as elsewhere in core. */
 export interface RateLimitStore {
   $queryRawUnsafe<T>(query: string, ...values: unknown[]): Promise<T[]>;
@@ -115,6 +167,9 @@ export class PostgresRateLimiter implements RateLimiter {
   ) {}
 
   async consume(key: string, rule: RateLimitRule, cost = 1): Promise<RateLimitDecision> {
+    assertUsableRule(rule);
+    assertUsableCost(cost, rule);
+
     const at = this.now().toISOString();
 
     // One statement. The refill expression appears twice — once to compute the new

@@ -53,13 +53,58 @@ const ALGORITHM = "scrypt";
 /**
  * The one password-length rule, used by every path that sets or checks a password.
  *
- * The maximum is not security theatre: it bounds the work an unauthenticated caller
- * can make us do, since hashing cost rises with input size. The minimum is length
- * rather than a character-class rule, because "at least one symbol" reliably produces
- * `Password1!` and nothing better.
+ * The minimum is length rather than a character-class rule, because "at least one symbol"
+ * reliably produces `Password1!` and nothing better.
+ *
+ * MEASURED IN CHARACTERS A PERSON WOULD COUNT (F8, independent review 2026-09-24). The rule
+ * used to use `String.length`, which counts UTF-16 code units — so six emoji satisfied a
+ * twelve-character minimum, because each one counts as two. The comment said "characters as
+ * typed" and the code said something else, which is the kind of gap that survives review
+ * precisely because the comment reads correctly.
+ *
+ * The maximum is enforced twice, in two different units, because it exists for two reasons:
+ * a sane upper bound on what a person types, AND a bound on the work an unauthenticated
+ * caller can make us do. Code points cover the first; bytes cover the second, since a
+ * 128-code-point password of astral characters is 512 bytes.
  */
 export const PASSWORD_MIN_LENGTH = 12;
 export const PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_MAX_BYTES = 1024;
+
+/**
+ * Counts what a person would call characters: code points, not UTF-16 code units.
+ *
+ * `"👷".length` is 2. Spreading the string iterates code points, so it is 1 — which is what
+ * the person who typed it believes.
+ */
+function characterCount(password: string): number {
+  return [...password].length;
+}
+
+/**
+ * The canonical form of a password, for hashing and for verifying.
+ *
+ * WHY (F7, independent review 2026-09-24): the same password typed on two devices can arrive
+ * as two different byte sequences. `é` is one code point on one keyboard (NFC) and `e` plus a
+ * combining accent on another (NFD). Without normalisation the NFD form fails against an NFC
+ * hash, and the user is told their correct password is wrong — the same failure shape as the
+ * trimming defect this module already exists to prevent, for the same reason: the bytes
+ * changed somewhere the user cannot see.
+ *
+ * NFC, not NFKC. NFKC also folds compatibility characters — `ﬁ` becomes `fi`, full-width
+ * letters become ASCII — which silently makes distinct passwords equal and *reduces* entropy.
+ * NFC only composes what is canonically the same character. This follows the reasoning in
+ * RFC 8265's OpaqueString profile.
+ *
+ * NOT trimming, still: normalisation does not remove a leading or trailing space, because that
+ * space is a character the user chose.
+ *
+ * Safe to introduce now because no password has ever been stored. After the first real user,
+ * changing this would lock out anyone whose password contains a composable character.
+ */
+function canonical(password: string): string {
+  return password.normalize("NFC");
+}
 
 export class WeakPasswordError extends Error {
   constructor(message: string) {
@@ -77,12 +122,21 @@ export class WeakPasswordError extends Error {
  * in characters as typed.
  */
 export function assertPasswordAllowed(password: string): void {
-  if (password.length < PASSWORD_MIN_LENGTH) {
+  // Measured on the canonical form, so the answer does not depend on which keyboard produced
+  // the accents.
+  const normalised = canonical(password);
+  const characters = characterCount(normalised);
+
+  if (characters < PASSWORD_MIN_LENGTH) {
     throw new WeakPasswordError(
       `Please use at least ${PASSWORD_MIN_LENGTH} characters. A short phrase you will remember is stronger than a short word with symbols in it.`,
     );
   }
-  if (password.length > PASSWORD_MAX_LENGTH) {
+  if (characters > PASSWORD_MAX_LENGTH) {
+    throw new WeakPasswordError(`Please use ${PASSWORD_MAX_LENGTH} characters or fewer.`);
+  }
+  // The work bound. Unreachable by anything a person types; reachable by a script.
+  if (Buffer.byteLength(normalised, "utf8") > PASSWORD_MAX_BYTES) {
     throw new WeakPasswordError(`Please use ${PASSWORD_MAX_LENGTH} characters or fewer.`);
   }
 }
@@ -98,9 +152,11 @@ export function assertPasswordAllowed(password: string): void {
 export async function hashPassword(password: string): Promise<string> {
   assertPasswordAllowed(password);
 
+  // Hash the canonical form, so verify can canonicalise too and the two always agree.
+  const normalised = canonical(password);
   const salt = randomBytes(SALT_BYTES);
   const { N, r, p, maxmem } = SCRYPT_PARAMS;
-  const hash = await scrypt(password, salt, HASH_BYTES, { N, r, p, maxmem });
+  const hash = await scrypt(normalised, salt, HASH_BYTES, { N, r, p, maxmem });
 
   return [
     ALGORITHM,
@@ -184,12 +240,20 @@ function parse(stored: string): ParsedHash | null {
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const parsed = parse(stored);
   if (!parsed) return false;
-  if (password.length === 0 || password.length > PASSWORD_MAX_LENGTH) return false;
+
+  // Canonicalised on the way in, exactly as hashing does — F7. Without this, the same password
+  // typed on a different keyboard is rejected as wrong.
+  const normalised = canonical(password);
+  if (normalised.length === 0) return false;
+  // Bounded in bytes here rather than characters: this is the denial-of-service bound, and it is
+  // the only limit that should apply to a verify. A stored password from before a policy change
+  // must still be checkable, so the CHARACTER policy is deliberately not enforced on this path.
+  if (Buffer.byteLength(normalised, "utf8") > PASSWORD_MAX_BYTES) return false;
 
   const { N, r, p, salt, hash } = parsed;
   let candidate: Buffer;
   try {
-    candidate = await scrypt(password, salt, hash.length, {
+    candidate = await scrypt(normalised, salt, hash.length, {
       N,
       r,
       p,

@@ -33,6 +33,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  InvalidRateLimitError,
   PostgresRateLimiter,
   type RateLimitStore,
   emailKey,
@@ -180,6 +181,45 @@ describe("concurrency", () => {
     const allowed = decisions.filter((d) => d.allowed).length;
     expect(allowed).toBe(RULE.capacity);
     expect(decisions.length - allowed).toBe(attempts - RULE.capacity);
+  });
+});
+
+describe("a cost or rule the limiter cannot honour", () => {
+  it("refuses a zero cost, which always succeeds and therefore limits nothing (F9)", async () => {
+    // The reviewer's finding, executed: on an exhausted capacity-3 bucket, consume(key, rule, 0)
+    // was allowed 1000 times out of 1000, because spending nothing always succeeds. The limiter's
+    // own tests never passed a cost at all, so this waited for its first caller.
+    for (let i = 0; i < RULE.capacity; i += 1) await limiter.consume("k", RULE);
+    expect((await limiter.consume("k", RULE)).allowed).toBe(false);
+
+    await expect(limiter.consume("k", RULE, 0)).rejects.toThrow(InvalidRateLimitError);
+    await expect(limiter.consume("k", RULE, -5)).rejects.toThrow(InvalidRateLimitError);
+    await expect(limiter.consume("k", RULE, Number.NaN)).rejects.toThrow(InvalidRateLimitError);
+  });
+
+  it("refuses a cost larger than the bucket can ever hold", async () => {
+    // Otherwise the caller is refused forever and told to retry at a time that will never come.
+    await expect(limiter.consume("k", RULE, RULE.capacity + 1)).rejects.toThrow(
+      InvalidRateLimitError,
+    );
+  });
+
+  it("allows a fractional cost only when it is positive and payable", async () => {
+    // Fractions are legitimate — a cheap operation costing half a token — but 0.0 is not, and the
+    // bucket's arithmetic is fractional by design.
+    const decision = await limiter.consume("fractional", { ...RULE }, 0.5);
+    expect(decision).toEqual({ allowed: true, tokensLeft: 2.5 });
+  });
+
+  it("refuses a rule that is not a limit", async () => {
+    // A zero refill is a permanent lockout with no way back; a zero capacity refuses everything
+    // forever. Both are programming errors, and both used to be accepted silently.
+    await expect(
+      limiter.consume("k", { capacity: 0, refillPerSecond: 1 }),
+    ).rejects.toThrow(InvalidRateLimitError);
+    await expect(
+      limiter.consume("k", { capacity: 3, refillPerSecond: 0 }),
+    ).rejects.toThrow(InvalidRateLimitError);
   });
 });
 

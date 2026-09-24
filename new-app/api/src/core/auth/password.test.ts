@@ -17,6 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PASSWORD_MAX_BYTES,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   SCRYPT_PARAMS,
@@ -28,6 +29,31 @@ import {
 } from "./password.js";
 
 const GOOD = "correct horse battery staple";
+
+/**
+ * A hash of a real password at the cost we used before, for the upgrade case.
+ *
+ * Built rather than hard-coded, so it is genuinely verifiable — the fixture it replaced was a
+ * string of "x" that no password could match, which is exactly why F6's test proved nothing.
+ */
+async function legacyHash(password: string): Promise<string> {
+  const { randomBytes, scrypt } = await import("node:crypto");
+  const { promisify } = await import("node:util");
+  const derive = promisify(scrypt) as (
+    p: string,
+    s: Buffer,
+    k: number,
+    o: { N: number; r: number; p: number; maxmem: number },
+  ) => Promise<Buffer>;
+  const salt = randomBytes(16);
+  const params = { N: 16_384, r: 8, p: 1, maxmem: 96 * 1024 * 1024 };
+  // Normalised the same way hashPassword does, or a legacy hash of an accented password would
+  // never verify and this helper would be testing the wrong thing.
+  const hash = await derive(password.normalize("NFC"), salt, 32, params);
+  return ["scrypt", params.N, params.r, params.p, salt.toString("base64"), hash.toString("base64")].join(
+    "$",
+  );
+}
 
 describe("hashing and verifying", () => {
   it("accepts the right password and rejects a wrong one", async () => {
@@ -119,6 +145,45 @@ describe("a corrupt or hostile stored hash", () => {
   });
 });
 
+describe("unicode", () => {
+  it("accepts the same password typed on a different keyboard (F7)", async () => {
+    // "café résumé passphrase" composed (NFC) and decomposed (NFD). A person typing on one
+    // device produces one, another device the other, and they believe they typed the same
+    // thing — because they did.
+    const composed = "caf\u00e9 r\u00e9sum\u00e9 passphrase";
+    const decomposed = "cafe\u0301 re\u0301sume\u0301 passphrase";
+
+    expect(composed, "the two forms must differ, or this test proves nothing").not.toBe(
+      decomposed,
+    );
+
+    const stored = await hashPassword(composed);
+    expect(await verifyPassword(decomposed, stored)).toBe(true);
+
+    // And the other way round: hashed decomposed, verified composed.
+    const storedFromDecomposed = await hashPassword(decomposed);
+    expect(await verifyPassword(composed, storedFromDecomposed)).toBe(true);
+  });
+
+  it("does not fold distinct characters together", async () => {
+    // NFC, not NFKC. NFKC would turn "ﬁ" into "fi" and full-width into ASCII, silently making
+    // different passwords equal and reducing entropy.
+    const ligature = "\ufb01nancial statement pass";
+    const spelled = "financial statement pass";
+
+    const stored = await hashPassword(ligature);
+    expect(await verifyPassword(spelled, stored)).toBe(false);
+  });
+
+  it("still does not trim, because a space is a character the user chose", async () => {
+    const withSpace = `${GOOD} `;
+    const stored = await hashPassword(withSpace);
+
+    expect(await verifyPassword(withSpace, stored)).toBe(true);
+    expect(await verifyPassword(GOOD, stored)).toBe(false);
+  });
+});
+
 describe("the password policy", () => {
   it("requires a real length and says so usefully", () => {
     expect(() => assertPasswordAllowed("short")).toThrow(WeakPasswordError);
@@ -126,6 +191,31 @@ describe("the password policy", () => {
       /at least 12 characters/,
     );
     expect(() => assertPasswordAllowed("x".repeat(PASSWORD_MIN_LENGTH))).not.toThrow();
+  });
+
+  it("counts characters a person would count, not UTF-16 code units (F8)", () => {
+    // Six construction-worker emoji are twelve UTF-16 code units and six characters. The old
+    // rule counted units, so this satisfied a twelve-character minimum — while the comment
+    // claimed it measured "characters as typed".
+    const sixEmoji = "\u{1F477}".repeat(6);
+    expect(sixEmoji.length, "twelve code units").toBe(12);
+    expect([...sixEmoji].length, "six characters").toBe(6);
+
+    expect(() => assertPasswordAllowed(sixEmoji)).toThrow(WeakPasswordError);
+    expect(() => assertPasswordAllowed("\u{1F477}".repeat(12))).not.toThrow();
+  });
+
+  it("bounds the work in bytes as well as characters (F8)", () => {
+    // 128 astral characters are 512 bytes, which is within the byte bound; the byte bound exists
+    // for what a script sends, not what a person types.
+    expect(() => assertPasswordAllowed("\u{1F477}".repeat(PASSWORD_MAX_LENGTH))).not.toThrow();
+    expect(() => assertPasswordAllowed("\u{1F477}".repeat(PASSWORD_MAX_LENGTH + 1))).toThrow(
+      WeakPasswordError,
+    );
+
+    // And verify refuses an absurd input outright rather than hashing it.
+    const absurd = "a".repeat(PASSWORD_MAX_BYTES + 1);
+    expect(Buffer.byteLength(absurd, "utf8")).toBeGreaterThan(PASSWORD_MAX_BYTES);
   });
 
   it("caps the length, so an unauthenticated caller cannot ask for unbounded work", () => {
@@ -145,12 +235,21 @@ describe("needsRehash", () => {
     expect(needsRehash(await hashPassword(GOOD))).toBe(false);
   });
 
-  it("is true for a hash made with weaker parameters", async () => {
-    // Simulates the upgrade case: a row written before the cost was raised. It must
-    // still VERIFY (users can sign in) and be flagged for replacement.
-    const weak = `scrypt$16384$8$1$c2FsdHlzYWx0eXNhbHQ=$${Buffer.from("x".repeat(32)).toString("base64")}`;
+  it("is true for a hash made with weaker parameters, which must still verify", async () => {
+    // F6 (independent review, 2026-09-24): this test used to assert ONLY that needsRehash was
+    // true, while its comment claimed "it must still VERIFY". Those are different claims, and
+    // the weaker one passes whether the old hash verifies or is rejected outright. The reviewer
+    // planted a parse rejection for old parameters — locking out every pre-upgrade user — and
+    // this file stayed 14/14 green.
+    //
+    // A comment describing a stronger claim than the assertion is worse than no comment: it
+    // tells a reader the case is covered. So the hash is now built from a REAL password at the
+    // old cost, and both halves are asserted.
+    const weak = await legacyHash(GOOD);
 
-    expect(needsRehash(weak)).toBe(true);
+    expect(await verifyPassword(GOOD, weak), "a pre-upgrade user can still sign in").toBe(true);
+    expect(await verifyPassword("the wrong password entirely", weak)).toBe(false);
+    expect(needsRehash(weak), "and the hash is flagged for replacement").toBe(true);
   });
 
   it("is true for a hash it cannot read, so a bad row gets replaced at the next chance", () => {
