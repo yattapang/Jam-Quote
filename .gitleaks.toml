@@ -1,0 +1,57 @@
+# What the secret scanner is allowed to ignore, and why each one is safe.
+#
+# THIS FILE IS A LIABILITY IF IT IS WRITTEN CARELESSLY. Every entry is a place a real
+# credential could hide from the scan, so the rules are: name the exact thing, never a
+# directory or a rule id, and state the reason in a sentence somebody can check. An
+# allowlist that says "test files" would exempt every credential anyone ever pastes into
+# a test, which is the most common place they get pasted.
+#
+# The first scan over the full history (427 commits) found three matches. All three are
+# false positives, each verified by reading the line rather than by trusting its name.
+# Nothing was deleted to make the scanner quiet, and no rule was weakened.
+#
+# Requires gitleaks 8.19+ for the `[[allowlists]]` array. CI pins 8.24.3.
+
+[extend]
+# Start from the full default rule set. Ours only ever adds exemptions, never removes
+# detections.
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# 1 & 2. The RFC 6238 test-vector seed.
+#
+# "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ" is base32 for the ASCII string
+# "12345678901234567890" — the seed published in RFC 6238 Appendix B, alongside the six
+# code values our TOTP implementation is checked against. It is in a public standards
+# document, and it protects nothing.
+#
+# It also cannot be replaced with a random fixture without destroying the only
+# meaningful correctness check we have on that code: the other implementation of the
+# protocol is an authenticator app we do not control, so agreeing with our own generator
+# would prove nothing (ADR 0021). The right move is to exempt the published constant,
+# not to weaken the test.
+#
+# Matched as a regex rather than by commit, because these files will legitimately change
+# and the seed must keep working when they do.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "RFC 6238 Appendix B seed, published in the standard; the TOTP vectors depend on it"
+regexes = ['''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''']
+
+# ---------------------------------------------------------------------------
+# 3. An empty placeholder in a template, in one historical commit.
+#
+# `apps/api/.env.example:9` is `WIPAY_API_KEY=""` — an empty value in the checked-in
+# template that tells a developer which variables to set locally. The scanner matched
+# across lines 9-10 and picked up the adjacent `WIPAY_ENVIRONMENT="sandbox"`. There is
+# no credential on either line; I read both at the commit and as they stand today.
+#
+# Pinned to that ONE COMMIT rather than to the path. `paths` would exempt
+# `.env.example` forever, and an example file is exactly where somebody eventually
+# pastes a real key "just to show the format". This commit is history and cannot
+# change, so the exemption cannot grow — any future edit to that file is scanned again.
+# ---------------------------------------------------------------------------
+[[allowlists]]
+description = "Empty WIPAY_API_KEY placeholder in the .env.example template, as first committed"
+commits = ["7c8ef8302cc803d80d83b6281e0e79cc3b7c1360"]
+paths = ['''apps/api/\.env\.example$''']
