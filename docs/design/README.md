@@ -34,7 +34,8 @@ Each design carries a header: **Proposed** (awaiting the owner), **Approved** (b
 
 | Design | Status | For |
 |---|---|---|
-| [staff-mfa.md](staff-mfa.md) | **Proposed** | TOTP with RFC test vectors, enrolment before access, a key id so the key can be rotated, and re-authentication before impersonation. Names four corrections to the schema already built (Rule 1.2) |
+| [domain-model.md](domain-model.md) | **Proposed** | The whole product as entities, designed from the eight steps of the job rather than from the tables that exist (Rule 1.2). Six contexts; a quote that is two things so an issued document cannot be edited; deposit and progress invoicing; number leases so issuing works with no signal; separation of duties modelled rather than documented. Names five corrections to work already built |
+| [staff-mfa.md](staff-mfa.md) | **Approved & built** 2026-09-24 | TOTP with RFC test vectors, enrolment before access, a key id so the key can be rotated, and re-authentication before impersonation. Names four corrections to the schema already built (Rule 1.2) |
 | [audit-log.md](audit-log.md) | **Approved & built** 2026-09-24 | Append-only, enforced by grants rather than by code; atomic with the change it describes; tenant-readable so a tenant can see what we did to their data |
 | [row-identity-and-versioning.md](row-identity-and-versioning.md) | **Approved & built** 2026-09-24 | Client-generated UUIDv7 ids, a version column compared on write, and tombstones — the schema half of offline sync, which §18 puts in Foundations so it is not a retrofit |
 | [api-bootstrap.md](api-bootstrap.md) | **Built** 2026-09-24 | The composition root and making default-deny real (F2). Explicitly NOT the HTTP layer: no `main.ts`, no session transport |
