@@ -339,6 +339,42 @@ decision; it is what happens when nobody checks. So:
 the tracker. The honesty is the control: a tracker that only ever says "on plan" is not being
 maintained.
 
+## 20. The public site, and what we say on it (owner requirement)
+
+pryvis.com is the front door. A self-service product with no public description cannot be signed up
+for, so the site is a launch dependency and not marketing polish.
+
+- **We own the site.** Pages live in our own application, content in typed data files, deployed on
+  free hosting we can leave (ADR 0018). A free **site builder** is not the same as free hosting: it
+  puts our words in someone else's database, in their format, behind their editor, and "upgradable
+  later" becomes a migration nobody scheduled. Rule 10 applies to the website exactly as it applies
+  to the database.
+- **Free now, upgradable deliberately.** Every free tool is chosen so leaving it is a change of
+  configuration rather than a rewrite, and each one is entered in the service register with its
+  upgrade trigger (Rule 18).
+- **We claim nothing that is not true.** No testimonials we did not receive, no customer counts we
+  cannot evidence, no logos we have no right to, no review scores, no invented awards. Until there
+  are customers, the site sells the product on what it does. A prospect who discovers an invented
+  claim has learned something true about us.
+- **No price until the price is decided.** A placeholder number gets screenshotted and quoted back.
+  Say what a tier includes and that pricing is coming.
+- **No third-party scripts by default** — no trackers, tag managers, chat widgets or font CDNs. Each
+  is a processor to register, a consent banner to justify and a performance cost. Analytics, if
+  wanted, are privacy-preserving and registered like any other service.
+- **The legal pages are real work, not filler.** Terms of Service and a Privacy Policy are required
+  before a self-service sign-up that will take payment. The privacy policy names the processors and
+  says plainly that data leaves the country. **They carry legal responsibility, so the owner
+  approves the words**; until then they ship marked as drafts and are never presented as final.
+- **It works for the person we are actually selling to:** a contractor on a phone, on mobile data,
+  in sunlight. Mobile-first, accessible, fast, and legible outdoors. These are requirements with
+  tests, not aspirations.
+- **The site keeps working when the product is asleep.** Static pages that call nothing, so a
+  cold-starting API or a sleeping free instance never makes the front door look broken.
+
+**Enforcement.** Guards over the site's own pages: every page has a title and description, internal
+links resolve, no external script or stylesheet host appears, and no social-proof claim exists
+unless a data file provides evidence for it. Plus review, for the things a test cannot judge.
+
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
