@@ -122,8 +122,11 @@ model AppUser {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  sessions   AppSession[]
-  credential AppCredential?
+  sessions             AppSession[]
+  credential           AppCredential?
+  platformCapabilities PlatformCapability[]
+  mfaTotp              MfaTotp?
+  mfaRecoveryCodes     MfaRecoveryCode[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -165,6 +168,11 @@ model AppSession {
 
   /// Revoked, never deleted: a session that was used to do something is history.
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  /// The password was accepted; a second factor is still owed. Staff sessions start here
+  /// (Rule 5.1). Added by the MFA migration and MISSING from this model until F11 was found -
+  /// see schema-migration-parity.test.ts, which now refuses that kind of drift.
+  mfaPending Boolean @default(false) @map("mfa_pending")
 
   @@index([userId])
   @@map("app_session")
@@ -211,4 +219,108 @@ model AppCredential {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("app_credential")
+}
+
+// ---------------------------------------------------------------------------
+// Rate limiting, staff capabilities and second factors.
+//
+// These four models were MISSING while their tables existed (F11, independent review
+// 2026-09-24). Prisma compares this file against a live database to plan a migration, so four
+// real tables - rate limits, staff capabilities, TOTP secrets and recovery codes - looked like
+// surplus and would have been DROPPED by a tool doing exactly what it is designed to do.
+//
+// Nothing caught it because every test replays migration SQL directly and never asks Prisma
+// anything. db/test/schema-migration-parity.test.ts now compares both sides, in both directions.
+// ---------------------------------------------------------------------------
+
+/// A token bucket. Not tenant-scoped, and consulted before anyone is identified - which is its
+/// purpose (ADR 0016). Holds no personal data: an email dimension is keyed by a hash.
+model RateLimitBucket {
+  /// "<action>:<dimension>:<value>", e.g. "signin:ip:203.0.113.4".
+  key String @id
+
+  /// Fractional on purpose: tokens refill continuously, and rounding would either give attempts
+  /// away or swallow them.
+  tokens Float
+
+  /// When `tokens` was last correct. Refill is computed from the gap, so no sweeper is needed and
+  /// an idle bucket costs nothing.
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(6)
+
+  @@index([updatedAt])
+  @@map("rate_limit_bucket")
+}
+
+/// What one of OUR staff may do. Deliberately not tenant-scoped: a platform capability is not a
+/// fact about any tenant (Rule 5.1). A grant has an author and a timestamp, or least privilege is
+/// a slogan.
+model PlatformCapability {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @map("user_id") @db.Uuid
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// e.g. "impersonate_tenant", "manage_pricing", "read_audit". Text, not an enum: capabilities
+  /// grow, and a new one should not need a migration (ADR 0002).
+  capability String
+
+  /// NULL only for the bootstrap grant created before any person exists. Every other grant names
+  /// who made it.
+  grantedByUserId String?  @map("granted_by_user_id") @db.Uuid
+  grantedAt       DateTime @default(now()) @map("granted_at") @db.Timestamptz(6)
+
+  /// Revoked rather than deleted: who could do what, and when, is history.
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("platform_capability")
+}
+
+/// A TOTP second factor.
+///
+/// The secret is ENCRYPTED AT REST (AES-256-GCM, key in configuration and never in the database).
+/// A TOTP secret is a credential equal to the password, so storing it in plaintext beside a slow
+/// password hash would hand an attacker with a dump both factors and the second one would have
+/// bought nothing.
+model MfaTotp {
+  userId String  @id @map("user_id") @db.Uuid
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  secretCiphertext Bytes @map("secret_ciphertext")
+  /// Not secret, and GCM cannot detect tampering without the tag.
+  secretIv  Bytes @map("secret_iv")
+  secretTag Bytes @map("secret_tag")
+
+  /// Set when the person has proved they can generate a code. An unconfirmed factor protects
+  /// nobody: it means a secret was issued and may never have reached an authenticator.
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+
+  /// The last 30-second step this factor was used for. A TOTP code stays valid for its whole
+  /// step, so without this a captured code can be replayed inside the same window.
+  lastUsedStep BigInt? @map("last_used_step")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("mfa_totp")
+}
+
+/// A single-use recovery code.
+///
+/// Hashed with SHA-256 and no salt, which looks wrong beside the scrypt used for passwords and is
+/// deliberate: a recovery code is ~100 bits of randomness WE generate, so there is no dictionary
+/// to try, while generating ten at scrypt's cost would mean 670 MB of work to enrol one person.
+model MfaRecoveryCode {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @map("user_id") @db.Uuid
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  codeHash String @unique @map("code_hash")
+
+  /// Marked rather than deleted, so "a recovery code was used" is a fact the audit trail can
+  /// point at.
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@map("mfa_recovery_code")
 }

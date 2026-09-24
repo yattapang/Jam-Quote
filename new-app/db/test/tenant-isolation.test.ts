@@ -24,8 +24,11 @@
  *
  * - Nothing about whether the application actually sets `app.tenant_id`. That is
  *   core/tenancy's job, and its own test's.
- * - Nothing about tables added later. `policy-parity.test.ts` is what refuses a
- *   new tenant-owned table that arrives without a policy.
+ * - Nothing about tables added later *by name*. The last describe block below closes the half of
+ *   that gap this file can: it creates a table inside the test, applies the canonical policy, and
+ *   proves the expression isolates. `policy-parity.test.ts` closes the other half by proving every
+ *   real table carries exactly that expression. F1 existed because neither half was there: this
+ *   file only ever queried `tenant` and `app_user`, and that file only counted policies.
  * - Nothing about a connection that runs as superuser or as the table owner in
  *   production. That is a deployment property; FORCE covers the owner case, and
  *   the application must never connect as a superuser.
@@ -201,5 +204,87 @@ describe("row-level security on tenant-owned tables", () => {
 
     const mine = await asTenant(TENANT_A, "SELECT email FROM app_user ORDER BY email");
     expect(mine.rows).toHaveLength(2);
+  });
+});
+
+describe("the canonical policy expression, on a table this test creates", () => {
+  /**
+   * F1's behavioural half.
+   *
+   * The tests above prove isolation on `tenant` and `app_user` — the two tables that existed when
+   * they were written. That is what let a planted table with `USING (true)` leak every tenant's
+   * rows while both guards passed: nothing executed a policy on any table added afterwards, and
+   * policy-parity only counted them.
+   *
+   * So this creates a table the way a future migration would, applies the expression from
+   * `db/policies/001-tenant-isolation.sql`, and attacks it. Together with policy-parity's
+   * character-for-character check that every real table carries this same expression, the argument
+   * covers tables that do not exist yet — which is the only way this guard can be true next year.
+   */
+  const CANONICAL_POLICY = `
+    ALTER TABLE "widget" ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE "widget" FORCE ROW LEVEL SECURITY;
+    CREATE POLICY widget_tenant_isolation ON "widget"
+      USING ("tenant_id" = nullif(current_setting('app.tenant_id', true), '')::uuid)
+      WITH CHECK ("tenant_id" = nullif(current_setting('app.tenant_id', true), '')::uuid);
+  `;
+
+  beforeEach(async () => {
+    await db.exec(`
+      CREATE TABLE "widget" (
+        "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+        "tenant_id" UUID NOT NULL REFERENCES "tenant"("id") ON DELETE CASCADE,
+        "label" TEXT NOT NULL,
+        CONSTRAINT "widget_pkey" PRIMARY KEY ("id")
+      );
+      ${CANONICAL_POLICY}
+      GRANT SELECT, INSERT, UPDATE, DELETE ON "widget" TO ${APP_ROLE};
+    `);
+    // Seeded as the superuser, which bypasses RLS — the point is that the app role cannot reach
+    // the other tenant's row.
+    await db.query(`INSERT INTO widget (tenant_id, label) VALUES ($1, 'A owns this')`, [TENANT_A]);
+    await db.query(`INSERT INTO widget (tenant_id, label) VALUES ($1, 'B owns this')`, [TENANT_B]);
+  });
+
+  it("shows a new table's rows only to their owner", async () => {
+    const mine = await asTenant(TENANT_A, "SELECT label FROM widget");
+
+    expect(mine.rows).toEqual([{ label: "A owns this" }]);
+  });
+
+  it("returns nothing from a new table with no tenant in context", async () => {
+    const none = await asTenant(null, "SELECT label FROM widget");
+
+    expect(none.rows).toHaveLength(0);
+  });
+
+  it("refuses a write into another tenant's rows on a new table", async () => {
+    await expect(
+      asTenant(TENANT_A, `INSERT INTO widget (tenant_id, label) VALUES ($1, 'planted')`, [
+        TENANT_B,
+      ]),
+    ).rejects.toThrow(/row-level security/i);
+
+    const update = await asTenant(
+      TENANT_A,
+      `UPDATE widget SET label = 'seized' WHERE tenant_id = $1`,
+      [TENANT_B],
+    );
+    expect(update.affectedRows ?? 0).toBe(0);
+  });
+
+  it("would have caught the leak that F1 described", async () => {
+    // The planted defect, executed rather than described: a permissive policy in place of the
+    // canonical one. Before this block existed, this arrangement passed every test in the suite.
+    await db.exec(`
+      DROP POLICY widget_tenant_isolation ON "widget";
+      CREATE POLICY widget_wide_open ON "widget" USING (true);
+    `);
+
+    const leaked = await asTenant(TENANT_A, "SELECT label FROM widget ORDER BY label");
+
+    // Two rows: the leak is real, and this test is what now stands between it and a release.
+    expect(leaked.rows).toHaveLength(2);
+    expect(leaked.rows).toEqual([{ label: "A owns this" }, { label: "B owns this" }]);
   });
 });

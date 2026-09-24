@@ -14,9 +14,24 @@
  *    ask only about tables carrying a tenant_id, which made a table without one
  *    invisible to it; the MFA tables made that gap concrete.
  *
+ * F1 (independent review, 2026-09-24): this file used to COUNT policies and never read what they
+ * said, so a table added later with `CREATE POLICY … USING (true)` passed while returning every
+ * tenant's rows. Counting a control is not checking it. The fix is in two halves, and they only
+ * work together:
+ *
+ *   1. `tenant-isolation.test.ts` proves the canonical expression actually isolates, behaviourally,
+ *      against a real database — including on a table created inside the test, so the proof is not
+ *      limited to the two tables that happened to exist when it was written.
+ *   2. This file proves every tenant-owned table's policy IS that expression, character for
+ *      character, and that it carries no others.
+ *
+ * Neither half is sufficient. Half 1 on its own says a good policy works somewhere; half 2 on its
+ * own says every table shares an expression nobody has executed.
+ *
  * WHAT THESE GUARDS DO NOT PROVE
  *
- * - Not that the policy is *correct*. `tenant-isolation.test.ts` executes it.
+ * - Not that a policy nobody uses is harmless: a table could be reachable by a role these tests do
+ *   not model. Real Postgres grants are not checked here (PGlite runs one cluster we build).
  * - Not that a later migration cannot DROP a policy: this checks that a table with
  *   a tenant column ends up with a policy after every migration has run, so a drop
  *   with no replacement is caught, but a policy replaced by a weaker one is only
@@ -29,6 +44,30 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { applyMigrations, MIGRATIONS_DIR, migrationNames, migrationSql } from "./harness.js";
+
+/**
+ * The policy expression every tenant-owned table must carry, as Postgres prints it back.
+ *
+ * Postgres normalises what it stores: identifiers get quoted, `current_setting(...)` gains its
+ * `::text` argument cast, and the literal `''` becomes `''::text`. So this is written in the form
+ * `pg_get_expr` returns rather than the form the migration wrote, and it is built from the column
+ * name so the tenant table (which compares `id`) and every other table (which compares
+ * `tenant_id`) share one definition.
+ */
+function canonicalPolicyExpression(column: string): string {
+  // Exactly as `pg_get_expr` prints it: the column unquoted, the NULLIF call parenthesised before
+  // its cast, `current_setting`'s argument carrying `::text`, and the empty-string literal typed.
+  // Written by copying what Postgres returned rather than by guessing — the first attempt guessed,
+  // and the guard caught the guess, which is the right way round.
+  return normalise(
+    `(${column} = (NULLIF(current_setting('app.tenant_id'::text, true), ''::text))::uuid)`,
+  );
+}
+
+/** Whitespace and case differences are not semantic here; anything else is. */
+function normalise(expression: string | null): string {
+  return (expression ?? "").replace(/\s+/g, " ").trim().toUpperCase();
+}
 
 const POLICY_FILE = "001-tenant-isolation.sql";
 const BEGIN = `-- >>> BEGIN db/policies/${POLICY_FILE}`;
@@ -168,6 +207,58 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
         else if (!row.rls_forced) {
           unprotected.push(`${table} has RLS enabled but not FORCED, so its owner bypasses it`);
         } else if (row.policy_count === 0) unprotected.push(`${table} has RLS but no policy`);
+        else {
+          // F1: read what the policy SAYS. A policy that exists and permits everything is worse
+          // than none, because it satisfies a counter and reads as protection in review.
+          const policies = await db.query<{
+            polname: string;
+            cmd: string;
+            permissive: boolean;
+            roles: string;
+            using_expr: string | null;
+            check_expr: string | null;
+          }>(
+            `
+            SELECT p.polname,
+                   p.polcmd::text                        AS cmd,
+                   p.polpermissive                       AS permissive,
+                   COALESCE(array_to_string(p.polroles, ','), '')::text AS roles,
+                   pg_get_expr(p.polqual, p.polrelid)      AS using_expr,
+                   pg_get_expr(p.polwithcheck, p.polrelid) AS check_expr
+              FROM pg_policy p
+              JOIN pg_class c ON c.oid = p.polrelid
+             WHERE c.relname = $1
+            `,
+            [table],
+          );
+
+          // The tenant table is the tenant, so its policy compares `id`; every other
+          // tenant-owned table compares `tenant_id`. Both must resolve the value the same way.
+          const column = table === "tenant" ? "id" : "tenant_id";
+          const expected = canonicalPolicyExpression(column);
+
+          for (const policy of policies.rows) {
+            const named = `${table}.${policy.polname}`;
+
+            // `polcmd` is '*' for ALL. A policy scoped to SELECT only would leave writes
+            // unprotected while still counting as a policy.
+            if (policy.cmd !== "*") {
+              unprotected.push(`${named} applies only to ${policy.cmd}, not ALL`);
+            }
+            if (normalise(policy.using_expr) !== expected) {
+              unprotected.push(
+                `${named} USING is not the canonical tenant expression — got ${policy.using_expr}`,
+              );
+            }
+            // WITH CHECK may be null, in which case Postgres reuses USING. Either the canonical
+            // expression or nothing; anything else is a write rule nobody wrote down.
+            if (policy.check_expr !== null && normalise(policy.check_expr) !== expected) {
+              unprotected.push(
+                `${named} WITH CHECK is not the canonical tenant expression — got ${policy.check_expr}`,
+              );
+            }
+          }
+        }
       }
 
       expect(unprotected, unprotected.join("; ")).toEqual([]);
