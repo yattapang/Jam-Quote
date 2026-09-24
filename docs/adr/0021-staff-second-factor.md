@@ -5,6 +5,12 @@
 - **Design:** [`docs/design/staff-mfa.md`](../design/staff-mfa.md) (approved before any code — Rule 1.1)
 - **Supersedes:** nothing. Extends ADR 0013 (default-deny), ADR 0014 (password hashing),
   ADR 0016 (rate limiting), ADR 0020 (audit log).
+- **Delegation (Rule 16.5), recorded after the fact and in breach:** built by **Opus in the main
+  session**, with no agent and no declared decision. Rule 16.2 places "building to a precise spec"
+  with Sonnet, and this had an approved design listing the very defects to plant. Under 16.5 — which
+  exists because of this batch — the credential-path exception would have permitted Opus, but only if
+  declared and argued beforehand. It was not. Recorded rather than tidied away, because the first
+  entry under a new rule showing the rule being kept would be a small lie.
 
 ## Context
 

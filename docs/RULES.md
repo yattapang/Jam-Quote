@@ -405,13 +405,49 @@ especially anything that would change a design or close a defect.
 Cost discipline applies as it does anywhere else: budgets, usage alerts and caps (Rule 15), and a
 named human accountable for what lands.
 
+### 16.5 The delegation decision is declared, not assumed
+
+**Before any build batch begins, one line is written down: which model class does the work, and
+why.** A stated decision can be reviewed and corrected. A silent one cannot — which is exactly how
+Opus came to build staff MFA on 2026-09-24 against an already-approved design, work that 16.2 places
+with Sonnet. Nobody broke a rule on purpose; there was simply nothing to break, because 16.2 said
+which model *suits* which work and never said the choice had to be made out loud.
+
+**The default: building against an approved design is Sonnet.** The design is the spec. If a design
+is not precise enough for Sonnet to build from, the design is not finished — that is a finding about
+the design, not a reason to escalate the model.
+
+**The exception, and it is narrow.** These stay Opus, and the line must say which one applies:
+
+- the **credential path** — hashing, sessions, second factors, token issuing;
+- **row-level-security policy text**, and the guards that assert it;
+- **money arithmetic** — rounding, tax, totals, anything that decides an amount.
+
+The reason is specific rather than "these feel important": in all three, a mistake leaves the suite
+**green**. The authentication bypass in our own `password.ts` — an empty salt and hash verifying any
+password — was found by reasoning about what the code permitted, not by a test going red. Where
+correctness is established by adversarial reading rather than by a failing assertion, the reading is
+the work, and it is judgement-class.
+
+**Deviating from the default is allowed, and asks first.** If the suitable model differs from what
+this rule prescribes — either direction, up or down — say so **with the reasoning, before starting**,
+and get the owner's approval. A deviation that is argued is a decision; one taken quietly is drift,
+and drift is what this rule exists to stop.
+
+**Where the line lives.** In the batch's entry in `BRIEF-STATUS.md`, and in the ADR the batch
+produces. That makes a breach visible in a diff rather than only in hindsight, and it is the only
+reason this rule is enforceable where 16.2 alone was not.
+
+**No declaration, no build.**
+
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
 review register, and today include: no dependency-vulnerability check or secret scan in the
-gate; no second factor anywhere, including the admin console; a long session with no rotation
-and no live-session invalidation; and the mobile sync module has neither an independent review
-nor a seam test.
+gate; a long session with no rotation and no live-session invalidation; and the mobile sync
+module has neither an independent review nor a seam test. (The "no second factor anywhere" entry
+was true when written and is not now — staff MFA landed 2026-09-24, ADR 0021. A stale weakness
+list is worse than none, because it is read as current.)
 
 ## 18. Every service we depend on is recorded, with the reason (owner requirement)
 

@@ -126,11 +126,18 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
    wording (which removes the draft banners), setting the tier prices, and deciding the
    aggregate-data consent clause — that last one blocks registration, not the website.
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
-   both.
+   both. The **domain model** is written and **Proposed** (`docs/design/domain-model.md`), designed
+   from the eight steps of the job rather than from the tables that exist (Rule 1.2); it names five
+   corrections to work already built, and asks the owner two questions — whether one person may hold
+   more than one business, and whether a tenant's clients ever get a login — because both change the
+   PRD materially. *Delegation (Rule 16.5): Opus. Architecture and product decisions, 16.2's own
+   category.* The **PRD** is next.
 5. ~~Audit log~~ ✅ **done 2026-09-24** (ADR 0020). Owed: `platform_audit_entry` for tenant-less
    staff actions, capability-gated read redaction, and the retention job that enforces the
    seven-year policy.
-5a. ~~Staff MFA~~ ✅ **done 2026-09-24** (ADR 0021), the last of the three Foundations gaps. Owed and
+5a. ~~Staff MFA~~ ✅ **done 2026-09-24** (ADR 0021), the last of the three Foundations gaps.
+   *Delegation (Rule 16.5): Opus, main session, no agent, **undeclared and in breach** — Rule 16.2
+   places a build against an approved design with Sonnet. Rule 16.5 was written in response.* Owed and
    recorded there: the capability-gated re-enrolment path, a key-management service in place of
    configuration, and calling the re-authentication check at each dangerous action once those
    actions exist.
