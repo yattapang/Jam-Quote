@@ -45,6 +45,16 @@ export interface SessionReader {
   read(request: unknown): SessionRef | null;
 }
 
+/**
+ * Injection tokens for the two ports.
+ *
+ * An interface does not exist at runtime, so Nest cannot inject one by type. These are the tokens
+ * `app.module.ts` binds, and they live here — beside the interfaces they name — so that the port
+ * and the way it is injected cannot drift apart.
+ */
+export const SESSION_READER = Symbol("pryvis:session-reader");
+export const CALLER_RESOLVER = Symbol("pryvis:caller-resolver");
+
 @Injectable()
 export class DefaultDenyGuard implements CanActivate {
   private readonly log = new Logger(DefaultDenyGuard.name);

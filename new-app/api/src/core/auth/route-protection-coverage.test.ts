@@ -14,17 +14,33 @@
  * Through the TypeScript parser. A regex would match `@Get` in a comment, and could
  * not tell a method's decorators from its class's.
  *
+ * TWO BLIND SPOTS IT USED TO HAVE (F2, independent review 2026-09-24)
+ *
+ * It scanned only `*.controller.ts`, and it matched HTTP decorators by the identifier as written.
+ * So a controller in any other file was invisible, and `import { Get as Fetch }` walked straight
+ * past it — both proved by the reviewer, with the printed inventory cheerfully reporting
+ * "2 route(s)". A guard that examines the wrong SET is the same failure as one that examines the
+ * wrong property, and this project has now shipped both.
+ *
+ * So: every `.ts` under `src/` is read, a controller is identified by its `@Controller` decorator
+ * rather than its filename, and decorator identifiers are resolved back through the import that
+ * renamed them.
+ *
  * WHAT IT DOES NOT PROVE
  *
  * - Not that the declaration is CORRECT. A route marked `@PublicRoute("health
  *   check")` that returns customer data is a review failure, not a parse failure.
  *   That is why the reason string is mandatory and printed below: the point is to
  *   make every public surface easy to look at, not to judge it.
- * - Not that the guard is actually registered globally. That is its own test, in
- *   default-deny.guard.test.ts.
- * - Nothing about routes defined outside a controller class — a middleware or a raw
- *   handler would be invisible here, and would also be invisible to Nest's guard, so
- *   it must not be how routes are added.
+ * - Not that the guard is actually registered globally. That is `app.module.test.ts`, which boots
+ *   the real application and issues real requests — added with this fix, because until then the
+ *   guard was registered nowhere and this file was the only thing standing behind it.
+ * - Nothing about routes defined outside a controller class — a middleware or a raw handler is
+ *   invisible here AND bypasses Nest's global guard, so it would be genuinely unprotected. That
+ *   is why `app.module.ts` states routes must be controllers; no test can enforce it.
+ * - Not that a decorator imported from somewhere other than `@nestjs/common` is what it claims.
+ *   A local `Get` re-exported from a wrapper module is treated as the real one, which errs
+ *   towards checking too much rather than too little.
  */
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
@@ -47,7 +63,13 @@ interface Route {
   readonly publicReason: string | null;
 }
 
-async function controllerFiles(dir: string): Promise<string[]> {
+/**
+ * Every TypeScript file under `src/`, tests excluded.
+ *
+ * Not `*.controller.ts`: that was the blind spot. A controller is whatever carries `@Controller`,
+ * wherever somebody put it.
+ */
+async function sourceFiles(dir: string): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -57,25 +79,61 @@ async function controllerFiles(dir: string): Promise<string[]> {
   const out: string[] = [];
   for (const entry of entries) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...(await controllerFiles(full)));
-    else if (entry.name.endsWith(".controller.ts")) out.push(full);
+    if (entry.isDirectory()) out.push(...(await sourceFiles(full)));
+    else if (
+      entry.name.endsWith(".ts") &&
+      !entry.name.endsWith(".d.ts") &&
+      !entry.name.endsWith(".test.ts")
+    ) {
+      out.push(full);
+    }
   }
   return out;
 }
 
-/** The decorator names on a node, e.g. `["Get", "Authenticated"]`. */
-function decoratorNames(node: ts.Node): { name: string; firstStringArg: string | null }[] {
+/**
+ * Maps each locally-visible name back to the name it was imported under.
+ *
+ * `import { Get as Fetch } from "@nestjs/common"` makes `Fetch` mean `Get`, and matching on the
+ * written identifier missed it entirely — the reviewer declared a route with `@Fetch` and three
+ * tests passed. Renaming an import is ordinary TypeScript, not an exotic attack; a guard that can
+ * be defeated by it is checking spelling rather than meaning (Rule 8: detect the class, not the
+ * spelling).
+ */
+function importAliases(sourceFile: ts.SourceFile): Map<string, string> {
+  const aliases = new Map<string, string>();
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    const clause = statement.importClause;
+    if (!clause?.namedBindings || !ts.isNamedImports(clause.namedBindings)) continue;
+    for (const element of clause.namedBindings.elements) {
+      // `propertyName` is present only when the import was renamed: { Get as Fetch }.
+      aliases.set(element.name.text, (element.propertyName ?? element.name).text);
+    }
+  }
+  return aliases;
+}
+
+/** The decorator names on a node, resolved through any import alias. */
+function decoratorNames(
+  node: ts.Node,
+  aliases: Map<string, string>,
+): { name: string; firstStringArg: string | null }[] {
   const decorators = ts.canHaveDecorators(node) ? (ts.getDecorators(node) ?? []) : [];
   return decorators.map((decorator) => {
     const expression = decorator.expression;
+    const resolve = (local: string) => aliases.get(local) ?? local;
+
     if (ts.isCallExpression(expression) && ts.isIdentifier(expression.expression)) {
       const arg = expression.arguments[0];
       return {
-        name: expression.expression.text,
+        name: resolve(expression.expression.text),
         firstStringArg: arg && ts.isStringLiteral(arg) ? arg.text : null,
       };
     }
-    if (ts.isIdentifier(expression)) return { name: expression.text, firstStringArg: null };
+    if (ts.isIdentifier(expression)) {
+      return { name: resolve(expression.text), firstStringArg: null };
+    }
     return { name: "<computed>", firstStringArg: null };
   });
 }
@@ -94,15 +152,23 @@ async function routesIn(file: string): Promise<Route[]> {
   const rel = relative(SRC, file).split(sep).join("/");
   const found: Route[] = [];
 
+  const aliases = importAliases(sourceFile);
+
   for (const statement of sourceFile.statements) {
     if (!ts.isClassDeclaration(statement)) continue;
-    const classDecorators = decoratorNames(statement);
+
+    const classDecorators = decoratorNames(statement, aliases);
+
+    // A controller is a class carrying @Controller, wherever it lives and whatever the file is
+    // called. Classes without it have no routes to check.
+    if (!classDecorators.some((d) => d.name === "Controller")) continue;
+
     const classDeclared =
       classDecorators.find((d) => PROTECTION_DECORATORS.includes(d.name as never)) ?? null;
 
     for (const member of statement.members) {
       if (!ts.isMethodDeclaration(member) || !ts.isIdentifier(member.name)) continue;
-      const decorators = decoratorNames(member);
+      const decorators = decoratorNames(member, aliases);
       if (!decorators.some((d) => HTTP_METHODS.has(d.name))) continue;
 
       // Handler wins over controller, matching routeProtectionOf's precedence. A
@@ -124,7 +190,7 @@ async function routesIn(file: string): Promise<Route[]> {
 describe("route protection coverage", () => {
   it("lists every route and what protects it, so the scope is visible", async () => {
     const routes = (
-      await Promise.all((await controllerFiles(SRC)).map((f) => routesIn(f)))
+      await Promise.all((await sourceFiles(SRC)).map((f) => routesIn(f)))
     ).flat();
 
     // While the skeleton is being built there may be very few routes. That is
@@ -135,12 +201,17 @@ describe("route protection coverage", () => {
       `route-protection: ${routes.length} route(s)\n` +
         routes.map((r) => `  ${r.declared ?? "UNDECLARED"}  ${r.where}`).join("\n"),
     );
-    expect(routes.length).toBeGreaterThanOrEqual(0);
+
+    // The printed count is what made F2 invisible: the inventory said "2 route(s)" while an
+    // undeclared third existed. It cannot say zero and be believed — the application has routes.
+    expect(routes.length, "no routes found at all, so this guard is checking nothing").toBeGreaterThan(
+      0,
+    );
   });
 
   it("finds no route without a declaration", async () => {
     const routes = (
-      await Promise.all((await controllerFiles(SRC)).map((f) => routesIn(f)))
+      await Promise.all((await sourceFiles(SRC)).map((f) => routesIn(f)))
     ).flat();
 
     const undeclared = routes
@@ -159,7 +230,7 @@ describe("route protection coverage", () => {
     // belt to that brace: it catches the case where the file is never imported by a
     // test and therefore never evaluated.
     const routes = (
-      await Promise.all((await controllerFiles(SRC)).map((f) => routesIn(f)))
+      await Promise.all((await sourceFiles(SRC)).map((f) => routesIn(f)))
     ).flat();
 
     const weak = routes

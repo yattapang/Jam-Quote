@@ -82,7 +82,7 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 
 | Threat | Control | Status | Evidence |
 |---|---|---|---|
-| A route ships with no protection and is open | A build-time guard; route inventory printed each run. The global runtime guard is **written but registered nowhere** — there is no `app.module.ts` yet | **PARTIAL** (was wrongly BUILT until 2026-09-24; F2, F10) | `default-deny.guard.test.ts` proves the logic, not the wiring; the build-time guard misses routes outside `*.controller.ts` and aliased decorators |
+| A route ships with no protection and is open | A global guard bound with `APP_GUARD`, **and** a build-time guard; route inventory printed each run | **BUILT** (F2 closed 2026-09-24) | `app.module.test.ts` boots the real application and enumerates every registered route, refusing any not intended public; removing `APP_GUARD` fails it. `route-protection-coverage.test.ts` reads every file, finds controllers by decorator and resolves renamed imports. **Still not proved:** a production bootstrap — there is no `main.ts` — and behaviour with a real session, because nothing can read one yet |
 | A dump yields reusable passwords | scrypt, per-password salt, parameters in the hash | **BUILT** | `password.test.ts` |
 | A corrupt hash row becomes a universal password | Lengths validated | **BUILT** | Found as a real bypass in review: `scrypt$65536$8$1$$` verified *every* password |
 | Account enumeration through the sign-in response | One message for every failure | **BUILT** | `sign-in.test.ts` |
