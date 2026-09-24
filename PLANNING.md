@@ -31,6 +31,11 @@ dashboard setting, not a file); tier prices per country; Pryvis brand assets.
 The product is **Pryvis** (pryvis.com); JamQuote was the working name - ADR 0009.
 
 - **`docs/RULES.md`** - the canonical rulebook: Rule 0 plus the 18 approved rules.
+- **`docs/design/`** - the approved design for each piece of work. Nothing is implemented
+  without one (Rule 1.1). An ADR justifies a decision; a design says what is being built.
+- **`docs/PRODUCT-OPPORTUNITIES.md`** - what to add and what to take out of the product, with
+  the one item that carries a deadline: the price-index consent must be in the terms of service
+  before the first tenant signs up.
 - **`docs/DEVELOPMENT-BRIEF.md`** - the plan of record, and **`docs/BRIEF-STATUS.md`** - where
   we actually are against it, section by section, with the gaps named (Rule 19).
 - **`docs/SERVICE-REGISTER.md`** - the asset register: every service and third party, why it

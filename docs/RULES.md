@@ -22,8 +22,25 @@ approval — never ignored quietly in one task.
 
 ## 1. How we work
 
-1. **Design before code.** Schemas, interfaces and trade-offs are proposed and approved
-   before implementation.
+1. **Design before code — a gate, not a preference (owner requirement, 2026-09-24).** Nothing is
+   implemented until a design for it exists and the owner has approved it. The design says what
+   problem is being solved, what it must achieve, the shape, the trade-offs, what is deliberately
+   excluded, and how it will be proved. It is proportionate: a page or two for a feature, a
+   paragraph for a small change. Designs live in `docs/design/`.
+
+   **An ADR is not a design.** An ADR justifies one decision; a design says what is being built. A
+   threat model and a domain model are what show the decisions add up.
+
+   The failure mode has a name — **vibe coding**: building because the next step looks obvious, and
+   finding out afterwards what got decided by accident. This project exists not to be that. It has
+   already happened twice here (Foundations built ahead of Phase 1's artefacts; the marketing site
+   started with no design and parked because of it), and both are recorded rather than smoothed
+   over.
+
+   **How it is enforced:** every task names the approved design it implements *before* it starts. If
+   there is no design, the task is to write one. Where building ahead of the design is genuinely the
+   right call, it is said to the owner at the time and recorded in `BRIEF-STATUS.md` — never
+   discovered later.
 2. **Audit before rebuild.** `original-app/` is read-only from the moment Phase 0 begins. It
    is deleted only when the owner says so, as its own commit.
 3. **Small reviewable changes.** One scope per change, sized for a single pull request.
@@ -338,6 +355,46 @@ decision; it is what happens when nobody checks. So:
 **Enforcement.** Rule 0 makes this file read at the start of every task, and this rule points at
 the tracker. The honesty is the control: a tracker that only ever says "on plan" is not being
 maintained.
+
+**Two questions answered before any task begins**, and they are the whole of this rule in practice:
+*which step of the brief is this?* and *which approved design does it implement?* (Rule 1.1). A task
+that cannot answer both is not ready to start.
+
+## 20. The public site, and what we say on it (owner requirement)
+
+pryvis.com is the front door. A self-service product with no public description cannot be signed up
+for, so the site is a launch dependency and not marketing polish.
+
+- **We own the site.** Pages live in our own application, content in typed data files, deployed on
+  free hosting we can leave (ADR 0018). A free **site builder** is not the same as free hosting: it
+  puts our words in someone else's database, in their format, behind their editor, and "upgradable
+  later" becomes a migration nobody scheduled. Rule 10 applies to the website exactly as it applies
+  to the database.
+- **Free now, upgradable deliberately.** Every free tool is chosen so leaving it is a change of
+  configuration rather than a rewrite, and each one is entered in the service register with its
+  upgrade trigger (Rule 18).
+- **We claim nothing that is not true.** No testimonials we did not receive, no customer counts we
+  cannot evidence, no logos we have no right to, no review scores, no invented awards. Until there
+  are customers, the site sells the product on what it does. A prospect who discovers an invented
+  claim has learned something true about us.
+- **No price until the price is decided.** A placeholder number gets screenshotted and quoted back.
+  Say what a tier includes and that pricing is coming.
+- **No third-party scripts by default** — no trackers, tag managers, chat widgets or font CDNs. Each
+  is a processor to register, a consent banner to justify and a performance cost. Analytics, if
+  wanted, are privacy-preserving and registered like any other service.
+- **The legal pages are real work, not filler.** Terms of Service and a Privacy Policy are required
+  before a self-service sign-up that will take payment. The privacy policy names the processors and
+  says plainly that data leaves the country. **They carry legal responsibility, so the owner
+  approves the words**; until then they ship marked as drafts and are never presented as final.
+- **It works for the person we are actually selling to:** a contractor on a phone, on mobile data,
+  in sunlight. Mobile-first, accessible, fast, and legible outdoors. These are requirements with
+  tests, not aspirations.
+- **The site keeps working when the product is asleep.** Static pages that call nothing, so a
+  cold-starting API or a sleeping free instance never makes the front door look broken.
+
+**Enforcement.** Guards over the site's own pages: every page has a title and description, internal
+links resolve, no external script or stylesheet host appears, and no social-proof claim exists
+unless a data file provides evidence for it. Plus review, for the things a test cannot judge.
 
 ## 17. Where we are weak, stated plainly
 

@@ -59,34 +59,48 @@ value, and the web deploy fails until it is repointed by hand.
 
 ---
 
-## Edit 3 — §5 and §9: the scope decision, and what "verticalise later" commits us to
+## Edit 3 — §5: the scope decision, and the product-portfolio question it actually asked
 
-**The brief asks** for a product-scope recommendation for the owner to decide: one product as
-scoped, a second product, or full integration.
+**I misread this the first time.** I answered §5's scope question as a *verticalisation* question —
+whether the code should be ready for a second trade — and proposed brief wording to match. That
+decision is real and stands (ADR 0017), but the owner's question was a **product-portfolio** one:
+given the product as proposed, what else is worth adding, and what currently inside it would be
+worth more as a separate solution.
 
-**Decided by the owner, 2026-09-24: one product, built to verticalise later.** Not one of the
-brief's three options exactly — it is the first with an explicit constraint attached, and it
-changes the design rather than only the scope.
+Both belong in the brief, and they are different things: one is about how the code is structured, the
+other about what the business sells.
 
 **Proposed replacement for the scope paragraph:**
 
 > **Product scope (decided 2026-09-24).** One product — quoting, invoicing, payment and job profit
-> for contractors — with the **trade-specific parts built as data from the first commit** so a
-> second trade is configuration rather than a new product. The tier structure in §9 is unchanged:
-> Free, Pro, Business, with invoicing at Pro and team features at Business. A second product is not
-> planned; the option is kept open by the data boundary, not by a second codebase.
+> for contractors — with the **trade-specific parts built as data from the first commit** so a second
+> trade is configuration rather than a new product (ADR 0017). The tier structure in §9 is unchanged.
+> Product code must never branch on a trade, exactly as it must never branch on a country (Rule 3);
+> construction is the first trade, not the only one, and no entity, table or type is named for it.
+
+**Proposed new subsection, §5a — the portfolio review:**
+
+> **§5a. What to add, and what to take out.** The feature inventory is also read for portfolio
+> questions, and the answers are recorded in `docs/PRODUCT-OPPORTUNITIES.md`: which adjacent features
+> or related businesses the existing data makes possible, and which bundled features would be worth
+> more as a separate solution. This is reviewed again at the end of each delivery step in §18, because
+> the answers change as the data grows. Recommendations are the owner's to decide.
 >
-> **What this commits the build to.** Alongside the jurisdiction rule pack there is a **trade
-> pack**: the unit vocabulary, material categories and attributes, the labour trade list, default
-> job recipes, document wording and the quoting style a trade expects. Product code must never
-> branch on a trade, exactly as it must never branch on a country (Rule 3). Construction is the
-> first trade, not the only one, and no entity, table or type is named for it.
+> **The finding that carries a deadline:** every tenant enters supplier prices, so the product
+> accumulates a live price index for Jamaican construction materials — the most defensible asset in
+> the business, and one no competitor can copy without the same history. Using it, even in aggregate,
+> requires the tenant's consent **in the terms they accept at sign-up**, plus a statistical guarantee
+> that no tenant can infer a named competitor's buying price. That consent cannot be retro-fitted, so
+> **the terms of service must settle it before the first tenant signs up** — which makes it a
+> dependency of registration, not of the website.
+>
+> Confirmed for removal: the admin-curated regulatory feed, which shares no data and no workflow with
+> quoting and carries a content cost with no revenue. If it lives, it lives as a media product with an
+> editor, not inside a quoting tool.
 
-**Why the distinction is worth the words:** "one product" alone would have let the build hard-code
-construction into names and logic, and a second trade would then have meant a second codebase — the
-option you chose to keep would have been spent without anyone deciding to spend it.
-
----
+**Why the correction matters:** the verticalisation answer shapes the code, and I had let it stand in
+place of the portfolio answer — which shapes the *terms of service*, and therefore has a deadline the
+code question does not.
 
 ## Edit 4 — §18: Foundations, as it actually proceeded, and what is still missing from it
 
@@ -109,27 +123,37 @@ would not be a retrofit.
 
 ---
 
-## Edit 5 — §6: Phase 1 ran out of order, and the brief should say what that costs
+## Edit 5 — §3 and §6: design before build, as a gate rather than a principle
 
-**The brief says** design before code, and Phase 1 produces the PRD, domain model, threat model,
-ADRs and target schema before implementation.
+**The brief says** design before code: propose designs, schemas and trade-offs first, and write no
+implementation until they are approved.
 
-**What is true:** ADRs were written for every decision and each build step was approved, but the
-**PRD, domain model and threat model were not written** while Foundations was built. The threat
-model now exists (2026-09-24) and, written afterwards, it mostly validated the work — but that was
-luck as much as judgement, and it is not a precedent to rely on.
+**What is true:** it was not followed. ADRs were written for every decision and each build step was
+directed by the owner, but the **PRD, domain model and threat model were not written** while
+Foundations was built, and the marketing site was started with no design at all — an ADR arguing the
+platform choice is not a design of what the site says or what each page must achieve. The owner's
+instruction on 2026-09-24 was to go back to design-before-build and hold the rule going forward, in
+those words, to prevent vibe coding. The site work is parked on a branch rather than kept and
+relabelled a prototype.
 
-**Proposed addition:**
+**Proposed replacement for §3 item 1:**
 
-> **Order, and what it cost.** Foundations was built before the PRD, domain model and threat model
-> were written. The threat model, written afterwards, endorsed the authentication design and found
-> no defect in it — but it also surfaced five gaps that an earlier reading would have scheduled
-> differently, the audit log first among them. **Design-before-code is not satisfied by an ADR per
-> change.** An ADR justifies one decision; a threat model and a domain model are what show the
-> decisions add up. Where building ahead of the paper is deliberate, it is stated in
-> `BRIEF-STATUS.md` and to the owner at the time (Rule 19).
-
----
+> 1. **Design before code, as a gate.** Nothing is implemented until a design for it exists and the
+>    owner has approved it. The design is written down — what problem, what it must achieve, the
+>    shape, the trade-offs, what is deliberately excluded, and how it will be proved — and it is
+>    proportionate: a page or two for a feature, a paragraph for a small change. An ADR is **not** a
+>    design: it justifies one decision. A threat model and a domain model are what show the decisions
+>    add up.
+>
+>    **This gate was breached twice** — Foundations built ahead of Phase 1's artefacts, and the
+>    marketing site started with none — and both are recorded in `BRIEF-STATUS.md` rather than
+>    smoothed over. The failure mode has a name: **vibe coding**, building because the next step is
+>    obvious and discovering afterwards what was decided by accident. It is what this project exists
+>    not to be.
+>
+>    **How it is enforced:** every task states which approved design it implements, before it starts.
+>    If none exists, the task is to write one. Where building ahead is deliberately the right call, it
+>    is named to the owner at the time and recorded — never discovered later.
 
 ## Edit 6 — §11 and §14: what the audit and threat model added to the security requirements
 
@@ -172,8 +196,45 @@ luck as much as judgement, and it is not a precedent to rely on.
 
 ---
 
+## Edit 8 — the marketing website belongs in the brief, not beside it
+
+**What the brief says:** nothing. It treats the live website as an existing thing to audit (§5) and
+never contemplates building one.
+
+**What is true:** there is no website, the owner owns pryvis.com and has asked for it, and a
+self-service product with no public description cannot be signed up for. It is a launch dependency —
+so on the owner's instruction it goes *into* the brief, with a design, a place in the delivery order
+and its own deliverables, rather than proceeding as a side project.
+
+**Proposed new §17a, and an addition to §18:**
+
+> **§17a. The public website.** pryvis.com is the product's front door and a launch dependency, not
+> marketing polish. It is built as pages in our own application, content in data files, on free
+> hosting we can leave — never a site builder that holds our words in its own format (ADR 0018,
+> Rule 20). Deliverables: a written design of what each page must achieve and for whom, approved
+> before any page is built; the pages themselves; **Terms of Service and a Privacy Policy approved by
+> the owner**, which registration legally depends on and which must settle the aggregate-data question
+> in §5a; and guards proving no third-party tracker, no unevidenced social-proof claim, and no price
+> displayed before a price is decided.
+>
+> **In §18's delivery order it sits inside step 2**, the first end-to-end vertical slice, because the
+> journey that matters is *land on the site → sign up → build a quote → send it → get it accepted*.
+> Building the site earlier is allowed; building it in isolation is not — a front door to nothing is
+> not a milestone.
+
+**Why inside step 2 rather than before it:** the site's only job is to start that journey. Shipping it
+alone produces a page asking people to sign up for something that cannot yet accept them — which is
+exactly the state the parked branch is in, with a `mailto:` standing in for registration.
+
 ## What I recommend you do with this
 
-Approve edits 1, 2, 4, 5, 6 and 7 as written — they record what happened. **Edit 3 is the one worth
-reading closely**, because it converts your scope decision into a constraint the build must honour
-from the first commit, and it is the one that costs design effort later if it is wrong now.
+Approve edits 1, 2, 4, 6 and 7 as written — they record what happened.
+
+**Edit 3 is the one to read closely.** It carries the only deadline here: the price-index consent has
+to be in the terms of service before the first tenant signs up, and it cannot be added afterwards.
+
+**Edit 5 is the one that changes how we work**, and it is the owner's instruction rather than my
+suggestion. It turns design-before-build from a principle into a gate with a named failure mode.
+
+**Edit 8 puts the website inside the brief** and inside step 2 of the delivery order, so it is built
+against a design and lands as part of a journey rather than as a front door to nothing.

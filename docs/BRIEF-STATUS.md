@@ -7,8 +7,10 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 
 **Legend:** ✅ done · 🟡 partly done · ❌ not started · ⏭️ deliberately later
 
-Last reviewed: **2026-09-24**, at commit `2a20f7b`. Staff MFA is **paused** at a clean point (schema
-and the strengthened guard are committed; no service code was started).
+Last reviewed: **2026-09-24**. Staff MFA is **paused** at a clean point (schema and the
+strengthened guard are committed; no service code started). The marketing site is **parked** on
+`wip/marketing-site-built-before-design` — it was built before its design was approved, and the
+owner's design-before-build instruction applies to it.
 
 ---
 
@@ -31,6 +33,13 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
    tenancy. It has not been built.
 4. **Seven of the fourteen open questions in §19 are unanswered**, and the brief says they should
    be surfaced early.
+5. **The design-before-build gate was breached twice** — Foundations ahead of Phase 1's artefacts,
+   and the marketing site with no design at all. On 2026-09-24 the owner made it a hard gate
+   (Rule 1.1): designs live in `docs/design/`, and a task names its approved design before it
+   starts. The site implementation is parked until its design is approved.
+6. **The independent review did not happen.** It was commissioned on 2026-09-24 and the agent
+   **failed** — it hit a session limit and returned nothing. So the Rule 9 breach is still open and
+   no `new-app` module has been independently reviewed. It must be re-run.
 
 ---
 
@@ -47,6 +56,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 | Feature inventory, keep/change/drop | ✅ | §6 — 34 items |
 | Product-scope recommendation | ✅ | §6 — one product |
 | **Owner's scope DECISION** (the brief's gate on Phase 1) | ✅ | **2026-09-24: one product, built to verticalise later** — ADR 0017. Trade behaviour becomes a data pack; tier ladder unchanged |
+| **Portfolio review — what to add, what to take out** | ✅ | `PRODUCT-OPPORTUNITIES.md`, 2026-09-24. The owner's actual §5 question, which I first misread as the verticalisation question. One item carries a deadline: price-index consent must be in the terms before the first tenant signs up |
 | **Proposed edits to the brief after the audit** | ✅ | `BRIEF-EDITS-PROPOSED.md`, 2026-09-24 — seven edits, awaiting the owner's approval before they are applied |
 
 ## Phase 1 — requirements and design (§6)
@@ -102,9 +112,12 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 
 1. ~~Proposed edits to the brief~~ ✅ — awaiting approval, then applied in one commit.
 2. ~~Threat model~~ ✅.
-3. **The independent review of `new-app`** (Rule 9). Commissioned 2026-09-24. Until it lands, **no
-   `new-app` module is complete** by the rule's own definition — every line so far was written and
-   reviewed by one author, which is the arrangement Rule 9 exists to forbid.
+3. **The independent review of `new-app`** (Rule 9). Commissioned 2026-09-24 and it **failed** — the
+   agent hit a session limit and produced nothing, so this is still entirely owed. Until it lands,
+   **no `new-app` module is complete** by the rule's own definition: every line so far was written
+   and reviewed by one author, which is the arrangement Rule 9 exists to forbid.
+3a. **The marketing site design** (Rule 1.1, brief Edit 8). The implementation exists, parked, and
+   waits on it. This is the first file in `docs/design/`.
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
    both.
 5. **Audit log** — named in Foundations, missing, and the threat model makes it the control every

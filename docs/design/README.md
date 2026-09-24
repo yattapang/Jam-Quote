@@ -1,0 +1,37 @@
+# Designs
+
+**Nothing is implemented without an approved design in this folder** (Rule 1.1). That rule became a
+gate on 2026-09-24, at the owner's instruction, after it had been breached twice.
+
+## What a design is
+
+One file per piece of work, named for it (`marketing-site.md`, `audit-log.md`, `sign-up.md`), and
+proportionate — a page or two for a feature, a paragraph for a small change. It answers:
+
+1. **What problem, for whom.** Named people in a real situation, not "users".
+2. **What it must achieve** to be worth building, stated so that failure is recognisable.
+3. **The shape.** Screens, endpoints, tables, states — enough that someone else could build it and
+   arrive somewhere close.
+4. **The trade-offs**, and what was considered and rejected.
+5. **What is deliberately excluded**, so scope creep is visible as a change rather than a drift.
+6. **How it will be proved** — which tests, and which defect each one is planted with (Rule 8).
+7. **What it depends on**, including anything owed by someone else or by the owner.
+
+## What a design is not
+
+**An ADR.** An ADR justifies one decision and records what was rejected. A design says what is being
+built. Both exist; neither substitutes for the other, and "there is an ADR" was exactly the
+reasoning that let the marketing site get built without a design.
+
+**A ticket.** A list of tasks is not a design — it is the output of one.
+
+## Status
+
+Each design carries a header: **Proposed** (awaiting the owner), **Approved** (build it), or
+**Superseded** (with a pointer to what replaced it). A design is approved by the owner, not by me.
+
+## Designs
+
+| Design | Status | For |
+|---|---|---|
+| _none yet_ | | The first is the marketing site, whose implementation is parked on `wip/marketing-site-built-before-design` until its design is approved |

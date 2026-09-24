@@ -30,3 +30,4 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0015](0015-credentials-and-self-service-signup.md) | Credentials in their own table outside RLS; sign-in email globally unique; tenants sign themselves up free and upgrade by card | Accepted |
 | [0016](0016-rate-limiting.md) | Token buckets in Postgres, per IP and per hashed email, checked before the expensive hash | Accepted |
 | [0017](0017-one-product-built-to-verticalise.md) | One product; trade behaviour is a data pack, never a branch in product code | Accepted |
+| [0018](0018-marketing-website.md) | The marketing site is static pages in our own Next.js app on free hosting — not a site builder | Accepted |

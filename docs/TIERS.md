@@ -116,7 +116,11 @@ not. This is the most common reason a Jamaican contractor still uses a paper boo
 a typed name, a timestamp and a PDF record of the acceptance. Contractors need proof the
 client agreed to a price before work starts, which is exactly the dispute that costs them.
 
-**4. Material price index with supplier comparison.** Already planned. It makes the product
+**4. Material price index with supplier comparison.** — and see `PRODUCT-OPPORTUNITIES.md`: this
+is also the most defensible asset in the business, with two conditions that cannot be retro-fitted.
+Using tenants' price data in aggregate needs their **consent in the sign-up terms**, and a
+statistical guarantee that no tenant can infer a named competitor's buying price.
+ Already planned. It makes the product
 sticky: a quote priced from this week's prices is a quote a rival cannot match by hand.
 
 **5. Variations and change orders as first-class documents.** A variation exists as a quote
