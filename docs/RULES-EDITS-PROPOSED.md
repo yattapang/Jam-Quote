@@ -80,3 +80,90 @@ which is the assessment that goes wrong under time pressure.
   one's own finished work is treated here as the job being done well rather than as a setback. That
   is the owner's to maintain, and asking the question that produced this document is what
   maintaining it looks like.
+
+---
+
+## Proposal 1a — two additions to Rule 21, from two more errors the same day
+
+**Status: Proposed** · 2026-09-24
+
+### 21.5 A remediation claim quotes the authority, not a general expectation
+
+I told the owner a **patch upgrade within `next@14.2.x` would clear the critical advisories**, and
+that a jump to 15.x was unnecessary. Then I read `npm audit --json`:
+
+```
+next vulnerable range : 0.9.9 - 16.3.0-preview.10
+fix available         : next@16.3.6  (isSemVerMajor: true)
+```
+
+The vulnerable range spans **every version of 14 and 15**. A 14.2.x patch achieves nothing. The
+claim came from a general expectation — "advisories are usually patched within the current minor" —
+applied without reading the one field that answers the question. It would have led to a pull
+request that looked like security work, passed the gate, and left every critical in place. Worse
+than doing nothing, because it would have been recorded as done.
+
+> **Proposed:** a statement about what an upgrade, patch or configuration change will fix quotes the
+> authority that decides it — the advisory's own `fixAvailable` and `range`, the changelog entry, the
+> vendor's note — in the same breath as the claim. "This clears the criticals" without the range
+> beside it is an opinion dressed as a finding.
+
+This is Rule 21.1 widened: it was written for controls, and the same failure happens in ordinary
+advice. Anything a tool can answer authoritatively is quoted, not paraphrased from expectation.
+
+### 21.6 One sample is not a pattern
+
+I reported that the keep-warm workflow's **last run was 11 September**, thirteen days earlier, and
+built a conclusion on it. It was a single stale entry from a list query, and it was wrong — the
+workflow had run that morning. The real defect turned out to be different and worse, and I found it
+only because I looked again.
+
+> **Proposed:** any claim about behaviour over time — "last run", "always", "never", "still", "no
+> longer" — rests on at least two observations, or says in the same sentence that it rests on one.
+
+Cheap, and it maps exactly onto how these mistakes happen: not from bad reasoning over the data, but
+from confident reasoning over one row of it.
+
+---
+
+## Proposal 2 — Rule 22: a scripted edit is verified mechanically, not by eye
+
+**Status: Proposed** · 2026-09-24 · Arises from two self-inflicted errors in the same session.
+
+### Why
+
+1. **A scripted edit spliced a block into the wrong job.** Adding the scan step to `verify.yml`, I
+   located the insertion point with a text search on an anchor that was **not unique**, and the
+   replacement landed inside the `verify` job instead of `scan`. It was caught immediately — by
+   parsing the YAML afterwards and printing the job and step names, which showed the step under the
+   wrong parent. Without that parse it would have been a pull request whose diff looked plausible.
+2. **A commit message lost a line to the shell.** The message contained backticks inside a
+   heredoc, so the shell ran them as command substitution and ate the clause describing a bug. The
+   commit is on `main`; amending it would mean force-pushing, which costs more than the line is
+   worth.
+
+Both are mechanical mistakes with mechanical prevention. Neither is a lapse of care that more care
+would fix — I was being careful in both cases.
+
+### The proposal
+
+> **22.1 An anchored edit asserts its anchor is unique before it writes.** If a pattern matches
+> more than once, the edit stops rather than picking the first match. A text position is not an
+> address in a structured file.
+>
+> **22.2 Every scripted edit to a structured file is followed by a parse of the result**, printing
+> the structure that was supposed to change — YAML jobs and step names, TOML keys, JSON paths, a
+> migration's statements. The parse is the proof; the diff looking right is not. This is already
+> what caught the error above, so the rule is to keep doing deliberately what happened to be done
+> once.
+>
+> **22.3 Prose passed to a tool goes through a file, never inline.** Commit messages, pull request
+> bodies and issue text contain backticks, quotes, `$` and newlines, and every shell has its own
+> opinion about all four. `-F <file>` and `--body-file <file>` cost one extra step and remove the
+> class entirely.
+
+### What this does not fix
+
+- It does not catch an edit that is syntactically valid and semantically wrong — a step under the
+  right job that does the wrong thing. That is what review and Rule 21.2's planted positive are for.
+- 22.3 does not help where a tool has no file option. There, the answer is to keep the text plain.
