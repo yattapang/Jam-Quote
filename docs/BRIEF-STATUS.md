@@ -12,12 +12,20 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 Written down because a context reset loses what was in flight, and the last time that happened
 the work was picked up on an already-finished feature.
 
-1. **The keep-warm anomaly.** `keep-api-warm.yml` is `active` but its last run was **11 September**
+1. ~~**The keep-warm anomaly.**~~ ✅ **done 2026-09-24, and it was worse than the symptom.** `keep-api-warm.yml` is `active` but its last run was **11 September**
    — thirteen days before this was written — though it is scheduled every ten minutes. Not the
    60-day inactivity disable the service register describes, because the workflow is not disabled;
-   something else. If the pings genuinely stopped, the free-tier Render API is sleeping and every
-   first request after an idle period pays a cold start. *Delegation (Rule 16.5): Sonnet — reading
-   run history and one workflow file, no judgement call.*
+   something else. **My "last run was 11 September" was wrong** — a stale list entry reported
+   without checking a second one. It runs; it simply never worked. GitHub fires the `*/10` schedule
+   every three to five hours on a free runner, against a 15-minute spin-down, and **every run paid a
+   full cold start** (42-72s) — the proof the instance was asleep each time. `|| true` kept it green
+   throughout, including a 90-second timeout recording `HTTP 000`. Now an honest liveness check that
+   fails loudly, with two planted failures proving it fires and the real endpoint as the control.
+   The API sleeping is now recorded as an open decision in `SERVICE-REGISTER.md` §4a, with the two
+   real fixes and their costs. *Delegation (Rule 16.5): in-session — a handful of read-only `gh`
+   calls and one workflow file, below the threshold where briefing a cold agent pays.*
+   *Coverage (proposed Rule 21.3): `gitleaks` "430 commits scanned, no leaks"; liveness script
+   "HTTP 200 / exit 0" on the control and "exit 1" on both plants.*
 2. **Next.js patch upgrade, within 14.2.x.** `next@14.2.18` carries the criticals found by the new
    audit, including unauthenticated RCE in the Image Optimization API and a middleware
    authorisation bypass. Patch, **not** 15.x: same security benefit without App Router changes to a

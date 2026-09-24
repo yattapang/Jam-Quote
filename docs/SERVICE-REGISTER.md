@@ -101,6 +101,30 @@ Two honest limits of what did land, so the register does not overstate it:
 - `gitleaks` **is** blocking from the first run. A committed credential is valid until it is
   rotated, so it is not a backlog item.
 
+## 4a. The API sleeps, and nothing currently prevents that
+
+Recorded because a workflow spent months implying otherwise. Render's free tier spins the API
+down after ~15 minutes idle; the first request afterwards waits **40-70 seconds** (measured
+2026-09-24: 52s cold, 0.37s warm).
+
+The `Keep API warm` workflow did not prevent it and **reported success while not preventing it**.
+GitHub fires a `*/10` schedule on a free runner roughly every three to five hours, and every run
+paid a full cold start — the proof that the instance was asleep each time the job arrived. The ping
+ended in `|| true`, so even a 90-second timeout recorded green. It is now an honest liveness check
+(`API liveness`) that fails loudly on anything but 200 and states in its own header that it does
+not keep anything warm.
+
+**Two ways to actually fix it, both with a cost, neither chosen:**
+
+| Option | Cost | Note |
+|---|---|---|
+| Paid Render instance | A monthly fee | No spin-down. The eventual answer once anybody is paying us (Rule 10's trigger for leaving a free tier) |
+| External uptime pinger (e.g. UptimeRobot) | Free tier, 5-minute interval | Would work, unlike ours. It is a **new third-party service** that must be recorded here, and it can reach a production endpoint — so it gets its own decision, not a quiet addition |
+
+Until one is chosen, the honest statement is: **the prototype API sleeps, and the first visitor
+after an idle period waits about a minute.** That is acceptable for a prototype and unacceptable at
+launch, and it is written here so it is a decision rather than a surprise.
+
 ## 5. Where the secrets live
 
 Named here so nobody hunts, and empty of values on purpose.

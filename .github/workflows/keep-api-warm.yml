@@ -1,29 +1,79 @@
-name: Keep API warm
+name: API liveness
 
-# Render's free tier spins the API down after ~15 min of inactivity, which
-# causes a ~40s cold start (and a "showing demo data" banner) on the next
-# request. This workflow pings the health endpoint on a schedule to keep the
-# instance awake during the prototype phase.
+# WHAT THIS IS, AND WHAT IT USED TO CLAIM TO BE
 #
-# Best-effort by design: GitHub's scheduled runs can be delayed under load,
-# and scheduled workflows are auto-disabled after 60 days with no repo
-# activity. For guaranteed always-on, upgrade the Render instance (paid tier,
-# no spin-down) or point an external uptime pinger (e.g. UptimeRobot) at
-# /api/health.
+# This was "Keep API warm": a `*/10` schedule pinging the health endpoint to stop
+# Render's free tier spinning the instance down after ~15 minutes of inactivity.
+#
+# **It never did that, and it reported success the whole time.** Two measurements,
+# taken 2026-09-24:
+#
+#   1. GitHub does not honour `*/10` here. The eight most recent runs fired at
+#      15:22, 10:25, 05:29, 00:41, 22:20, 19:12, 15:35 and 11:49 — roughly every
+#      three to five hours. Scheduled workflows on free runners are queued at low
+#      priority and dropped under load. Against a 15-minute spin-down a 3-hour
+#      cadence cannot keep anything warm; that is not a tuning problem, it is
+#      structurally impossible.
+#   2. Every single run paid a full cold start — 42s, 42s, 52s, 52s, 72s — which is
+#      the proof: the instance was asleep each time the "keep warm" job arrived.
+#      Measured by hand the same day: 52s cold, then 0.37s warm.
+#
+# And it was **green throughout**, including a run that timed out at 90 seconds and
+# recorded `HTTP 000`, because the ping ended in `|| true` so a slow wake-up would
+# not send a failure email. A control that reports success for work it is not doing
+# is worse than no control: it answers the question nobody then asks.
+#
+# So it is now what it can actually be — a liveness check. It tells you the deployed
+# API still boots and answers, and **it does not keep it warm.** Real always-on needs
+# either a paid Render instance with no spin-down, or an external uptime pinger on a
+# cadence GitHub will not give us. Both are decisions with a cost attached, and they
+# belong in the service register rather than being implied by a workflow that looks
+# like it is handling them.
+#
+# ## What this does not prove
+#
+# - Nothing about latency for a real user. The first request after a spin-down waits
+#   ~50 seconds, and that is the free tier working as designed, not a fault.
+# - Nothing about correctness. `/api/health` answering 200 says the process is up; it
+#   says nothing about the database, the migrations, or any other route.
+# - Nothing on a cadence you can rely on. GitHub decides when this runs, so a dead
+#   API may go unnoticed for hours. It is a smoke alarm, not a monitor.
 
 on:
+  # Written as hourly rather than `*/10` so the file stops stating an interval it
+  # does not get. The observed reality is every three to five hours.
   schedule:
-    - cron: "*/10 * * * *" # every 10 minutes (Render sleeps after ~15)
-  workflow_dispatch: {} # allow manual runs from the Actions tab
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
 
 jobs:
-  ping:
+  liveness:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - name: Ping API health endpoint
+      - name: The deployed API answers
         run: |
-          # -m 90 tolerates a cold start; || true so a slow/failed wake-up
-          # doesn't mark the workflow failed (which would email on every miss).
-          curl -sS -m 90 -o /dev/null \
-            -w "health: HTTP %{http_code} in %{time_total}s\n" \
-            https://jamquote-api.onrender.com/api/health || true
+          set -uo pipefail
+          url="https://jamquote-api.onrender.com/api/health"
+
+          # -m 150 tolerates a cold start, which is routinely 40-70s on the free tier
+          # and caused the one historical 90s timeout. A timeout shorter than the cold
+          # start turns normal behaviour into a red run, and a red run nobody believes
+          # is the failure this file used to have.
+          #
+          # `|| code="000"` ASSIGNS rather than appends: curl prints "000" on a DNS
+          # failure and also exits non-zero, so the obvious `|| echo "000"` produced
+          # "000000". Found by pointing this script at a host that does not resolve
+          # before it shipped, which is the only reason that bug is not in here.
+          code=$(curl -sS -m 150 -o /dev/null -w "%{http_code}" "$url") || code="000"
+          echo "health: HTTP ${code}"
+
+          # FAILS LOUDLY on anything but 200, unlike the `|| true` this replaces.
+          # Proved by planting two failures before landing: a path that does not exist
+          # (404, exit 1) and a host that does not resolve (000, exit 1), with the real
+          # endpoint as the control (200, exit 0).
+          if [ "$code" != "200" ]; then
+            echo "::error::The deployed API did not answer 200 (got ${code})."
+            exit 1
+          fi
