@@ -50,18 +50,33 @@ approval — never ignored quietly in one task.
    there is no design, the task is to write one. Where building ahead of the design is genuinely the
    right call, it is said to the owner at the time and recorded in `BRIEF-STATUS.md` — never
    discovered later.
-2. **Audit before rebuild.** `original-app/` is read-only from the moment Phase 0 begins. It
+2. **Design from the product, not from the code that exists (owner requirement, 2026-09-24).**
+   A design says what the product needs in order to be delivered. It is **not** derived from
+   whatever tables, modules or types happen to exist today, and it is not trimmed to avoid
+   changing them. Where the existing work turns out to be wrong or insufficient, **we go back and
+   correct it** — that is the expected cost, and the owner has said so in those words.
+
+   The failure this forbids is quieter than vibe coding and harder to spot: designing around what
+   is already built, so the architecture ends up shaped by the order things happened to be written
+   in rather than by what the product requires. Every "we can work with what we have" is a
+   decision, and it belongs in a design with its reasoning, not in an omission.
+
+   In practice: a design lists what the product needs, then names which existing work must change
+   to meet it. A migration that corrects an earlier one is normal (Rule 6 — a new migration, never
+   an edit). So is revising an ADR, with the reason recorded.
+
+3. **Audit before rebuild.** `original-app/` is read-only from the moment Phase 0 begins. It
    is deleted only when the owner says so, as its own commit.
-3. **Small reviewable changes.** One scope per change, sized for a single pull request.
-4. **Tests first, or alongside.** No feature is done without tests. **A test counts only once
+4. **Small reviewable changes.** One scope per change, sized for a single pull request.
+5. **Tests first, or alongside.** No feature is done without tests. **A test counts only once
    it has been shown to fail**: plant the defect, watch the test catch it, restore from a
    backup copy. A test that passes with the fix removed is worse than none — it teaches false
    confidence.
-5. **Explain decisions.** State the options, the trade-offs and the recommendation. Record
+6. **Explain decisions.** State the options, the trade-offs and the recommendation. Record
    significant choices as dated ADRs.
-6. **Flag, don't assume.** Ambiguity is surfaced. Assumptions are listed, not guessed at.
-7. **The owner reviews every diff.** Nothing merges on "it seems to work".
-8. **Living documents.** The brief, the PRD, the ADRs, the audit and this file are updated as
+7. **Flag, don't assume.** Ambiguity is surfaced. Assumptions are listed, not guessed at.
+8. **The owner reviews every diff.** Nothing merges on "it seems to work".
+9. **Living documents.** The brief, the PRD, the ADRs, the audit and this file are updated as
    proposed edits for the owner's approval when reality changes them — never left stale and
    never changed silently.
 
