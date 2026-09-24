@@ -34,4 +34,4 @@ Each design carries a header: **Proposed** (awaiting the owner), **Approved** (b
 
 | Design | Status | For |
 |---|---|---|
-| _none yet_ | | The first is the marketing site, whose implementation is parked on `wip/marketing-site-built-before-design` until its design is approved |
+| [marketing-site.md](marketing-site.md) | **Proposed** | pryvis.com — the six public pages, the sign-up hole and how it is handled for now, and the seven guards. Its implementation is parked on `wip/marketing-site-built-before-design` until this is approved |

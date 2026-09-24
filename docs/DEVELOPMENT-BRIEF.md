@@ -1,5 +1,7 @@
 # Quotation Application: Development Brief for Claude
 
+> **Revised 2026-09-24.** Eight owner-approved edits from `docs/BRIEF-EDITS-PROPOSED.md` are applied below, each marked where it lands. Where we actually are against this brief is tracked, section by section, in `docs/BRIEF-STATUS.md` (Rule 19).
+
 ## 1. Purpose of this document
 
 This brief captures the goals, methodology, owner requirements, and architectural recommendations agreed so far for rebuilding our quotation application. Treat it as the standing context for all work on this project. Follow it in order, and do not skip ahead to code.
@@ -37,7 +39,13 @@ This decision also determines the **tier structure** (section 9): tiers may need
 
 ## 3. Working agreement (how Claude should work on this project)
 
-1. **Design before code.** Propose designs, schemas, and trade-offs first. Write no implementation until they are approved.
+1. **Design before code — a gate, not a preference.** Nothing is implemented until a design for it exists and the owner has approved it. The design says what problem is being solved, for whom, what it must achieve, the shape, the trade-offs, what is deliberately excluded, and how it will be proved. It is proportionate: a page or two for a feature, a paragraph for a small change. Designs live in `docs/design/`.
+
+   **An ADR is not a design.** An ADR justifies one decision; a design says what is being built. A threat model and a domain model are what show the decisions add up.
+
+   The failure mode has a name — **vibe coding**: building because the next step looks obvious, and finding out afterwards what got decided by accident. This project exists not to be that. It has already happened twice (Foundations built ahead of Phase 1's artefacts; the marketing site started with no design, and parked because of it), and both are recorded in `docs/BRIEF-STATUS.md` rather than smoothed over.
+
+   **Enforcement:** every task names the step of this brief it belongs to and the approved design it implements, *before* it starts. If there is no design, the task is to write one. Where building ahead of the design is genuinely right, it is said to the owner at the time and recorded — never discovered later.
 2. **Audit before rebuild.** The existing codebase and live website are analysed before any new code is written.
 3. **Small, reviewable changes.** Work in small increments, each with a clear scope, suitable for a single pull request.
 4. **Tests first (or alongside).** Propose tests before or with each change. No feature is done without tests.
@@ -73,6 +81,8 @@ This decision also determines the **tier structure** (section 9): tiers may need
 - `original-app/` is excluded from the Claude API automation in section 16: automated changes only ever target `new-app/`.
 - **Retiring `original-app/`:** once `new-app/` is live in production, fully covers what's being kept from the feature inventory (section 5), and has run for an owner-agreed confidence period with data migration verified, `original-app/` is deleted from the repository as its own commit — not folded into an unrelated change, so it stays a clean, reversible-in-history checkpoint. Delete only after the owner explicitly confirms readiness; Claude does not delete it unprompted.
 
+**As built (2026-09-23, ADR 0010).** `original-app/` and `new-app/` are each their own npm-workspace root, with their own `package.json`, lockfile and `turbo.json`, so a dependency upgrade in one cannot destabilise the other. `render.yaml` carries `rootDir: original-app` and CI runs each workspace as its own job. **Vercel's Root Directory is a dashboard setting and cannot be versioned**; it must be changed by hand in the same window as any move, and the web deploy fails until it is. Any future folder move inherits that constraint.
+
 ## 5. Phase 0: Audit the existing version (no code changes)
 
 Read the existing files in `original-app/` and produce a **written audit only**. Do not modify anything in `original-app/`.
@@ -104,7 +114,9 @@ Read the existing files in `original-app/` and produce a **written audit only**.
 - What should be rebuilt.
 - A proposed approach for migrating existing data rather than discarding it.
 
-**Product and feature review (from the live website)**
+**Product and feature review**
+
+> **Revised 2026-09-24: there is no marketing website.** `/` redirects to `/dashboard`, so the deployment is the application behind a login and there is no owner-written public copy to extract. Derive the product's purpose, features and workflows from the code and from the only public surfaces that exist (the login page and the public quote/invoice pages), and mark positioning and pricing as **unverified** until the owner confirms them. Producing that public copy — what the product is, who it is for, what it promises — is itself a deliverable, owed before launch, and §17a now covers it. A product with no public description cannot be signed up for: this is a launch dependency, not a documentation gap.
 - Use the **current live website** as the source of truth for what the product does today. Extract from it:
   - The **purpose** and positioning of the product and who it is for.
   - The **current features**, described as the user experiences them.
@@ -117,7 +129,19 @@ Read the existing files in `original-app/` and produce a **written audit only**.
 
 **Deliverable:** one audit document, including the feature inventory and the product-scope recommendation. The owner reviews and decides on product scope before Phase 1 begins.
 
-**Brief revision:** once the audit is complete and the owner has decided on product scope, Claude proposes specific edits to this brief (section 1) reflecting what was actually found — updated assumptions, corrected scope, anything this document got wrong or left out. The owner reviews these edits before Phase 1 design work starts.
+> **Product scope — decided 2026-09-24.** One product: quoting, invoicing, payment and job profit for contractors, with the **trade-specific parts built as data from the first commit** so a second trade is configuration rather than a new product (ADR 0017). The tier structure in §9 is unchanged. Product code must never branch on a trade, exactly as it must never branch on a country; construction is the first trade, not the only one, and no entity, table or type is named for it.
+
+### 5a. What to add, and what to take out
+
+The feature inventory is also read for **portfolio** questions, separately from the scope question above: which adjacent features or related businesses the existing data makes possible, and which bundled features would be worth more as a separate solution. Answers are recorded in `docs/PRODUCT-OPPORTUNITIES.md` and reviewed again at the end of each delivery step in §18, because the answers change as the data grows. Recommendations are the owner's to decide.
+
+**The finding that carries a deadline.** Every tenant enters supplier prices, so the product accumulates a live price index for Jamaican construction materials — the most defensible asset in the business, and one no competitor can copy without the same history. Using it, even in aggregate, requires the tenant's consent **in the terms they accept at sign-up**, plus a statistical guarantee that no tenant can infer a named competitor's buying price. That consent cannot be retro-fitted, so **the terms of service must settle it before the first tenant signs up** — a dependency of registration, not of the website.
+
+**Confirmed for removal:** the admin-curated regulatory feed, which shares no data and no workflow with quoting and carries a content cost with no revenue. If it lives, it lives as a media product with an editor, not inside a quoting tool.
+
+**Kept deliberately, with a line drawn:** project costing and job profit stay, because they close the loop that makes quoting trustworthy — but **shallow**. When they grow a chart of accounts they have become a different product and the decision is revisited.
+
+**Brief revision:** *(done — the edits were proposed on 2026-09-24 in `docs/BRIEF-EDITS-PROPOSED.md` and approved by the owner; this document is the revised version. The step was late, which is why Rule 19 and `BRIEF-STATUS.md` now exist.)* Once the audit is complete and the owner has decided on product scope, Claude proposes specific edits to this brief (section 1) reflecting what was actually found — updated assumptions, corrected scope, anything this document got wrong or left out. The owner reviews these edits before Phase 1 design work starts.
 
 ## 6. Phase 1: Requirements and design
 
@@ -194,6 +218,17 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 - Since this affects what the document actually looks like, cross-check it against the feature inventory and live website in Phase 0: if the original application already supports branding, numbering, or colour customization, that behaviour is part of what gets audited and carried forward or improved, not just newly invented.
 
 ## 11. Data isolation and security
+> **Revised 2026-09-24**, per the owner-approved edits in `docs/BRIEF-EDITS-PROPOSED.md`.
+
+**Added 2026-09-24, from what the audit and the threat model found rather than from theory:**
+
+- **Row-level security is not optional, and `FORCE` is part of it.** Postgres exempts a table's owner from its own policies, and the application's migration role owns the tables — so `ENABLE` alone leaves isolation switched on and doing nothing for exactly the connection that matters.
+- **Every table is tenant-protected or exempt with a written reason.** There are exactly two exemptions, both authentication bootstrap (a session and a credential must be readable before a tenant is known), plus non-tenant infrastructure. A guard refuses a third that arrives quietly.
+- **Staff and administrators meet a higher bar than tenants** (Rule 5.1): MFA mandatory, a longer password minimum, named individual accounts, re-authentication before impersonation or a price change, least privilege by named capability, and same-day offboarding. **Staff MFA is a launch blocker.**
+- **Rate limiting is part of authentication, not an operational afterthought.** A deliberately expensive password hash on an unauthenticated endpoint is a denial-of-service lever; the hash and its limiter ship together.
+- **Self-service registration is a security surface.** It is unauthenticated and creates rows, so it ships with rate limits, email verification before anything costs us money, and a duplicate registration that does not confirm the address is taken.
+- **A threat model is maintained** (`docs/THREAT-MODEL.md`), with every control marked built, partial or owed, and the evidence that proves it.
+
 
 **Owner requirement:** Tenant profiles and data must be independent of each other. No information from one tenant's account, or from their clients, may be visible in another tenant's account. Security must protect the tenants' clients' data, and it must protect our tenants' data.
 
@@ -325,12 +360,31 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 - **Backups** with **tested restores**.
 - **Security baseline:** as in section 11.
 
+## 17a. The public website
+
+*Added 2026-09-24. The brief did not contemplate building one; there is none, the owner owns pryvis.com, and a self-service product with no public description cannot be signed up for.*
+
+pryvis.com is the product's front door and a **launch dependency**, not marketing polish. It is built as pages in our own application, content in data files, on free hosting we can leave — never a site builder that holds our words in its own format (ADR 0018, Rule 20).
+
+**Deliverables:**
+
+- a written **design** of what each page must achieve and for whom, approved before any page is built;
+- the pages themselves, mobile-first and readable outdoors, with no third-party scripts;
+- **Terms of Service and a Privacy Policy approved by the owner** — registration legally depends on them, and the terms must settle the aggregate-data question in §5a;
+- guards proving no third-party tracker, no unevidenced social-proof claim, and no price displayed before a price is decided.
+
+**Nothing is claimed that is not true:** no testimonials we did not receive, no customer counts we cannot evidence, no logos we have no right to, and no placeholder price.
+
 ## 18. Delivery order
 
 Each step is approved before the next begins.
 
 1. **Foundations:** authentication, tenancy with cross-tenant leak tests, schema (including client-generated IDs and versioning for future sync), audit log, CI.
-2. **First end-to-end vertical slice:** create a quote, send it by email, customer accepts.
+
+   > **Status at 2026-09-24.** Built: tenancy (`tenant_id` + forced row-level security + request-scoped context, with leak tests against a real Postgres), authentication (default-deny routes, identity re-resolved per request, revocable sessions, sign-in, rate limiting), and CI gating both workspaces. **Still owed within step 1:** the audit log, staff MFA, and client-generated ids with row versioning. Step 1 is not complete until those land, and **no `new-app` module is complete until it has had the independent review Rule 9 requires** — commissioned once and failed, still owed.
+2. **First end-to-end vertical slice:** land on the website, sign up, create a quote, send it by email, customer accepts.
+
+   > **The website (§17a) sits inside this step**, not before it. The journey is what matters: a front door to nothing is not a milestone. Building the site earlier is allowed; shipping it in isolation, asking people to sign up for something that cannot accept them, is not.
 3. **Then:** catalog, tax, PDF output, tiers and entitlements, and billing with the manual payment approval workflow.
 4. **Then:** offline sync on mobile, WhatsApp sending, and the customer service channel chosen in section 15.
 5. **Then:** the second country. This is the real test of whether the seams are in the right places.
@@ -339,6 +393,11 @@ Each step is approved before the next begins.
 ## 19. Open questions for the owner
 
 Claude should surface these early and record the answers as ADRs or PRD entries.
+
+**Answered as at 2026-09-24:** product scope (one product, built to verticalise later — ADR 0017); the current stack and its storage problems (audit §1–2); first and second country (Jamaica, then Trinidad & Tobago); tier definitions (`docs/TIERS.md` — numeric limits and prices still open); WhatsApp approach (click-to-chat now, Business API on the Business tier); payment provider (WiPay); data to migrate (none — there are no live tenants).
+
+**Still open, each now blocking something specific:** the mobile framework (Expo is assumed because it exists, never decided); offline scope, and whether a quote may be issued offline; the support model, buy or build; payment-approval staffing at launch, which sets how strict Rule 13 can be on day one; hosting region and data residency, which matters because tenant and customer data currently leaves Jamaica; the free-tier-to-paid trigger, which Rule 10 requires as an ADR; and the Claude API budget cap.
+
 
 - **Product scope:** after Phase 0's feature review, is this one product, a second product with different features, or full integration into one product? (This gates the PRD and tier design.)
 - What is the current stack, and what specific storage problems are observed? (The audit should answer this from the code.)

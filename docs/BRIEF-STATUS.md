@@ -57,7 +57,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 | Product-scope recommendation | ✅ | §6 — one product |
 | **Owner's scope DECISION** (the brief's gate on Phase 1) | ✅ | **2026-09-24: one product, built to verticalise later** — ADR 0017. Trade behaviour becomes a data pack; tier ladder unchanged |
 | **Portfolio review — what to add, what to take out** | ✅ | `PRODUCT-OPPORTUNITIES.md`, 2026-09-24. The owner's actual §5 question, which I first misread as the verticalisation question. One item carries a deadline: price-index consent must be in the terms before the first tenant signs up |
-| **Proposed edits to the brief after the audit** | ✅ | `BRIEF-EDITS-PROPOSED.md`, 2026-09-24 — seven edits, awaiting the owner's approval before they are applied |
+| **Proposed edits to the brief after the audit** | ✅ | `BRIEF-EDITS-PROPOSED.md`, 2026-09-24 — eight edits, **approved by the owner and applied to the brief** the same day |
 
 ## Phase 1 — requirements and design (§6)
 
@@ -110,14 +110,15 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 
 Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outranks the rest.
 
-1. ~~Proposed edits to the brief~~ ✅ — awaiting approval, then applied in one commit.
+1. ~~Proposed edits to the brief~~ ✅ — approved and applied to `DEVELOPMENT-BRIEF.md`. The brief now carries §5a (the portfolio review), §17a (the public website), the design-before-build gate in §3, and the Foundations status in §18.
 2. ~~Threat model~~ ✅.
 3. **The independent review of `new-app`** (Rule 9). Commissioned 2026-09-24 and it **failed** — the
    agent hit a session limit and produced nothing, so this is still entirely owed. Until it lands,
    **no `new-app` module is complete** by the rule's own definition: every line so far was written
    and reviewed by one author, which is the arrangement Rule 9 exists to forbid.
-3a. **The marketing site design** (Rule 1.1, brief Edit 8). The implementation exists, parked, and
-   waits on it. This is the first file in `docs/design/`.
+3a. ~~The marketing site design~~ ✅ — `docs/design/marketing-site.md`, **Proposed**, awaiting the
+   owner. The parked implementation waits on it. Its sharpest dependency is not code: if
+   `hello@pryvis.com` does not receive mail, the site's only call to action is broken.
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
    both.
 5. **Audit log** — named in Foundations, missing, and the threat model makes it the control every

@@ -13,7 +13,16 @@ Standing context: the development brief in `docs/DEVELOPMENT-BRIEF.md`.
 
 Every task — mine, a subagent's, or a future maintainer's — begins by reading this file and
 the ADRs that bear on the work, and states which rules apply to it. A task that has not cited
-its rules has not started. Every subagent brief carries this rule in its first line.
+its rules has not started.
+
+**Every process, not only the ones that write code.** A build, a review, an audit, a schema change,
+a document, a deployment, an investigation, a question answered from memory: each one starts here.
+The habit is the control, and a process that skips it has usually skipped something else.
+
+**Every subagent brief carries this rule in its first line**, names the specific rules and ADRs that
+bear on its task, and names the approved design it works against (Rule 1.1). An agent starts cold:
+it knows nothing we have not told it, so the brief either hands it the rules or it works without
+them. See Rule 16.
 
 When a rule turns out to be wrong, it is changed deliberately, in writing, with the owner's
 approval — never ignored quietly in one task.
@@ -296,7 +305,27 @@ customers are.
   and review.
 - A named human stays accountable. That process is what separates this from vibe coding.
 
-## 16. How work is delegated (token discipline)
+## 16. How work is delegated to agents (owner requirement)
+
+Agents are how this project stays affordable. They are also how it can quietly go wrong, because an
+agent starts **cold**: it knows nothing we have not written down, and it cannot be assumed to share
+any of the context in which the work made sense.
+
+### 16.1 Every agent reads the rules first
+
+**The brief's first line carries Rule 0**, and the brief then names:
+
+- the specific **rules** and **ADRs** that bear on the task — not "read the rules", but which ones
+  and why;
+- the **approved design** it is implementing (Rule 1.1), or that its task is to write one;
+- the **step of the brief** the work belongs to (Rule 19);
+- an explicit **do-not-touch list** — `original-app/` is read-only, and anything another live agent
+  is working in;
+- how to **plant and restore** a defect: copy to a backup first, restore from the backup, and
+  **never `git checkout`** — that has destroyed uncommitted work here before;
+- what it must **report**: what it planted, what it proved, what it did **not** check, and why.
+
+### 16.2 The minimum capable model, and one hard thing at a time
 
 | Work | Model |
 |---|---|
@@ -305,9 +334,47 @@ customers are.
 | Architecture, schema, threat modelling, audits, adversarial review, product decisions | Opus |
 
 **One complex agent at a time.** Never two build-class or two judgement-class agents at once.
-Read-only work may run alongside a single build agent, in different files. Every brief carries
-Rule 0, an explicit do-not-touch list, and must report what it planted, what it proved, and
-what it did not.
+Read-only work may run alongside a single build agent, in different files. Never spawn a second
+agent to do what a live one is already doing — wait for it, or send it a message.
+
+**A bounded brief beats a broad one.** An agent given a precise scope spends its budget on the work;
+one given "review the codebase" spends it re-deriving what we already know. Handing over context we
+already hold is cheaper than having it rediscovered.
+
+**Do not delegate what needs the context.** If explaining the task costs more than doing it, do it.
+
+### 16.3 An agent's silence is never a pass
+
+Added after a real failure: an independent review was commissioned, the agent **died on a session
+limit and returned nothing**, and the finding it was meant to produce did not exist. Nothing filled
+that gap by default.
+
+- **A failed or interrupted agent is reported as failed**, to the owner, in those words. Its absence
+  of findings is never read as "found nothing".
+- **The work it was doing stays owed** in `BRIEF-STATUS.md` until an agent actually completes it.
+- **Never write, predict or imply an agent's findings.** If it has not reported, we do not know.
+- **After any agent has touched the tree, verify it:** `git status`, look for stray backups or probe
+  files, and confirm no planted defect was left behind. An agent that dies mid-plant leaves a real
+  defect in the working tree.
+- **An agent's working files are its own.** Do not delete or commit them while it is live — and a
+  bulk `git add -A` will sweep them in, which has happened here. Untrack rather than delete.
+
+### 16.4 What an agent's report is worth
+
+A report is **evidence to check, not a verdict to adopt.** An agent can be confidently wrong, and a
+finding that cannot be reproduced does not go in the register as fact. Reproduce what matters,
+especially anything that would change a design or close a defect.
+
+Cost discipline applies as it does anywhere else: budgets, usage alerts and caps (Rule 15), and a
+named human accountable for what lands.
+
+## 17. Where we are weak, stated plainly
+
+Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
+review register, and today include: no dependency-vulnerability check or secret scan in the
+gate; no second factor anywhere, including the admin console; a long session with no rotation
+and no live-session invalidation; and the mobile sync module has neither an independent review
+nor a seam test.
 
 ## 18. Every service we depend on is recorded, with the reason (owner requirement)
 
@@ -396,10 +463,3 @@ for, so the site is a launch dependency and not marketing polish.
 links resolve, no external script or stylesheet host appears, and no social-proof claim exists
 unless a data file provides evidence for it. Plus review, for the things a test cannot judge.
 
-## 17. Where we are weak, stated plainly
-
-Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the
-review register, and today include: no dependency-vulnerability check or secret scan in the
-gate; no second factor anywhere, including the admin console; a long session with no rotation
-and no live-session invalidation; and the mobile sync module has neither an independent review
-nor a seam test.
