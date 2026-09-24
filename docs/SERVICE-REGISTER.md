@@ -86,6 +86,13 @@ workspace roots — and the SBOM is now the **only** one of the three outstandin
 next, because an advisory is only answerable against a bill of materials: without one, "are we
 affected?" is an investigation rather than a query.
 
+The first full-history scan (427 commits) found **three matches, all false positives** — the
+RFC 6238 test-vector seed twice, and an empty `WIPAY_API_KEY=""` placeholder in a template. Each
+was verified by reading the line, and each is exempted by name in `.gitleaks.toml` with its
+reason. Nothing was deleted to quiet the scanner and no rule was weakened; the `.env.example`
+exemption is pinned to the one historical commit rather than to the path, because an example file
+is exactly where somebody eventually pastes a real key to show the format.
+
 Two honest limits of what did land, so the register does not overstate it:
 
 - `npm audit` is **non-blocking** for now (`continue-on-error: true`), so an advisory annotates
