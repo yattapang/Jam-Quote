@@ -7,6 +7,40 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 
 **Legend:** ✅ done · 🟡 partly done · ❌ not started · ⏭️ deliberately later
 
+## Next three, in the owner's order (queued 2026-09-24, paused on a usage reset)
+
+Written down because a context reset loses what was in flight, and the last time that happened
+the work was picked up on an already-finished feature.
+
+1. **The keep-warm anomaly.** `keep-api-warm.yml` is `active` but its last run was **11 September**
+   — thirteen days before this was written — though it is scheduled every ten minutes. Not the
+   60-day inactivity disable the service register describes, because the workflow is not disabled;
+   something else. If the pings genuinely stopped, the free-tier Render API is sleeping and every
+   first request after an idle period pays a cold start. *Delegation (Rule 16.5): Sonnet — reading
+   run history and one workflow file, no judgement call.*
+2. **Next.js patch upgrade, within 14.2.x.** `next@14.2.18` carries the criticals found by the new
+   audit, including unauthenticated RCE in the Image Optimization API and a middleware
+   authorisation bypass. Patch, **not** 15.x: same security benefit without App Router changes to a
+   site that works. `verify-new-app` already builds `@pryvis/web`, so the gate proves the site still
+   compiles. *Delegation (Rule 16.5): Sonnet — a bounded upgrade against a gate.* Also still open:
+   `multer@1.4.4-lts.1` (3 high, DoS) via `@nestjs/platform-express@10`, which needs Nest 11 and
+   should wait for HTTP transport rather than land on work in flight.
+3. **The PRD.** Blocked on two questions for the owner, both from `docs/design/domain-model.md` §11,
+   because either answer changes the document materially rather than cosmetically:
+   - may one person hold **more than one business**? If so, `tenant`/`user` is the wrong shape and
+     every policy sits on it;
+   - do a tenant's **clients ever get a login**, or is a revocable share link enough? A portal makes
+     Documents readable from outside.
+
+   *Delegation (Rule 16.5): Opus — product decisions, 16.2's own category.*
+
+**Also open, owner-side:** whether this repository should stay **public**. It is public today, which
+is why gitleaks and GitHub secret scanning are free here — but `THREAT-MODEL.md`, `RULES.md` §17 and
+`REVIEW-FINDINGS.md` are publicly readable, and §17 is a deliberately honest list of *unmitigated*
+weaknesses. The answer is to make the repository private or to unpublish that list, never to make
+the list dishonest. Recommendation: private, since nothing about this project benefits from being
+public yet.
+
 Last reviewed: **2026-09-24**. Staff MFA is **built** (ADR 0021): TOTP proved against RFC 6238's
 published vectors, secrets sealed with a rotatable key, enrolment that grants nothing until a code
 is produced, replay refused, a lock that follows the person rather than the session, recovery codes,
