@@ -10,8 +10,8 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 Last reviewed: **2026-09-24**. Staff MFA is **paused** at a clean point (schema and the
 strengthened guard are committed; no service code started). The marketing site is **built and
 landed** against its approved design (`docs/design/marketing-site.md`), with nine guards proved by
-planting. The independent review (Rule 9) **ran and reported**: 15 findings, of which F15, F13,
-F10, F1 and F11 are fixed and ten remain open in `REVIEW-FINDINGS.md`.
+planting. The independent review (Rule 9) ran, reported 15 findings, and **all 15 are now closed** —
+each with the defect planted and the fix proved (`REVIEW-FINDINGS.md`).
 
 ---
 
@@ -38,9 +38,11 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
    and the marketing site with no design at all. On 2026-09-24 the owner made it a hard gate
    (Rule 1.1): designs live in `docs/design/`, and a task names its approved design before it
    starts. The site implementation is parked until its design is approved.
-6. **The independent review did not happen.** It was commissioned on 2026-09-24 and the agent
-   **failed** — it hit a session limit and returned nothing. So the Rule 9 breach is still open and
-   no `new-app` module has been independently reviewed. It must be re-run.
+6. ~~The independent review did not happen.~~ **Done.** The first agent failed on a session limit
+   and returned nothing; the second reported incrementally so its findings could survive that, and
+   found a red gate plus a critical guard hole in code I had written and reviewed myself. All 15
+   findings are closed. **Rule 9's breach is closed for this slice** — and the rule is no longer
+   theoretical.
 
 ---
 
@@ -113,10 +115,7 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 
 1. ~~Proposed edits to the brief~~ ✅ — approved and applied to `DEVELOPMENT-BRIEF.md`. The brief now carries §5a (the portfolio review), §17a (the public website), the design-before-build gate in §3, and the Foundations status in §18.
 2. ~~Threat model~~ ✅.
-3. **The independent review of `new-app`** (Rule 9). Commissioned 2026-09-24 and it **failed** — the
-   agent hit a session limit and produced nothing, so this is still entirely owed. Until it lands,
-   **no `new-app` module is complete** by the rule's own definition: every line so far was written
-   and reviewed by one author, which is the arrangement Rule 9 exists to forbid.
+3. ~~The independent review of `new-app`~~ ✅ **done, and its register is clear.**
 3a. ~~The marketing site design~~ ✅ — `docs/design/marketing-site.md`, **Proposed**, awaiting the
    owner. The parked implementation waits on it. Its sharpest dependency is not code: if
    `hello@pryvis.com` does not receive mail, the site's only call to action is broken.

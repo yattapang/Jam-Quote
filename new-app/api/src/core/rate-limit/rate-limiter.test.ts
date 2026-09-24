@@ -26,10 +26,8 @@
  * - Nothing about cleaning up old rows. An absent bucket is a full one, so nothing
  *   breaks — but the table grows until housekeeping exists, which is owed.
  */
+import { APP_ROLE, applyMigrations } from "@pryvis/db/test-support";
 import { PGlite } from "@electric-sql/pglite";
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -39,9 +37,6 @@ import {
   emailKey,
   ipKey,
 } from "./rate-limiter.js";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS = join(HERE, "..", "..", "..", "..", "db", "migrations");
 
 /** Three tokens, refilling one per second — small numbers make the arithmetic legible. */
 const RULE = { capacity: 3, refillPerSecond: 1 } as const;
@@ -63,12 +58,11 @@ function store(pg: PGlite): RateLimitStore {
 
 beforeEach(async () => {
   db = new PGlite();
-  for (const name of (await readdir(MIGRATIONS, { withFileTypes: true }))
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort()) {
-    await db.exec(await readFile(join(MIGRATIONS, name, "migration.sql"), "utf8"));
-  }
+  // F12: this suite used to replay the migrations by hand and create NO unprivileged role, so the
+  // limiter was the one subject never exercised as the identity the policies are written for.
+  // Nobody noticed, because the file looked correct on its own.
+  await applyMigrations(db);
+  await db.exec(`SET ROLE ${APP_ROLE};`);
   clock = new Date("2026-09-23T12:00:00.000Z");
   limiter = new PostgresRateLimiter(store(db), () => clock);
 });

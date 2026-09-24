@@ -29,16 +29,26 @@
  *
  * Through the TypeScript parser, never a text search — a regex over source counts
  * a specifier inside a comment or a string as an import (Rule 8). It reads import
- * declarations, export-from declarations, `import type`, and dynamic `import()`
- * calls with a literal specifier.
+ * declarations, export-from declarations, `import type`, dynamic `import()` calls,
+ * `import x = require(...)`, and — since F3 — `require()` calls, including a `require`
+ * obtained from `createRequire(import.meta.url)`.
+ *
+ * F3 (independent review, 2026-09-24): `createRequire(import.meta.url)("../users/users.service.js")`
+ * walked straight past this guard, in both directions, while its header claimed a computed
+ * dynamic import was "the one way to cross a boundary unseen". It was not. Reaching for
+ * `createRequire` in an ESM module is unusual enough to be worth noticing on its own, so it is
+ * treated as an import and its specifier is checked like any other.
  *
  * WHAT IT DOES NOT PROVE
  *
- * - A dynamic import with a COMPUTED specifier — `import(base + name)` — is
+ * - A dynamic import or require with a COMPUTED specifier — `import(base + name)` — is
  *   invisible to it, because the string does not exist until runtime. It fails the
- *   test loudly rather than passing silently: a computed specifier inside
- *   `src/modules/` is itself a failure, because it is the one way to cross a
- *   boundary unseen.
+ *   test loudly rather than passing silently: a computed specifier inside `src/modules/`
+ *   is itself a failure.
+ * - Nothing about a module loaded through an indirection this guard has not been taught:
+ *   an `eval`, a dynamically-built `createRequire` call, or a loader hook. F3 proved that
+ *   claiming "this is the one way" invites someone to find the second one, so this now says
+ *   what it reads rather than what it believes is exhaustive.
  * - Laundering through a shared re-export: if some module's `index.ts` re-exports
  *   another module's service, this guard sees a legal import of a public surface.
  *   That is a review question, not a parse question.
@@ -107,6 +117,29 @@ async function importsIn(file: string): Promise<FoundImport[]> {
   const rel = relative(SRC, file).split(sep).join("/");
   const found: FoundImport[] = [];
 
+  /**
+   * Local names that behave like `require`.
+   *
+   * `const require = createRequire(import.meta.url)` binds one; so does any other name, which is
+   * why this tracks the binding rather than looking for the word "require". A guard that matched
+   * the name would be defeated by `const load = createRequire(...)`.
+   */
+  const requireLikeNames = new Set<string>(["require"]);
+  const collectRequireBindings = (node: ts.Node): void => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      ts.isIdentifier(node.initializer.expression) &&
+      node.initializer.expression.text === "createRequire"
+    ) {
+      requireLikeNames.add(node.name.text);
+    }
+    ts.forEachChild(node, collectRequireBindings);
+  };
+  collectRequireBindings(sourceFile);
+
   const record = (node: ts.Node, specifier: string | null) => {
     const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
     found.push({ file: rel, line: line + 1, specifier });
@@ -133,6 +166,25 @@ async function importsIn(file: string): Promise<FoundImport[]> {
       ts.isStringLiteral(node.moduleReference.expression)
     ) {
       record(node, node.moduleReference.expression.text);
+    }
+    // require("x"), including a require obtained from createRequire — F3.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      requireLikeNames.has(node.expression.text)
+    ) {
+      const arg = node.arguments[0];
+      record(node, arg && ts.isStringLiteral(arg) ? arg.text : null);
+    }
+    // createRequire(...)("x") — called immediately, with nothing bound to a name.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isCallExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "createRequire"
+    ) {
+      const arg = node.arguments[0];
+      record(node, arg && ts.isStringLiteral(arg) ? arg.text : null);
     }
     ts.forEachChild(node, visit);
   };
@@ -187,8 +239,9 @@ describe("module boundaries", () => {
       for (const imp of await importsIn(file)) {
         if (imp.specifier === null) {
           offences.push(
-            `${imp.file}:${imp.line} uses a computed dynamic import. This guard cannot read it, ` +
-              `which makes it the one way to cross a module boundary unseen — so it is refused here.`,
+            `${imp.file}:${imp.line} loads a module by a specifier this guard cannot read — a ` +
+              `computed dynamic import or require. That is the way to cross a module boundary ` +
+              `unseen, so it is refused rather than trusted.`,
           );
           continue;
         }

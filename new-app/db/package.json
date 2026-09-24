@@ -12,5 +12,8 @@
   },
   "devDependencies": {
     "prisma": "^6.1.0"
+  },
+  "exports": {
+    "./test-support": "./test-support/index.ts"
   }
 }

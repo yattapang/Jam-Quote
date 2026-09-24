@@ -2376,33 +2376,33 @@ myself, it says so. Where I have not yet, it says that too.
 | **F15** | **HIGH — the gate was RED on a clean tree.** `SignInService` stamped `expires_at` from an injected clock fixed at 2026-09-23T12:00, while `DbCallerResolver` asked the database whether the session had expired. Real time walked past the fixture fourteen hours later and three tests failed, **including both seam tests the file calls "the one that matters most"**. An injected clock on one side of a seam is a half-truth. | **FIXED.** I reproduced it (3 failures at 02:08 UTC), gave the resolver an injected clock, and now bind the caller's "now" into the expiry comparison so one statement still decides it. A second instance of the same mistake lived *inside* a test, comparing the injected clock's output to real `Date.now()`; also fixed. 77/77 green. |
 | **F13** | LOW — `sign-in.test.ts`'s "does not prove" section still said rate limiting "is owed", directly above eight tests for it. | **FIXED**, and replaced with what is genuinely still not covered. |
 
-## Open — critical and high
+## Critical and high — all closed
 
 | # | Finding | My verification | Status |
 |---|---|---|---|
 | **F1** | **CRITICAL — a cross-tenant read with both database guards green.** `policy-parity.test.ts` counts policies (`policy_count === 0`) and never reads what a policy *says*; `tenant-isolation.test.ts` only ever queries `tenant` and `app_user`. A table added later with `CREATE POLICY … USING (true)` passes both guards and returns every tenant's rows. The reviewer proved it with a planted `quote` table. | **Confirmed by reading the code** — the mechanism is exactly as described. Not re-proved empirically; the reviewer's plant is convincing and the code is unambiguous. | **OPEN — fix first.** The guard must assert what a policy contains, and the behavioural test must cover every tenant-owned table by discovery rather than by name. |
 | **F2** | ~~HIGH — the route inventory is silently incomplete, with no runtime backstop.~~ | **FIXED 2026-09-24.** Both halves. The coverage guard now reads every `.ts` under `src/`, identifies a controller by its `@Controller` decorator rather than its filename, and resolves decorator identifiers back through the import that renamed them — so `Get as Fetch` and a controller in `admin.ts` are both caught. And `app.module.ts` now exists, binding `DefaultDenyGuard` with `APP_GUARD`, with `app.module.test.ts` booting the real application and issuing real requests. Proved by four plants: removing `APP_GUARD` breaks the runtime tests; an undeclared route, a controller in the wrong filename, and a renamed decorator each break the coverage guard. A direct probe confirms a planted undeclared route returns **403 with the handler never reached**. |
 | **F10** | **HIGH — the threat model overstates three controls.** §4.2 claimed the global default-deny guard as BUILT when only the build-time half exists (and that half has F2's hole). §4.1 claimed computed dynamic imports "refused outright" (F3) and the new-table guard as BUILT (F1). | Confirmed — I wrote those rows, and they are wrong by the document's own definition of BUILT ("exists with a test that fails when it is removed"). | **FIXED in the document** today. The underlying controls stay open as F1, F2, F3. |
-| **F4** | MEDIUM-HIGH — the contract generator collects only `interface`, so a `@wire` **type alias** vanishes silently, and the "found at least one @wire type" check cannot see the loss. | Not re-proved; the generator's code only visits `isInterfaceDeclaration`, so the mechanism is plain. | **OPEN.** |
+| **F4** | ~~The contract generator collected only `interface`, so a `@wire` **type alias** vanished silently.~~ | **FIXED 2026-09-24.** Type aliases are collected too — a union like `type TenantStatus = "active" \| "suspended"` is a wire shape as much as an object is, and is exactly what a server declares as an alias. Proved by adding a `@wire` alias and watching the drift check fail. |
 
-## Open — medium
+## Medium — all closed
 
 | # | Finding | Status |
 |---|---|---|
-| **F3** | `import-boundaries.test.ts` misses `createRequire(import.meta.url)("../users/users.service.js")`, in both directions. Defeats the header's claim that a computed dynamic import is "the one way to cross a boundary unseen". | **OPEN** |
-| **F5** | `generate.ts`'s header claims it *rejects* a `@wire` interface whose fields reference types declared elsewhere. **There is no such code.** A server-only shape with a `Buffer` field can reach the client contract with nothing failing. A comment claiming a check that does not exist is worse than no comment. | **OPEN** |
+| **F3** | ~~`import-boundaries.test.ts` missed `createRequire(import.meta.url)(…)`, in both directions.~~ | **FIXED 2026-09-24.** `require()` calls are now read as imports, including a `require` obtained from `createRequire` — tracked by BINDING rather than by the name `require`, so `const load = createRequire(…)` is caught too. The header no longer claims a computed dynamic import is "the one way to cross a boundary unseen": F3 proved that saying so invites someone to find the second one, so it now states what it reads instead of what it believes is exhaustive. |
+| **F5** | ~~`generate.ts` claimed it *rejects* a `@wire` interface whose fields reference types declared elsewhere. **No such code existed.**~~ | **FIXED 2026-09-24 — the check is now real**, rather than the comment being deleted. Every referenced type must be a JSON primitive or another emitted `@wire` type. `Buffer` is rejected; so is **`Date`**, deliberately — JSON has no date, the client receives a string, and a contract saying `Date` is a lie that type-checks. Both proved by planting. |
 | **F6** | ~~`password.test.ts`'s legacy-hash test asserted only `needsRehash(weak) === true`, which passes whether the old hash verifies or is rejected.~~ | **FIXED 2026-09-24.** The fixture was a string of `x` that no password could ever match, which is precisely why the test proved nothing; it is now built from a real password at the old cost, and asserts that a pre-upgrade user **can still sign in** as well as that the hash is flagged. Proved with the reviewer's own plant — rejecting old parameters in `parse()` — which the old test slept through and the new one fails on. |
 | **F7** | ~~Passwords were not unicode-normalised: the NFD form of the same typed password failed against an NFC hash.~~ | **FIXED 2026-09-24.** Canonicalised to **NFC** on both hash and verify. NFC and not NFKC deliberately: NFKC folds `ﬁ` into `fi` and full-width into ASCII, silently making distinct passwords equal and *reducing* entropy. Both directions tested, plus a test that distinct characters stay distinct, plus the existing no-trimming rule. Safe to introduce now only because no password has ever been stored — after the first real user this change would lock people out, and the code says so. |
 | **F8** | ~~The length rule counted UTF-16 code units while the comment said "characters as typed": six emoji satisfied a twelve-character minimum.~~ | **FIXED 2026-09-24.** The minimum counts **code points**; the maximum is enforced twice, in characters *and* bytes, because it exists for two different reasons — a sane bound on what a person types, and a bound on the work a script can demand. The comment that described a stronger rule than the code is the part worth remembering: it reads correctly, which is why review missed it. |
 | **F9** | ~~`consume()` validated neither cost nor rule: a zero cost was granted 1000/1000 on an exhausted bucket.~~ | **FIXED 2026-09-24.** A cost must be positive, finite and payable from the bucket — a cost larger than capacity is refused too, since it would refuse the caller forever while promising a retry time that never comes. A rule must have positive capacity and a positive refill, because a zero refill is a permanent lockout. Nothing reached it with a bad value, and the limiter's own tests never passed a cost at all, which is how it waited for its first caller. |
 | **F11** | `schema.prisma` has 4 models; the migrations create 8 tables. `rate_limit_bucket`, `platform_capability`, `mfa_totp` and `mfa_recovery_code` have no model, so `prisma migrate diff/dev` would compute a diff that **drops** them. No guard compares the two. | **OPEN — dangerous in a way that is easy to miss.** |
 
-## Open — low
+## Low — all closed
 
 | # | Finding | Status |
 |---|---|---|
-| **F12** | The db test harness — "the one place tests get a real database from" — is restated by hand in four files, which is Rule 7's named failure mode. `rate-limiter.test.ts` creates no role at all, so the limiter is never exercised as the unprivileged identity. | **OPEN** |
-| **F14** | Sign-in logs the plaintext email on every failure, contradicting Rule 5 and ADR 0016's own reason for hashing it in `rate_limit_bucket`. | **OPEN** |
+| **F12** | ~~The db harness was restated by hand in four files — Rule 7's own failure mode — and `rate-limiter.test.ts` created no role at all, so the limiter was never run as the unprivileged identity.~~ | **FIXED 2026-09-24.** One `@pryvis/db/test-support` module, exported across the workspace boundary rather than reached into. The limiter suite now runs as the app role like every other. Proved by planting: removing `CREATE ROLE` from the shared harness fails the suites, which is only possible because they genuinely share it. |
+| **F14** | ~~Sign-in logged the plaintext email on every failure, contradicting Rule 5 and ADR 0016's own reason for hashing it two files away.~~ | **FIXED 2026-09-24.** A 16-character fingerprint, built the same way the rate limiter builds its bucket key, so a log line and a bucket can be matched without either holding the address. A failed sign-in is exactly when the address is most likely to belong to someone who is *not* our user — a typo, or an attacker working a list — so logging it put other people's addresses in our logs. |
 
 ## Attacked and held — worth recording, because it is evidence too
 
@@ -2424,6 +2424,24 @@ myself, it says so. Where I have not yet, it says that too.
 True multi-backend concurrency (PGlite is one connection); anything HTTP, so the unvalidated `ip`
 feeding `ipKey` and any trust in `X-Forwarded-For` are undecidable; real Postgres role grants;
 timing by measurement.
+
+## Register status: CLEAR
+
+**All 15 findings are closed as of 2026-09-24**, each with the defect planted and the fix proved.
+Nothing was closed by argument.
+
+What the closures actually took: 4 new tests proving behaviour that had only been claimed, 2 guards
+rewritten because they examined the wrong SET rather than the wrong property, 1 check implemented
+that a comment had asserted for weeks, and 1 shared module replacing a rule copied into four files.
+Three of the fifteen were not defects in the product at all — they were **documents and comments
+that described something stronger than the code did**, which is the pattern worth carrying forward:
+F5's check that never existed, F6's test whose comment claimed more than its assertion, F8's rule
+that measured something other than what it said.
+
+Owed, and recorded rather than closed: type/default/index comparison needs `prisma migrate diff`
+against a live database; a production bootstrap (`main.ts`) does not exist; behaviour with a real
+session cannot be tested until transport lands; and true multi-backend concurrency is not testable
+under PGlite.
 
 ## What this review cost, and what it bought
 

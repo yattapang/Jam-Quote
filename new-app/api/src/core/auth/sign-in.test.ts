@@ -18,12 +18,10 @@
  * - Nothing about HTTP: no cookie, no header, no CSRF. That is the next step.
  * - Nothing about sign-up, invitations, or password reset. None exist yet.
  */
+import { APP_ROLE, applyMigrations } from "@pryvis/db/test-support";
 import { PGlite } from "@electric-sql/pglite";
 import { randomBytes, scrypt, type ScryptOptions } from "node:crypto";
 import { promisify } from "node:util";
-import { readdir, readFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DbCallerResolver, type Queryable } from "./db-caller-resolver.js";
@@ -32,14 +30,11 @@ import { PostgresRateLimiter, type RateLimitStore } from "../rate-limit/rate-lim
 import {
   SESSION_LIFETIME_MS,
   SIGN_IN_FAILED_MESSAGE,
+  emailFingerprint,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   SignInService,
   type SignInFailure,
 } from "./sign-in.js";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS = join(HERE, "..", "..", "..", "..", "db", "migrations");
-const APP_ROLE = "pryvis_app";
 
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const OTHER_TENANT = "22222222-2222-4222-8222-222222222222";
@@ -49,7 +44,7 @@ const PASSWORD = "correct horse battery staple";
 
 let db: PGlite;
 let signIn: SignInService;
-let failures: { email: string; reason: SignInFailure }[];
+let failures: { emailFingerprint: string; reason: SignInFailure }[];
 let clock: Date;
 
 /** Every attempt in these tests comes from one address unless a test says otherwise. */
@@ -90,17 +85,9 @@ async function asOwner(sql: string, params: unknown[] = []) {
 
 beforeEach(async () => {
   db = new PGlite();
-  for (const name of (await readdir(MIGRATIONS, { withFileTypes: true }))
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort()) {
-    await db.exec(await readFile(join(MIGRATIONS, name, "migration.sql"), "utf8"));
-  }
-  await db.exec(`
-    CREATE ROLE ${APP_ROLE} NOLOGIN;
-    GRANT USAGE ON SCHEMA public TO ${APP_ROLE};
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE};
-  `);
+  // One shared harness (F12): replaying migrations and creating the unprivileged role by
+  // hand in every suite is how one of them ended up creating no role at all.
+  await applyMigrations(db);
 
   for (const [tenant, name] of [
     [TENANT, "Tenant A"],
@@ -129,7 +116,7 @@ beforeEach(async () => {
   const limiter = new PostgresRateLimiter(adapt(db) as RateLimitStore, () => clock);
   signIn = new SignInService(
     adapt(db),
-    { failed: (email, reason) => failures.push({ email, reason }) },
+    { failed: (fingerprint, reason) => failures.push({ emailFingerprint: fingerprint, reason }) },
     limiter,
     () => clock,
   );
@@ -443,5 +430,41 @@ describe("rate limiting protects the expensive path", () => {
     clock = new Date(clock.getTime() + 30_000);
 
     expect(await signIn.signIn(EMAIL, PASSWORD, FROM)).toMatchObject({ ok: true });
+  });
+});
+
+describe("what a failed sign-in writes down", () => {
+  it("logs a fingerprint, never the address (F14)", async () => {
+    // Rule 5: no personal data in logs. A failed sign-in is exactly when the address is most
+    // likely to belong to someone who is not our user — a typo, or an attacker working a list —
+    // so logging it puts other people's addresses in our logs.
+    await signIn.signIn(EMAIL, "wrong password entirely", FROM);
+    await signIn.signIn("someone-elses@example.com", PASSWORD, FROM);
+
+    expect(failures).toHaveLength(2);
+    for (const entry of failures) {
+      expect(entry.emailFingerprint).not.toContain("@");
+      expect(entry.emailFingerprint).not.toContain("example.com");
+      expect(entry.emailFingerprint).toMatch(/^[0-9a-f]{16}$/);
+    }
+  });
+
+  it("keeps the fingerprint stable, so repeated failures can be correlated", async () => {
+    // The log's actual purpose: seeing the same address fail ten times. A random value would be
+    // private and useless.
+    await signIn.signIn(EMAIL, "wrong once", FROM);
+    await signIn.signIn(EMAIL, "wrong twice", FROM);
+
+    expect(failures[0]?.emailFingerprint).toBe(failures[1]?.emailFingerprint);
+    expect(failures[0]?.emailFingerprint).toBe(
+      emailFingerprint(SignInService.normaliseEmail(EMAIL)),
+    );
+  });
+
+  it("gives different addresses different fingerprints", async () => {
+    await signIn.signIn("one@example.com", PASSWORD, FROM);
+    await signIn.signIn("two@example.com", PASSWORD, FROM);
+
+    expect(failures[0]?.emailFingerprint).not.toBe(failures[1]?.emailFingerprint);
   });
 });

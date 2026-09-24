@@ -21,10 +21,8 @@
  *   is what makes pooling safe, and this proves the setting is transaction-local —
  *   not that the deployed pool behaves.
  */
+import { APP_ROLE, applyMigrations } from "@pryvis/db/test-support";
 import { PGlite } from "@electric-sql/pglite";
-import { readFile, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -33,10 +31,6 @@ import {
   withTenant,
   withoutTenant,
 } from "./tenant-context.js";
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS = join(HERE, "..", "..", "..", "..", "db", "migrations");
-const APP_ROLE = "pryvis_app";
 
 const TENANT_A = "11111111-1111-4111-8111-111111111111";
 const TENANT_B = "22222222-2222-4222-8222-222222222222";
@@ -80,17 +74,9 @@ async function readAllTenantNames(): Promise<string[]> {
 
 beforeEach(async () => {
   db = new PGlite();
-  for (const entry of (await readdir(MIGRATIONS, { withFileTypes: true }))
-    .filter((e) => e.isDirectory())
-    .map((e) => e.name)
-    .sort()) {
-    await db.exec(await readFile(join(MIGRATIONS, entry, "migration.sql"), "utf8"));
-  }
-  await db.exec(`
-    CREATE ROLE ${APP_ROLE} NOLOGIN;
-    GRANT USAGE ON SCHEMA public TO ${APP_ROLE};
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE};
-  `);
+  // One shared harness (F12). Replaying migrations and creating the unprivileged role by hand
+  // in every suite is how one of them ended up creating no role at all.
+  await applyMigrations(db);
   for (const [id, name] of [
     [TENANT_A, "Tenant A Construction"],
     [TENANT_B, "Tenant B Contracting"],

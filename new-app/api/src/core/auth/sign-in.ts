@@ -22,7 +22,7 @@
  *    plaintext exists, so it is the only moment a weaker stored hash can be upgraded
  *    (ADR 0014). This is where needsRehash is called.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { type SessionRef } from "./caller.js";
 import {
@@ -115,8 +115,32 @@ interface UserStateRow {
 }
 
 export interface SignInLog {
-  /** Called on every failure, with the real reason. Never reaches the caller. */
-  failed(email: string, reason: SignInFailure): void;
+  /**
+   * Called on every failure, with the real reason. Never reaches the caller.
+   *
+   * @param emailFingerprint a short hash of the address, NOT the address (F14, independent
+   *   review 2026-09-24). Sign-in used to log the plaintext email on every failure, which
+   *   contradicts Rule 5 — no personal data in logs — and contradicted ADR 0016's own reasoning,
+   *   since the rate limiter hashes the same address for the same reason two files away. A failed
+   *   sign-in is exactly when an address is most likely to be someone else's: a typo, or an
+   *   attacker working through a list. Logging it puts other people's addresses in our logs.
+   *
+   *   The fingerprint keeps what the log is actually for: correlating repeated failures against
+   *   one address, and matching a log line to a rate-limit bucket. It is not reversible by
+   *   reading, and it is reversible by guessing a known address — the same honest limit ADR 0016
+   *   records for the bucket keys.
+   */
+  failed(emailFingerprint: string, reason: SignInFailure): void;
+}
+
+/**
+ * A short, stable fingerprint of a normalised address, for logs and audit entries.
+ *
+ * Deliberately the same construction the rate limiter uses, truncated: a log line and a bucket
+ * can be matched to each other without either holding the address.
+ */
+export function emailFingerprint(normalisedEmail: string): string {
+  return createHash("sha256").update(normalisedEmail).digest("hex").slice(0, 16);
 }
 
 export class SignInService {
@@ -174,7 +198,7 @@ export class SignInService {
     // holds that property. ADR 0016 records it as accepted rather than solved.
     const ip = await this.limiter.consume(ipKey("signin", from.ip), RATE_LIMITS.signInPerIp);
     if (!ip.allowed) {
-      this.log.failed(normalised, "rate-limited-ip");
+      this.log.failed(emailFingerprint(normalised), "rate-limited-ip");
       return {
         ok: false,
         message: SIGN_IN_RATE_LIMITED_MESSAGE,
@@ -187,7 +211,7 @@ export class SignInService {
       RATE_LIMITS.signInPerEmail,
     );
     if (!perEmail.allowed) {
-      this.log.failed(normalised, "rate-limited-email");
+      this.log.failed(emailFingerprint(normalised), "rate-limited-email");
       return {
         ok: false,
         message: SIGN_IN_RATE_LIMITED_MESSAGE,
@@ -210,13 +234,13 @@ export class SignInService {
     // time says nothing about whether the address is registered.
     if (!credential) {
       await verifyPassword(password, await getDecoyHash());
-      this.log.failed(normalised, "unknown-email");
+      this.log.failed(emailFingerprint(normalised), "unknown-email");
       return { ok: false, message: SIGN_IN_FAILED_MESSAGE };
     }
 
     const passwordMatches = await verifyPassword(password, credential.password_hash);
     if (!passwordMatches) {
-      this.log.failed(normalised, "wrong-password");
+      this.log.failed(emailFingerprint(normalised), "wrong-password");
       return { ok: false, message: SIGN_IN_FAILED_MESSAGE };
     }
 
@@ -239,18 +263,18 @@ export class SignInService {
     // No row means the user is gone, or that the credential's tenant does not own this
     // user — in which case the policies refused the join. Either way, not a sign-in.
     if (!user) {
-      this.log.failed(normalised, "unknown-email");
+      this.log.failed(emailFingerprint(normalised), "unknown-email");
       return { ok: false, message: SIGN_IN_FAILED_MESSAGE };
     }
     if (user.tenant_suspended) {
       // A correct password for a suspended tenant gets the same sentence as a wrong
       // one. Telling them "your account is suspended" here would confirm the address
       // exists to anyone who guessed it.
-      this.log.failed(normalised, "tenant-suspended");
+      this.log.failed(emailFingerprint(normalised), "tenant-suspended");
       return { ok: false, message: SIGN_IN_FAILED_MESSAGE };
     }
     if (user.deactivated) {
-      this.log.failed(normalised, "user-deactivated");
+      this.log.failed(emailFingerprint(normalised), "user-deactivated");
       return { ok: false, message: SIGN_IN_FAILED_MESSAGE };
     }
 
