@@ -22,6 +22,10 @@
 #
 # It does not deploy. Render and Vercel own that, from their own triggers.
 #
+# The `scan` job checks dependencies and looks for committed secrets. It does NOT
+# produce an SBOM, which the service register records as owed and which should
+# land next to these two.
+#
 # ## Concurrency
 #
 # A new push to the same ref cancels the previous run. Two runs of the same branch
@@ -142,3 +146,88 @@ jobs:
       - name: Build the site
         if: ${{ !cancelled() }}
         run: npm run build -w @pryvis/web
+
+  # ---------------------------------------------------------------------------
+  # scan: the class of problem the gate could not see at all
+  #
+  # Rule 17 named this as a stated weakness for as long as this workflow has
+  # existed: no dependency-vulnerability check and no secret scan. Everything else
+  # here asks "does our code do what we think". Neither of those questions is about
+  # our code, which is why no amount of typechecking, testing or planting defects
+  # was ever going to surface them.
+  #
+  # A SEPARATE JOB, not steps bolted onto the two above, for two reasons: it spans
+  # the whole repository rather than one workspace root, and a red advisory must not
+  # read as "the tests broke".
+  # ---------------------------------------------------------------------------
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, because a secret removed in a later commit is still a
+          # leaked secret: whoever cloned the repo before the fix has it, and the
+          # working tree alone would show nothing.
+          fetch-depth: 0
+
+      # ---------------------------------------------------------------------
+      # Committed secrets
+      #
+      # GitHub's own secret scanning is free on public repositories and depends on
+      # the plan for private ones, so this runs regardless of what that setting
+      # turns out to be — a control whose presence depends on a dashboard checkbox
+      # nobody can see from the repo is not a control we can reason about (Rule 5).
+      #
+      # gitleaks is free for personal accounts and public repositories. If this ever
+      # starts demanding a licence key because the repository moves under an
+      # organisation, swap this step for the binary rather than paying for it:
+      #
+      #   curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz"       #     | tar -xz gitleaks && ./gitleaks git . --redact --exit-code 1
+      #
+      # BLOCKING from the first run, unlike the audit below. A committed credential
+      # is not a backlog item: it is valid until it is rotated, and every minute it
+      # sits on a green build is a minute somebody could be using it.
+      - name: No committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # A summary in the run, so a finding is readable without digging through
+          # the log. Note what this does NOT do: the action prints matches, so a
+          # finding may echo the secret into the build log. That is survivable
+          # because the response to a finding is to rotate the credential anyway —
+          # but it is the reason the binary fallback above passes `--redact`.
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # ---------------------------------------------------------------------
+      # Known vulnerabilities in what we install
+      #
+      # Both workspace roots, because they have separate lockfiles and a fix in one
+      # says nothing about the other (ADR 0010).
+      #
+      # NON-BLOCKING ON PURPOSE, and this is the part to revisit rather than leave
+      # forever. A transitive advisory with no published fix would otherwise redden
+      # every pull request from the day this lands, and a gate that is red for
+      # reasons nobody can act on is a gate people learn to ignore — the same
+      # failure as the ungated lint warnings described at the top of this file.
+      #
+      # `continue-on-error` rather than `|| true` so the run is annotated as a
+      # warning instead of silently passing: the finding still has to be looked at,
+      # it just does not block. TURN THIS OFF once the first pass is clean, and
+      # record the date in the service register when you do.
+      - name: Audit original-app dependencies
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: original-app
+        run: npm audit --audit-level=high
+
+      - name: Audit new-app dependencies
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        working-directory: new-app
+        run: npm audit --audit-level=high
