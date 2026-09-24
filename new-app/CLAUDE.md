@@ -70,9 +70,17 @@ Run from this directory.
 ```bash
 npm install
 npm run typecheck
-npm test                     # db + api + contract
+npm test                     # db + api + web + contract
 npm run contract:generate    # after changing any @wire type; commit the result
+npm run build -w @pryvis/web # the public site; CI builds it too
 ```
+
+**`npm test` runs the packages one at a time** (`--concurrency=1`), and that is deliberate. Several
+suites each start their own in-process Postgres, and running them in parallel starves them on a
+modest machine: the gate fails, a different suite each time, with nothing wrong in the code. A
+flaky gate is worse than a slow one — it teaches everyone to re-run instead of investigate, and
+then a real failure gets re-run too. If you want the parallel run while iterating, call
+`npx turbo run test` directly and treat a failure as unproven until you have repeated it serially.
 
 A change to a `@wire` type is not finished until the contract is regenerated and committed. CI
 regenerates it and fails on a diff.

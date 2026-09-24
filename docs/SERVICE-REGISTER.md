@@ -46,7 +46,8 @@ can rely on. **The paid-tier trigger is the first paying tenant**, and it is owe
 
 **The public site adds no service.** It is static pages in our own application on the same Vercel
 project: no site builder, no CMS, no form service, no analytics, no font host (Rule 20). The only
-asset is the owner's logo, committed to the repository. That is the point of ADR 0018 — the row
+asset is the owner's logo, committed to the repository as SVG in two variants (light and a
+dark-mode version with the letterforms lightened and the leaf untouched). That is the point of ADR 0018 — the row
 above is the entire infrastructure cost of having a front door.
 
 ## 2. Third-party services in the product

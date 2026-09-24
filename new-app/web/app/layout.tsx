@@ -28,14 +28,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="site-head">
           <div className="site-head__inner">
             {/*
-              The supplied logo, at its intrinsic aspect ratio. `alt` carries the product name so
-              the header still says "Pryvis" to a screen reader and when images fail — a logo with
-              empty alt in the one place the brand is named is a page that introduces itself to
-              nobody. Width and height are set so the header does not jump as it loads.
+              The supplied logo, as SVG: sharp at any size, ~16 KB, and no raster to pick a
+              resolution for. `alt` carries the product name so the header still says "Pryvis" to
+              a screen reader and when images fail — a logo with empty alt in the one place the
+              brand is named is a page that introduces itself to nobody. Width and height match
+              its 3.68:1 aspect so the header does not jump as it loads.
             */}
             <a className="wordmark" href="/" aria-label={`${site.name} home`}>
-              {/* eslint-disable-next-line @next/next/no-img-element -- no optimiser (ADR 0018) */}
-              <img src="/pryvis-logo.png" alt={site.name} width={132} height={32} />
+              {/*
+                Two real files rather than a CSS filter. A filter flattens every path to one
+                colour, so the leaf — the distinguishing part of the mark — came out as a white
+                blob on dark. `pryvis-logo-dark.svg` lightens only the letterforms and leaves the
+                leaf's greens and cyans exactly as supplied.
+
+                <picture> means the browser chooses before paint: no flash, no JavaScript, and it
+                still works with JavaScript off.
+              */}
+              <picture>
+                <source srcSet="/pryvis-logo-dark.svg" media="(prefers-color-scheme: dark)" />
+                {/* eslint-disable-next-line @next/next/no-img-element -- no optimiser (ADR 0018) */}
+                <img src="/pryvis-logo.svg" alt={site.name} width={110} height={30} />
+              </picture>
             </a>
             <nav className="site-nav" aria-label="Main">
               {site.chrome.nav.map((item) => (

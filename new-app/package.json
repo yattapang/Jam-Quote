@@ -13,9 +13,9 @@
   "scripts": {
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "test": "turbo run test",
+    "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
-    "test:integration": "turbo run test:integration",
+    "test:integration": "turbo run test:integration --concurrency=1",
     "contract:generate": "npm run contract:generate -w @pryvis/contract"
   },
   "devDependencies": {

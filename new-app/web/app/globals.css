@@ -118,7 +118,7 @@ body {
  * a flat one. Flat navy-teal, with the leaf colour on the V's position handled by the real asset
  * when it arrives.
  */
-/* The supplied logo. The PNG is trimmed tight, so height alone sets the size. */
+/* The supplied logo, trimmed and vector, so height alone sets the size. */
 .wordmark {
   display: inline-flex;
   align-items: center;
@@ -130,16 +130,11 @@ body {
   display: block;
 }
 /*
- * The logo's letterforms are a deep blue-teal, which disappears on the dark background. Inverting
- * a photograph would be wrong, but this is a flat two-colour mark: lifting it keeps the leaf's
- * gradient recognisable while making the wordmark legible. A supplied light-on-dark SVG would be
- * better, and is worth asking for.
+ * No dark-mode filter here any more. There are two real files — see layout.tsx — because a CSS
+ * filter cannot tell a letterform from a leaf, and flattening the mark to one colour threw away
+ * the one element that makes it recognisable.
  */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .wordmark img {
-    filter: brightness(0) invert(1) sepia(0.2) saturate(3) hue-rotate(130deg);
-  }
-}
+
 .site-nav {
   display: flex;
   gap: 1.1rem;
