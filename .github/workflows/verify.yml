@@ -210,8 +210,13 @@ jobs:
           url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz"
           curl -sSfL "$url" | tar -xz gitleaks
           ./gitleaks version
+          # --config is passed explicitly rather than relying on the implicit
+          # `.gitleaks.toml` lookup: the first attempt at an allowlist silently had no
+          # effect, and a scanner quietly ignoring its own exemptions is the same class
+          # of problem as one quietly scanning a single commit.
+          #
           # No --log-opts, so this is every commit rather than the tip.
-          ./gitleaks git . --redact --verbose --exit-code 1
+          ./gitleaks git . --config .gitleaks.toml --redact --verbose --exit-code 1
 
       - uses: actions/setup-node@v4
         with:
