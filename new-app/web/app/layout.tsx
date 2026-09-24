@@ -22,18 +22,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {/* A keyboard user should not have to tab through the nav on every page. */}
         <a className="skip-link" href="#main">
-          Skip to content
+          {site.chrome.skipToContent}
         </a>
 
         <header className="site-head">
           <div className="site-head__inner">
-            <a className="wordmark" href="/">
-              {site.name}
+            {/*
+              The supplied logo, at its intrinsic aspect ratio. `alt` carries the product name so
+              the header still says "Pryvis" to a screen reader and when images fail — a logo with
+              empty alt in the one place the brand is named is a page that introduces itself to
+              nobody. Width and height are set so the header does not jump as it loads.
+            */}
+            <a className="wordmark" href="/" aria-label={`${site.name} home`}>
+              {/* eslint-disable-next-line @next/next/no-img-element -- no optimiser (ADR 0018) */}
+              <img src="/pryvis-logo.png" alt={site.name} width={132} height={32} />
             </a>
             <nav className="site-nav" aria-label="Main">
-              <a href="/features">What it does</a>
-              <a href="/pricing">Pricing</a>
-              <a href="/about">About</a>
+              {site.chrome.nav.map((item) => (
+                <a key={item.href} href={item.href}>
+                  {item.label}
+                </a>
+              ))}
             </nav>
           </div>
         </header>
@@ -43,11 +52,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="site-foot">
           <div className="wrap">
             <p>
-              {site.name} — estimating and invoicing for contractors. Built in Jamaica.
+              {site.name} — {site.chrome.footerTagline}
             </p>
             <p>
-              <a href="/legal/terms">Terms</a> · <a href="/legal/privacy">Privacy</a> ·{" "}
-              <a href={`mailto:${site.earlyAccessEmail}`}>{site.earlyAccessEmail}</a>
+              <a href="/legal/terms">{site.chrome.termsLabel}</a>{" "}
+              <a href="/legal/privacy">{site.chrome.privacyLabel}</a>{" "}
+              <a href={`mailto:${site.contactEmail}`}>{site.contactEmail}</a>
             </p>
           </div>
         </footer>

@@ -133,3 +133,12 @@ jobs:
       - name: Contract is not stale
         if: ${{ !cancelled() }}
         run: npm run contract:generate && git diff --exit-code -- packages/contract/src/generated
+
+      # The public site IS built here, unlike in original-app, where `next build` was excluded
+      # because it fetched fonts from Google at build time and could not complete on every
+      # network. This site loads no third-party host at all (Rule 20), so the build is
+      # self-contained - and it earned its place immediately: a module-resolution error that
+      # both typecheck and the unit tests passed was caught only by building.
+      - name: Build the site
+        if: ${{ !cancelled() }}
+        run: npm run build -w @pryvis/web

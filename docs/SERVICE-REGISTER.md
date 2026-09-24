@@ -31,7 +31,7 @@ is a defect, not a paperwork oversight.
 
 | Service | What it does | Why this one | Tier and cost | Holds personal data | If it went away |
 |---|---|---|---|---|---|
-| **Vercel** | Hosts the Next.js web app; builds on push to `main` | First-class Next.js support, zero-config preview deploys, free tier sufficient for pre-launch. Root Directory points at `original-app/apps/web` (ADR 0010) | Free (Hobby) | In transit only; nothing stored | Any Node host or container runs Next.js. Migration cost is CI configuration, not code (Rule 10) |
+| **Vercel** | Hosts the Next.js web app **and, from 2026-09-24, the public site at pryvis.com** (ADR 0018) | First-class Next.js support, zero-config preview deploys, free tier sufficient for pre-launch. Root Directory points at `original-app/apps/web` (ADR 0010) | Free (Hobby) | In transit only; nothing stored | Any Node host or container runs Next.js. Migration cost is CI configuration, not code (Rule 10) |
 | **Render** | Hosts the NestJS API (`jamquote-api`), configured by `render.yaml` (`rootDir: original-app`) | Blueprint-as-code in the repository, free tier, straightforward Docker/Node runtime | Free — **spins down after ~15 min idle**, so a cold start is ~40–90s | In transit; logs must contain none (Rule 5) | Any container host. The Dockerfile and blueprint are portable by design |
 | **Neon Postgres** (provisioned through Vercel's Postgres integration) | The database | Standard Postgres, so nothing is provider-proprietary; branching is useful; free tier adequate pre-launch. **It is Neon underneath the Vercel dashboard** — which matters when you go looking for it | Free | **Yes — all tenant and customer data** | It is plain Postgres. `pg_dump`/restore to any provider. This is the single most important portability property we have, and it was a deliberate choice |
 | **GitHub** | Source of truth for code; Actions runs the verify gate and the keep-warm ping | Already in use; Actions is free for this volume | Free | No | Any git host; CI would be rewritten |
@@ -43,6 +43,11 @@ concludes the product is broken. The keep-warm workflow is a prototype-phase pat
 disables scheduled workflows after 60 days of repository inactivity, so it is not a control we
 can rely on. **The paid-tier trigger is the first paying tenant**, and it is owed its own ADR
 (Rule 10).
+
+**The public site adds no service.** It is static pages in our own application on the same Vercel
+project: no site builder, no CMS, no form service, no analytics, no font host (Rule 20). The only
+asset is the owner's logo, committed to the repository. That is the point of ADR 0018 — the row
+above is the entire infrastructure cost of having a front door.
 
 ## 2. Third-party services in the product
 

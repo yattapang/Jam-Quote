@@ -34,4 +34,4 @@ Each design carries a header: **Proposed** (awaiting the owner), **Approved** (b
 
 | Design | Status | For |
 |---|---|---|
-| [marketing-site.md](marketing-site.md) | **Approved** 2026-09-24 | pryvis.com — the six public pages, the sign-up hole and how it is handled for now, and the seven guards. Leads on the on-the-spot estimate (Delroy at the roadside). Implementation on `wip/marketing-site-built-before-design` may now be finished against it |
+| [marketing-site.md](marketing-site.md) | **Approved & built** 2026-09-24 | pryvis.com — the six public pages, the sign-up hole and how it is handled for now, and the seven guards. Leads on the on-the-spot estimate (Delroy at the roadside). Built and landed on `main`: six static pages, content as data, nine guards proved by planting |

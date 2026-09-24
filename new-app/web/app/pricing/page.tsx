@@ -39,7 +39,7 @@ export default function PricingPage() {
       <section>
         <p className="note">{site.pricing.footnote}</p>
         <div className="cta-row">
-          <a className="btn" href={`mailto:${site.earlyAccessEmail}?subject=Pryvis%20pricing`}>
+          <a className="btn" href={`mailto:${site.contactEmail}?subject=Pryvis%20pricing`}>
             Ask about pricing
           </a>
         </div>

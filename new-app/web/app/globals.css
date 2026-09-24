@@ -7,17 +7,36 @@
  * means high contrast, large type, and no thin grey text on white — which looks elegant
  * on a desk monitor and disappears in sunlight.
  */
+/*
+ * BRAND TOKENS, from the Pryvis logo the owner supplied on 2026-09-24.
+ *
+ * The mark is the wordmark PRYVIS with the V drawn as two leaves: a mint-to-cyan gradient on the
+ * left leaf, deepening to near-navy at the base of the right. The letterforms are a deep
+ * blue-teal. So the palette is teal and navy with a green-cyan accent — NOT the construction
+ * green-and-orange the first draft guessed at, which is now replaced.
+ *
+ * Contrast was the deciding factor in the exact values. The logo's mint (#5FC9A5) and cyan
+ * (#27C3DE) are lovely and both fail text contrast on white, so they are used for the gradient,
+ * borders and marks — never for body text. Text uses the deep blue-teal, which clears 4.5:1
+ * comfortably. Delroy is reading this in sunlight with one hand; legibility beats fidelity to a
+ * swatch.
+ */
 :root {
-  --ink: #12161c;
-  --ink-soft: #3c4657;
+  /* Letterform navy-teal from the wordmark. */
+  --ink: #1b3f4f;
+  --ink-soft: #3f5f6d;
   --paper: #ffffff;
-  --paper-warm: #f6f4ef;
-  --line: #d9d5cc;
-  /* Deep green: reads as "build" rather than "fintech", and holds contrast at small sizes. */
-  --brand: #14543a;
-  --brand-bright: #1c7a52;
-  --accent: #b4531a;
-  --focus: #1c7a52;
+  /* A barely-there tint of the brand teal, for cards and quiet panels. */
+  --paper-warm: #f2f7f8;
+  --line: #ccdde1;
+
+  /* The leaf gradient, as tokens. */
+  --brand: #16697a;        /* darkened from the logo's teal so it can carry white text */
+  --brand-bright: #27c3de; /* logo cyan — marks, borders, hover, never body text */
+  --leaf: #5fc9a5;         /* logo mint — the gradient's light end */
+  --leaf-deep: #0e3a4f;    /* the near-navy at the base of the right leaf */
+  --accent: #2aa87f;       /* a green that passes contrast, for the one place a price is flagged */
+  --focus: #27c3de;
 
   --measure: 34rem;
   --gutter: 1rem;
@@ -27,18 +46,21 @@
     sans-serif;
 }
 
-/* Dark mode is not an aesthetic here: a phone in a dark truck cab at 6am. */
+/* Dark mode is not an aesthetic here: a phone in a dark truck cab at 6am. The light end of the
+   logo's gradient becomes the text colour, because the dark end disappears on a dark ground. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ink: #f2f0ec;
-    --ink-soft: #b9c0cc;
-    --paper: #12161c;
-    --paper-warm: #1a1f27;
-    --line: #333c49;
-    --brand: #8fd3b0;
-    --brand-bright: #a8e3c4;
-    --accent: #f0a06a;
-    --focus: #8fd3b0;
+    --ink: #eef6f7;
+    --ink-soft: #a9c4cc;
+    --paper: #0e2530;
+    --paper-warm: #143240;
+    --line: #2b4d5c;
+    --brand: #5fc9a5;
+    --brand-bright: #7ad9e8;
+    --leaf: #5fc9a5;
+    --leaf-deep: #0e3a4f;
+    --accent: #6fd6ac;
+    --focus: #7ad9e8;
   }
 }
 
@@ -88,12 +110,35 @@ body {
   max-width: 62rem;
   margin: 0 auto;
 }
+/*
+ * The wordmark, until the logo file itself is in the repository.
+ *
+ * Deliberately NOT a gradient-filled text effect: `background-clip: text` degrades to invisible
+ * text where it is unsupported, and an invisible brand name in the header is a worse failure than
+ * a flat one. Flat navy-teal, with the leaf colour on the V's position handled by the real asset
+ * when it arrives.
+ */
+/* The supplied logo. The PNG is trimmed tight, so height alone sets the size. */
 .wordmark {
-  font-weight: 700;
-  font-size: 1.25rem;
-  letter-spacing: -0.02em;
-  color: var(--brand);
+  display: inline-flex;
+  align-items: center;
   text-decoration: none;
+}
+.wordmark img {
+  height: 30px;
+  width: auto;
+  display: block;
+}
+/*
+ * The logo's letterforms are a deep blue-teal, which disappears on the dark background. Inverting
+ * a photograph would be wrong, but this is a flat two-colour mark: lifting it keeps the leaf's
+ * gradient recognisable while making the wordmark legible. A supplied light-on-dark SVG would be
+ * better, and is worth asking for.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wordmark img {
+    filter: brightness(0) invert(1) sepia(0.2) saturate(3) hue-rotate(130deg);
+  }
 }
 .site-nav {
   display: flex;
@@ -212,7 +257,7 @@ p {
   width: 0.55rem;
   height: 0.55rem;
   border-radius: 50%;
-  background: var(--brand-bright);
+  background: var(--leaf);
 }
 
 .cards {
@@ -246,7 +291,7 @@ p {
   padding: 1.4rem;
 }
 .tier--mid {
-  border-color: var(--brand);
+  border-color: var(--brand-bright);
   border-width: 2px;
 }
 .tier__price {

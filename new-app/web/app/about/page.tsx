@@ -18,7 +18,7 @@ export default function AboutPage() {
           </p>
         ))}
         <div className="cta-row">
-          <a className="btn" href={`mailto:${site.earlyAccessEmail}?subject=Pryvis`}>
+          <a className="btn" href={`mailto:${site.contactEmail}?subject=Pryvis`}>
             Get in touch
           </a>
         </div>

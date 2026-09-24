@@ -8,9 +8,10 @@ tracker, and Rule 19 requires it to be read at the start of a task and updated a
 **Legend:** ✅ done · 🟡 partly done · ❌ not started · ⏭️ deliberately later
 
 Last reviewed: **2026-09-24**. Staff MFA is **paused** at a clean point (schema and the
-strengthened guard are committed; no service code started). The marketing site is **parked** on
-`wip/marketing-site-built-before-design` — it was built before its design was approved, and the
-owner's design-before-build instruction applies to it.
+strengthened guard are committed; no service code started). The marketing site is **built and
+landed** against its approved design (`docs/design/marketing-site.md`), with nine guards proved by
+planting. The independent review (Rule 9) **ran and reported**: 15 findings, of which F15, F13,
+F10, F1 and F11 are fixed and ten remain open in `REVIEW-FINDINGS.md`.
 
 ---
 

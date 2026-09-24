@@ -7,6 +7,10 @@ export const metadata: Metadata = {
   description: site.features.description,
 };
 
+/**
+ * Job recipes are deliberately the first card: they are what makes the roadside estimate
+ * on the home page possible at all (design §3).
+ */
 export default function FeaturesPage() {
   return (
     <div className="wrap">
@@ -26,13 +30,12 @@ export default function FeaturesPage() {
 
       <section>
         <h2>Coming next</h2>
-        <p>
-          Staged deposit and progress invoicing, a signed record of the client&rsquo;s acceptance,
-          change orders as their own documents, and supplier price comparison. In that order, and
-          one at a time.
-        </p>
+        <p>{site.features.next}</p>
         <div className="cta-row">
-          <a className="btn" href={`mailto:${site.earlyAccessEmail}?subject=Early%20access%20to%20Pryvis`}>
+          <a
+            className="btn"
+            href={`mailto:${site.contactEmail}?subject=Early%20access%20to%20Pryvis`}
+          >
             Ask for early access
           </a>
         </div>
