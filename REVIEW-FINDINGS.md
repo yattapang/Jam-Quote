@@ -2357,3 +2357,77 @@ capabilities through it before authorizing or displaying them, so
 rewriting a single row. No SQL statement is needed here as a result — this
 section exists to record that the "or write SQL here" fallback path was
 considered and not taken, and why.
+
+---
+
+# Independent review of `new-app` — 2026-09-24 (Rule 9)
+
+The review Rule 9 required, by an agent that did not write the code. A first attempt failed on a
+session limit and returned nothing; this one reported incrementally so its findings could survive
+that (Rule 16.3). **15 findings: 1 critical, 4 high, 7 medium, 3 low.**
+
+Rule 16.4: a report is evidence to check, not a verdict to adopt. Where I have reproduced a finding
+myself, it says so. Where I have not yet, it says that too.
+
+## Fixed already
+
+| # | Finding | Status |
+|---|---|---|
+| **F15** | **HIGH — the gate was RED on a clean tree.** `SignInService` stamped `expires_at` from an injected clock fixed at 2026-09-23T12:00, while `DbCallerResolver` asked the database whether the session had expired. Real time walked past the fixture fourteen hours later and three tests failed, **including both seam tests the file calls "the one that matters most"**. An injected clock on one side of a seam is a half-truth. | **FIXED.** I reproduced it (3 failures at 02:08 UTC), gave the resolver an injected clock, and now bind the caller's "now" into the expiry comparison so one statement still decides it. A second instance of the same mistake lived *inside* a test, comparing the injected clock's output to real `Date.now()`; also fixed. 77/77 green. |
+| **F13** | LOW — `sign-in.test.ts`'s "does not prove" section still said rate limiting "is owed", directly above eight tests for it. | **FIXED**, and replaced with what is genuinely still not covered. |
+
+## Open — critical and high
+
+| # | Finding | My verification | Status |
+|---|---|---|---|
+| **F1** | **CRITICAL — a cross-tenant read with both database guards green.** `policy-parity.test.ts` counts policies (`policy_count === 0`) and never reads what a policy *says*; `tenant-isolation.test.ts` only ever queries `tenant` and `app_user`. A table added later with `CREATE POLICY … USING (true)` passes both guards and returns every tenant's rows. The reviewer proved it with a planted `quote` table. | **Confirmed by reading the code** — the mechanism is exactly as described. Not re-proved empirically; the reviewer's plant is convincing and the code is unambiguous. | **OPEN — fix first.** The guard must assert what a policy contains, and the behavioural test must cover every tenant-owned table by discovery rather than by name. |
+| **F2** | **HIGH — the route inventory is silently incomplete, with no runtime backstop.** The coverage guard scans only `*.controller.ts` and matches HTTP decorators by written identifier, so an undeclared route in another file, or `Get as Fetch`, is invisible. **And `DefaultDenyGuard` is registered nowhere: no `app.module.ts` or `main.ts` exists.** | Not yet re-proved. The absence of `app.module.ts` I can confirm trivially — it is true. | **OPEN.** Two fixes: widen the scan and resolve decorator aliases through the parser's binder, and register the guard globally when the HTTP layer lands. |
+| **F10** | **HIGH — the threat model overstates three controls.** §4.2 claimed the global default-deny guard as BUILT when only the build-time half exists (and that half has F2's hole). §4.1 claimed computed dynamic imports "refused outright" (F3) and the new-table guard as BUILT (F1). | Confirmed — I wrote those rows, and they are wrong by the document's own definition of BUILT ("exists with a test that fails when it is removed"). | **FIXED in the document** today. The underlying controls stay open as F1, F2, F3. |
+| **F4** | MEDIUM-HIGH — the contract generator collects only `interface`, so a `@wire` **type alias** vanishes silently, and the "found at least one @wire type" check cannot see the loss. | Not re-proved; the generator's code only visits `isInterfaceDeclaration`, so the mechanism is plain. | **OPEN.** |
+
+## Open — medium
+
+| # | Finding | Status |
+|---|---|---|
+| **F3** | `import-boundaries.test.ts` misses `createRequire(import.meta.url)("../users/users.service.js")`, in both directions. Defeats the header's claim that a computed dynamic import is "the one way to cross a boundary unseen". | **OPEN** |
+| **F5** | `generate.ts`'s header claims it *rejects* a `@wire` interface whose fields reference types declared elsewhere. **There is no such code.** A server-only shape with a `Buffer` field can reach the client contract with nothing failing. A comment claiming a check that does not exist is worse than no comment. | **OPEN** |
+| **F6** | `password.test.ts`'s legacy-hash test asserts only `needsRehash(weak) === true`, which passes whether the weak hash verifies or is rejected — despite the comment claiming "It must still VERIFY". Planting a parse rejection locks out every pre-upgrade user and that file stays 14/14 green. **Honest mitigation the reviewer volunteered: the suite as a whole caught it**, via sign-in's rehash test. | **OPEN** |
+| **F7** | Passwords are not unicode-normalised: the NFD form of the same typed password fails against an NFC hash. Same failure shape as the trimming defect the module says it exists to prevent. | **OPEN** |
+| **F8** | The length rule counts UTF-16 code units while the comment says "characters as typed". Six emoji satisfy the 12-character minimum; 64 emoji pass the 128 maximum at 256 UTF-8 bytes. | **OPEN** |
+| **F9** | `consume()` validates neither `cost` nor the rule. On an exhausted capacity-3 bucket, `consume(key, rule, 0)` was allowed 1000/1000 times; a fractional cost multiplies capacity. Not reachable from sign-in today, and the limiter's own tests never pass a cost at all. | **OPEN** |
+| **F11** | `schema.prisma` has 4 models; the migrations create 8 tables. `rate_limit_bucket`, `platform_capability`, `mfa_totp` and `mfa_recovery_code` have no model, so `prisma migrate diff/dev` would compute a diff that **drops** them. No guard compares the two. | **OPEN — dangerous in a way that is easy to miss.** |
+
+## Open — low
+
+| # | Finding | Status |
+|---|---|---|
+| **F12** | The db test harness — "the one place tests get a real database from" — is restated by hand in four files, which is Rule 7's named failure mode. `rate-limiter.test.ts` creates no role at all, so the limiter is never exercised as the unprivileged identity. | **OPEN** |
+| **F14** | Sign-in logs the plaintext email on every failure, contradicting Rule 5 and ADR 0016's own reason for hashing it in `rate_limit_bucket`. | **OPEN** |
+
+## Attacked and held — worth recording, because it is evidence too
+
+- **No SQL injection anywhere in scope.** All nine raw call sites bind `$1..$n`. The one
+  interpolation is a constant, and because both copies of the refill expression are the *same*
+  template variable, the "must stay identical" hazard I warned about is structurally impossible.
+- **Transaction-locality is real and its test bites** — planting `false` for `true` fails the leak
+  test.
+- **A session or credential whose tenant does not own its user cannot resolve** — row-level
+  security refuses the join and both resolvers fail closed with the generic refusal.
+- **`needsRehash` cannot be tricked** into false for a weak hash.
+- **The zero-length salt/hash bypass family is closed** — with a warning worth keeping:
+  `verifyPassword` derives the length from `hash.length` rather than the `HASH_BYTES` constant, so
+  the bypass returns if the length check is ever relaxed.
+- **No enumeration oracle in sign-in**, by message or by code path.
+
+## What the review could not check
+
+True multi-backend concurrency (PGlite is one connection); anything HTTP, so the unvalidated `ip`
+feeding `ipKey` and any trust in `X-Forwarded-For` are undecidable; real Postgres role grants;
+timing by measurement.
+
+## What this review cost, and what it bought
+
+One agent, ~1.5M tokens of its own budget, 25 minutes. It found a red gate I had not noticed, a
+critical guard hole of exactly the class the Phase 0 audit warned about, and three overstated claims
+in a document I wrote. **Rule 9's breach is now closed for this slice** — and the case for the rule
+is no longer theoretical.

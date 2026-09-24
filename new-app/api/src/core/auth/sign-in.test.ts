@@ -9,8 +9,10 @@
  *
  * WHAT THIS FILE DOES NOT PROVE
  *
- * - Nothing about rate limiting. Sign-in costs ~67 MB and ~150 ms by design
- *   (ADR 0014), which makes a limiter necessary rather than optional. It is owed.
+ * - Rate limiting IS covered here (the last describe block). This line used to say it was
+ *   owed, and stayed wrong after the limiter landed — flagged as F13 by the independent
+ *   review. What is still not covered: the limiter under real multi-connection concurrency,
+ *   and anything about the IP the limit is keyed on, which arrives with HTTP transport.
  * - Not that timing is actually equal for known and unknown emails. It asserts the
  *   decoy path runs; measuring wall-clock timing in a test runner would be flaky.
  * - Nothing about HTTP: no cookie, no header, no CSRF. That is the next step.
@@ -28,6 +30,7 @@ import { DbCallerResolver, type Queryable } from "./db-caller-resolver.js";
 import { hashPassword } from "./password.js";
 import { PostgresRateLimiter, type RateLimitStore } from "../rate-limit/rate-limiter.js";
 import {
+  SESSION_LIFETIME_MS,
   SIGN_IN_FAILED_MESSAGE,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   SignInService,
@@ -143,7 +146,10 @@ describe("a correct sign-in", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.session.version).toBe(0);
-    expect(result.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    // Measured against the INJECTED clock, not Date.now(). Comparing an injected clock's
+    // output to real wall time is the same half-truth as F15, one layer down: it passes on
+    // the day it is written and fails once real time walks past the fixture.
+    expect(result.expiresAt.getTime() - clock.getTime()).toBe(SESSION_LIFETIME_MS);
     expect(failures).toEqual([]);
   });
 
@@ -293,7 +299,9 @@ describe("the seam: a session sign-in issues is one the resolver accepts", () =>
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    const resolved = await new DbCallerResolver(adapt(db)).resolve(result.session);
+    // The SAME clock the service used. Handing the resolver a different notion of time is
+    // exactly the defect this seam test exists to catch (F15).
+    const resolved = await new DbCallerResolver(adapt(db), () => clock).resolve(result.session);
 
     expect(resolved).toEqual({
       ok: true,
@@ -308,7 +316,7 @@ describe("the seam: a session sign-in issues is one the resolver accepts", () =>
 
     await asOwner(`UPDATE app_user SET session_version = session_version + 1 WHERE id = $1`, [USER]);
 
-    expect(await new DbCallerResolver(adapt(db)).resolve(result.session)).toEqual({
+    expect(await new DbCallerResolver(adapt(db), () => clock).resolve(result.session)).toEqual({
       ok: false,
       refusal: "session-superseded",
     });

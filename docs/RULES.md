@@ -334,8 +334,30 @@ any of the context in which the work made sense.
 | Architecture, schema, threat modelling, audits, adversarial review, product decisions | Opus |
 
 **One complex agent at a time.** Never two build-class or two judgement-class agents at once.
-Read-only work may run alongside a single build agent, in different files. Never spawn a second
-agent to do what a live one is already doing — wait for it, or send it a message.
+Never spawn a second agent to do what a live one is already doing — wait for it, or send it a
+message.
+
+**A reviewing agent is a WRITER, not read-only.** It plants defects to prove guards, so it edits
+files and runs the suite. Treat it as the one complex agent in flight, and do not start build work
+that competes with it. (Clarified 2026-09-24 after I was about to run `npm install` in the shared
+workspace while a review agent was running tests in the same `node_modules`.)
+
+**While any agent is live, no shared-resource operations.** These interfere even when the files are
+disjoint, and the cost is a wasted agent rather than a merge conflict:
+
+- no `npm install` and no lockfile change;
+- no full-gate or workspace-wide test run;
+- no `git add -A`, no branch switch, no commit that sweeps the tree — the agent's working files are
+  in it (Rule 16.3);
+- no dependency upgrade, and no change to a shared config the agent's tests load.
+
+Work that *is* safe alongside one agent: writing files in a directory it is not reviewing, and
+documents. When in doubt, wait — an agent's whole run is worth more than a few minutes.
+
+**The session is a shared budget.** An agent that dies with the session takes its findings with it
+(Rule 16.3), so the practical limit is lower than it looks: **one agent, and the rest of the session
+spent on work that does not need it.** Prefer letting an agent finish over starting a second thing
+that has to be redone.
 
 **A bounded brief beats a broad one.** An agent given a precise scope spends its budget on the work;
 one given "review the codebase" spends it re-deriving what we already know. Handing over context we

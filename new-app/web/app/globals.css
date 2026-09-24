@@ -1,0 +1,309 @@
+/*
+ * One stylesheet, tokens first. No Tailwind, no CSS-in-JS, no font CDN (Rule 20: no
+ * third-party hosts). The system font stack renders instantly and is what the person's
+ * own phone already draws best.
+ *
+ * Colours are chosen for a specific reader: a contractor holding a phone outdoors. That
+ * means high contrast, large type, and no thin grey text on white — which looks elegant
+ * on a desk monitor and disappears in sunlight.
+ */
+:root {
+  --ink: #12161c;
+  --ink-soft: #3c4657;
+  --paper: #ffffff;
+  --paper-warm: #f6f4ef;
+  --line: #d9d5cc;
+  /* Deep green: reads as "build" rather than "fintech", and holds contrast at small sizes. */
+  --brand: #14543a;
+  --brand-bright: #1c7a52;
+  --accent: #b4531a;
+  --focus: #1c7a52;
+
+  --measure: 34rem;
+  --gutter: 1rem;
+  --radius: 10px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+/* Dark mode is not an aesthetic here: a phone in a dark truck cab at 6am. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f2f0ec;
+    --ink-soft: #b9c0cc;
+    --paper: #12161c;
+    --paper-warm: #1a1f27;
+    --line: #333c49;
+    --brand: #8fd3b0;
+    --brand-bright: #a8e3c4;
+    --accent: #f0a06a;
+    --focus: #8fd3b0;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  /* 17px base: a step up from the usual 16, because this is read at arm's length on a site. */
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* Every interactive element must show where the keyboard is. */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.wrap {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* --- header / footer --- */
+.site-head {
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.site-head__inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  align-items: center;
+  padding: 0.9rem var(--gutter);
+  max-width: 62rem;
+  margin: 0 auto;
+}
+.wordmark {
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+  color: var(--brand);
+  text-decoration: none;
+}
+.site-nav {
+  display: flex;
+  gap: 1.1rem;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.site-nav a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 0.35rem 0;
+}
+.site-nav a:hover,
+.site-nav a:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.site-foot {
+  border-top: 1px solid var(--line);
+  margin-top: 4rem;
+  padding: 2rem 0 3rem;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.site-foot a {
+  color: var(--ink-soft);
+}
+
+/* --- type --- */
+h1 {
+  font-size: clamp(2rem, 6vw, 3.1rem);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
+}
+h2 {
+  font-size: clamp(1.4rem, 3.4vw, 1.9rem);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 2.5rem 0 0.75rem;
+}
+h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+p {
+  max-width: var(--measure);
+}
+.lede {
+  font-size: 1.15rem;
+  color: var(--ink-soft);
+  max-width: 40rem;
+}
+
+/* --- buttons --- */
+.btn {
+  display: inline-block;
+  /* 48px minimum target: a thumb, not a mouse pointer. */
+  padding: 0.85rem 1.4rem;
+  min-height: 48px;
+  border-radius: var(--radius);
+  background: var(--brand);
+  color: #ffffff;
+  text-decoration: none;
+  font-weight: 600;
+  border: 2px solid var(--brand);
+}
+.btn:hover,
+.btn:focus-visible {
+  background: var(--brand-bright);
+  border-color: var(--brand-bright);
+}
+.btn--quiet {
+  background: transparent;
+  color: var(--brand);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn {
+    color: #0d1117;
+  }
+}
+
+/* --- sections --- */
+.hero {
+  padding: 3.5rem 0 1rem;
+}
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.75rem 0 0.5rem;
+}
+.note {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+.checks {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0 0;
+  display: grid;
+  gap: 0.85rem;
+}
+.checks li {
+  padding-left: 1.9rem;
+  position: relative;
+  max-width: var(--measure);
+}
+.checks li::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 0.55rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--brand-bright);
+}
+
+.cards {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  margin: 1.5rem 0 0;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  background: var(--paper-warm);
+}
+.card p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* --- pricing --- */
+.tiers {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  margin: 2rem 0 0;
+  align-items: start;
+}
+.tier {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+}
+.tier--mid {
+  border-color: var(--brand);
+  border-width: 2px;
+}
+.tier__price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.25rem 0 0.75rem;
+}
+.tier__price--tbd {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.tier__who {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+  margin: 0;
+}
+.tier__line {
+  font-weight: 600;
+  margin: 0 0 0.9rem;
+}
+.tier ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+/* --- legal --- */
+.draft-banner {
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  margin: 1.5rem 0;
+  background: var(--paper-warm);
+}
+.draft-banner strong {
+  color: var(--accent);
+}
+.prose h2 {
+  margin-top: 2rem;
+}
+.prose p,
+.prose li {
+  max-width: var(--measure);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--paper);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--focus);
+}

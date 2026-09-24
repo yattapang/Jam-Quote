@@ -54,23 +54,42 @@ interface UserRow {
 }
 
 export class DbCallerResolver implements CallerResolver {
-  constructor(private readonly db: Queryable) {}
+  constructor(
+    private readonly db: Queryable,
+    /**
+     * The time this request happens, passed INTO the query rather than left to the
+     * database's own `now()`.
+     *
+     * This exists because of a real seam defect (F15, independent review 2026-09-24).
+     * SignInService stamped `expires_at` from an injected clock while this class asked the
+     * database whether the session had expired — two different notions of "now" at the two
+     * ends of one seam. The tests passed on the day they were written and failed fourteen
+     * hours later, when real time walked past the fixed clock's expiry. An injected clock
+     * on one side of a seam is a half-truth; both sides now read the same one.
+     */
+    private readonly now: () => Date = () => new Date(),
+  ) {}
 
   async resolve(sessionRef: SessionRef | null): Promise<CallerResult> {
     if (!sessionRef) return { ok: false, refusal: "no-session" };
 
     // Step 1: the bootstrap read, with no tenant in scope. `withoutTenant` is named
     // so this is visible in review rather than being the accidental default.
+    const at = this.now().toISOString();
     const sessions = await withoutTenant(this.db, "authentication", (tx) =>
       (tx as Queryable).$queryRawUnsafe<SessionRow>(
+        // Expiry is still decided in the same statement as the read, so there is one
+        // comparison and no window between them — but against the caller's clock, bound as
+        // a parameter, not the database's.
         `SELECT user_id,
                 tenant_id,
                 version,
-                (expires_at <= now()) AS expired,
+                (expires_at <= $2::timestamptz) AS expired,
                 (revoked_at IS NOT NULL) AS revoked
            FROM app_session
           WHERE id = $1`,
         sessionRef.sessionId,
+        at,
       ),
     );
 

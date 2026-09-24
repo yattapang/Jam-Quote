@@ -56,6 +56,13 @@ status of each control**, because a threat model listing only intended controls 
 ## 4. Threats, controls, and what is actually true today
 
 Status is deliberately harsh: **BUILT** means it exists with a test that fails when it is removed.
+
+> **Corrected 2026-09-24.** An independent review (Rule 9) found three rows below claiming BUILT
+> that did not meet that definition — the global default-deny guard is registered nowhere, the
+> new-table guard never reads what a policy says, and the import guard misses one route. They are
+> now PARTIAL with the gap named. A threat model that grades its own controls generously is worse
+> than none, because it is the document people check instead of the code.
+
 **PARTIAL** means something exists but not the whole control. **OWED** means it does not exist.
 
 ### 4.1 Cross-tenant access (T1, T3 → A1, A2)
@@ -64,18 +71,18 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 |---|---|---|---|
 | A query missing its tenant filter returns everyone's rows | Forced RLS: no tenant in context ⇒ **zero rows**, not all rows | **BUILT** | `db/test/tenant-isolation.test.ts`; a `SELECT` with no `WHERE` returns one tenant's rows inside `withTenant` and nothing outside |
 | RLS enabled but the app connects as the table owner, which Postgres exempts | `FORCE ROW LEVEL SECURITY`, asserted per table | **BUILT** | `policy-parity.test.ts` fails on enabled-but-not-forced |
-| A new table ships with no policy | Every table must be tenant-protected or exempt **with a reason** | **BUILT** | `policy-parity.test.ts`, strengthened 2026-09-24 after it was found to ignore tables without a `tenant_id` |
+| A new table ships with no policy | Every table must be tenant-protected or exempt **with a reason** | **PARTIAL** (F1) | `policy-parity.test.ts` catches a table with *no* policy, but **counts policies without reading them** — a table with `USING (true)` passes and leaks every tenant's rows. The behavioural test only queries `tenant` and `app_user`. **The most serious open finding.** |
 | A caller supplies another tenant's id | Tenant comes only from the session store; a foreign id is answered as a nonexistent one | **BUILT** | `tenant-isolation.test.ts`, `db-caller-resolver.test.ts` |
 | A pooled connection leaks a tenant into the next request | `set_config(..., true)` — transaction-local | **BUILT** | `tenant-context.test.ts`; planting `false` fails it |
 | The readable policy file drifts from what was applied | Migration embeds it verbatim; guard compares | **BUILT** | `policy-parity.test.ts` |
-| A module reaches into another module's internals and bypasses its checks | Import-boundary guard | **BUILT** | `import-boundaries.test.ts`; computed dynamic imports refused outright |
+| A module reaches into another module's internals and bypasses its checks | Import-boundary guard | **PARTIAL** (F3) | `import-boundaries.test.ts` catches static and dynamic imports and refuses computed specifiers — but **misses `createRequire(import.meta.url)(…)`**, in both directions |
 | Exports, PDFs, cache keys, search, logs scoped per tenant | — | **OWED** | None of these exist yet; each must be tenant-scoped when built |
 
 ### 4.2 Authentication and sessions (T2, T3 → A5)
 
 | Threat | Control | Status | Evidence |
 |---|---|---|---|
-| A route ships with no protection and is open | Global default-deny guard **and** a build-time guard; route inventory printed each run | **BUILT** | `default-deny.guard.test.ts`, `route-protection-coverage.test.ts` |
+| A route ships with no protection and is open | A build-time guard; route inventory printed each run. The global runtime guard is **written but registered nowhere** — there is no `app.module.ts` yet | **PARTIAL** (was wrongly BUILT until 2026-09-24; F2, F10) | `default-deny.guard.test.ts` proves the logic, not the wiring; the build-time guard misses routes outside `*.controller.ts` and aliased decorators |
 | A dump yields reusable passwords | scrypt, per-password salt, parameters in the hash | **BUILT** | `password.test.ts` |
 | A corrupt hash row becomes a universal password | Lengths validated | **BUILT** | Found as a real bypass in review: `scrypt$65536$8$1$$` verified *every* password |
 | Account enumeration through the sign-in response | One message for every failure | **BUILT** | `sign-in.test.ts` |

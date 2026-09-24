@@ -1,0 +1,22 @@
+{
+  "name": "@pryvis/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The public site at pryvis.com, plus the product UI under /app (ADR 0018).",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "next": "14.2.18",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "typescript": "^5.6.3"
+  }
+}
