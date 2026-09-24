@@ -47,6 +47,10 @@ const EXEMPT: Record<string, string> = {
   mfa_totp:
     "A second factor is removed, not soft-deleted: leaving the row would leave the encrypted " +
     "secret behind, which is the opposite of what removing a factor should do.",
+  audit_entry:
+    "Append-only by design (ADR 0020): the table has no UPDATE or DELETE policy, so a version " +
+    "column would describe edits that cannot happen and a tombstone would be a soft delete the " +
+    "application is forbidden to perform. Its history IS the point.",
   mfa_recovery_code:
     "Single-use by design, marked with used_at. A tombstone would add a third state to a thing " +
     "with two.",

@@ -81,7 +81,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 | Authentication | 🟡 | Default-deny routes, identity re-resolved per request, revocable sessions, sign-in, rate limiting (ADRs 0013–0016). **Owed:** staff MFA (in flight), HTTP transport, sign-up, password reset |
 | Tenancy with cross-tenant leak tests | ✅ | `tenant_id` + forced RLS + `withTenant`, proved against real Postgres; every table must now be protected or exempt with a reason |
 | Schema | 🟡 | **Client-generated ids, row versions and tombstones done** 2026-09-24 (ADR 0019), with partial indexes and a convention guard. **Owed:** the audit log's tables, and the product schema itself |
-| Audit log | ❌ | **Missing from step 1** |
+| Audit log | ✅ | Built 2026-09-24 (ADR 0020): append-only by the absence of a policy, atomic with its change, tenant-readable including staff actions. **Owed:** the platform trail, capability-gated read redaction, and the retention job |
 | CI | ✅ | Both workspaces gate on every push |
 
 **2. First end-to-end vertical slice** (quote → email → accept) ❌ not started
@@ -121,8 +121,9 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
    `hello@pryvis.com` does not receive mail, the site's only call to action is broken.
 4. **PRD and domain model** (§6), in trade-neutral language (ADR 0017). The vertical slice needs
    both.
-5. **Audit log** — named in Foundations, missing, and the threat model makes it the control every
-   staff safeguard depends on for detection. **Next.**
+5. ~~Audit log~~ ✅ **done 2026-09-24** (ADR 0020). Owed: `platform_audit_entry` for tenant-less
+   staff actions, capability-gated read redaction, and the retention job that enforces the
+   seven-year policy.
 6. **Finish authentication:** staff MFA (Rule 5.1 launch blocker, paused), sign-out and session
    rotation, HTTP transport, sign-up, password reset.
 7. **Dependency scanning, secret scanning and an SBOM** — cheap, mechanical, and the only defence

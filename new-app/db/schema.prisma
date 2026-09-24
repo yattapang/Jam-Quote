@@ -80,9 +80,10 @@ model Tenant {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  users       AppUser[]
-  sessions    AppSession[]
-  credentials AppCredential[]
+  users        AppUser[]
+  sessions     AppSession[]
+  credentials  AppCredential[]
+  auditEntries AuditEntry[]
 
   @@map("tenant")
 }
@@ -347,4 +348,60 @@ model MfaRecoveryCode {
 
   @@index([userId])
   @@map("mfa_recovery_code")
+}
+
+/// Who did what, to which tenant, when.
+///
+/// APPEND-ONLY, ENFORCED BY THE ABSENCE OF A POLICY. The table has policies for SELECT and INSERT
+/// and none for UPDATE or DELETE, so Postgres refuses those commands even to a role that HOLDS
+/// the grant. A trail the application can edit is a trail that will be edited. There is no
+/// amend(): a mistaken entry is corrected by a later entry.
+///
+/// tenant_id is NOT NULL deliberately. A staff action against a tenant carries that tenant's id,
+/// which is exactly the set Rule 5.1 says the tenant should be able to see - so the ordinary
+/// tenant policy lets a tenant read what we did to them, with no special case. Staff actions with
+/// no tenant need platform_audit_entry, which lands with the admin console.
+///
+/// Exempt from the row convention (version, deleted_at): see db/test/row-convention.test.ts.
+model AuditEntry {
+  /// A UUIDv7, so entries sort chronologically by primary key (ADR 0019) - which for a table read
+  /// in time order during an incident is the whole index strategy.
+  id String @id @db.Uuid
+
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// The moment of the ACTION, not of the write. An entry written by a retried job describes when
+  /// the thing happened.
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  /// "tenant_user" | "platform_staff" | "system". Text, not an enum: actor kinds grow (an API key,
+  /// an integration) and a new one should not need a migration (ADR 0002).
+  actorKind String @map("actor_kind")
+
+  /// NULL only for "system" - enforced by a CHECK, because a human action with no actor is not an
+  /// audit entry, it is a rumour.
+  actorUserId String? @map("actor_user_id") @db.Uuid
+
+  /// From the AuditAction union in @pryvis/core, so a typo cannot invent a new action and split
+  /// one behaviour across two names nobody thinks to search for.
+  action String
+
+  subjectType String  @map("subject_type")
+  subjectId   String? @map("subject_id") @db.Uuid
+
+  /// One sentence a person can read during an incident without decoding the details.
+  summary String
+
+  /// Redacted by the writer. core/audit refuses a payload carrying a password, token, secret or
+  /// hash: this is the one table humans read under pressure.
+  details Json @default("{}")
+
+  /// Personal data, kept deliberately - after a compromise "which address" is the question. The
+  /// privacy notice says we keep it and why.
+  actorIp String? @map("actor_ip") @db.Inet
+
+  @@index([tenantId, occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([tenantId, subjectType, subjectId])
+  @@map("audit_entry")
 }

@@ -129,6 +129,17 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
       // EXEMPTIONS live here and nowhere else, each with the reason it is safe. An
       // exemption is a hole in the isolation rule: it should be hard to add, impossible
       // to add silently, and readable as a list.
+      /**
+       * Tables whose history must never be rewritten, with the reason each is one.
+       *
+       * These are held to a STRICTER standard than the rest (see below), not excused from it.
+       */
+      const APPEND_ONLY: Record<string, string> = {
+        audit_entry:
+          "The audit trail (ADR 0020). Its whole value is that it cannot be edited, so the " +
+          "absence of an UPDATE or DELETE policy is the control rather than an omission.",
+      };
+
       const EXEMPT: Record<string, string> = {
         app_session:
           "Read before any tenant is known, because it is what establishes app.tenant_id. " +
@@ -236,6 +247,41 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
           // tenant-owned table compares `tenant_id`. Both must resolve the value the same way.
           const column = table === "tenant" ? "id" : "tenant_id";
           const expected = canonicalPolicyExpression(column);
+
+          if (table in APPEND_ONLY) {
+            // A STRICTER rule, not a looser one.
+            //
+            // The default requirement is that a policy applies to ALL commands, so a SELECT-only
+            // policy cannot leave writes unguarded. An append-only table inverts that on purpose:
+            // its writes are *unpermitted*, and the absence of an UPDATE or DELETE policy is what
+            // makes history unrewritable — even by a role holding the grant (ADR 0020).
+            //
+            // So these tables must have EXACTLY a canonical SELECT and a canonical INSERT, and
+            // nothing else. A policy for ALL, UPDATE or DELETE appearing here is the defect this
+            // branch exists to catch, which is why it is spelled out rather than skipped.
+            const byCommand = new Map(policies.rows.map((p) => [p.cmd, p]));
+            const commands = [...byCommand.keys()].sort().join(",");
+            if (commands !== "a,r") {
+              unprotected.push(
+                `${table} is append-only, so it must have exactly a SELECT ('r') and an INSERT ` +
+                  `('a') policy and no others — found '${commands}'. A policy permitting UPDATE or ` +
+                  `DELETE would make its history rewritable.`,
+              );
+            }
+            const read = byCommand.get("r");
+            if (read && normalise(read.using_expr) !== expected) {
+              unprotected.push(
+                `${table}.${read.polname} USING is not the canonical tenant expression — got ${read.using_expr}`,
+              );
+            }
+            const append = byCommand.get("a");
+            if (append && normalise(append.check_expr) !== expected) {
+              unprotected.push(
+                `${table}.${append.polname} WITH CHECK is not the canonical tenant expression — got ${append.check_expr}`,
+              );
+            }
+            continue;
+          }
 
           for (const policy of policies.rows) {
             const named = `${table}.${policy.polname}`;

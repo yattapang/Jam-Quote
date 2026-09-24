@@ -9,4 +9,4 @@
  * than copied, because the names change (`customer`, `…MinorUnits`) and a copy would carry the
  * old vocabulary into the new schema.
  */
-export { isRowId, newRowId, rowIdTimestamp } from "./identity/row-id.js";
+export { isRowId, isUuid, newRowId, rowIdTimestamp } from "./identity/row-id.js";

@@ -122,3 +122,22 @@ const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 export function isRowId(value: string): boolean {
   return UUID_V7.test(value);
 }
+
+/**
+ * Any UUID this system can legitimately hold — versions 1 to 8, correct variant bits.
+ *
+ * DELIBERATELY LOOSER THAN `isRowId`, and the distinction cost a real defect. `core/tenancy`
+ * validated tenant ids against a regex that required version 1–5, which predated the decision to
+ * issue v7 (ADR 0019). The moment ids became v7, `withTenant` refused every genuine tenant id — a
+ * total outage, caught only because the audit log's tests used realistic v7 ids.
+ *
+ * So there is one definition of "a uuid we can hold" and one of "a uuid we made", they live beside
+ * each other, and nothing validates a uuid with its own regex (Rule 7). Validation accepts v4 too,
+ * because the database's `gen_random_uuid()` default is a deliberate fallback for rows created by
+ * a migration or a script.
+ */
+const ANY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return ANY_UUID.test(value);
+}

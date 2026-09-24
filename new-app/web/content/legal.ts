@@ -75,7 +75,18 @@ export const privacy = {
       ],
     },
     {
-      heading: "How long we keep it",
+      // Added with the audit log (ADR 0020). An IP address is personal data and the trail keeps
+      // one, so shipping that table without saying so here would have made this notice untrue -
+      // which is the failure the site's own guards exist to prevent.
+      heading: "Records of what happened in your account",
+      paragraphs: [
+        "We keep a record of significant actions in your account: who changed a price or a permission, when, and from which internet address. You can see this record, including any action taken by Pryvis staff on your account.",
+        "We keep it because it is the only way to answer “who changed this?” after the fact, and the only way you or we could investigate if something went wrong. It cannot be edited or deleted by anyone at Pryvis, deliberately — a record that can be altered is not a record.",
+        "We keep it for seven years, so that it outlives the quotes and invoices it describes and your business record-keeping obligations. After that it is deleted automatically. Closing your account does not delete it: if there were ever a dispute, it is the evidence for both of us.",
+      ],
+    },
+    {
+      heading: "How long we keep the rest",
       paragraphs: [
         "While your account is open, and for a period afterwards so you can come back to your own quote and invoice history. You can ask for your data to be exported or deleted. A document you have already sent to a customer is a record of a transaction, and deleting your account does not reach into their inbox.",
       ],

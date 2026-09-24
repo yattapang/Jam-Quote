@@ -33,6 +33,8 @@
  * most likely way to get this wrong.
  */
 
+import { isUuid } from "@pryvis/core";
+
 /**
  * The minimum of a Prisma client this module needs.
  *
@@ -58,17 +60,25 @@ export class InvalidTenantIdError extends Error {
 }
 
 /**
- * Canonical UUID form. Deliberately strict.
+ * Is this the shape of an id we could have issued?
  *
- * `set_config` takes a string, and the policy casts it to uuid, so a malformed
- * value would become a database error at some later, confusing point — or, if the
- * value were ever interpolated rather than bound, something worse. Validating here
- * means the failure names the real problem at the boundary where it entered.
+ * `set_config` takes a string and the policy casts it to uuid, so a malformed value would surface
+ * as a database error at some later, confusing point. Validating here makes the failure name the
+ * real problem at the boundary where it entered.
+ *
+ * THE CHECK LIVES IN `@pryvis/core`, NOT HERE, and that is the fix for a real defect. This file
+ * carried its own regex requiring UUID version 1-5, written before the decision to issue v7
+ * (ADR 0019). The moment ids became v7, this function refused every genuine tenant id - every
+ * request, every test, a total outage. It was caught only because the audit log's tests used
+ * realistic v7 ids instead of hand-written v4 fixtures.
+ *
+ * Two copies of a rule diverge at exactly the moment one of them changes (Rule 7). There is now
+ * one definition of "a uuid we can hold", beside one of "a uuid we made", and this imports it.
+ * v4 is accepted because the database's gen_random_uuid() default is a deliberate fallback for
+ * rows created by a migration or a script.
  */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export function assertTenantId(tenantId: string): void {
-  if (!UUID.test(tenantId)) throw new InvalidTenantIdError(tenantId);
+  if (!isUuid(tenantId)) throw new InvalidTenantIdError(tenantId);
 }
 
 /**
