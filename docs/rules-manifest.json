@@ -44,7 +44,11 @@
     },
     "1.9": {
       "title": "Living documents",
-      "hash": "a509af1333ddc13f"
+      "hash": "a13c147b397123aa"
+    },
+    "1.10": {
+      "title": "A plan is attacked before anything is built from it (owner requirement, 2026-09-25)",
+      "hash": "3f13d47bfdc67292"
     },
     "2": {
       "title": "Code a stranger can follow",

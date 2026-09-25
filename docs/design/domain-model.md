@@ -1,7 +1,11 @@
 # Design: the domain model
 
-**Status: APPROVED by the owner 2026-09-25.** Schema work may proceed from it; each piece still needs
-its own design for the parts this document leaves open (§10), and the physical schema is its own step.
+**Status: APPROVED by the owner 2026-09-25 · independent review OUTSTANDING (Rule 1.10).** Approval
+answers "is this what I want"; it does not answer "will this do what it says". Both are required
+before code is built from a plan, and the second gate was added to the rules the same day this was
+approved — so schema work waits on the review, which runs alongside the PRD's
+([`../PRD-REVIEW.md`](../PRD-REVIEW.md)). Each piece still needs its own design for what this document
+leaves open (§10), and the physical schema is its own step.
 
 Date: 2026-09-24, approved 2026-09-25 · Brief §6, §10, §13, §14 · Rule 1.2
 Answers to §11's two blocking questions: [ADR 0022](../adr/0022-one-tenant-per-user-and-no-client-logins.md)

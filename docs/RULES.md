@@ -105,6 +105,35 @@ rule is worse than a missing one, because it still reads as authority.
 - **1.9 Living documents.** The brief, the PRD, the ADRs, the audit and this file are updated as
    proposed edits for the owner's approval when reality changes them — never left stale and
    never changed silently.
+- **1.10 A plan is attacked before anything is built from it (owner requirement, 2026-09-25).**
+   Rule 9 puts a reviewer on every *module* — code, after it exists. Nothing put one on the **plan**,
+   which is the cheapest place to find a mistake and the most expensive place to leave one. The owner
+   asked for this gate explicitly, and the gap was real: the PRD reached "complete" with an approval
+   step and no review step.
+
+   **Two gates, not one.** Owner approval says *this is what I want*. Independent review says *this
+   will not do what it says*. They are different questions and both are required before the first
+   line of code that implements a plan. Applies to the PRD, the domain model, and any design shaping
+   more than one module.
+
+   **The reviewer did not write it**, and attacks rather than reads. What it is worth attacking:
+   - a requirement that **cannot be demonstrated** — a hope in the grammar of a requirement;
+   - a scope boundary that **hides work** rather than removing it ("release 2" for something release
+     1 cannot function without);
+   - an invariant with **no owner** — stated in prose, enforced by nothing;
+   - a decision resting on an **unverified assumption about the world** rather than about the code.
+     This is the one that bites: the domain model asserted two businesses may share an email address,
+     which was wrong, and only the owner could have said so (ADR 0022);
+   - a **dependency not named**, especially one that is somebody else's to deliver;
+   - a **claim the product makes publicly** that the plan does not actually deliver (Rule 20).
+
+   **Findings are appended to a file as they are found**, never held to the end — an agent that dies
+   on a limit takes an unwritten finding with it, and that has happened here (Rule 16.3). Every
+   finding is then **closed, or accepted in writing with a reason**. An open finding blocks building
+   the part it concerns, not the whole plan.
+
+   The review states what it did **not** examine (Rule 21.4). A review whose scope is unstated reads
+   as though it covered everything.
 
 ## 2. Code a stranger can follow
 

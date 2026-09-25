@@ -1,7 +1,15 @@
 # Product Requirements: Pryvis, release 1
 
-**Status: Proposed.** Awaiting the owner's approval. Brief §6 · Rule 1.2 · Rule 19 (this is part of
-the plan of record and is kept true, not left stale).
+**Status: Proposed — NOT a basis for building yet.** Two gates stand between this document and code,
+and they ask different questions (Rule 1.10):
+
+| Gate | Question | State |
+|---|---|---|
+| **Owner approval** | Is this what you want built? | **Outstanding** |
+| **Independent review** | Will this do what it says? | **Outstanding** — findings go to [`PRD-REVIEW.md`](PRD-REVIEW.md) |
+
+An open finding blocks building the part it concerns, not the whole plan. Brief §6 · Rule 1.2 ·
+Rule 1.10 · Rule 19 (this is part of the plan of record and is kept true, not left stale).
 
 Date: 2026-09-25 · Country: **Jamaica first** (ADR 0008) · Domain model:
 [`design/domain-model.md`](design/domain-model.md) (Approved) · Tiers: [`TIERS.md`](TIERS.md) ·
