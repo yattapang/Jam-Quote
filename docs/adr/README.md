@@ -35,3 +35,4 @@ product questions are in `PLANNING.md`'s decisions table.
 | [0020](0020-audit-log-and-retention.md) | The audit log is append-only by the absence of a policy, atomic with its change, kept seven years | Accepted |
 | [0021](0021-staff-second-factor.md) | A second factor: TOTP written against the RFC vectors, secrets sealed with a rotatable key, required of staff and enforced in the resolver | Accepted |
 | [0022](0022-one-tenant-per-user-and-no-client-logins.md) | One tenant per user with one email each, so global email uniqueness enforces the owner's rule; a tenant's clients have no login and meet us through a scoped share link | Accepted |
+| [0023](0023-release-1-metering-and-tier-boundaries.md) | The free tier meters jobs **numbered**, not sealed or sent; offline sealing is on every tier and offline issuing is Pro; a free tenant may create one recipe; whether a typed acceptance is legally sufficient goes to the attorney with the terms | Accepted |
