@@ -54,7 +54,20 @@ the work was picked up on an already-finished feature.
    compiles. *Delegation (Rule 16.5): Sonnet — a bounded upgrade against a gate.* Also still open:
    `multer@1.4.4-lts.1` (3 high, DoS) via `@nestjs/platform-express@10`, which needs Nest 11 and
    should wait for HTTP transport rather than land on work in flight.
-3. **The PRD.** ✅ **Unblocked 2026-09-25** — both questions answered (ADR 0022): one person may hold
+3. ~~**The PRD.**~~ ✅ **written 2026-09-25 — [`PRD.md`](PRD.md), Proposed, awaiting approval.**
+   Release 1 is *"price it and get paid"*: directory, recipes, pricing, issuing, share-and-accept,
+   invoicing with deposit and progress claims, and self-service sign-up with manual-payment separation
+   of duties. Free and Pro only; Business is R3.
+   **The one hard call, made explicitly:** the site promises *"price the job while you are standing
+   there"* and sells offline use on Pro, but a full sync engine is the old application's highest-risk
+   component. Read precisely, the promise is a **number now**, not a PDF now — so R1 works offline for
+   pricing and drafting, and requires connectivity to *issue*. Offline issuing with device number
+   leases moves to R2. That keeps the claim honest and takes the riskiest component out of the critical
+   path to revenue.
+   Invoicing stays in R1 because it **is** the Pro line: a release with no invoicing has nothing
+   anybody pays for. Variations move to R2 because they only bite after a job is won and changed.
+   *Delegation (Rule 16.5): Opus — product decisions.*
+   Previously unblocked 2026-09-25 — both questions answered (ADR 0022): one person may hold
    several businesses with a different email each, so global email uniqueness *enforces* that rule and
    the migration I proposed is withdrawn; and a tenant's clients have no login for now, so Documents
    keeps no outside reader and `share_link` carries the weight. Previously blocked on two questions, both from `docs/design/domain-model.md` §11,
@@ -91,6 +104,12 @@ reasoning. Both are good practice and neither will be trimmed to look better —
 the repository private, not to make the documents dishonest. **Trigger: before the first paying
 tenant.** Actions minutes are free while public and metered when private, which is the other half of
 the reason to wait.
+
+**R1 launch blockers that are not engineering** (PRD §9): `info@pryvis.com` receiving mail · tier
+prices set and the price guard updated · legal wording approved so the draft banners come off · the
+**aggregate-data consent clause** in the terms, which blocks registration rather than the website ·
+and a **second staff account** before the first is relied on, since there is deliberately no
+self-service way to remove a second factor and separation of duties needs two people.
 
 **Also open, owner-side:** It is public today, which
 is why gitleaks and GitHub secret scanning are free here — but `THREAT-MODEL.md`, `RULES.md` §17 and

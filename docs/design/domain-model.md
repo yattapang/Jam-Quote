@@ -1,8 +1,10 @@
 # Design: the domain model
 
-**Status: Proposed.** Awaiting the owner's approval (Rule 1.1). Nothing is built until then.
+**Status: APPROVED by the owner 2026-09-25.** Schema work may proceed from it; each piece still needs
+its own design for the parts this document leaves open (§10), and the physical schema is its own step.
 
-Date: 2026-09-24 · Brief §6, §10, §13, §14 · Rule 1.2
+Date: 2026-09-24, approved 2026-09-25 · Brief §6, §10, §13, §14 · Rule 1.2
+Answers to §11's two blocking questions: [ADR 0022](../adr/0022-one-tenant-per-user-and-no-client-logins.md)
 
 ---
 
