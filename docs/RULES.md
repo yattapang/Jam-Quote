@@ -8,7 +8,15 @@ folded in here, and `docs/adr/` keeps the reasoning behind each structural choic
 **Amendments:** 5.1 staff and administrator accounts (2026-09-23) · 1.1 the design gate, 1.2 design
 from the product, 16.5 the declared delegation decision, 16.6 what the agents got wrong, 18 the
 service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
-coverage** (21.7 added the same day), **22 a scripted edit is verified mechanically** (2026-09-24).
+coverage**, **22 a scripted edit is verified mechanically** (2026-09-24) ·
+**23 changing a rule changes everything that cites it**, **24 every mistake is answered with a
+mechanism** (2026-09-25).
+
+**How this file is changed.** Rule 23. In short: explicit numbers, append never insert, tombstone a
+retirement, and `tools/check_rules.py` fails the build when a rule's text or number changes until the
+citations it prints have been reviewed and `--update` has been run. Every defect that prompted a rule
+is recorded in [`MISTAKES.md`](MISTAKES.md) (Rule 24), so no rule here is fussiness without a bill
+attached.
 
 **Sub-rule numbers are stable and cited across the repository.** New sub-rules are appended, never
 inserted — inserting one renumbers every rule after it and silently invalidates existing citations,
@@ -690,4 +698,73 @@ class entirely.
 **What Rule 22 does not fix.** It catches edits that are structurally wrong, not edits that are
 structurally valid and semantically wrong — a step under the right job that does the wrong thing.
 That is what review and 21.2's planted positive are for.
+
+---
+
+## 23. Changing a rule is a change to everything that cites it (added 2026-09-25)
+
+The rulebook is cited in about three hundred places. That makes it code, and it drifts the way code
+drifts — except nothing compiled it, so nothing complained.
+
+**23.1 Sub-rule numbers are explicit, and new sub-rules are appended, never inserted.** An
+auto-numbered list is not an addressing scheme. Inserting one item renumbers every item after it and
+silently retargets every existing citation, which is exactly what happened on 2026-09-24: a new 1.2
+left three ADRs and the Phase 0 audit pointing at rules that had moved.
+
+**23.2 A retired rule keeps its number and is tombstoned in place** — "retired 2026-xx-xx, see Rule
+N" — and **a number is never reused.** A reused number turns every old citation into a confident lie.
+
+**23.3 A rule's text and title are recorded in `docs/rules-manifest.json`, and changing either fails
+the build until the citations have been reviewed.** `tools/check_rules.py` prints **every file and
+line that cites the affected rule** — the review list is handed over, not left to be found. Clearing
+it means running `--update`, which lands in the diff as a deliberate act. It runs in CI as the `docs`
+job.
+
+**23.4 Renaming or rewording a rule carries the same obligation as renumbering it.** A citation's
+meaning lives in the rule's *text*, not its number, so "Rule 1.3" can rot without a single digit
+changing. The manifest hashes the text for that reason, and yes, it fires on a typo fix — guessing
+which edits are "meaningful" is what let the renumber through.
+
+**23.5 The plan of record is updated in the same change as the rule.** `DEVELOPMENT-BRIEF.md`,
+`BRIEF-STATUS.md`, the designs and the ADRs are amended in the commit that changes the rule, never in
+a follow-up (Rule 19 says the same thing about the brief; this says it about the rulebook).
+
+**What Rule 23 does not fix.** It cannot tell whether a citation is *apt*. "Rule 1.3" where 1.6 was
+meant resolves perfectly and always will. What the manifest guarantees is that somebody was shown the
+citation list at the moment the rule moved — the reading is still human work, and the four fixes on
+2026-09-24 were read in context rather than computed.
+
+---
+
+## 24. Every mistake is written down, and answered with a mechanism (added 2026-09-25)
+
+`docs/MISTAKES.md` is an append-only ledger. It exists because each session starts cold, so a lesson
+that lives only in a conversation is a lesson that will be learned again at full price.
+
+**24.1 Every defect found in our own work gets an entry.** What happened, what it cost or would have
+cost, and the date. Defects that reached a commit, a document, a claim made to the owner, or a
+control that shipped believing something untrue. **Not** near-misses avoided by working correctly, and
+**not** a punishment log.
+
+**24.2 Every entry names the rule that now prevents recurrence — or says plainly that none does, and
+why.** "Be more careful" is not a mechanism and does not count. If no mechanical prevention exists,
+that sentence is the entry's most useful line, because it tells the next reader the exposure is still
+open.
+
+**24.3 A rule written in response lands in the same change as the ledger entry.** Not "to follow".
+
+**24.4 A repeat is treated as evidence that the first rule was decorative.** Entries carry what they
+repeat. A mistake occurring twice means the rule written the first time asks for vigilance instead of
+enforcing something, and **the rule is rewritten rather than the person reminded**. This is the most
+valuable line in the ledger: it is the only way to tell a working control from a comforting one.
+
+**24.5 The test for any new rule: would it have caught this mechanically?** Vigilance decays within a
+session; artefacts do not. A rule that cannot be checked by a script, a parse, a plant or a diff is a
+preference, and it is written as advice rather than added to this file — `RULES.md` §17's own stale
+weakness list and the ungated lint warnings at the top of `verify.yml` are this project's evidence
+that unread rules are worse than none.
+
+**What Rule 24 does not fix.** It records and it forces a mechanism to be named; it cannot make the
+mechanism good. And it depends on defects being *found* — which is Rule 9's independent review and
+Rule 21.2's plants, not this.
 

@@ -167,10 +167,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Proved before landing by citing a rule that does not exist and watching this fail
-      # (Rule 21.2). Python 3 is preinstalled on the runner; no setup step needed.
-      - name: Rule references resolve
-        run: python3 tools/check-rule-references.py
+      # Two checks in one, and the second is the one that stops drift: every citation
+      # resolves, AND no rule has changed, been renumbered or been removed without its
+      # citations being reviewed — the manifest makes a silent renumber a red build and
+      # prints the review list. Clearing it requires `--update`, which lands in the diff.
+      #
+      # Proved before landing by planting a citation of a rule that does not exist, by
+      # editing a rule's text, and by deleting a rule outright (Rule 21.2). Python 3 is
+      # preinstalled on the runner; no setup step needed.
+      - name: Rules and their citations agree
+        run: python3 tools/check_rules.py
 
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all

@@ -15,6 +15,9 @@ then they land in `docs/RULES.md` and this file becomes the record of *why*.
 > | Proposal 2 — scripted edits verified mechanically | **Rule 22** (22.1–22.3) |
 > | Amendment to 16.3 — a report without evidence is failed work | **Rule 16.3**, final bullet |
 > | *(added while applying)* what the agent failures actually showed | **Rule 16.6** |
+> | *(added while applying)* an exit code is not evidence of an effect | **Rule 21.7** |
+> | *(added 2026-09-25)* changing a rule changes everything that cites it | **Rule 23** |
+> | *(added 2026-09-25)* every mistake is answered with a mechanism | **Rule 24** + `docs/MISTAKES.md` |
 >
 > `docs/RULES.md` is the rulebook. **This file is history and must not be cited as authority** — two
 > documents that both look normative is exactly the drift Rule 7 (one rule, one place) forbids. It is

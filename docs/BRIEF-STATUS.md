@@ -63,6 +63,20 @@ the work was picked up on an already-finished feature.
 
    *Delegation (Rule 16.5): Opus — product decisions, 16.2's own category.*
 
+**Governance, closed 2026-09-25.** Rules 21-24 are in force, each written from a specific failure
+rather than from good intentions, and each with a mechanism behind it:
+
+| Concern | Mechanism, not a reminder |
+|---|---|
+| A control that overstates its coverage | Rule 21 — scope quoted from the tool; a new control must be seen to fire |
+| Scripted edits that land in the wrong place | Rule 22 — unique anchors, re-parse the result, prose through a file |
+| Rule numbers drifting under the documents that cite them | Rule 23 + `tools/check_rules.py` + `docs/rules-manifest.json`, gated by the `docs` CI job: any change to a rule's number, title or text fails the build and prints every citation of it |
+| Lessons lost between sessions | Rule 24 + [`MISTAKES.md`](MISTAKES.md) — 17 entries, each naming the rule that prevents recurrence or stating that none does |
+
+The drift that prompted Rule 23 was real and is fixed: inserting Rule 1.2 had silently renumbered
+Rule 1's list, leaving three ADRs and the Phase 0 audit citing rules that had moved. Those four are
+corrected, and 307 citations across 40 rules now resolve.
+
 **Also open, owner-side:** whether this repository should stay **public**. It is public today, which
 is why gitleaks and GitHub secret scanning are free here — but `THREAT-MODEL.md`, `RULES.md` §17 and
 `REVIEW-FINDINGS.md` are publicly readable, and §17 is a deliberately honest list of *unmitigated*

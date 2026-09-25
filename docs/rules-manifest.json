@@ -1,0 +1,250 @@
+{
+  "generated_from": "docs/RULES.md",
+  "note": "Regenerated deliberately with tools/check_rules.py --update. Every rule whose hash changed had its citations reviewed at that moment.",
+  "rules": {
+    "0": {
+      "title": "The rules are read at the start of every task",
+      "hash": "c96a3427409a49ef"
+    },
+    "1": {
+      "title": "How we work",
+      "hash": "c2f4cac25467de67"
+    },
+    "1.1": {
+      "title": "Design before code \u2014 a gate, not a preference (owner requirement, 2026-09-24)",
+      "hash": "d4b59aaad6af6fc5"
+    },
+    "1.2": {
+      "title": "Design from the product, not from the code that exists (owner requirement, 2026-09-24)",
+      "hash": "7e3194069a11153f"
+    },
+    "1.3": {
+      "title": "Audit before rebuild",
+      "hash": "a6dc2870084580d8"
+    },
+    "1.4": {
+      "title": "Small reviewable changes",
+      "hash": "c5be87bf97840e8d"
+    },
+    "1.5": {
+      "title": "Tests first, or alongside",
+      "hash": "f043a1792825f1be"
+    },
+    "1.6": {
+      "title": "Explain decisions",
+      "hash": "056b2eaa775e7e34"
+    },
+    "1.7": {
+      "title": "Flag, don't assume",
+      "hash": "54f326d093ed98d3"
+    },
+    "1.8": {
+      "title": "The owner reviews every diff",
+      "hash": "1703fc608845583b"
+    },
+    "1.9": {
+      "title": "Living documents",
+      "hash": "a509af1333ddc13f"
+    },
+    "2": {
+      "title": "Code a stranger can follow",
+      "hash": "db4e1656edb2d8d1"
+    },
+    "3": {
+      "title": "Money, tax, country and time",
+      "hash": "17f07797698b74c6"
+    },
+    "4": {
+      "title": "Tenant isolation (owner requirement)",
+      "hash": "95cffc49a14efa0e"
+    },
+    "5": {
+      "title": "Security and authentication, from each module's first commit",
+      "hash": "169a356ab93597f9"
+    },
+    "5.1": {
+      "title": "Staff and administrator accounts \u2014 the higher bar (owner requirement, 2026-09-23)",
+      "hash": "45c344304690de78"
+    },
+    "6": {
+      "title": "Data integrity",
+      "hash": "c625f0b2ff348ce4"
+    },
+    "7": {
+      "title": "One rule, one place",
+      "hash": "dba853f1b9766349"
+    },
+    "8": {
+      "title": "Testing, and what \"done\" means",
+      "hash": "965dc56cd22846c5"
+    },
+    "9": {
+      "title": "A module is complete only when someone else has attacked it",
+      "hash": "cc57569fa27a5fb8"
+    },
+    "10": {
+      "title": "Portability and infrastructure staging (owner requirement)",
+      "hash": "8c5faef12932c924"
+    },
+    "11": {
+      "title": "Communications",
+      "hash": "b355b8ccde00df2e"
+    },
+    "12": {
+      "title": "Offline (mobile)",
+      "hash": "acb22f9573fcf168"
+    },
+    "13": {
+      "title": "Payments and activation controls (owner requirement)",
+      "hash": "2e1cff5acc851b3c"
+    },
+    "14": {
+      "title": "Entitlements and tiers",
+      "hash": "6ef3c1b0600a01f7"
+    },
+    "15": {
+      "title": "Claude-assisted maintenance",
+      "hash": "86a2ed1d683a7131"
+    },
+    "16": {
+      "title": "How work is delegated to agents (owner requirement)",
+      "hash": "49ed1103be2e58d3"
+    },
+    "16.1": {
+      "title": "Every agent reads the rules first",
+      "hash": "9be2b308db507d50"
+    },
+    "16.2": {
+      "title": "The minimum capable model, and one hard thing at a time",
+      "hash": "b135847f2655e3c3"
+    },
+    "16.3": {
+      "title": "An agent's silence is never a pass",
+      "hash": "3fdf5776425f53c0"
+    },
+    "16.4": {
+      "title": "What an agent's report is worth",
+      "hash": "b06bceee9ff29472"
+    },
+    "16.5": {
+      "title": "The delegation decision is declared, not assumed",
+      "hash": "53dd36400ffce51d"
+    },
+    "16.6": {
+      "title": "What the agents actually got wrong, and what that changes (2026-09-24)",
+      "hash": "8dedf26f7a18d5ed"
+    },
+    "17": {
+      "title": "Where we are weak, stated plainly",
+      "hash": "e0602432229ef85f"
+    },
+    "18": {
+      "title": "Every service we depend on is recorded, with the reason (owner requirement)",
+      "hash": "4e01261898d46cea"
+    },
+    "19": {
+      "title": "The brief is the plan of record, and it is kept true (owner requirement)",
+      "hash": "b697ef4e0bda3f21"
+    },
+    "20": {
+      "title": "The public site, and what we say on it (owner requirement)",
+      "hash": "233854f9d7fb8a72"
+    },
+    "21": {
+      "title": "A control states the coverage it has, in the tool's own words (added 2026-09-24)",
+      "hash": "fba4653b95fafdec"
+    },
+    "21.1": {
+      "title": "A control's stated scope is quoted from what the tool reports, never from what it was meant\nto do",
+      "hash": "d0c22ec651fbd9a0"
+    },
+    "21.2": {
+      "title": "A new control ships having fired at least once, on purpose",
+      "hash": "592c9a8b4e219776"
+    },
+    "21.3": {
+      "title": "Every batch closes with a coverage line, in the same place as the 16.5 declaration",
+      "hash": "e57c510bda481890"
+    },
+    "21.4": {
+      "title": "\"What this does not prove\" is required of every control, not only of tests",
+      "hash": "b7e044f62d6d2594"
+    },
+    "21.5": {
+      "title": "A remediation claim quotes the authority that decides it",
+      "hash": "9887dd3c775a82f7"
+    },
+    "21.6": {
+      "title": "One sample is not a pattern",
+      "hash": "29752afdbdcc462c"
+    },
+    "21.7": {
+      "title": "An exit code is not evidence of an effect",
+      "hash": "2903372a903188d3"
+    },
+    "22": {
+      "title": "A scripted edit is verified mechanically, not by eye (added 2026-09-24)",
+      "hash": "6ce2df8fd89a365f"
+    },
+    "22.1": {
+      "title": "An anchored edit asserts its anchor is unique before it writes",
+      "hash": "edae0ab72bdd06b0"
+    },
+    "22.2": {
+      "title": "Every scripted edit to a structured file is followed by a parse of the result",
+      "hash": "4f1fff2769c28422"
+    },
+    "22.3": {
+      "title": "Prose passed to a tool goes through a file, never inline",
+      "hash": "5e3fca0618e8036e"
+    },
+    "23": {
+      "title": "Changing a rule is a change to everything that cites it (added 2026-09-25)",
+      "hash": "556e059a39325200"
+    },
+    "23.1": {
+      "title": "Sub-rule numbers are explicit, and new sub-rules are appended, never inserted",
+      "hash": "28638b323c7f8e32"
+    },
+    "23.2": {
+      "title": "A retired rule keeps its number and is tombstoned in place",
+      "hash": "41ebe7e62c08d98d"
+    },
+    "23.3": {
+      "title": "A rule's text and title are recorded in `docs/rules-manifest.json`, and changing either fails\nthe build until the citations have been reviewed",
+      "hash": "75f682b2b197fc60"
+    },
+    "23.4": {
+      "title": "Renaming or rewording a rule carries the same obligation as renumbering it",
+      "hash": "94f941496cc5b03c"
+    },
+    "23.5": {
+      "title": "The plan of record is updated in the same change as the rule",
+      "hash": "e8a10eba4968ada5"
+    },
+    "24": {
+      "title": "Every mistake is written down, and answered with a mechanism (added 2026-09-25)",
+      "hash": "81ee1765cfd9be97"
+    },
+    "24.1": {
+      "title": "Every defect found in our own work gets an entry",
+      "hash": "9bb20828776642c2"
+    },
+    "24.2": {
+      "title": "Every entry names the rule that now prevents recurrence \u2014 or says plainly that none does, and\nwhy",
+      "hash": "1aa7223e03bc4eb4"
+    },
+    "24.3": {
+      "title": "A rule written in response lands in the same change as the ledger entry",
+      "hash": "b818291f8efc254e"
+    },
+    "24.4": {
+      "title": "A repeat is treated as evidence that the first rule was decorative",
+      "hash": "0f576cdadeef6831"
+    },
+    "24.5": {
+      "title": "The test for any new rule: would it have caught this mechanically?",
+      "hash": "3a50cc937201181c"
+    }
+  }
+}
