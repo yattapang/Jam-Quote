@@ -194,3 +194,31 @@ checks that a cited file exists or that a cited guard asserts what it is credite
 thing is `tools/check_rules.py`, and extending it to verify cited paths is cheap — recorded here as
 owed rather than promised.
 
+### M15 · A disposition table claimed five blockers closed; three of the rows overstated what changed
+`Repeat of:` **M13** — and it recurred *in the commit that logged M13*, which is the strongest possible
+evidence that M13's lesson had no mechanism behind it (Rule 24.4).
+
+F1's own `Where:` line named `domain-model.md` §4 and §6.1. The amendment added §6.1a and never touched
+§4, which still reads *"Allocate at sync … **Rejected**"* and *"**Chosen:** device number blocks"* — so the
+contradiction the amendment existed to remove **moved from between two documents to inside one**. F17 and
+F3 failed the same way: amended in one of the two places each named.
+
+**Cost if it had not been caught:** the physical schema would have been written from a document that
+contradicts itself about the one thing that decides its columns, and the disposition table said it was
+safe. A second review caught it; a reader trusting the table would not have.
+**Prevented by:** Rule 24.6 and `tools/check_dispositions.py` — a row may not say `Closed` without citing
+every document the finding named, gated in CI. Against the uncorrected table it flagged all twelve rows.
+
+### M16 · The amendments introduced four of the five blockers in the next review
+Not a slip but a **class**: an amendment that closes a finding writes new text, and new text carries new
+invariants that nobody has attacked. `issue_balance` was created to give the money invariant an owner and
+arrived with no row creator — and `SELECT … FOR UPDATE` on zero rows takes no lock, so the first pair of
+concurrent invoices, the very case it was built for, still slips (G2). The minimal variation closed F3 and
+created a unilateral way for one party to raise the invoiceable ceiling (G1).
+
+**Cost if it had not been caught:** each fix would have shipped believing itself complete, and the second
+one is a money defect that surfaces as over-billing a real client.
+**Prevented by:** Rule 24.6's second half — closing a blocker earns a **re-review**, not a tick. There is
+no cheaper mechanism: a fix cannot be attacked by whoever wrote it, which is Rule 9's whole premise
+applied to amendments rather than to modules.
+

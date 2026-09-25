@@ -8,29 +8,39 @@ is the record, and nothing here is closed by assertion — each names what chang
 
 | # | Severity | Disposition |
 |---|---|---|
-| **F1** | blocker | **Closed.** Owner-approved resolution: seal / number / deliver split. `quote_issue` is sealed offline and insert-only; the number moves to an insert-only `issue_number` row allocated at sync. Domain model §6.1a and §8, PRD §4, R1.13, R1.14, R1.16a, R1.18, R1.18a-b. Logged as M13 |
-| **F2** | major | **Closed.** R1.8 now names its instrument: a scripted fence-at-the-gate walkthrough, timed first tap to total, named device, aeroplane mode, recorded per release |
-| **F3** | blocker | **Closed by scope change, and it needs the owner's yes.** A minimal priced variation moves **into R1** (W6a, R1.22a-d); the client-signable change order stays R2. Revising an accepted issue is refused in R1 |
-| **F4** | blocker | **Closed.** The invariant is restated in R1 vocabulary and given an owner: `issue_balance` locked `FOR UPDATE` inside the invoice transaction, a rebuild-and-compare job, and planted-defect tests. Domain model §6.2a, PRD R1.24, R1.24a-c, R1.25 |
+| **F1** | blocker | **REOPENED 2026-09-25 by the re-review (G3).** The seal/number split landed in `domain-model.md` §6.1a and `PRD.md` §4/R1.13/R1.14/R1.18, but `domain-model.md` **§4 was never amended** and still reads "Allocate at sync … Rejected" and "Chosen: device number blocks". The contradiction moved from between two documents to inside one. Logged as M15 |
+| **F2** | major | **REOPENED (G10).** `PRD.md` R1.8 gained an instrument but only 1 of 4 sub-findings is fixed: "a named device" names no device, there is no cache-warm precondition, and §10's "instrumentation is itself part of R1" still has no requirement |
+| **F3** | blocker | **REOPENED (G1, G7).** `PRD.md` W6a/R1.22a-d exist, but `domain-model.md`'s `variation` row still demands "its own acceptance … signable on its own", and the ceiling reads "+ recorded variations" in `PRD.md` against "+ accepted variations" in `domain-model.md` — so either the contractor raises it unilaterally or no variation ever counts |
+| **F4** | blocker | **REOPENED (G2, G12, G13).** `domain-model.md` §6.2a and `PRD.md` R1.24a-c give the invariant a shape, and the reviewer agrees the shape is right — but nothing creates the `issue_balance` row, and `SELECT … FOR UPDATE` matching zero rows takes **no lock**, so the first pair of concurrent invoices is exactly the case that slips |
 | **F5** | blocker (Rule 20) | **Half closed.** The false guard citation is corrected and the over-claim is written down; R1.40b adds a guard asserting tier lists against delivered scope. **Open:** which undelivered Pro features are marked "coming" vs removed is public copy and the owner's call. Logged as M14 |
 | **F6** | major | **Open — bundled with F5.** The site's roadmap tense is the same edit as the tier lists, and the same owner decision |
 | **F7** | major | **Open — owner question.** PRD §8a.3, with a recommendation: let Free create one recipe |
 | **F8** | major | **Open — owner question.** PRD §8a.2, with a recommendation: offline sealing on every tier, offline issuing Pro |
-| **F9** | major | **Closed.** Both §10 rows rewritten around "tenants who hit the free limit" |
+| **F9** | major | **Closed** — verified by the re-review against the text. `PRD.md` §10, both rows rekeyed to "tenants who hit the free limit"; the arithmetic holds |
 | **F10** | question | **Open — owner question.** PRD §8a.1, with a recommendation: count distinct jobs numbered |
-| **F11** | blocker (Rule 18) | **Closed.** Four dependencies added (§9 1a-1d) and `SERVICE-REGISTER.md` §3a names malware scanning and object storage as required-and-undecided |
-| **F12** | blocker | **Closed.** R1.30a-c add Rule 14's four defences, make email verification load-bearing for ADR 0022, and reconcile "bound per address" with one-business-per-address by putting the bound on the creator |
-| **F13** | major | **Closed.** R1.41 puts `price_observation` in R1 as capture-only, gated on recorded consent, with the pre-registration deadline stated |
-| **F14** | major | **Closed.** `quote_section` and `quote.client_detail_level` added to the model; the tenant-readable audit trail is recorded as a redacting read path on `audit_entry`, not a new entity |
+| **F11** | blocker (Rule 18) | **Closed** — verified. `PRD.md` §9 items 1a-1d exist, and `SERVICE-REGISTER.md` §3a names malware scanning and object storage as required-and-undecided, stating "Until both are chosen, R1.36 cannot be met" |
+| **F12** | blocker | **REOPENED (G9, G11).** `PRD.md` R1.30a-c add Rule 14's defences, but R1.30b weakens `domain-model.md`'s global email uniqueness without amending it, the both-verify race is undefined, and R1.30c's "bound per IP or device" is not implementable on Jamaican mobile CGNAT — which `TIERS.md` and ADR 0023 now lean the whole free-tier defence on |
+| **F13** | major | **Closed** — verified. `PRD.md` R1.41, capture-only, consent-gated, with the pre-registration deadline stated; `domain-model.md` already carried `price_observation` |
+| **F14** | major | **Closed** — verified. `domain-model.md` gains `quote_section` and `quote.client_detail_level` frozen into the issue; the tenant-readable audit trail is correctly a redacting read path on `audit_entry` rather than an entity, and `PRD.md` R1.40 stands |
 | **F15** | question | **Open — legal, not engineering.** PRD §8a.4 recommends asking the attorney while the terms are being approved |
-| **F16** | major | **Closed.** R1.22e requires the share page to survive the API being asleep, served statically or pre-rendered, with only acceptance touching the API |
-| **F17** | minor | **Closed.** One hash, on `document_render`, referenced by the issue and the acceptance — and R1.16a requires it to be **verified** when a PDF is re-served |
-| **F18** | minor | **Closed.** R1.23 states that it deliberately supersedes the audit's inventory item #15 |
+| **F16** | major | **Closed** — verified. `PRD.md` R1.22e requires the share page to survive the API being asleep, and draws the right conclusion about Rule 10's trigger; `SERVICE-REGISTER.md` §4a is its evidence |
+| **F17** | minor | **REOPENED (G7).** `PRD.md` R1.16a puts one hash on `document_render` — but both `domain-model.md`'s `acceptance` row and `PRD.md` R1.20 still say the acceptance carries "its own PDF hash". Amended in neither of the two places the finding named |
+| **F18** | minor | **Closed** — verified. `PRD.md` R1.23 states that it deliberately supersedes `PHASE-0-AUDIT.md` inventory item #15 |
 | **F19** | minor | **Accepted, not fixed.** The review order was inverted: the domain model was approved before the PRD that scopes it, and before Rule 1.10 existed. It cannot be undone, only recorded — and this review, run across both documents together, is the compensating control |
 
-**Six blockers: five closed, one half-closed on an owner decision.** The five still open are four owner
-questions and one public-copy choice. Nothing marked closed here is claimed as proved; the re-review is
-what tests that.
+> ### This table was wrong, and the re-review is what found it
+>
+> The row above originally read *"six blockers: five closed"*. A second independent review
+> (`PRD-REVIEW-2.md`, 17 findings) checked the amended **text** instead of this table and found that
+> **three rows overstated what changed** (F1, F3, F17) and three more were undone by new findings
+> (F2, F4, F12). **Four of its five blockers were introduced by the amendments themselves.**
+>
+> Corrected standing: **6 verified closed** (F9, F11, F13, F14, F16, F18) · **6 reopened** · F5/F6 open on
+> owner copy · F7/F8/F10/F15 answered by ADR 0023 and ADR 0024, whose document edits are still owed.
+>
+> The mechanism that now prevents this: **Rule 24.6** and `tools/check_dispositions.py`, which fails the
+> build when a row claims `Closed` without citing every document the finding's own `Where:` line named.
+> Run against this table before correction it flagged all twelve. Logged as M15.
 
 **Gate:** independent review of a plan the reviewer did not write. Owner approval answers *is this
 what I want*; this answers *will it do what it says*. Findings are appended as they are found

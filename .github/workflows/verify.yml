@@ -178,6 +178,14 @@ jobs:
       - name: Rules and their citations agree
         run: python3 tools/check_rules.py
 
+      # A review finding may not be marked Closed unless the disposition cites every
+      # document the finding named. Added after three disposition rows overstated what
+      # changed and a second review had to find it (Rule 24.6). Proved by planting: run
+      # against the table before correction, it flagged all twelve rows.
+      - name: Closed findings cite what they changed
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_dispositions.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

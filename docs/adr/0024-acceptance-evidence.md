@@ -1,4 +1,21 @@
-# ADR 0024 — A typed name is not evidence, so the product stops implying it is
+# ADR 0024 — A typed name is not evidence; a proper e-signature can be
+
+> ## AMENDED THE SAME DAY, 2026-09-25 — and the amendment moves work INTO release 1
+>
+> This ADR was written on the owner's statement that *"the typed name on a phone acceptance record on
+> the phone is not legal in a dispute"*, and it parked stronger acceptance in release 2 pending legal
+> advice (§5, below). The owner then corrected it: **"esignatures can work."**
+>
+> Those are two different claims and the distinction is the whole decision:
+>
+> | Claim | Status |
+> |---|---|
+> | A **typed name** alone is evidence | **Rejected** by the owner. Everything in §1 and §2 stands unchanged |
+> | A **properly constructed e-signature** can hold | **Accepted.** So §5 is wrong to park it, and §3's signed-paper path is a fallback rather than the answer |
+>
+> The revised decision is in **§6**, which supersedes §5. The original §5 is left in place rather than
+> deleted, because an ADR that quietly rewrites itself is worth less than one that shows what changed
+> (Rule 1.9).
 
 - **Status:** Accepted
 - **Date:** 2026-09-25
@@ -85,10 +102,46 @@ hold?* — and it goes with the terms.
   as a client can. We store what we are given and say who uploaded it and when; we do not certify it. That
   honesty is the control.
 
+## 6. Supersedes §5 — a verified e-signature is the release 1 acceptance mechanism
+
+Since a properly constructed e-signature can hold, parking it is the wrong call: it makes release 1 ship
+an acceptance record the owner has already said is worth nothing in a dispute, and then asks contractors
+to trust it. So **W5's acceptance becomes a verified electronic signature in release 1**, and it is built
+to the elements such regimes generally require rather than to whatever is easiest:
+
+| Element | How it is met | Already exists? |
+|---|---|---|
+| **Attribution** — the signature is tied to a person, not to whoever holds a link | A one-time code sent to the channel **the tenant has on file for that client**, entered to sign. Possession of the link stops being sufficient | `share_link` exists; the code and the verification record are new |
+| **Intent** — an explicit act of signing, clearly labelled | A signing step that says it is a signature, separate from reading the quote. Not a generic "continue" | New, and it is a UI requirement as much as a data one |
+| **Consent to sign electronically** | Captured and recorded at the moment of signing | New, one field |
+| **Integrity** — exactly what was signed, provably | The `document_render` hash is bound into the `acceptance` row (R1.16a already requires one hash, referenced rather than copied) | Exists |
+| **Audit trail** | Timestamp, IP, user agent, which channel the code went to, and the verification event | Mostly exists on `acceptance` |
+| **Reproducibility** — the signer can be given back exactly what they signed | The immutable issue plus the hashed render | Exists (domain model §6.1) |
+
+**The channel is the real constraint, and it decides the cost.** The code must reach the client on
+something the tenant recorded, and:
+
+- **Email is effectively free** through the sender already in the service register — and it needs the
+  **verified sending domain** that is already an owner dependency (PRD §9 item 1a). No new service.
+- **SMS is a new paid service and a new sub-processor**, absent from the register. It is the channel most
+  Jamaican clients would prefer, which makes it a real decision rather than a detail.
+- **WhatsApp Business** sending is release 3 and carries per-message cost and Meta verification.
+
+**Recommendation: release 1 verifies by email, and the client record gains a phone number for later.**
+If a client has no email, the fallback is §3's signed copy — which is why §3 survives the amendment
+rather than being deleted.
+
+**What this does not become:** a claim that our implementation satisfies Jamaica's Electronic Transactions
+Act. The elements above are what such regimes generally ask for; whether ours clears the bar is the
+attorney's call, and the difference is that we are now designing **toward a standard** instead of parking
+the question. The narrow question for them is unchanged and cheap to ask: *does a one-time-code-verified
+signature over a hashed document hold?*
+
 ## What this does not settle
 
-- **Whether anything short of a wet signature holds in Jamaica.** The owner's attorney answers that, and
-  the answer decides whether §5 is worth building at all.
+- **Whether our specific implementation clears Jamaica's bar.** The owner's attorney answers that. §6 is
+  built to the standard elements so that the answer is likely yes and cheap to adjust if not — a
+  different position from §5's, which was to build nothing until told.
 - **Whether a client will sign and return a PDF in practice.** If they will not, the honest position is
   that quotes accepted by tap are commercially useful and evidentially thin, and the contractor should
   know which of their jobs need more.

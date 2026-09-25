@@ -793,6 +793,27 @@ preference, and it is written as advice rather than added to this file — `RULE
 weakness list and the ungated lint warnings at the top of `verify.yml` are this project's evidence
 that unread rules are worse than none.
 
+**24.6 A finding is not "closed" until the claim cites every document the finding named — and a fix is
+not proved until someone else has checked it (added 2026-09-25).** Two halves, both from the same day.
+
+A disposition table claimed five of six blockers closed. A second review checked the amended **text**
+instead of the table and found three rows overstated what changed: the fix had been written into one
+clause, or one document, of the two or three the finding named. F1's own text named `domain-model.md` §4;
+the amendment added §6.1a and left §4 still saying the opposite. **The contradiction moved from between
+two documents to inside one, in the very commit that logged that failure as M13** — which by 24.4 means
+the lesson was decorative until it had a mechanism.
+
+- **The mechanism:** `tools/check_dispositions.py` fails the build when a row claims `Closed` without
+  citing, by file, every document the finding's own `Where:` line named. It runs in CI. Against the table
+  that prompted it, it flagged all twelve rows.
+- **The second half, from Rule 21.2:** an amendment that closes a finding is itself unreviewed work, and
+  amendments that touch an invariant tend to create new ones — four of five blockers in that second pass
+  were **introduced by the amendments**. So closing a blocker earns a **re-review**, not a tick. "Closed"
+  means somebody who did not write the fix checked it.
+
+**What Rule 24.6 does not fix.** The checker verifies that every named document was *cited*, not that the
+edit was *correct*. Only the re-review does that, which is why both halves exist.
+
 **What Rule 24 does not fix.** It records and it forces a mechanism to be named; it cannot make the
 mechanism good. And it depends on defects being *found* — which is Rule 9's independent review and
 Rule 21.2's plants, not this.

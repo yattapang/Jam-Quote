@@ -248,7 +248,11 @@
     },
     "24.5": {
       "title": "The test for any new rule: would it have caught this mechanically?",
-      "hash": "3a50cc937201181c"
+      "hash": "2e065580b8396e52"
+    },
+    "24.6": {
+      "title": "A finding is not \"closed\" until the claim cites every document the finding named \u2014 and a fix is\nnot proved until someone else has checked it (added 2026-09-25)",
+      "hash": "6f3d0ffe6752582b"
     }
   }
 }
