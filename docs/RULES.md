@@ -8,7 +8,7 @@ folded in here, and `docs/adr/` keeps the reasoning behind each structural choic
 **Amendments:** 5.1 staff and administrator accounts (2026-09-23) · 1.1 the design gate, 1.2 design
 from the product, 16.5 the declared delegation decision, 16.6 what the agents got wrong, 18 the
 service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
-coverage**, **22 a scripted edit is verified mechanically** (2026-09-24).
+coverage** (21.7 added the same day), **22 a scripted edit is verified mechanically** (2026-09-24).
 
 **Sub-rule numbers are stable and cited across the repository.** New sub-rules are appended, never
 inserted — inserting one renumbers every rule after it and silently invalidates existing citations,
@@ -644,6 +644,16 @@ absence.
 > Why, twice in one day: the keep-warm workflow's "last run was 11 September" came from a single
 > stale list row and was wrong. And "no such agent exists" was asserted about an agent that did
 > exist, when one `ListAgents` call would have shown it.
+
+**21.7 An exit code is not evidence of an effect.** A command that succeeded is not the same as a
+command that did what was wanted. Where an action has a state we can read afterwards — a remote ref,
+a row, a file, a deployed version — **the claim quotes that state, not the exit status**.
+
+> Why: `git push -q origin main && echo pushed` printed "pushed", and I reported it. I had never
+> switched back from a feature branch, so the command pushed the *unchanged local `main`* to the
+> remote — a successful no-op — while the work sat on the other branch. Exit 0, nothing pushed, and
+> a commit that would have arrived inside an unrelated pull request. `git ls-remote` would have said
+> so in one line.
 
 **What Rule 21 does not fix.** It cannot make anyone honest; it makes an overstatement visible in a
 diff. It cannot catch a control that fires correctly on the wrong thing — a scanner whose rules miss
