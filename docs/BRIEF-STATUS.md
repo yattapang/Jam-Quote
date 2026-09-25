@@ -105,6 +105,15 @@ the repository private, not to make the documents dishonest. **Trigger: before t
 tenant.** Actions minutes are free while public and metered when private, which is the other half of
 the reason to wait.
 
+**The first Rule 1.10 review is done and its findings are dispositioned** (`PRD-REVIEW.md`): 19 findings,
+6 blockers. Five blockers closed by amending **both** documents in one change — because leaving them
+disagreeing is what caused F1 in the first place. One blocker is half-closed and waits on the owner
+(public copy), and four questions wait on the owner. **Two scope changes the owner should notice:** a
+minimal priced variation moves **into R1** (F3 — without it, the commonest event in construction was
+unrepresentable), and `price_observation` is confirmed as R1 capture-only because its consent cannot be
+retro-fitted (F13). A **re-review of the amended pair** is the next step, since a fix I wrote is not
+reviewed by me having written it.
+
 **R1 launch blockers that are not engineering** (PRD §9): `info@pryvis.com` receiving mail · tier
 prices set and the price guard updated · legal wording approved so the draft banners come off · the
 **aggregate-data consent clause** in the terms, which blocks registration rather than the website ·

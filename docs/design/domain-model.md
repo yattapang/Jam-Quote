@@ -160,10 +160,43 @@ This is where the existing application's real defect lives, and where the model 
 `quote` is the **working document**: editable, versioned, mergeable between devices, worth nothing
 to anybody outside the tenant.
 
-`quote_issue` is an **immutable snapshot**, written once when Delroy taps *Issue*. It carries its own
-number, every line with its frozen description, quantity, unit price, tax treatment, markup and
-discount, the tax rates it used, the currency, the terms wording, the document settings as they were,
-and a hash of the rendered PDF. **No column on it is ever updated.**
+`quote_issue` is an **immutable snapshot**, written once when Delroy taps *Issue*. It carries every
+line with its frozen description, quantity, unit price, tax treatment, markup and discount, the tax
+rates it used, the currency, the terms wording, the document settings as they were, `sealed_at`, and
+`catalog_synced_at` — when the prices it froze were last refreshed from the server, so a stale price is
+visible rather than deniable. **No column on it is ever updated.**
+
+### 6.1a Sealing, numbering and delivering are three acts, not one (amended 2026-09-25)
+
+The first version of this section had the number *on* `quote_issue`, and §8 said issuing offline was
+allowed with a leased number. The PRD then scoped release 1 as "issuing requires connectivity" and
+deferred leases. Two live documents disagreeing about the same thing, in the document the physical
+schema is built from — recorded as M13, and the owner's requirement is what resolved it: **the data
+must be captured offline and held until the device can sync.** That is not the same as allocating an
+official number offline, and separating them dissolves the contradiction.
+
+| Act | What it does | Needs a server? |
+|---|---|---|
+| **Seal** | Freeze the lines, prices, tax rates, currency, terms, settings, totals and `catalog_synced_at` | **No** — happens on the device, offline |
+| **Number** | Allocate from the tenant's series: unique, gapless, answerable to an accountant | **Yes**, or a device lease (deferred) |
+| **Deliver** | Render the PDF, mint the share link, send it | Yes |
+
+**`issue_number` is its own insert-only table** — one row per issue, carrying the series, the number
+and `allocated_at`. This is the load-bearing choice. A nullable `number` column on `quote_issue`,
+filled in later, would mean an UPDATE on a sealed financial document, and this section's whole argument
+is that immutability must not depend on every future query being careful. A separate row keeps
+`quote_issue` with **no UPDATE path at all**.
+
+**A sealed issue is not deliverable until it has an `issue_number` row.** "Sealed, awaiting number" is
+a real state the app shows plainly. What the client sees at the gate is the sealed total on screen —
+the promise is *price* the job while standing there, not *send* it from there.
+
+**Why this makes release 2 cheap instead of dangerous.** Adding device leases later changes only *who
+inserts the `issue_number` row and on whose authority* — the device from a lease, rather than the
+server at sync. No schema change to issued financial rows, which was the migration hazard. And note
+the trade-off honestly: **server allocation is strictly gapless; leases burn numbers and create gaps.**
+Release 2's offline issuing is therefore a trade-down on the property an accountant cares about, worth
+buying only if contractors actually hit the wall.
 
 Why a separate entity rather than a frozen flag: a flag is one forgotten `WHERE` clause away from an
 edited commitment, and "issued documents are immutable" then depends on every future query being
@@ -179,7 +212,8 @@ including which of three versions they accepted.
 
 | Entity | Purpose | Key invariants |
 |---|---|---|
-| `quote_line` | A line on the working quote, in a section, ordered. | Belongs to one quote. Recipe-expanded lines remember the recipe, so a recipe change can offer to refresh a draft — never an issue. |
+| `quote_section` | A named, ordered group of lines, so a quote reads the way a contractor talks about the job. | Belongs to one quote. Named by review (F14): the requirement existed with no entity to live in. |
+| `quote_line` | A line on the working quote, in a section, ordered. | Belongs to one quote and one section. Recipe-expanded lines remember the recipe, so a recipe change can offer to refresh a draft — never an issue. |
 | `variation` | A change to accepted work: added, removed or altered scope, with its own price and its own acceptance. | First-class, not a new quote. The client has already accepted the original, and a variation must be signable on its own so "who agreed to the extra $40,000" has an answer. |
 | `acceptance` | The client accepting or declining an issue or a variation. | Records typed name, timestamp, IP and user agent, and its own PDF hash. Immutable. One acceptance per issue. |
 | `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices may never exceed the accepted total plus accepted variations, which is the single most important arithmetic invariant in the product. |
@@ -188,9 +222,51 @@ including which of three versions they accepted.
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
 | `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. |
 
+**Two more fields the requirements need, named by review (F14).** `quote.client_detail_level`
+(summary or itemised) decides what the client is shown and is **frozen into the issue**, because
+changing it later would alter a document already sent. And a tenant reading their own audit trail is a
+**capability on the existing `audit_entry`**, not a new entity — it needs a redacting read path, which
+is owed work already recorded against ADR 0020, not a table.
+
 **Invoice status is derived, never stored.** A stored status is a second source of truth that drifts
 from the payments, which is precisely how the existing application's CSV export came to report a
 negative amount due. The trade-off is a slightly more expensive read, paid for with an index.
+
+### 6.2a The money invariant has an owner (amended 2026-09-25)
+
+**The invariant:** the sum of issued invoices against an accepted issue may never exceed the accepted
+total, plus accepted variations, where those exist.
+
+The first version of this document stated that twice in prose and never said where it is enforced —
+found by review as the exact thing Rule 1.10 names, *"an invariant with no owner"*. Prose is not an
+owner. It cannot be a column `CHECK`, because it is a **cross-row aggregate**; it is not a unique
+index; and §3's `version` compare-and-set protects one row and does nothing about two invoices that
+are each individually under the total and together over it. That failure is silent, arrives as real
+over-billing of a real client, and is found by their accountant rather than by us.
+
+**The mechanism: an `issue_balance` row, locked for the duration of the transaction that issues an
+invoice.** One row per accepted issue, holding `accepted_total`, `variations_total` and
+`invoiced_total`. Issuing an invoice is one transaction that:
+
+1. takes `SELECT … FOR UPDATE` on the issue's `issue_balance` row — which serialises every concurrent
+   attempt against that issue, and only that issue;
+2. computes the new `invoiced_total`;
+3. **refuses** if it would exceed `accepted_total + variations_total`;
+4. inserts the invoice and updates the balance **in the same transaction**.
+
+This is the same shape `number_series` already uses for allocation, and it is chosen for the same
+reason: a lock on one named row is cheap, obvious in review, and cannot be forgotten by a query written
+later, because the invoice cannot be inserted without passing through it.
+
+Note what is **not** claimed: `issue_balance` is a **derived cache with a lock**, not a second source
+of truth. It is rebuildable from the invoices at any time, and a reconciliation job that rebuilds and
+compares it is owed — because a maintained total that nobody re-derives is how the old application's
+stored status drifted (§6.2). Retention and credit notes feed the *status* derivation, never this
+ceiling: money held back or credited does not raise how much may be billed.
+
+**This is money arithmetic, so it is judgement-class work under Rule 16.5** and its tests are planted
+defects: two concurrent invoices, a queued offline replay, and a variation arriving between the read
+and the write.
 
 ### 6.3 The two state machines
 
@@ -270,16 +346,26 @@ somewhere expensive.
 |---|---|---|
 | Directory (materials, rates, clients, recipes) | read, and create new | **Server wins** on fields; local creations always push. |
 | `quote` draft + lines | full edit | **Merge by line**, with a review step when both sides changed one line. Never silently discard a line. |
-| `quote_issue` | **create** (with a leased number) | **Never conflicts** — it is append-only by construction. Pushes as-is, or fails loudly. |
+| `quote_issue` | **seal** (no number yet) | **Never conflicts** — append-only by construction. Pushes as-is, or fails loudly. |
+| `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series |
 | `acceptance` | create | First write wins; a second is refused, not merged. |
 | `invoice`, `client_payment` | read only in v1 | — |
 | `project`, `purchase`, `labour_entry` | create and edit | Last-write-wins per row, with the audit trail carrying the loser. |
 | Entitlements | cached with a **grace period** | Server wins on sync; the grace period is what stops a signal outage from stopping work. |
 
-Issuing offline is **allowed** — refusing it would break step 3 of the only story that matters, and
-the number lease plus the immutable issue is what makes it safe. Prices are frozen from the
-last-synced catalog, and the issue records **when that sync happened**, so a stale price is visible
-rather than deniable.
+**Sealing offline is allowed and required; numbering offline is not** (§6.1a). Refusing to capture the
+job offline would break step 3 of the only story that matters, so the snapshot is written on the device
+and held in a durable outbox until it syncs. The number is allocated server-side at sync in release 1,
+and from a device lease in release 2 — the same `issue_number` row either way.
+
+**The outbox is generic, not issue-specific.** Every offline create queues in it, survives the app
+closing, and shows what is pending. It is encrypted at rest on the device, has a retention limit, and
+is wiped by a remote sign-out (brief §13, Rule 5).
+
+**The residual risk, named rather than dressed up:** a device that seals and never syncs holds the only
+copy. Mitigations are a visible pending count, a warning after a few days, and the fact that the draft
+survives so the job can be re-priced. An outbox is not a backup and this document does not pretend it
+is one.
 
 ---
 

@@ -73,6 +73,21 @@ above is the entire infrastructure cost of having a front door.
 | **gitleaks** (the pinned binary, v8.24.3, in CI only) | Scans **every commit** for committed credentials on each push and pull request | The official action was tried first and **understated its coverage**: it runs `--log-opts=-1`, the most recent commit only, while reporting a clean scan. The binary with `gitleaks git .` scans the history, is pinned so the scope cannot change underneath us, and runs `--redact` so a finding is not echoed into a public build log. Holds no data of ours. If it disappeared: any equivalent scanner, or the same binary from a mirror |
 | **`npm audit`** (built in, no new dependency) | Known vulnerabilities in what both workspace roots install | Chosen over a third-party scanner precisely because it adds nothing to install and nothing to the register. It only knows what the npm advisory database knows, which is the argument for the SBOM below rather than against the check |
 
+## 3a. Two services release 1 requires and we have not chosen (added 2026-09-25, F11)
+
+Rule 18: *"A service running in production and missing from the register is a defect, not a paperwork
+oversight."* The review of the PRD found two required by numbered requirements and absent from every row
+here. They are listed as **undecided on purpose** — naming the gap is the register's job; inventing a
+vendor to fill a table is not.
+
+| Needed for | What it must do | What choosing it costs |
+|---|---|---|
+| **Malware scanning** (PRD R1.36, Rule 5) | Scan every uploaded deposit receipt and logo before it is stored or served | A **sub-processor holding tenant financial documents**, so it needs a register row, a privacy-policy mention and a data-residency answer. A self-hosted scanner avoids the sub-processor but adds an always-on service to a free tier that sleeps |
+| **Private object storage** (PRD R1.13, R1.36, `document_render.storage_key`, Rule 10) | Hold receipts, logos and rendered PDFs privately, tenant-scoped, out of the database | Cost scales with documents rather than tenants. The residency question is the same one the privacy policy already answers for the database |
+
+**Until both are chosen, R1.36 cannot be met**, and any upload path built before then is building against
+a decision that has not been made. Both are on the owner's dependency list in `PRD.md` §9.
+
 ## 4. Software Bill of Materials
 
 Code dependencies are **not listed here by hand** — a hand-maintained dependency list is wrong

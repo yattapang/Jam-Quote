@@ -1,5 +1,37 @@
 # Independent review: PRD release 1 and the domain model (Rule 1.10)
 
+## Disposition, 2026-09-25 — what happened to each finding
+
+Rule 1.10: every finding is **closed, or accepted in writing with a reason**. An open finding blocks
+building the part it concerns, not the whole plan. The amendments are in commit `see git log`; this table
+is the record, and nothing here is closed by assertion — each names what changed.
+
+| # | Severity | Disposition |
+|---|---|---|
+| **F1** | blocker | **Closed.** Owner-approved resolution: seal / number / deliver split. `quote_issue` is sealed offline and insert-only; the number moves to an insert-only `issue_number` row allocated at sync. Domain model §6.1a and §8, PRD §4, R1.13, R1.14, R1.16a, R1.18, R1.18a-b. Logged as M13 |
+| **F2** | major | **Closed.** R1.8 now names its instrument: a scripted fence-at-the-gate walkthrough, timed first tap to total, named device, aeroplane mode, recorded per release |
+| **F3** | blocker | **Closed by scope change, and it needs the owner's yes.** A minimal priced variation moves **into R1** (W6a, R1.22a-d); the client-signable change order stays R2. Revising an accepted issue is refused in R1 |
+| **F4** | blocker | **Closed.** The invariant is restated in R1 vocabulary and given an owner: `issue_balance` locked `FOR UPDATE` inside the invoice transaction, a rebuild-and-compare job, and planted-defect tests. Domain model §6.2a, PRD R1.24, R1.24a-c, R1.25 |
+| **F5** | blocker (Rule 20) | **Half closed.** The false guard citation is corrected and the over-claim is written down; R1.40b adds a guard asserting tier lists against delivered scope. **Open:** which undelivered Pro features are marked "coming" vs removed is public copy and the owner's call. Logged as M14 |
+| **F6** | major | **Open — bundled with F5.** The site's roadmap tense is the same edit as the tier lists, and the same owner decision |
+| **F7** | major | **Open — owner question.** PRD §8a.3, with a recommendation: let Free create one recipe |
+| **F8** | major | **Open — owner question.** PRD §8a.2, with a recommendation: offline sealing on every tier, offline issuing Pro |
+| **F9** | major | **Closed.** Both §10 rows rewritten around "tenants who hit the free limit" |
+| **F10** | question | **Open — owner question.** PRD §8a.1, with a recommendation: count distinct jobs numbered |
+| **F11** | blocker (Rule 18) | **Closed.** Four dependencies added (§9 1a-1d) and `SERVICE-REGISTER.md` §3a names malware scanning and object storage as required-and-undecided |
+| **F12** | blocker | **Closed.** R1.30a-c add Rule 14's four defences, make email verification load-bearing for ADR 0022, and reconcile "bound per address" with one-business-per-address by putting the bound on the creator |
+| **F13** | major | **Closed.** R1.41 puts `price_observation` in R1 as capture-only, gated on recorded consent, with the pre-registration deadline stated |
+| **F14** | major | **Closed.** `quote_section` and `quote.client_detail_level` added to the model; the tenant-readable audit trail is recorded as a redacting read path on `audit_entry`, not a new entity |
+| **F15** | question | **Open — legal, not engineering.** PRD §8a.4 recommends asking the attorney while the terms are being approved |
+| **F16** | major | **Closed.** R1.22e requires the share page to survive the API being asleep, served statically or pre-rendered, with only acceptance touching the API |
+| **F17** | minor | **Closed.** One hash, on `document_render`, referenced by the issue and the acceptance — and R1.16a requires it to be **verified** when a PDF is re-served |
+| **F18** | minor | **Closed.** R1.23 states that it deliberately supersedes the audit's inventory item #15 |
+| **F19** | minor | **Accepted, not fixed.** The review order was inverted: the domain model was approved before the PRD that scopes it, and before Rule 1.10 existed. It cannot be undone, only recorded — and this review, run across both documents together, is the compensating control |
+
+**Six blockers: five closed, one half-closed on an owner decision.** The five still open are four owner
+questions and one public-copy choice. Nothing marked closed here is claimed as proved; the re-review is
+what tests that.
+
 **Gate:** independent review of a plan the reviewer did not write. Owner approval answers *is this
 what I want*; this answers *will it do what it says*. Findings are appended as they are found
 (Rule 1.10), never held to the end.
