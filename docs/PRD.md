@@ -149,15 +149,23 @@ demonstrated, it is not a requirement, it is a hope.
   once and reused.
 - **R1.6** Quantities may be expressed **per driving dimension** (per metre of fence, per m² of slab),
   so changing one number reprices the whole job. This is the feature the product is chosen for.
-- **R1.7** Free tier: view and use recipes. Pro: create and edit them (`TIERS.md`).
+- **R1.7** Free tier: **create one recipe** and use it; Pro: unlimited (ADR 0023). "View only" gave a new
+  free tenant nothing to view, so the wedge could not demonstrate the one feature the product is chosen
+  for. One is enough to price the same job twice and feel the value, not enough to run a business on.
 
 ### W3 · Price a job — the moment that matters
 - **R1.8** From a client and a recipe, produce a priced draft in **under 60 seconds of interaction**,
-  with no signal, on a mid-range Android phone. **Measured, or it is not a requirement (F2):** the
+  with no signal, on a mid-range Android phone. **Measured, or it is not a requirement (F2, tightened for G10):** the
   instrument is a scripted walkthrough of the fence-at-the-gate task, timed from first tap to the total
-  appearing, run on a named device in aeroplane mode, recorded per release. "Interaction" excludes time
-  the user spends thinking and includes every wait the app imposes. Without that definition the number
-  was a hope in the grammar of a requirement.
+  appearing, with **all four parameters named rather than gestured at**:
+  **the device** — a Samsung Galaxy A15 or equivalent (8-core, 4 GB), the phone this market actually
+  carries, not the fastest one to hand;
+  **the state** — signed in, catalog synced, app cold-started and the recipe never opened this session, so
+  no warm cache flatters the number;
+  **the network** — aeroplane mode;
+  **what counts** — every wait the app imposes; not time the user spends thinking or typing.
+  Run per release and recorded. Naming three of four and calling it measured is how "a hope in the grammar
+  of a requirement" survives its own fix.
 - **R1.9** Per-line GCT treatment, markup and discount, with the tenant's GCT registration respected.
 - **R1.10** Sections, so a quote reads the way a contractor talks about the job.
 - **R1.11** Two detail levels for the client: a summary, or fully itemised.
@@ -166,13 +174,26 @@ demonstrated, it is not a requirement, it is a hope.
 ### W4 · Issue — the commitment
 - **R1.13** Sealing writes an **immutable snapshot**: every line as-priced, the tax rates used, the
   currency, the terms wording, the document settings, `sealed_at`, and `catalog_synced_at` — the last
-  time those prices were refreshed, so a stale price is visible rather than deniable. No column on it is
-  ever updated. The number and the PDF hash live in their own rows (R1.14, R1.16a).
+  time those prices were refreshed. No column on it is ever updated; the number and the PDF hash live in
+  their own rows (R1.14, R1.16a).
+- **R1.13a** **`catalog_synced_at` is shown, not merely stored (G6).** The sealing screen shows how old the
+  cached prices are; past a tenant-configurable threshold (default 7 days) sealing **warns before it
+  proceeds**; and the date is printed on the internal copy so a later argument about a price has a date
+  attached. It never blocks sealing — refusing to price a job because the catalog is old is the one
+  failure this product cannot afford.
 - **R1.14** Numbers come from a per-tenant, per-document-kind series with a prefix, start and reset
   rule, allocated atomically into an insert-only `issue_number` row. **Gapless per series in R1** —
   server allocation makes that free — and a number is never reused.
 - **R1.15** A revision is a **new issue** at the next revision number; the previous one is marked
-  superseded and remains readable exactly as sent.
+  superseded and remains readable exactly as sent. **This applies to an issue that has NOT been accepted**
+  (see R1.22c): once accepted, the path is a variation, because superseding an accepted issue would orphan
+  the acceptance attached to it.
+- **R1.15a** **A non-price error on an accepted issue has a remedy (G8).** A variation answers "the scope
+  changed"; it does not answer "the wrong client", "the wrong terms" or "the wrong tax treatment". For
+  those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason, and only
+  before any invoice exists against it — which returns the issue to superseded-able. Once an invoice
+  exists, the remedy is a credit note and a fresh quote, because money has moved. Without this, a typo in
+  a client name on an accepted quote had no path at all.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from
   `document_settings` — a shared layout reading tenant data, never an uploaded template.
 - **R1.16a** The rendered PDF's hash is recorded once, on `document_render`, and the issue and any
@@ -185,18 +206,53 @@ demonstrated, it is not a requirement, it is a hope.
   sign-out. **Numbering and delivery happen at sync.** A sealed, unnumbered issue is shown as "awaiting
   number" and is never presented as sent.
 - **R1.18a** The outbox is **generic**: every offline create queues in it, not only issues.
+- **R1.18c** **Sealing claims the quote (G4).** Two devices holding the same draft can both seal it —
+  neither push conflicts, because each is an append — which would give one job two issued identities.
+  So the server enforces **one sealed issue per (quote, revision)**; the second device is **refused, told
+  a colleague sealed this job, and its snapshot is kept and offered as a revision** rather than discarded.
+  A revision cannot be created offline.
+- **R1.18d** **A sealed snapshot is never destroyed by a timer.** The outbox's retention limit may expire
+  cached reads; it may not delete a sealed document that has not reached the server. A retention limit that
+  can destroy the only copy of a financial document is data loss on a schedule (G5).
+- **R1.18e** **At sync, a seal is re-checked** against what could not be checked offline: the tenant is not
+  suspended, the user is still an active member, the client still exists, the entitlement still permits it
+  (metered at numbering — ADR 0023), and no colleague sealed that revision. Each refusal is explained in
+  terms of what happened, never as a sync error.
 - **R1.18b** A device holding unsynced seals for more than a stated number of days warns the user. An
   outbox is not a backup, and the app must not imply it is.
+- **R1.18f** **The phone is now a place tenant data lives, and the threat model says so** (`THREAT-MODEL.md`
+  §4a, G14): the local store is encrypted against the device keystore, the app locks behind the device's own
+  authentication, and **remote sign-out cannot reach an offline device** — it revokes the session, so the
+  device can no longer sync, and the store is wiped when it next connects. Stating that honestly is the
+  control; claiming a remote wipe we cannot perform would not be.
 
 ### W5 · Share and accept — no login for the client
 - **R1.19** A share link is a **credential**: high-entropy token, hashed at rest, scoped to one issue,
   expiring, revocable (ADR 0022).
-- **R1.20** The client can accept or decline. Acceptance records a typed name, timestamp, IP and user
-  agent, and its own PDF hash. One acceptance per issue, immutable.
+- **R1.20** The client can accept or decline. **Acceptance is a verified electronic signature**
+  (ADR 0024): a one-time code sent to the channel the tenant holds for that client, an explicit signing
+  act labelled as one, consent to sign electronically, and a record carrying the signer's name, the
+  timestamp, the IP, the user agent, the channel verified — and a **reference to the `document_render`
+  row whose hash is the document signed**, not a hash of its own (F17). One acceptance per issue,
+  immutable.
+- **R1.20a** **The product never states what the record proves.** The owner's position is that a typed
+  name alone is not legal in a dispute; a properly constructed e-signature can be. So the UI says what was
+  recorded and never that it is binding, and the terms do not call the tap a signature. Whether our
+  implementation clears Jamaica's bar is the owner's attorney's answer, not ours.
+- **R1.20b** Release 1 verifies by **email**, because it needs no new service — only the verified sending
+  domain already owed (§9 item 1a). SMS is a new paid sub-processor and absent from the register;
+  WhatsApp Business sending is release 3.
+- **R1.20c** **A signed copy may be uploaded against an issue** — the PDF carries a signature block, and
+  the returned paper or file is attached to the immutable issue with its own render and hash. It is the
+  fallback where a client has no email, and the artefact for a job where real money is at stake. We record
+  who uploaded it and when; **we do not certify it** — a tenant can forge one as easily as a client can,
+  and saying so is the control.
+- **R1.20d** A **paid deposit is recorded as corroboration** of acceptance, linked to the issue. A client
+  who pays 40% has behaved in a way no typed name matches, and R1.23 already builds the deposit.
 - **R1.21** Share by WhatsApp click-to-chat and by email, on every tier. Server-side WhatsApp Business
   sending is R3.
 - **R1.22** The shared page works on a cheap phone on mobile data and needs no account.
-- **R1.22e** **The share page must survive the API being asleep (F16).** It is the one client-facing
+- **R1.21a** **The share page must survive the API being asleep (F16).** It is the one client-facing
   surface, and the free instance spins down after ~15 minutes with a ~50-second first response
   (`SERVICE-REGISTER.md` §4a). A client who taps a quote link and waits a minute on a blank screen is
   the worst impression the product can make, and it lands on the tenant, not on us. So the page is served
@@ -205,6 +261,8 @@ demonstrated, it is not a requirement, it is a hope.
   Rule 10's paid-infrastructure trigger firing before launch, not after.
 
 ### W6a · Variations, minimal — added by review (F3)
+- **R1.22f** A variation may be **recorded offline** but its effect on the ceiling is computed
+  **server-side, inside the lock** (G13). A device never decides how much may be billed.
 - **R1.22a** A **priced variation** may be recorded against an accepted issue: a description, lines
   priced the same way a quote is, and a total that may be positive or negative.
 - **R1.22b** Recording one **re-derives the accepted total** for that issue, which is what R1.24
@@ -224,15 +282,30 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.24** The sum of issued invoices against an accepted issue may never exceed its **accepted total
   plus recorded variations** (R1.22b). **This is the most important arithmetic invariant in the
   product.**
-- **R1.24a** It is **enforced by a lock, not by prose** (domain model §6.2a): issuing an invoice takes
-  `SELECT … FOR UPDATE` on that issue's `issue_balance` row, computes the new total, refuses if it would
+- **R1.24d** **"Recorded", not "accepted", and the weakness is stated rather than hidden (G1).** In
+  release 1 a variation has no client signature, so recording one **does** let the contractor raise their
+  own invoiceable ceiling. R1.24 therefore protects against *mistake and drift*, not against a contractor
+  who intends to over-bill — and it is the client's own acceptance, plus the audit trail naming who
+  recorded the variation and when, that answers the second. Calling it "accepted variations" while
+  building no acceptance would have been the worse outcome: an invariant that reads stronger than it is.
+  When release 2 makes variations signable, this requirement tightens to "accepted" and the ceiling
+  becomes what it claims to be.
+- **R1.24a** It is **enforced by a lock, not by prose** (domain model §6.2a). The `issue_balance` row is
+  created **in the same transaction as the acceptance, unconditionally** — because a `SELECT … FOR UPDATE`
+  that matches no row takes **no lock at all**, so a missing row would have let the very first pair of
+  concurrent invoices through (G2). Issuing an invoice then takes `SELECT … FOR UPDATE` on that row, computes the new total, refuses if it would
   exceed the ceiling, and inserts the invoice in the same transaction. Per-row version checks do nothing
   here — two invoices each individually under the total are together over it. Review found this
   invariant stated twice in prose with nowhere to live (F4), which is Rule 1.10's "invariant with no
   owner".
-- **R1.24b** `issue_balance` is a **derived cache with a lock**, rebuildable from the invoices, and a
-  reconciliation job that rebuilds and compares it is part of R1. A maintained total nobody re-derives
-  is how the old application's stored status drifted.
+- **R1.24b** `issue_balance` is a **derived cache with a lock**, and every writer re-sums from the
+  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total` is written
+  once, by the acceptance transaction, from the issue's own frozen lines and never again — safe only
+  because the issue is immutable (G12).
+- **R1.24e** The **reconciliation job runs nightly per tenant**, rebuilds all three derived columns,
+  and on a mismatch writes an audit entry, alerts us and **refuses further invoicing against that issue**
+  until a person has looked. It does not self-heal: self-healing erases the evidence of the defect that
+  caused the drift (G12).
 - **R1.24c** Its tests are **planted defects**, because this is money arithmetic and judgement-class
   under Rule 16.5: two concurrent invoices, a replayed offline seal, and a variation landing between the
   read and the write.
@@ -259,14 +332,38 @@ demonstrated, it is not a requirement, it is a hope.
   owns it and can lock out its real holder — and because R1.30a's duplicate response deliberately does
   not enumerate, the victim cannot even discover why. So an unverified registration reserves nothing:
   the address is claimed only when verified, and unverified attempts expire.
-- **R1.30c** Rule 14's *bound on tenants per address* and ADR 0022's *one person, several businesses,
-  one address each* are reconciled as: **one tenant per verified address, with a bound on how many
-  addresses may be created from one IP or one device in a period.** The bound belongs on the creator,
-  not on the person.
+- **R1.30c** Rule 14's *bound on tenants per address* and ADR 0022's *one person, several businesses, one
+  address each* are reconciled as **one tenant per verified address**. That part is exact and is enforced
+  by the unique index that already exists.
+- **R1.30d** **The rate bound is not an IP bound, because IP does not work here (G11).** Jamaican mobile
+  networks put tens of thousands of subscribers behind carrier-grade NAT, so an address bound either
+  blocks a whole network or permits everything. The bound is therefore:
+  **(a)** a rate limit per IP on *attempts* — cheap, effective against a crude script, and deliberately
+  loose enough not to lock out a whole carrier;
+  **(b)** the **email verification requirement** (R1.30a) doing the real work: an unverified registration
+  reserves nothing and costs us nothing, so volume without deliverable addresses buys an attacker nothing;
+  **(c)** a **cost ceiling rather than an identity ceiling** — the free tier's three numbered jobs a month
+  (ADR 0023) already bounds what an account can consume, so abuse means creating many verified mailboxes,
+  which is work.
+  **No device fingerprinting.** It was in the previous wording; it is a tracking technology with a privacy
+  and threat-model cost nobody had weighed, for a defence (b) and (c) already provide.
+- **R1.30e** **Verification races and expiry are defined, because uniqueness depends on them (G9):** an
+  unverified registration holds a *pending* claim on the address, not the address itself; pending claims
+  expire in **72 hours**; if two people register the same address, the first to verify takes it and the
+  other's pending claim is dropped with the same non-enumerating message; and the address becomes the
+  tenant's only on verification. This is the detail ADR 0022's global uniqueness rests on — without it the
+  first person to *type* an address owns it.
 - **R1.31** Plans and entitlements are **data**, resolved by one resolver, enforced on the server. The
   client may ask; it may never decide.
-- **R1.32** Free tier limit: 3 new jobs quoted per calendar month, enforced server-side with a clear,
-  non-punitive message.
+- **R1.32** Free tier limit: **3 distinct jobs *numbered* per calendar month** (ADR 0023), enforced
+  server-side. Not counted on sealing — sealing happens offline and metering it would mean trusting a
+  client-side count or refusing work already done at a client's gate. Not counted on sending. **Revisions
+  and declines are free**: charging for a revision meters care, and billing for a declined quote teaches
+  contractors to quote less.
+- **R1.32a** **The cross-month case has a test and a message.** A contractor who seals four jobs offline on
+  a Sunday gets three numbered and one refused when they sync, in the month of *syncing*. The refused
+  snapshot is **kept, never destroyed**, the message explains what happened rather than reporting a sync
+  error, and upgrading releases it.
 - **R1.33** Manual payment: the tenant uploads a deposit receipt with amount, date, bank and reference.
   Status *submitted*.
 - **R1.34** **Separation of duties is structural** (Rule 13): submitter, approver and activator are
@@ -288,20 +385,23 @@ demonstrated, it is not a requirement, it is a hope.
 
 ## 6. Non-functional requirements
 
-These are requirements with tests, not aspirations.
+These are requirements with tests, not aspirations — **and review found that claim unearned for five of
+them (G15)**, because a requirement whose test nobody can name is an aspiration with a table row. The
+instrument is now named beside each, and where there is none the row says so. That is the honest version:
+a stated gap can be closed, an implied test cannot.
 
 | # | Requirement | Why it is here |
 |---|---|---|
-| **N1** | Strict tenant isolation: `tenant_id` + row-level security + application scoping, with automated cross-tenant leak tests in CI | Owner requirement 1; already built and proved by planting |
+| **N1** | Strict tenant isolation: `tenant_id` + row-level security + application scoping, with automated cross-tenant leak tests in CI | Owner requirement 1; already built and **proved by planting** — the policy-parity guard reads `pg_get_expr` rather than counting policies, and a behavioural test executes a leak attempt. The strongest instrument in the project, and the model for the rest of this table |
 | **N2** | Money: integer minor units, 64-bit, ceiling ~999,999,999.99 JMD, no float anywhere | ADR 0011. The old app capped at $21,474,836.47 |
-| **N3** | Quote and invoice documents are immutable once issued | Brief §10. Enforced by a table with no UPDATE path, not by careful queries |
-| **N4** | Works on a mid-range Android phone, on mobile data, legible in sunlight, one-handed | The primary user is standing up outdoors |
-| **N5** | Priced draft producible with **no network**; the app states its sync status plainly | §4's resolution of the "on the spot" promise |
+| **N3** | Quote and invoice documents are immutable once issued | Brief §10. `quote_issue`, `issue_number`, `acceptance`, `variation` and `document_render` have **no UPDATE path**. `issue_balance` **is** updated and is deliberately not a document — it is a derived cache behind a lock (domain model §6.2a), and saying "no table is ever updated" would have been false (G15) |
+| **N4** | Works on a mid-range Android phone, on mobile data, legible in sunlight, one-handed | The primary user is standing up outdoors. **Instrument:** the R1.8 walkthrough on the named device covers speed and one-handedness; contrast ratios are asserted by an automated check on the design tokens. **Sunlight legibility has no automated test** — it is judged by taking the phone outside, and that is a person's job, recorded per release |
+| **N5** | Priced draft producible with **no network**; the app states its sync status plainly | §4's resolution of the "on the spot" promise. **Instrument:** the R1.8 walkthrough runs in aeroplane mode, so N5 fails if R1.8 fails; the outbox's pending count is asserted by a test that seals offline and inspects it before any sync |
 | **N6** | Staff MFA mandatory; tenant MFA available | Rule 5.1, ADR 0021 |
 | **N7** | No personal data or secrets in logs; uploads private and scanned | Rule 5 |
 | **N8** | No tenant or client personal data, and no secrets, ever sent to the Claude API — redacted or synthetic only | Rule 15 |
-| **N9** | The public site keeps working when the API is asleep | Rule 20; the free tier spins down and the front door must not look broken |
-| **N10** | Free-tier infrastructure now, with a written trigger for moving to paid | Rule 10. **The API currently sleeps after ~15 min and the first visit waits ~50s** — acceptable for a prototype, not at launch |
+| **N9** | The public site keeps working when the API is asleep | Rule 20; the free tier spins down and the front door must not look broken. **Instrument:** the existing site guards prove no external host is loaded and the site builds standalone; R1.21a extends this to the share page, which is the surface that actually matters to a client |
+| **N10** | Free-tier infrastructure now, with a written trigger for moving to paid | Rule 10. **The API sleeps after ~15 min and the first visit waits ~50s** — acceptable for a prototype, not at launch. **Instrument:** the `API liveness` workflow records the cold-start figure on every run, so the number in this row is measured rather than remembered. **The trigger itself is still an owed ADR**, and R1.21a is the strongest argument for it firing before launch |
 
 ## 7. Tiers in release 1
 
@@ -312,10 +412,10 @@ R1 ships **Free and Pro only**. Business is R3, and until then the site must not
 | Jobs quoted | 3 per month | Unlimited |
 | Branded PDF, share, client accept | ✓ | ✓ |
 | Clients, catalog, labour, equipment | ✓ | ✓ |
-| Recipes | use only | create and edit |
+| Recipes | **create one**, then use it (ADR 0023) | unlimited |
 | Invoices, payments, reminders, WiPay | — | ✓ |
-| Offline pricing and drafting | ✓ | ✓ |
-| Offline **issuing** | — (R2) | — (R2) |
+| Offline **sealing** (the core promise — every tier, ADR 0023) | ✓ | ✓ |
+| Offline **issuing** (numbered at the gate) | — (R2) | — (R2, the Pro line when it lands) |
 | Users | 1 | 1 |
 
 **Open, and blocking the paid tier:** the **prices** are not set. The site shows no number by deliberate
@@ -340,6 +440,14 @@ Two things follow, and the first needs the owner:
   ships with a planted defect proving it fires (Rule 21.2).
 
 ### The entity with a deadline — named because leaving it out was the finding (F13)
+- **R1.42** **§10's measures are instrumented in release 1, or they are not measures.** Six signals need
+  data that does not collect itself: time-to-first-issued-quote, the offline pricing walkthrough (R1.8),
+  jobs numbered per tenant per month, tenants who hit the free limit, accepted issues that become an
+  invoice, and manual payments approved by a second person. §10 asserted "instrumentation that is itself
+  part of R1" and no requirement existed (G10). Each is a query over rows release 1 already writes, except
+  the walkthrough, which is a scripted test — so this is a reporting surface, not new tracking, and it
+  carries **no personal data** into any dashboard we build.
+
 - **R1.41** `price_observation` — what a tenant actually paid, captured when a material cost changes — is
   **built in R1 and written to only with the tenant's recorded consent.** The aggregate price index is the
   most defensible asset in the business and **consent cannot be retro-fitted**, so the capture path and the
@@ -358,27 +466,31 @@ beyond Jamaica · a client portal (ADR 0022) · any second product.
 
 ## 8a. Open questions the owner must answer — not decided here
 
-Review raised these as questions rather than defects (F7, F8, F10, F15). Each is a fact about the world
-or a commercial choice, so guessing would repeat the mistake ADR 0022 corrected.
+**All four were answered by the owner on 2026-09-25 and are recorded in ADR 0023 and ADR 0024.** They are
+kept here with their answers rather than deleted, because the reasoning is what a later reader needs — and
+because two of them overturned something this document had asserted, which is the pattern Rule 1.10 exists
+to catch.
 
-1. **What does "a job quoted" count?** (F10) R1.32 says three a month. Does the counter increment on
-   sealing, on numbering, or on a client being sent the document? Does a revision count again? Does a
-   declined quote? Each reading gives a different product: counting revisions punishes care, and counting
-   only sends lets a tenant seal unlimited work and deliver it by WhatsApp screenshot. **Recommendation:**
-   count **distinct jobs numbered** in the month, so revisions and declines are free and the meter tracks
-   real work.
-2. **Is offline use a Free feature or a Pro one?** (F8) `TIERS.md` puts "Offline mobile use" on Pro; §7 of
-   this document gives offline pricing to Free; the site lists offline under Pro. Three documents, three
-   answers. **Recommendation:** offline **sealing** on every tier, because it is the core promise and
-   gating it makes the free tier fail at the gate; offline *issuing* (R2) can be a Pro line.
-3. **Can a Free tenant do anything useful with recipes?** (F7) Free gets "view only", but in R1 a new Free
-   tenant has no recipes to view — the wedge cannot demonstrate the differentiator. **Recommendation:**
-   Free may create **one** recipe. It is the feature the product is chosen for and a demonstration with
-   nothing in it demonstrates nothing.
-4. **Is a typed name on a phone enough?** (F15) R1.20 records typed name, timestamp, IP and user agent.
-   Whether that is worth anything in a Jamaican dispute is a legal question, not an engineering one, and
-   the PRD should not imply it is settled. **Recommendation:** ask the owner's attorney while the terms
-   are being approved anyway, and record the answer in the ADR rather than in the UI's fine print.
+1. **What does "a job quoted" count?** (F10) R1.32 said three a month without saying what it counts.
+   Counting revisions punishes care; counting only sends lets a tenant seal unlimited work and deliver it
+   by screenshot. **ANSWERED (ADR 0023):** count **distinct jobs numbered** in the month; revisions and
+   declines are free. R1.32 and R1.32a carry it, including the cross-month case a Sunday of offline seals
+   produces.
+2. **Is offline use a Free feature or a Pro one?** (F8) `TIERS.md` said Pro, §7 gave it to Free, the site
+   said Pro — three documents, three answers. **ANSWERED (ADR 0023):** offline **sealing** on every tier,
+   because it is the core promise and a free tier that fails at the gate does not spread by word of mouth,
+   which is the only distribution this product has. Offline *issuing* (R2) carries the Pro line. §7 is
+   amended; `TIERS.md` and the site copy are owed.
+3. **Can a Free tenant do anything useful with recipes?** (F7) "View only" gave a new free tenant nothing
+   to view, so the wedge could not demonstrate the one feature the product is chosen for.
+   **ANSWERED (ADR 0023):** Free may create **one** recipe — enough to price the same job twice and feel
+   the value, not enough to run a business on. R1.7 and §7 amended.
+4. **Is a typed name on a phone enough?** (F15) **ANSWERED, and it changed the design (ADR 0024).** The
+   owner ruled that a typed name is **not** legal in a dispute, then corrected that **a properly
+   constructed e-signature can be**. Those are different claims, and the second moves work *into* release 1
+   rather than parking it: a one-time-code-verified signature over a hashed document (R1.20-R1.20d), with
+   signed paper as the fallback and a paid deposit as corroboration. Whether our implementation clears
+   Jamaica's bar remains the attorney's answer, and nothing in the product asserts that it does.
 
 ## 9. Dependencies on the owner
 

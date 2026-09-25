@@ -1,4 +1,39 @@
-# Second-pass review: the amended PRD and domain model (Rule 1.10, Rule 9, Rule 21)
+# Second-pass review: the amended PRD and domain model (Rule 1.10, Rule 24.6)
+
+## Disposition, 2026-09-25
+
+Rule 24.6: a row may not claim **Closed** without citing, by file, every document the finding's own
+`Where:` line named. `tools/check_dispositions.py` enforces it in CI. Nothing here is closed by
+assertion — and closing a blocker earns a **third review**, not a tick.
+
+| # | Sev | Disposition |
+|---|---|---|
+| **G1** | blocker | **Closed.** `domain-model.md` `variation` row no longer demands its own acceptance and states "release 1 records it; release 2 makes it signable"; `PRD.md` R1.24d states plainly that "recorded" lets a contractor raise their own ceiling, so the invariant protects against mistake and drift, not against intent — rather than reading stronger than it is |
+| **G2** | blocker | **Closed.** `domain-model.md` §6.2a and `PRD.md` R1.24a: the `issue_balance` row is created **in the acceptance transaction, unconditionally**, because a `FOR UPDATE` on zero rows takes no lock; the writer set is closed and named; every writer re-sums from the rows inside the lock rather than trusting the cache |
+| **G3** | blocker | **Closed.** `domain-model.md` §4 rewritten — "allocate at sync" is the release-1 choice and the old "Quote #pending" objection is named as false reasoning from a conflation; `PRD.md` §4 and R1.14 already carried the split |
+| **G4** | blocker | **Closed.** `domain-model.md` §8 and §6.3, plus `PRD.md` R1.18c: sealing **claims the quote**, one sealed issue per (quote, revision) by unique index, the second device refused rather than merged and its snapshot kept |
+| **G5** | major | **Closed.** `domain-model.md` §8 adds the "sealed, awaiting number" state machine node, the blocked-not-lost rule, the prohibition on retention deleting an unsynced seal, and the full re-check list at sync; `PRD.md` R1.32a covers the cross-month case |
+| **G6** | major | **Closed.** `domain-model.md` §6.1a and `PRD.md` R1.13a give `catalog_synced_at` a reader: staleness shown, a default 7-day warn-before-proceed, printed on the internal copy, never blocking a seal |
+| **G7** | major | **Closed.** `domain-model.md` `acceptance` row and `PRD.md` R1.20 both now reference the `document_render` hash instead of carrying their own |
+| **G8** | major | **Closed.** `PRD.md` R1.15 is bounded to un-accepted issues and R1.15a adds withdrawal before any invoice exists; `domain-model.md` §6.3 adds both the newly impossible transition and the newly possible one |
+| **G9** | major | **Closed.** `PRD.md` R1.30e defines the pending claim, the 72-hour expiry and the both-verify race; **`RULES.md` Rule 14 is amended** to say "one tenant per verified address" instead of leaving the PRD to interpret it, which is what Rule 23 requires; `domain-model.md` already stated global uniqueness |
+| **G10** | major | **Closed.** `PRD.md` R1.8 names all four parameters (device, cold state, network, what counts) and R1.42 makes §10's instrumentation a requirement |
+| **G11** | major | **Closed.** `PRD.md` R1.30d replaces the bound with a loose attempt limit, verification doing the real work and a cost ceiling; **`RULES.md` Rule 14 amended** to remove the bound it had asked for, with CGNAT as the stated reason. **Device fingerprinting removed** |
+| **G12** | major | **Closed.** `domain-model.md` §6.2a with `PRD.md` R1.24b and R1.24e: `accepted_total` has one named producer and is safe only because the issue is immutable; the reconciliation job is nightly, audits, alerts, refuses further invoicing, and does not self-heal |
+| **G13** | major | **Closed.** `domain-model.md` §8 adds sync rows for `variation` and `issue_balance` (server-only), and `PRD.md` R1.22f states that a device never decides how much may be billed |
+| **G14** | major | **Closed.** `THREAT-MODEL.md` §4a covers the phone as a trust boundary, the share page's revocation problem, the forgeable signed copy and the code channel; **`domain-model.md` §8 no longer claims a remote sign-out wipes the outbox** — it cannot reach an offline device, which the checker caught as a false control still standing; `PRD.md` R1.18f carries it into the requirements |
+| **G15** | minor | **Closed.** `PRD.md` §6: N3 is precise about `issue_balance` being updated and deliberately not a document; N1/N4/N5/N9/N10 each name an instrument, and where none exists (sunlight legibility) the row says a person does it |
+| **G16** | minor | **Closed.** `PRD.md` R1.22e renumbered to R1.21a, in the workflow it belongs to |
+| **G17** | major | **Closed.** `PRD.md` R1.20-R1.20d carry ADR 0024, including the e-signature correction; `TIERS.md` and `site.ts` amended for ADR 0023 and F5/F6 |
+
+**Also closed from the first review, by this pass:** F1 (G3), F2 (G10), F3 (G1, G7), F4 (G2, G12, G13),
+F12 (G9, G11), F17 (G7) — the six that had been reopened. **F5 and F6 are now closed too**, by the owner's
+decision to mark undelivered features with the release they land in, and `site-guards.test.ts` asserts it
+with two planted failures proving it fires.
+
+**What is NOT claimed:** that these amendments introduced nothing. Four of five blockers in the last pass
+were created by the previous amendments, and there is no reason to assume this pass is different. That is
+what the third review is for.
 
 **What this is.** The first review (`PRD-REVIEW.md`) produced 19 findings. The author amended both
 documents in commit `8c2faae` and the disposition table claims five of six blockers closed. This pass

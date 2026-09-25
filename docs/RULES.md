@@ -357,10 +357,26 @@ entitlement change; only the card path is automatic.
 
 Because registration is an **unauthenticated endpoint that creates rows**, it ships with the
 defences that make that safe: rate limiting per address and per IP, email verification before
-the account can cost us money, a bound on tenants per address, and a duplicate registration that
-**does not reveal the address is taken** — it answers exactly as a new one and emails the
+the account can cost us money, **one tenant per verified address**, and a duplicate registration
+that **does not reveal the address is taken** — it answers exactly as a new one and emails the
 existing owner instead. Telling whoever typed it is an enumeration oracle and leaks who our
 customers are.
+
+**Amended 2026-09-25 (review findings G9 and G11, through Rule 23).** This rule said "a bound on
+tenants per address", which the PRD then had to interpret — and interpreting a rule in a downstream
+document is how a rule changes without going through Rule 23. Two corrections:
+
+- **"One tenant per verified address"** is the exact form, and it is what enforces ADR 0022's
+  decision that one person may hold several businesses with a different address each. *Verified* is
+  load-bearing: without it the first person to **type** an address owns it and can lock out its real
+  holder — and the non-enumerating duplicate response above means the victim cannot discover why.
+- **There is no bound per IP or device.** Jamaican mobile networks put tens of thousands of
+  subscribers behind carrier-grade NAT, so an address bound either blocks a whole carrier or permits
+  everything. What replaces it: a deliberately loose per-IP limit on *attempts*; email verification
+  doing the real work, since an unverified registration reserves nothing and costs nothing; and a
+  **cost ceiling rather than an identity ceiling**, because the free tier already bounds what an
+  account can consume. **No device fingerprinting** — a tracking technology with a privacy cost, for
+  a defence the other three already provide.
 
 ## 15. Claude-assisted maintenance
 

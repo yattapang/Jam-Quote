@@ -135,7 +135,11 @@ export const site = {
       },
       {
         title: "Your client accepts on their phone",
-        body: "Send a link by WhatsApp or email. Your client sees a branded quote and accepts or declines. No app to install, no account to create, no PDF lost in a crowded inbox — and you have their answer in writing.",
+        // "you have their answer in writing" was here and had to go (ADR 0024). A contractor reads it as
+      // "I am covered", and the owner's position is that a typed name alone is not legal in a dispute.
+      // What release 1 builds is a code-verified signature, so the copy can describe the mechanism
+      // without claiming what it proves — that is the attorney's answer, not ours.
+      body: "Send a link by WhatsApp or email. Your client sees a branded quote, confirms with a code sent to them, and accepts or declines. No app to install and no account to create.",
       },
       {
         title: "Invoices and what you are owed",
@@ -166,11 +170,13 @@ export const site = {
         priceLabel: "Free",
         theLine: "Enough to win work with, genuinely — not a crippled demo.",
         includes: [
-          "3 new jobs quoted a month",
+          "3 jobs numbered a month — revisions and declines are free",
           "Your own materials, labour rates and equipment",
           "Branded PDF quotes",
           "Share by WhatsApp or email, client accepts online",
           "Client list",
+          "One reusable job recipe",
+          "Works with no signal — price and capture a job offline",
           "1 user",
         ],
       },
@@ -179,23 +185,34 @@ export const site = {
         who: "A working contractor or a one-crew outfit",
         priceLabel: null,
         theLine: "Quoting wins the work. Pro is where you get paid for it.",
+        // WHAT IS MARKED AND WHY (Rule 20, review finding F5). Four of these were listed as though
+        // they shipped: retention tracking, project costing, accountant exports, and offline use —
+        // and release 1 contains none of them in the form stated. The owner chose to mark rather than
+        // remove: a labelled roadmap is not a claim, and removing them makes the product look thinner
+        // than it is. `honestClaims` in site-guards.test.ts asserts every unmarked line is delivered.
         includes: [
           "Unlimited quotes",
-          "Reusable job recipes",
+          "Unlimited reusable job recipes",
           "Invoices and payment recording",
+          "Staged deposit and progress invoicing",
           "Payment reminders and an overdue list",
           "Card payment links",
-          "Retention tracking",
-          "Project costing and job profit",
-          "Accountant exports",
-          "Offline use on your phone",
+          "Works with no signal — price and capture a job offline",
+          "A number at the gate, fully offline (coming in release 2)",
+          "Change orders as their own signed documents (coming in release 2)",
+          "Retention tracking (coming in release 2)",
+          "Project costing and job profit (coming in release 2)",
+          "Accountant exports (coming in release 2)",
         ],
       },
       {
         name: "Business",
         who: "A firm with an office and several crews",
         priceLabel: null,
-        theLine: "For when more than one person quotes, and someone has to approve it.",
+        // EVERY line here is release 3, so the tier is marked once at the top rather than eleven
+        // times in a list nobody would finish reading (F5). A prospect must not be able to try to
+        // buy something that does not exist.
+        theLine: "For when more than one person quotes, and someone has to approve it. Coming in release 3 — none of this is built yet.",
         includes: [
           "Up to 10 users, then per seat",
           "Roles and approvals — who may send or discount",

@@ -34,19 +34,20 @@ country. What each tier *includes* is the design.
 | | **Free** | **Pro** | **Business** |
 |---|---|---|---|
 | Who it is for | A contractor trying the product | A working solo contractor or a one-crew outfit | A firm with a team, an office and several crews |
-| Quotes | 3 new jobs quoted a month | Unlimited | Unlimited |
+| Quotes | 3 jobs **numbered** a month; revisions and declines free | Unlimited | Unlimited |
 | Branded PDF quote | ✓ | ✓ | ✓ |
 | Share by WhatsApp or email link | ✓ | ✓ | ✓ |
 | Client list | ✓ | ✓ | ✓ |
 | Catalog: materials, labour, equipment | ✓ | ✓ | ✓ |
-| Job recipes (price a job once, reuse it) | view only | ✓ | ✓ |
+| Job recipes (price a job once, reuse it) | **create one** | unlimited | unlimited |
 | Invoices and payment recording | — | ✓ | ✓ |
 | Payment reminders and overdue digest | — | ✓ | ✓ |
 | Card payment links (WiPay) | — | ✓ | ✓ |
 | Project costing and job profit | — | ✓ | ✓ |
 | Retention tracking | — | ✓ | ✓ |
 | Accountant exports (CSV) | — | ✓ | ✓ |
-| Offline mobile use | — | ✓ | ✓ |
+| Offline **sealing** — price and capture a job with no signal | ✓ | ✓ | ✓ |
+| Offline **issuing** — a number at the gate (release 2) | — | ✓ | ✓ |
 | Users on the account | 1 | 1 | up to 10, then per seat |
 | Roles and approvals (who may send or discount) | — | — | ✓ |
 | Multi-crew assignment and crew cost rates | — | — | ✓ |
@@ -61,6 +62,15 @@ Notes on the boundaries, since they are the commercial decisions:
 
 - **Invoicing is the Pro line.** Quoting wins the customer; getting paid is what they will
   pay for. Free stays genuinely useful so the product spreads by word of mouth.
+- **Offline sealing is on every tier, and that is deliberate (ADR 0023).** This table used to put
+  "offline mobile use" on Pro. Sealing a job with no signal *is* the product's promise — "price the job
+  while you are standing there" — and a free tier that fails at a gate does not spread by word of mouth,
+  which is the only distribution this product has. What Pro buys is offline **issuing**: a real number at
+  the gate, which needs device number leases and arrives in release 2.
+- **Free creates one recipe (ADR 0023).** "View only" gave a new free tenant nothing to view, so the
+  wedge could not demonstrate the one feature the product is chosen for. One is enough to price the same
+  job twice and feel the value; the second is the most honest upsell in the ladder, because the
+  contractor discovers the need themselves.
 - **Business is about more than one person:** roles, approvals, crews, consolidated
   reporting. That is what a firm with an office actually needs, and it is the natural
   per-seat story.

@@ -141,6 +141,26 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 | A provider reads tenant data | Contractual, not technical | **ACCEPTED** — recorded in the register; field-level encryption is not proportionate at this stage |
 | Tenant data sent to the Claude API | Redacted or synthetic only (Rule 15) | **PROCESS** — a discipline, not yet a technical control |
 
+## 4a. The contractor's phone is now a place tenant data lives (added 2026-09-25, G14)
+
+Review found **one** device line in this whole model, about staff laptops, while the release-1 amendments
+put a tenant's catalog, client book, labour rates and **sealed financial documents** on a contractor's
+phone, held until it can sync. That is a new trust boundary and it was undefended here.
+
+| Threat | What is actually true today | Control |
+|---|---|---|
+| **A lost or stolen phone** holds the catalog, the client book and sealed issues | The outbox is specified as encrypted at rest (PRD R1.18) and nothing verifies that claim yet | Local encryption keyed to the device's own keystore, a session that expires, and the app locking behind the device's own authentication. **An unlocked phone is an authenticated user and no app-level control changes that** |
+| **Remote sign-out cannot reach an offline device** — and that device may hold the only copy of a sealed document | Stated as a control in brief §13; it is a *server* control and the offline device is precisely the case it cannot reach | Honest statement instead of a false control: sign-out revokes the **session**, so the device can no longer sync or fetch, and the local store is wiped **when it next connects**. Until then the data is on the phone. The mitigation that actually works is expiry — a local store with a maximum age — and **it must never delete a sealed document that has not reached the server** (domain model §8) |
+| **A sealed document is the only copy** | True by construction while it waits | Visible pending count, a warning after a few days (R1.18b), and the draft survives so the job can be re-priced. **An outbox is not a backup and the product must not imply it is** |
+| **The pre-rendered share page** (R1.21a) is served without the API answering | Unexamined until now | The link is a **credential**: high-entropy, hashed at rest, scoped to one issue, expiring, revocable. Pre-rendering must not make a document readable by a URL that is guessable, cached by an intermediary, or still live after revocation — so revocation has to invalidate the cached copy, which is a requirement on whatever serves it, not a detail |
+| **An uploaded "signed" copy is forgeable** by either side (R1.20c) | New in release 1 | We record who uploaded it and when, and **we do not certify it**. A tenant can forge one as easily as a client can, and saying so plainly is the control — a product that vouched for it would be making a claim it cannot support |
+| **The verification code channel** (R1.20b) is the attribution for an e-signature | New in release 1 | A code is single-use, short-lived, rate-limited per issue and per recipient, and the channel it went to is recorded on the acceptance. Guessing a six-digit code with no rate limit is the whole attack |
+
+**What this section does not cover:** anything about the device's own operating system, a rooted or
+malware-bearing phone, or a tenant's staff photographing a client list. Those are real and are outside what
+we can control; the honest position is that a tenant's data on a tenant's phone is partly the tenant's
+responsibility, and the terms should say so rather than implying we can protect it there.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

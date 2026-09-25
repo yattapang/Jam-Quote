@@ -229,6 +229,82 @@ describe("nothing untrue", () => {
     }
   });
 
+  it("sells nothing the current release does not deliver", () => {
+    // WHY THIS EXISTS (PRD R1.40b, review finding F5). The site's Pro tier sold retention tracking,
+    // project costing, accountant exports and offline use while the PRD's own §8 excluded three of
+    // them from release 1 — and the PRD pointed at a guard called `honest-claims.test.ts` as the
+    // reason that was safe. No such file has ever existed. So the claim was protected by a citation
+    // rather than by a test, which is the failure Rule 21.1 is about.
+    //
+    // The rule: every tier line is either delivered by the current release, or marked with the
+    // release it lands in. A tier whose `theLine` marks the whole tier is exempt, because marking
+    // eleven lines individually produces a list nobody reads.
+    //
+    // WHAT THIS DOES NOT PROVE: that a line marked "coming in release 2" will in fact arrive in
+    // release 2, and not that a delivered line is delivered WELL. It proves the page does not claim
+    // something the plan says is absent — no more.
+    const RELEASE = 1;
+
+    // What release 1 delivers, in the site's own words. Adding a line to the site without adding it
+    // here fails this test, which is the point: scope changes must pass through a deliberate edit.
+    const delivered = new Set([
+      "3 jobs numbered a month — revisions and declines are free",
+      "Your own materials, labour rates and equipment",
+      "Branded PDF quotes",
+      "Share by WhatsApp or email, client accepts online",
+      "Client list",
+      "One reusable job recipe",
+      "Works with no signal — price and capture a job offline",
+      "1 user",
+      "Unlimited quotes",
+      "Unlimited reusable job recipes",
+      "Invoices and payment recording",
+      "Staged deposit and progress invoicing",
+      "Payment reminders and an overdue list",
+      "Card payment links",
+    ]);
+
+    // Two markers, because they read differently to a person. A LINE carries a parenthesised
+    // "(coming in release N)"; a WHOLE TIER says it in its own sentence, where parentheses would be
+    // odd. The first draft of this guard used the line pattern for both and flagged all nine Business
+    // lines — it was right that they were unmarked and wrong about where to look, which is a better
+    // failure than the reverse.
+    const markedLine = /\(coming in release (\d)\)/;
+    const markedTier = /coming in release (\d)/i;
+    const unmarked: string[] = [];
+
+    for (const tier of site.pricing.tiers) {
+      // A tier marked wholesale — every line in it is future work.
+      const whole = markedTier.exec(tier.theLine);
+      if (whole) {
+        expect(
+          Number(whole[1]),
+          `the ${tier.name} tier is marked as coming in a release that is not in the future`,
+        ).toBeGreaterThan(RELEASE);
+        continue;
+      }
+      for (const line of tier.includes) {
+        const match = markedLine.exec(line);
+        if (match) {
+          // A "coming" marker must name a LATER release. "Coming in release 1" while we are
+          // shipping release 1 is a claim wearing a disclaimer.
+          expect(
+            Number(match[1]),
+            `"${line}" is marked as coming in a release that is not in the future`,
+          ).toBeGreaterThan(RELEASE);
+          continue;
+        }
+        if (!delivered.has(line)) unmarked.push(`${tier.name}: ${line}`);
+      }
+    }
+
+    expect(
+      unmarked,
+      "these tier lines are neither in the delivered set for this release nor marked with the " +
+        "release they land in, so the page claims something the PRD says is absent (Rule 20)",
+    ).toEqual([]);
+  });
+
   it("shows a price only where a price has been decided", () => {
     // A placeholder number gets screenshotted and quoted back (Rule 20).
     const withPrices = site.pricing.tiers.filter((t) => t.priceLabel !== null);
