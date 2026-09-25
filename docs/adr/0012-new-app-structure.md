@@ -162,7 +162,7 @@ mobile client would have no place in that scheme.
   period the same rules exist in both trees. That duplication is bounded by `original-app/`
   being frozen, and it ends when `original-app/` is deleted.
 - Renaming `client` to `customer` and `…Cents` to `…MinorUnits` means the port of core is not a
-  copy — it is a reviewed adaptation, which costs time and is the point of Rule 1.2.
+  copy — it is a reviewed adaptation, which costs time and is the point of Rule 1.3.
 - `infra/docker-compose.yml` exists so row-level security runs in development. RLS that is only
   enabled in production is a rule nobody tests.
 

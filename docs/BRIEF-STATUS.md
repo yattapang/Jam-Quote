@@ -24,9 +24,30 @@ the work was picked up on an already-finished feature.
    The API sleeping is now recorded as an open decision in `SERVICE-REGISTER.md` §4a, with the two
    real fixes and their costs. *Delegation (Rule 16.5): in-session — a handful of read-only `gh`
    calls and one workflow file, below the threshold where briefing a cold agent pays.*
-   *Coverage (proposed Rule 21.3): `gitleaks` "430 commits scanned, no leaks"; liveness script
+   *Coverage (Rule 21.3): `gitleaks` "430 commits scanned, no leaks"; liveness script
    "HTTP 200 / exit 0" on the control and "exit 1" on both plants.*
-2. **Next.js patch upgrade, within 14.2.x.** `next@14.2.18` carries the criticals found by the new
+2. ~~**Next.js upgrade.**~~ ✅ **done 2026-09-24 — as a MAJOR, because my "patch" advice was wrong.**
+   The advisory range is `0.9.9 - 16.3.0-preview.10` and the only fix is `next@16.3.6`, so every
+   version of 14 *and* 15 was affected and a 14.2.x patch would have cleared nothing while looking
+   like security work. Recorded as Rule 21.5. Now on [PR #2](https://github.com/yattapang/Jam-Quote/pull/2),
+   CI green, awaiting the owner's merge. `next` is absent from `npm audit` afterwards, and `postcss`
+   with it; new-app goes 19 advisories → 17, criticals 2 → 1.
+   **Open decision for the owner:** Next 16 defaults to Turbopack, which cannot express the
+   `.js` → `.ts` resolution this repo's import convention needs (measured: nine `Module not found`
+   errors). `dev` and `build` now pass `--webpack`. The alternative is to drop `.js` specifiers in
+   `@pryvis/web`, which needs no config but splits a recorded convention — so it was written up, not
+   taken (Rule 1.2 cuts both ways).
+   *Delegation (Rule 16.5): declared Sonnet, **was Opus, in breach** — three agent runs failed, the
+   third capturing a baseline after changing the dependency. See Rule 16.6.*
+   *Coverage (Rule 21.3): typecheck 5/5 packages; tests 20 files / 231 passed; build "Compiled
+   successfully", 8 routes with all six authored pages present; `npm audit` no longer lists `next`;
+   three plants — broken import → build exit 1, Google Fonts → the named guard failed, comment-only
+   control → green.*
+   **Deferred with reasons:** `vitest` → 5 (critical, but a dev dependency, so exposure is a
+   malicious test file rather than a user); `@nestjs/*` → 12 for `multer`/`express`/`path-to-regexp`
+   (wait for HTTP transport rather than landing a major on work in flight).
+
+2a. ~~**Next.js patch upgrade, within 14.2.x.**~~ *(superseded by item 2 above — the premise was wrong.)* `next@14.2.18` carries the criticals found by the new
    audit, including unauthenticated RCE in the Image Optimization API and a middleware
    authorisation bypass. Patch, **not** 15.x: same security benefit without App Router changes to a
    site that works. `verify-new-app` already builds `@pryvis/web`, so the gate proves the site still

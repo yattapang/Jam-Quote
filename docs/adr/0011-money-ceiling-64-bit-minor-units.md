@@ -33,7 +33,7 @@ many such lines stay exact with several orders of magnitude of headroom. So the 
 4. **The ceiling is one value in core**, expressed in minor units, and every schema, DTO and
    form bound derives from it. It is not restated per field.
 5. This lands in `new-app/`. It is **not** retrofitted to `original-app/`, which is read-only
-   from the start of the audit (Rule 1.2).
+   from the start of the audit (Rule 1.3).
 
 ## Alternatives considered
 

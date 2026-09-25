@@ -149,6 +149,30 @@ jobs:
         run: npm run build -w @pryvis/web
 
   # ---------------------------------------------------------------------------
+  # docs: the rulebook's cross-references resolve
+  #
+  # Cheap, and it exists because of a real failure. Rule 1's sub-rules were an
+  # auto-numbered markdown list; inserting a new 1.2 on 2026-09-24 silently renumbered
+  # everything after it and left three ADRs and the Phase 0 audit citing rules that had
+  # moved. Nothing detected it — a reader would have had to notice, and Rule 21's whole
+  # lesson is that nobody does.
+  #
+  # What it does NOT prove: that a citation points at the RIGHT rule, only that the rule
+  # exists. "Rule 1.3" where 1.6 was meant resolves fine. That needs reading (Rule 21.4).
+  # ---------------------------------------------------------------------------
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Proved before landing by citing a rule that does not exist and watching this fail
+      # (Rule 21.2). Python 3 is preinstalled on the runner; no setup step needed.
+      - name: Rule references resolve
+        run: python3 tools/check-rule-references.py
+
+  # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #
   # Rule 17 named this as a stated weakness for as long as this workflow has

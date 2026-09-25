@@ -1,8 +1,19 @@
 # Project rules
 
-**Approved by the owner on 2026-09-23.** These rules govern every task on this project. They
+**Approved by the owner on 2026-09-23**, and amended since with the owner's approval — each
+amendment carries its date in the rule itself. These rules govern every task on this project. They
 are the single rulebook: the engineering rules written on 2026-09-20 (`BUILD-RULES.md`) are
 folded in here, and `docs/adr/` keeps the reasoning behind each structural choice.
+
+**Amendments:** 5.1 staff and administrator accounts (2026-09-23) · 1.1 the design gate, 1.2 design
+from the product, 16.5 the declared delegation decision, 16.6 what the agents got wrong, 18 the
+service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
+coverage**, **22 a scripted edit is verified mechanically** (2026-09-24).
+
+**Sub-rule numbers are stable and cited across the repository.** New sub-rules are appended, never
+inserted — inserting one renumbers every rule after it and silently invalidates existing citations,
+which happened on 2026-09-24 and cost four documents their accuracy. `tools/check-rule-references.py`
+gates it, and runs in CI.
 
 Product: **Pryvis** (pryvis.com). Built as JamQuote; renamed per ADR 0009.
 Standing context: the development brief in `docs/DEVELOPMENT-BRIEF.md`.
@@ -31,7 +42,14 @@ approval — never ignored quietly in one task.
 
 ## 1. How we work
 
-1. **Design before code — a gate, not a preference (owner requirement, 2026-09-24).** Nothing is
+**The sub-rules below are numbered explicitly, and new ones are appended rather than inserted.**
+They used to be an auto-numbered markdown list. When 1.2 was inserted on 2026-09-24 every later item
+silently renumbered, and four documents written earlier — three ADRs and the Phase 0 audit — were
+left citing rules that had moved out from under them. A citation that quietly points at the wrong
+rule is worse than a missing one, because it still reads as authority.
+
+
+- **1.1 Design before code — a gate, not a preference (owner requirement, 2026-09-24).** Nothing is
    implemented until a design for it exists and the owner has approved it. The design says what
    problem is being solved, what it must achieve, the shape, the trade-offs, what is deliberately
    excluded, and how it will be proved. It is proportionate: a page or two for a feature, a
@@ -50,7 +68,7 @@ approval — never ignored quietly in one task.
    there is no design, the task is to write one. Where building ahead of the design is genuinely the
    right call, it is said to the owner at the time and recorded in `BRIEF-STATUS.md` — never
    discovered later.
-2. **Design from the product, not from the code that exists (owner requirement, 2026-09-24).**
+- **1.2 Design from the product, not from the code that exists (owner requirement, 2026-09-24).**
    A design says what the product needs in order to be delivered. It is **not** derived from
    whatever tables, modules or types happen to exist today, and it is not trimmed to avoid
    changing them. Where the existing work turns out to be wrong or insufficient, **we go back and
@@ -65,18 +83,18 @@ approval — never ignored quietly in one task.
    to meet it. A migration that corrects an earlier one is normal (Rule 6 — a new migration, never
    an edit). So is revising an ADR, with the reason recorded.
 
-3. **Audit before rebuild.** `original-app/` is read-only from the moment Phase 0 begins. It
+- **1.3 Audit before rebuild.** `original-app/` is read-only from the moment Phase 0 begins. It
    is deleted only when the owner says so, as its own commit.
-4. **Small reviewable changes.** One scope per change, sized for a single pull request.
-5. **Tests first, or alongside.** No feature is done without tests. **A test counts only once
+- **1.4 Small reviewable changes.** One scope per change, sized for a single pull request.
+- **1.5 Tests first, or alongside.** No feature is done without tests. **A test counts only once
    it has been shown to fail**: plant the defect, watch the test catch it, restore from a
    backup copy. A test that passes with the fix removed is worse than none — it teaches false
    confidence.
-6. **Explain decisions.** State the options, the trade-offs and the recommendation. Record
+- **1.6 Explain decisions.** State the options, the trade-offs and the recommendation. Record
    significant choices as dated ADRs.
-7. **Flag, don't assume.** Ambiguity is surfaced. Assumptions are listed, not guessed at.
-8. **The owner reviews every diff.** Nothing merges on "it seems to work".
-9. **Living documents.** The brief, the PRD, the ADRs, the audit and this file are updated as
+- **1.7 Flag, don't assume.** Ambiguity is surfaced. Assumptions are listed, not guessed at.
+- **1.8 The owner reviews every diff.** Nothing merges on "it seems to work".
+- **1.9 Living documents.** The brief, the PRD, the ADRs, the audit and this file are updated as
    proposed edits for the owner's approval when reality changes them — never left stale and
    never changed silently.
 
@@ -390,6 +408,11 @@ that gap by default.
   of findings is never read as "found nothing".
 - **The work it was doing stays owed** in `BRIEF-STATUS.md` until an agent actually completes it.
 - **Never write, predict or imply an agent's findings.** If it has not reported, we do not know.
+- **A report that asserts a result without quoting the command it ran and the output it got is
+  treated as FAILED**, and the work stays owed. This is mechanical, not a judgement about tone:
+  "I have kicked off the research" fails it, and so does "all tests pass" with no counts. Added
+  2026-09-24 after three consecutive agent runs reported intent as completion — the loud failure
+  16.3 did not previously cover, since it is not silence.
 - **After any agent has touched the tree, verify it:** `git status`, look for stray backups or probe
   files, and confirm no planted defect was left behind. An agent that dies mid-plant leaves a real
   defect in the working tree.
@@ -439,6 +462,31 @@ produces. That makes a breach visible in a diff rather than only in hindsight, a
 reason this rule is enforceable where 16.2 alone was not.
 
 **No declaration, no build.**
+
+### 16.6 What the agents actually got wrong, and what that changes (2026-09-24)
+
+16.2 assumes the **model tier** is the variable that matters. One day of evidence says the variable
+is **protocol adherence**, and no tier fixes it. Three consecutive `general-purpose` agent runs, two
+different tasks, same failure: each reported intent as completion, one of them describing a
+subagent it had launched to do the work. The third did worse than narrate — it changed the
+dependency **before** capturing the baseline, so twelve minutes of test runs measured a state that
+was neither the before nor the after.
+
+So the default in 16.5 is narrower than it was written:
+
+- **A multi-step protocol is not delegated on the strength of the brief alone.** Where the work is a
+  sequence whose ORDER carries the meaning — capture a baseline, then change, then compare; plant,
+  then restore, then verify — it is done in-session, or handed over one step at a time with each
+  step's output checked before the next is given.
+- **"Building against an approved design is Sonnet" still holds** for work whose steps are
+  independent: a module against a written spec, a named defect, a set of tests.
+- **Every agent brief opens with "you have no subagents; you do this work yourself."** Cheap, and
+  aimed at the exact observed failure.
+- **An agent's first reply is checked against the tree before its findings are read at all.**
+  `git status`, and whether the thing it claims to have changed has changed.
+
+Recorded as a finding about the tooling rather than about a model, so the next person does not
+re-derive it by losing an afternoon.
 
 ## 17. Where we are weak, stated plainly
 
@@ -538,4 +586,98 @@ for, so the site is a launch dependency and not marketing polish.
 **Enforcement.** Guards over the site's own pages: every page has a title and description, internal
 links resolve, no external script or stylesheet host appears, and no social-proof claim exists
 unless a data file provides evidence for it. Plus review, for the things a test cannot judge.
+
+---
+
+## 21. A control states the coverage it has, in the tool's own words (added 2026-09-24)
+
+Every other rule here is about doing the work right. This one is about **knowing whether we did**,
+and it exists because on 2026-09-24 two controls reported success for work they were not doing.
+
+A control that overstates its coverage is **worse than no control**, because it stops anybody asking
+the question. A gap you know about gets a line in Rule 17; a gap hidden behind a green tick gets
+nothing.
+
+**21.1 A control's stated scope is quoted from what the tool reports, never from what it was meant
+to do.** `gitleaks` prints `430 commits scanned`; that line, not the phrase "full history", is what
+the comment may claim. The claim and its evidence live in the same place, so a mismatch is visible
+to a reader rather than only to somebody who goes looking.
+
+> Why: `gitleaks/gitleaks-action@v2` runs `--log-opts=-1`, which is `git log -1` — the most recent
+> commit. It reported "No leaks detected", the workflow comment claimed the full history, and
+> `fetch-depth: 0` fetched a history nothing looked at. The repository nearly carried a green
+> "history is clean" badge over 429 unscanned commits.
+
+**21.2 A new control ships having fired at least once, on purpose.** This is Rule 8's plant doctrine
+applied to controls that are not tests, and its absence is exactly what let the one-commit scan
+through: a planted credential in a historical commit would have exposed it on the first day. **A
+control that has never fired has never been tested.** For a scanner, plant a positive. For a build
+gate, break the build. For a liveness check, point it at a host that does not resolve. Record what
+was planted, that the *expected* thing failed, and that it was restored.
+
+**21.3 Every batch closes with a coverage line, in the same place as the 16.5 declaration.** One
+line per control the batch touched: what it actually reported, in its words. It sits beside the
+model declaration in `BRIEF-STATUS.md` and in the batch's ADR. No separate checklist — a checklist
+nobody reads is the failure described at the top of `verify.yml`.
+
+**21.4 "What this does not prove" is required of every control, not only of tests.** Test files here
+already carry it and it works. `verify.yml` did not, which is how a workflow comment came to assert
+full-history coverage unchallenged. It applies to workflows, guards, scanners, migrations and
+monitors.
+
+**21.5 A remediation claim quotes the authority that decides it.** A statement about what an
+upgrade, patch or configuration change will fix carries the advisory's own `range` and
+`fixAvailable`, the changelog entry, or the vendor's note — in the same breath as the claim. "This
+clears the criticals" without the range beside it is an opinion dressed as a finding.
+
+> Why: I advised a patch within `next@14.2.x`, from the general expectation that advisories are
+> patched in the current minor. The advisory's range was `0.9.9 - 16.3.0-preview.10` and its fix
+> `next@16.3.6`, a major — so every version of 14 and 15 was affected. The advice would have
+> produced a change that looked like security work, passed the gate, left every critical in place,
+> and been recorded as done.
+
+**21.6 One sample is not a pattern.** Any claim about behaviour over time — "last run", "always",
+"never", "still", "no longer" — rests on at least two observations, or says in the same sentence
+that it rests on one. This includes claims that something does not exist: check before asserting
+absence.
+
+> Why, twice in one day: the keep-warm workflow's "last run was 11 September" came from a single
+> stale list row and was wrong. And "no such agent exists" was asserted about an agent that did
+> exist, when one `ListAgents` call would have shown it.
+
+**What Rule 21 does not fix.** It cannot make anyone honest; it makes an overstatement visible in a
+diff. It cannot catch a control that fires correctly on the wrong thing — a scanner whose rules miss
+our particular secret format fires, satisfies 21.2, and still misses. Rule 9's independent review is
+the only answer to that, and 21 does not replace it.
+
+---
+
+## 22. A scripted edit is verified mechanically, not by eye (added 2026-09-24)
+
+Both failures behind this rule happened while being careful. Care is not the control.
+
+**22.1 An anchored edit asserts its anchor is unique before it writes.** If the pattern matches more
+than once, the edit stops rather than taking the first match. **A text position is not an address in
+a structured file.**
+
+> Why: a scripted edit to `verify.yml` matched a non-unique anchor and spliced a whole job's worth of
+> steps into the *wrong job*. The diff looked plausible.
+
+**22.2 Every scripted edit to a structured file is followed by a parse of the result**, printing the
+structure that was supposed to change: YAML job and step names, TOML keys, JSON paths, a migration's
+statements, a Markdown file's headings. **The parse is the proof; the diff looking right is not.**
+That parse is the only reason 22.1's error was caught, so the rule is to do deliberately what was
+once done by luck.
+
+**22.3 Prose passed to a tool goes through a file, never inline.** Commit messages, pull request
+bodies and issue text contain backticks, quotes, `$` and newlines, and every shell has its own
+opinion about all four. `git commit -F <file>` and `--body-file <file>` cost one step and remove the
+class entirely.
+
+> Why: backticks in a heredoc commit message were executed as command substitution and ate the
+> clause describing a bug. The commit is on `main`; amending it would have meant a force-push.
+
+**What Rule 22 does not fix.** It catches edits that are structurally wrong, not edits that are
+structurally valid and semantically wrong — a step under the right job that does the wrong thing.
+That is what review and 21.2's planted positive are for.
 

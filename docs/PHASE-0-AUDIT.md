@@ -456,7 +456,7 @@ single-product recommendation above stands unchanged.
 
 ## 7. Rebuild, evolve, or rebuild selectively
 
-The brief presumes a rebuild in `new-app/`. Rule 1.5 says state the options, so here they are
+The brief presumes a rebuild in `new-app/`. Rule 1.6 says state the options, so here they are
 honestly, because this decision is worth more than any other in Phase 1.
 
 **Option A — rebuild in `new-app/`.** *For:* every structural gap (RLS, entitlements,

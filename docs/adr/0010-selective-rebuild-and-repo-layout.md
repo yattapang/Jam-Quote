@@ -84,7 +84,7 @@ shared lockfile makes every upgrade in one a risk to the other.
   `original-app/README.md`.
 - On Windows, npm writes `node_modules` workspace links as absolute junctions, so the move
   broke them and `npm install` had to recreate them. The lockfile content did not change.
-- `original-app/` is read-only from now on (Rule 1.2) and excluded from Claude-proposed
+- `original-app/` is read-only from now on (Rule 1.3) and excluded from Claude-proposed
   automation (Rule 15). It is deleted only on the owner's explicit confirmation, as its own
   commit.
 - `new-app/`'s internal structure is still owed: it is proposed in Phase 1 and recorded as its

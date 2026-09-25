@@ -1,7 +1,30 @@
-# Proposed rule edits, awaiting the owner
+# Proposed rule edits — **all applied 2026-09-24**
 
-The same pattern as `BRIEF-EDITS-PROPOSED.md`: proposed changes live here, marked **Proposed**,
-until the owner approves them. Nothing here is in force.
+The same pattern as `BRIEF-EDITS-PROPOSED.md`: proposals live here until the owner approves them,
+then they land in `docs/RULES.md` and this file becomes the record of *why*.
+
+> ## Status: CLOSED. Everything below is now in force.
+>
+> The owner approved these on 2026-09-24 ("ensure rules are updated based on lessons learnt and gaps
+> found"). Where they landed:
+>
+> | Proposed here | Now |
+> |---|---|
+> | Proposal 1 — a control states its coverage | **Rule 21** (21.1–21.4) |
+> | Proposal 1a — quote the authority; one sample is not a pattern | **Rules 21.5 and 21.6** |
+> | Proposal 2 — scripted edits verified mechanically | **Rule 22** (22.1–22.3) |
+> | Amendment to 16.3 — a report without evidence is failed work | **Rule 16.3**, final bullet |
+> | *(added while applying)* what the agent failures actually showed | **Rule 16.6** |
+>
+> `docs/RULES.md` is the rulebook. **This file is history and must not be cited as authority** — two
+> documents that both look normative is exactly the drift Rule 7 (one rule, one place) forbids. It is
+> kept because the reasoning is longer here than a rule should be, and because each entry names the
+> specific failure it came from.
+>
+> One gap was found *while* applying them and fixed in the same change: Rule 1's sub-rules were an
+> auto-numbered list, so inserting 1.2 had silently renumbered everything after it and left three
+> ADRs and the Phase 0 audit citing the wrong rules. Those numbers are now explicit, and
+> `tools/check-rule-references.py` gates every citation in CI.
 
 ---
 
