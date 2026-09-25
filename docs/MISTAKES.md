@@ -151,3 +151,46 @@ paths.
 ### E5 · A grep hid a file-level failure
 A gate summary read "10 passed" while a whole test file failed to transform.
 **Prevented by:** the gate command now including the `Test Files` line — and generalised in Rule 21.1.
+
+---
+
+## 2026-09-25 — found by the first review under Rule 1.10
+
+The gate the owner asked for paid for itself on its first use: 19 findings, 6 of them blockers,
+against two documents I had written and one of which had already been approved. These are the
+entries that are mine rather than the plan's.
+
+### M13 · The PRD and the approved domain model gave opposite answers about offline issuing
+`Repeat of:` nothing, but it is the same *shape* as M11 — a document left behind when another moved.
+
+The domain model §8 says *"Issuing offline is **allowed** — refusing it would break step 3 of the only
+story that matters"*, with `quote_issue` offline listed as *"create (with a leased number)"*, and it
+specifies device number leases to make that safe. The PRD then scoped R1.18 as *"Issuing requires
+connectivity in R1"* and deferred leases to R2 — **without amending the model.**
+
+**Cost if it had not been caught:** the physical schema comes from the model, so whoever wrote it
+would have shipped either lease columns the PRD says are unnecessary, or a `number_series` that R2
+must migrate **with issued financial documents already in it** — the most dangerous column in the
+product to change late.
+**Prevented by:** Rule 1.10, which is what found it. Reinforced by Rule 23.5's principle applied
+beyond the rulebook: **a document that scopes another amends it in the same change.** Rule 1.2 already
+says design from the product and correct what disagrees; what was missing was doing it in the same
+breath rather than leaving two live documents disagreeing.
+
+### M14 · Cited a guard by a filename that does not exist, and credited it with protection it does not give
+PRD §7 says the absence of prices on the site is safe because *"a guard enforces that
+(`honest-claims.test.ts`)"*. There is no such file — the guards live in
+`new-app/web/test/site-guards.test.ts`. And the guard that does exist checks only that no tier shows a
+digit in its price label; **nothing asserts the tier feature lists are deliverable.** Meanwhile the
+site's Pro tier sells retention tracking, project costing, accountant exports and offline use, three
+of which the PRD's own §8 excludes from release 1.
+
+**Cost if it had not been caught:** a Rule 20 over-claim shipped on the public site, with the PRD
+pointing at a non-existent guard as the reason it was safe.
+**Prevented by:** Rule 21.1 — a control's coverage is quoted from what it reports, not from what it
+was believed to do. This is 21.1 broken by the person who wrote it, one day later, which is the
+strongest argument available that the rule is not fussiness. **A mechanism is still owed:** nothing
+checks that a cited file exists or that a cited guard asserts what it is credited with. The nearest
+thing is `tools/check_rules.py`, and extending it to verify cited paths is cheap — recorded here as
+owed rather than promised.
+
