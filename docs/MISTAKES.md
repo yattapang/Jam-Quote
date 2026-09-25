@@ -222,3 +222,38 @@ one is a money defect that surfaces as over-billing a real client.
 no cheaper mechanism: a fix cannot be attacked by whoever wrote it, which is Rule 9's whole premise
 applied to amendments rather than to modules.
 
+### M17 · Three amendment passes, each introducing blockers — the medium is the defect
+`Repeat of:` **M13 and M15**, third occurrence. That is the finding.
+
+| Pass | Findings | Blockers **created by the previous pass's amendments** |
+|---|---|---|
+| Review 1 | 19 | — |
+| Review 2 | 17 | 4 of 5 |
+| Review 3 | 20 | **11 of 20 findings are defects in text written by the commit that closed review 2** |
+
+Two findings marked **Closed** were not closed at all, in the document the finding named:
+
+- **G1** — `PRD.md` R1.24d carefully explains why the ceiling says "*recorded* variations"; the model
+  still says "plus **accepted** variations, where those exist" in **two** places (`domain-model.md:234`
+  and `:253`). I wrote the explanation and never changed the thing it explained.
+- **G2** — §6.2a declares the `issue_balance` writer set "**closed and named**" and the list omits the
+  **acceptance transaction that creates the row**, which is the fix G2 asked for. A writer set that
+  omits the creator is exactly the empty-lock hole, relocated.
+
+And the sharpest one: `site.ts:192` cites **`honestClaims` in site-guards.test.ts** — a symbol that does
+not exist. That is **M14's own defect (citing a guard by a name that is not real) re-committed inside
+M14's fix.**
+
+**Cost if it had not been caught:** the physical schema would encode a `user.email` unique index with no
+pending-claim table, an `issue_balance` column carrying two contradictory write rules, and a
+`quote_issue` state set that differs between two sections of one document.
+
+**Prevented by:** nothing yet, and a fourth prose pass is not it. The mechanism has to be structural, and
+the diagnosis is the medium: **an invariant written in prose in two places will drift every time**, and
+each amendment grows the surface of possible disagreement faster than any reader can check it. Rule 7
+already says one rule lives in one place; what it does not say is that a *document* is a poor place for
+a rule that code can hold instead. The five things that keep drifting — the state machine, the ceiling,
+the writer set, the uniqueness rule, the immutability boundary — stop drifting the moment they are a
+migration, an enum and a test, because code cannot hold two definitions of the same thing. **Recorded
+here as owed, pending the owner's decision**, because it changes the order of work rather than a rule.
+
