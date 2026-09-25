@@ -95,7 +95,7 @@ These are settled by work already landed, and are stated here so no entity re-li
 | Entity | Purpose | Key invariants |
 |---|---|---|
 | `tenant` | The contracting business. | Country and trading currency set at creation and not casually changed. Suspension is a field, not a deletion. |
-| `user` | A person who signs in. | Belongs to exactly one tenant. Email unique per tenant, not globally — two businesses may share an owner's address. |
+| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally**, which is what enforces the owner's rule that a second business needs a second address (11a). |
 | `membership_role` | What a user may do inside the tenant. | At least one active owner at all times; the last owner cannot be demoted or deactivated. |
 | `platform_capability` | What one of **our** staff may do. | Every grant has a granter (least privilege is only real with an author). Holding one requires a confirmed second factor (ADR 0021). |
 | `document_settings` | Logo, header details, two colours, default terms. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. |
@@ -281,10 +281,22 @@ rather than deniable.
 
 Named rather than left to be discovered:
 
-1. **`app_user.email` is globally unique; it must be unique per tenant.** Two contracting businesses
-   may legitimately share an owner's email address. A migration, and a correction to sign-in, which
-   currently resolves a credential by address alone. **This is the most consequential correction in
-   this document** and it changes the sign-in lookup, so it needs its own design step.
+1. ~~**`app_user.email` is globally unique; it must be unique per tenant.**~~ **WITHDRAWN
+   2026-09-25 — the owner answered the question and the built schema is right.** I had written that
+   two contracting businesses may legitimately share an owner's email address, and called it "the
+   most consequential correction in this document". The owner's answer: one person **may** hold more
+   than one business, **but with a different email account for each.**
+
+   That makes global uniqueness not merely acceptable but the **enforcement mechanism** for the
+   owner's rule — one address, one user, one tenant, and a second business requires a second
+   address. The migration is cancelled, the sign-in lookup stands unchanged, and the "own design
+   step" it was said to need does not exist.
+
+   Worth keeping visible rather than deleting: the claim rested on an assumption about how
+   contractors actually operate, which is not a question the code could answer. It was flagged as a
+   question at the same time it was written (Rule 1.7), which is the only reason it cost nothing —
+   had it been quietly acted on, it would have been a migration, a sign-in change and a weakened
+   uniqueness guarantee, all to support a case that does not arise.
 2. **`role` is a text field on the user; it must become `membership_role`** with the last-owner
    invariant enforced in the database.
 3. **The audit log's `subject.type` union covers three infrastructure types.** It must grow with the
@@ -314,13 +326,37 @@ Named rather than left to be discovered:
 
 Stated so the review has something to aim at:
 
-- If tenants turn out to need **more than one business per account**, `tenant` and `user` are wrong
-  and so is every policy built on them.
-- If clients need **logins of their own** (a portal rather than a link), `share_link` becomes a user
-  model and Documents gains an outside reader.
+- ~~If tenants turn out to need **more than one business per account**~~ — **resolved 2026-09-25:**
+  they may hold several, one email each, so the shape stands. See 11a.
+- ~~If clients need **logins of their own**~~ — **resolved 2026-09-25, for now:** they do not. The
+  owner expects this may change, so 11a records what a portal would cost rather than treating it as
+  settled forever.
 - If costing has to reconcile to real books, **Work is the wrong shape** and the shallow line breaks.
 - If issuing offline proves rare in practice, the **number-lease complexity** is unearned and
   allocate-at-sync was the right answer after all.
 
-Each is a question about the world, not about the code, and the first two are worth asking the owner
-before the schema is built.
+Each is a question about the world, not about the code, and the first two were worth asking the owner
+before the schema was built.
+
+### 11a. The first two, answered 2026-09-25
+
+**One person may hold more than one business — with a different email account for each.** So
+`tenant` and `user` keep their shape: a user belongs to exactly one tenant, and a person operating
+two businesses is two users with two addresses. No account switcher, no membership join table, no
+policy rewrite. The email's **global** uniqueness is what enforces it, so §9 item 1 is withdrawn.
+
+*What this costs, stated rather than discovered:* the same human signing in to their second business
+must use its own address, and there is no "switch business" affordance. If that becomes a complaint
+in practice, the change is a real one — a person entity above the user — and it is a change to
+Tenancy, the spine. Recorded now so that conversation starts from a known cost.
+
+**A tenant's clients do not get a login. That may change later.** So Documents has no outside
+reader: a client meets us through a `share_link` — a hashed, expiring, revocable capability URL
+scoped to one issue — and an `acceptance` that records a typed name, a timestamp and the IP. Nothing
+in the model assumes a client identity.
+
+*What keeps the door open:* `acceptance` already records who acted and how, and `share_link` is
+already scoped per issue rather than per client, so a future portal adds a client identity and reuses
+both. What a portal would **not** be is a small change: it makes tenant data readable from outside
+the tenant's own users, which is a new row-level-security surface and a new threat-model section.
+That is why it is a later decision and not a deferred detail.

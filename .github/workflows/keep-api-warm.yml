@@ -40,10 +40,21 @@ name: API liveness
 #   API may go unnoticed for hours. It is a smoke alarm, not a monitor.
 
 on:
-  # Written as hourly rather than `*/10` so the file stops stating an interval it
-  # does not get. The observed reality is every three to five hours.
+  # EVERY SIX HOURS, which is close to what GitHub actually delivers anyway.
+  #
+  # It was `*/10`; the observed firing was every three to five hours on a free runner (see
+  # the header). So a tighter cron is a statement about intent, not about behaviour, and
+  # this file's whole history is a lesson in not stating coverage we do not have
+  # (Rule 21.1). Four a day answers the only question this workflow can answer — "does the
+  # deployed API still boot" — within a day.
+  #
+  # It is also the cheaper shape for when the repository goes private, which the owner has
+  # deferred until going commercial. Actions minutes are free on a public repository and
+  # metered on a private one, and an hourly run at ~1.2 minutes is roughly 870 minutes a
+  # month, most of it spent waiting out a cold start. Nothing here depends on that
+  # decision; it just does not have to be revisited when it lands.
   schedule:
-    - cron: "17 * * * *"
+    - cron: "17 */6 * * *"
   workflow_dispatch: {}
 
 jobs:

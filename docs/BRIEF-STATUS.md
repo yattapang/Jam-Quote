@@ -54,7 +54,10 @@ the work was picked up on an already-finished feature.
    compiles. *Delegation (Rule 16.5): Sonnet — a bounded upgrade against a gate.* Also still open:
    `multer@1.4.4-lts.1` (3 high, DoS) via `@nestjs/platform-express@10`, which needs Nest 11 and
    should wait for HTTP transport rather than land on work in flight.
-3. **The PRD.** Blocked on two questions for the owner, both from `docs/design/domain-model.md` §11,
+3. **The PRD.** ✅ **Unblocked 2026-09-25** — both questions answered (ADR 0022): one person may hold
+   several businesses with a different email each, so global email uniqueness *enforces* that rule and
+   the migration I proposed is withdrawn; and a tenant's clients have no login for now, so Documents
+   keeps no outside reader and `share_link` carries the weight. Previously blocked on two questions, both from `docs/design/domain-model.md` §11,
    because either answer changes the document materially rather than cosmetically:
    - may one person hold **more than one business**? If so, `tenant`/`user` is the wrong shape and
      every policy sits on it;
@@ -77,7 +80,19 @@ The drift that prompted Rule 23 was real and is fixed: inserting Rule 1.2 had si
 Rule 1's list, leaving three ADRs and the Phase 0 audit citing rules that had moved. Those four are
 corrected, and 307 citations across 40 rules now resolve.
 
-**Also open, owner-side:** whether this repository should stay **public**. It is public today, which
+**Repository visibility — deferred to commercial launch (owner, 2026-09-25).** It was switched to
+private and switched back within the hour on the owner's instruction: *"Hold the private conversion
+until we are ready to go commercial then."* The flip destroyed nothing (0 forks, 0 stars, 0 watchers
+— going private deletes forks permanently, which is why that was checked before reverting).
+
+What being public actually costs, so the deferral is a decision and not an oversight: `RULES.md` §17
+publishes our unmitigated weaknesses and `MISTAKES.md` publishes seventeen defects with their
+reasoning. Both are good practice and neither will be trimmed to look better — the answer is to make
+the repository private, not to make the documents dishonest. **Trigger: before the first paying
+tenant.** Actions minutes are free while public and metered when private, which is the other half of
+the reason to wait.
+
+**Also open, owner-side:** It is public today, which
 is why gitleaks and GitHub secret scanning are free here — but `THREAT-MODEL.md`, `RULES.md` §17 and
 `REVIEW-FINDINGS.md` are publicly readable, and §17 is a deliberately honest list of *unmitigated*
 weaknesses. The answer is to make the repository private or to unpublish that list, never to make
