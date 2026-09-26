@@ -198,6 +198,9 @@ demonstrated, it is not a requirement, it is a hope.
   things that hang off an acceptance — a balance row and immutable variations — so the typo remedy had
   become a way to detach agreed money from the issue it was agreed against. Enforced by a database
   trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
+  That path is for a *wrong document*; for *less work*, the path is a credit note and a negative
+  variation on the same issue (R1.22a). Until J4 the credit note half of both did nothing, because
+  credit notes did not reduce the invoiced figure.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
   `accepted_total_minor` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
@@ -325,6 +328,10 @@ demonstrated, it is not a requirement, it is a hope.
   the schema can check it.**
 - **R1.22a** A **priced variation** may be recorded against an accepted issue: a description, lines
   priced the same way a quote is, and a total that may be positive or negative.
+  **A negative variation may not take the ceiling below what is already invoiced (J4).** The remedy is
+  one transaction: credit the excess against an invoice, then record the variation. The refusal names
+  the amount to credit. Until 2026-09-26 this sentence promised a negative total that the ordinary
+  case — scope removed after progress billing — could not record (`docs/design/scope-reduction.md`).
 - **R1.22b** Recording one **re-derives the ceiling** for that issue — not the accepted total, which is
   written once and never again (R1.24b). The distinction matters and getting it wrong was finding H3: the
   ceiling is `accepted_total + variations_total`, and a variation moves the second term. Variations are
@@ -341,9 +348,10 @@ demonstrated, it is not a requirement, it is a hope.
   an accurate description of what exists, not as a decision to preserve it; staged invoicing is #34, the
   audit's top-ranked absent feature, and the two cannot both hold. Recorded here rather than left as two
   documents disagreeing.
-- **R1.24** The sum of issued invoices against an accepted issue may never exceed its **accepted total
-  plus recorded variations** (R1.22b). **This is the most important arithmetic invariant in the
-  product.**
+- **R1.24** The sum of issued invoices against an accepted issue, **net of credit notes and excluding
+  voided invoices**, may never exceed its **accepted total plus recorded variations** (R1.22b). **This
+  is the most important arithmetic invariant in the product.** "Net of credit notes" was added
+  2026-09-26 (J4, `docs/design/scope-reduction.md`); the executed definition is `issue_balance_apply()`.
 - **R1.24d** **"Recorded", not "accepted", and the weakness is stated rather than hidden (G1).** In
   release 1 a variation has no client signature, so recording one **does** let the contractor raise their
   own invoiceable ceiling. R1.24 therefore protects against *mistake and drift*, not against a contractor
@@ -373,8 +381,11 @@ demonstrated, it is not a requirement, it is a hope.
   read and the write.
 - **R1.25** Invoice status is **derived** from payments and credit notes — never stored. **Retention is
   not an input in R1** because retention tracking is R2 (§8); the earlier wording made an excluded
-  entity a term in an R1 formula (F4). Retention and credits affect *status*, never the R1.24 ceiling:
-  money held back or credited does not raise how much may be billed. A stored
+  entity a term in an R1 formula (F4). Retention and credits never *raise* the R1.24 ceiling: money
+  held back or credited does not increase how much may be billed. **A credit note does reduce the
+  invoiced figure the ceiling is compared with** (J4, amended 2026-09-26) — it frees room within the
+  same ceiling, the same effect as voiding and re-issuing but for an amount rather than a whole
+  invoice. Credits on one invoice may not exceed it, and a voided invoice cannot be credited. A stored
   status is the second source of truth that produced the old application's negative amount due.
 - **R1.26** Recording a client payment: amount, date, method, reference, optional receipt file. Never
   more than the balance.

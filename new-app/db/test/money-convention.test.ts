@@ -24,8 +24,8 @@
  * WHAT IT DOES NOT PROVE (Rule 21.4)
  *
  * - **Not that the arithmetic is right.** `issue_balance_apply()` could still add when it should
- *   subtract; `documents-core.test.ts` executes that, and J4 (a negative variation stranding an
- *   issue) is an open finding about exactly this distinction.
+ *   subtract; `documents-core.test.ts` executes that, including J4's block (a negative variation,
+ *   and the credit notes that make room for it), which is about exactly this distinction.
  * - **Not that the application uses minor units.** A TypeScript layer can still divide by 100 in the
  *   wrong place. This is the schema's half of Rule 3 and the repository layer's half is owed.
  * - Nothing about currency conversion. There is none: the currency lives on the document that owns

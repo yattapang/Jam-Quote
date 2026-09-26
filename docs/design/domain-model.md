@@ -251,11 +251,11 @@ including which of three versions they accepted.
 | `acceptance_evidence` | The pieces of evidence behind one acceptance: a code confirmed, a signed document, a deposit paid, later an inbound reply. Append-only. | **The grade is derived from these rows, never stored** (`../design/acceptance-evidence.md`, approved 2026-09-26) — so it rises when evidence arrives and cannot drift, and a tenant-uploaded screenshot **or signed document** is graded 1 rather than higher because it is
 evidence the tenant can fabricate — the grade measures who witnessed the acceptance, never how convincing
 the artefact looks (finding J5). Grade 5 is retired and its number is not reused. |
-| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices may never exceed the ceiling, which is defined once in SQL as `issue_ceiling_minor()` and is the single most important arithmetic invariant in the product. |
+| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices, net of credit notes, may never exceed the ceiling, which is defined once in SQL as `issue_ceiling_minor()` and is the single most important arithmetic invariant in the product. |
 | `invoice_line` | Either a share of the issue (percentage or amount) or a named extra. | Frozen at issue, like the quote. |
 | `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | Never exceeds the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments, retention and credits. |
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
-| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. |
+| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. Reduces the invoiced figure the ceiling is compared with, so it is also how scope is reduced below what is billed (J4, `docs/design/scope-reduction.md`); it can never exceed its invoice, and a voided invoice cannot be credited. |
 
 **Two more fields the requirements need, named by review (F14).** `quote.client_detail_level`
 (summary or itemised) decides what the client is shown and is **frozen into the issue**, because
@@ -269,8 +269,9 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
-**The invariant:** the sum of issued invoices against an accepted issue may never exceed the accepted
-total, plus **recorded** variations.
+**The invariant:** the sum of issued invoices against an accepted issue, **net of credit notes and
+excluding voided invoices**, may never exceed the accepted total, plus **recorded** variations. ("Net of
+credit notes" added 2026-09-26 for J4; the executed definition is `issue_balance_apply()`.)
 
 **"Recorded", not "accepted", and the definition is not here.** Release 1 builds no variation
 acceptance, so "accepted variations" would name something that does not exist — an invariant reading
@@ -317,25 +318,25 @@ Three attempts, and the third failure was the same shape as the first two. So th
 home** per question, per Rule 7 and ADR 0025, and neither home is prose:
 
 - **Which insert moves which column** is `db/test/documents-core.test.ts`, in the J12 block. It inserts
-  each kind of row and reads all three columns, so a credit note moving nothing is an assertion rather
+  each kind of row and reads all three columns, so what a credit note moves is an assertion rather
   than a claim, and a defect that moved the *wrong* column would fail too.
 - **What makes the call happen at all** is
   `new-app/db/migrations/20260926130000_ceiling_enforced_by_trigger/migration.sql`, whose every
   identifier is checked against the real schema by `tools/check_schema_citations.py`.
 
 That migration's prose says the four trigger tables are the rows that "can move the ceiling or the
-invoiced total". Read strictly that is loose about `credit_note`: a credit note fires the trigger and the
-recompute leaves both totals where they were, deliberately. The trigger set is wider than the set of rows
-that change a number, and it is right to be — a table wired in without being named there raises rather
-than skipping the ceiling. This section does not repeat any of it, because repeating it is what produced
-H2, H2's own fix, and J12.
+invoiced total". Until J4 that was loose about `credit_note`, which fired the trigger and moved nothing;
+since `new-app/db/migrations/20260926200000_scope_reduction/migration.sql` a credit note lowers the
+invoiced total, so the sentence is now exact. A table wired in without being named there still raises
+rather than skipping the ceiling. This section does not repeat which row moves what, because repeating it
+is what produced H2, H2's own fix, J12 — and would have made this paragraph wrong the day J4 landed.
 
 What is worth stating here, because it is the *shape* rather than the list: **no caller chooses to
 maintain this row.** `issue_balance` has no INSERT or UPDATE policy the application can satisfy, so the
 only door is `issue_balance_apply()` and `issue_balance_open()`; and since J2 those are not reached by a
 caller remembering to call them but by triggers on every table that can move a total. The writer set is
 therefore a property of the schema, and `db/test/documents-core.test.ts` executes which insert moves
-which column — including the one that moves nothing.
+which column.
 
 What enforces it now: `issue_balance` has **no INSERT or UPDATE policy the application can satisfy**, so
 the only way in is `issue_balance_apply()` and `issue_balance_open()`, which set the transaction-local
@@ -359,8 +360,10 @@ per tenant, it rebuilds all three derived columns from the underlying rows and c
 looked. It does not silently self-heal — self-healing would erase the evidence of the defect that caused
 the drift.
 
-Retention and credit notes feed the invoice *status* derivation, never this ceiling: money held back or
-credited does not raise how much may be billed.
+Retention and credit notes never *raise* this ceiling: money held back or credited does not increase how
+much may be billed. A credit note does **lower the invoiced figure** compared with it (J4, amended
+2026-09-26), which is what makes a scope reduction below what is already billed representable — see
+`docs/design/scope-reduction.md`, and `db/test/documents-core.test.ts` for which insert moves which column.
 
 **This is money arithmetic, so it is judgement-class work under Rule 16.5** and its tests are planted
 defects: two concurrent invoices, a queued offline replay, and a variation arriving between the read

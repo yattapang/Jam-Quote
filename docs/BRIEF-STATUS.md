@@ -139,6 +139,27 @@ each with the defect planted and the fix proved (`REVIEW-FINDINGS.md`).
 
 ---
 
+## Review 4 remediation — J4, 2026-09-26
+
+**J4 built, not closed.** Agreed scope can now be reduced after it has been invoiced: credit notes count
+against the invoiced figure, so the remedy is one transaction — credit the excess, record the negative
+variation — with over-crediting and crediting a voided invoice refused. Design
+[`scope-reduction.md`](design/scope-reduction.md), approved by the owner 2026-09-26 (option 1 of three,
+and the default that a voided invoice's credits drop out with it). Migration
+`20260926200000_scope_reduction`; PRD R1.15b, R1.22a, R1.24, R1.25 and domain model §6.2a amended in
+the same change. Re-running the review's scenario first showed J2 had already changed J4's shape — the
+row is refused, not stranded — and two migrations still said otherwise (MISTAKES M27).
+*Delegation (Rule 16.5): Opus, in-session, no agent — money arithmetic, one of the three named
+exceptions.*
+*Coverage (Rule 21.3): typecheck "5 successful, 5 total"; `npm test` api 183 / db 113 / contract 2 /
+core 9 / web 11, all passed; five plants on the migration (netting, over-credit, voided credit, double
+subtraction, shortfall message) each turned its named J4/J12 test red and each was restored
+byte-identical; `check_schema_citations.py` "0 citations skipped" and fired on a planted phantom column
+in the new migration; `check_dispositions.py` "40 dispositions … across 3 review files" — review 4 is
+not yet in its set.*
+**Owed before J4 is Closed (Rule 24.6):** an independent re-review of this commit; the two-connection
+Postgres test (the credit checks' lock serialisation is read, not raced); J4's disposition row.
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**

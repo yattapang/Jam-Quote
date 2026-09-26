@@ -443,3 +443,29 @@ appeared to touch. A schema change touches every package that reads the schema, 
 them. The test itself is now better for it: the database's refusal is asserted where it belongs, and
 the resolver's own check — now the second layer — is exercised by dropping the constraint inside that
 one test, because a second layer that cannot be reached is a second layer nobody has tested.
+
+### M27 · Two migrations described an open finding's behaviour after their own fix had changed it
+`Repeat of:` **M14's class** — a comment crediting a state of the system that is not there — and the
+first time it has been about a *defect* rather than a mechanism.
+
+J2's trigger migration and J3's balance-write migration both say, in their "what this does not do"
+sections, that J4 is "a negative variation strands the issue". Review 4 executed that before J2 and it
+was true then. **J2 changed it**: the variation's own insert now fires `issue_balance_apply()`, which
+raises and rolls the row back, so nothing is stranded. Nobody re-ran J4 after J2 landed, so two committed
+migrations and the header of `money-convention.test.ts` described a defect that no longer existed in that
+form — while the real remaining blocker, *no way to reduce agreed scope at all*, went unstated. Found on
+2026-09-26 by re-executing the review's scenario before designing J4's fix rather than designing from the
+finding's text.
+
+**Cost if it had not been caught:** J4 would have been designed against the wrong defect — a fix for a
+stranded row that cannot occur — and the product question it actually raises would not have been put to
+the owner.
+
+**Prevented by:** partly, and the gap is stated. J4's scenario is now a test
+(`new-app/db/test/documents-core.test.ts`, the J4 block), so this particular claim cannot go stale again
+unnoticed. **No mechanism yet covers the class**: a review's executed probe lives in a scratchpad, so an
+open finding's behaviour is re-checked only when someone thinks to. The mechanism owed is to commit each
+executed finding's probe as a test that is *expected to fail* (`it.fails`) until its fix lands — a fix
+that changes the behaviour then flips the test and forces the description to be revisited. Recorded as
+owed rather than promised. The migrations themselves stay as written (Rule 6); the correcting migration
+`20260926200000_scope_reduction` says why they are wrong.

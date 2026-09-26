@@ -358,15 +358,15 @@ describe("J12 · which insert moves which balance column, executed rather than l
     expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 40_000 });
   });
 
-  it("a CREDIT NOTE moves nothing, which is the claim J12 found in the document", async () => {
-    // The document said "every invoice and credit note" writes `invoiced_total_minor`. A credit note
-    // reduces what is OWED on an invoice; it does not reduce what was invoiced, and the ceiling
-    // expression excludes it deliberately (documents_core: "what does NOT raise the ceiling:
-    // retention and credit notes"). So this is the assertion that the wrong writer stays wrong.
+  it("a CREDIT NOTE moves invoiced_total_minor DOWN and nothing else — changed by J4", async () => {
+    // This assertion said the opposite until 2026-09-26: a credit note moved nothing, deliberately.
+    // J4 showed that left no way to reduce agreed scope below what was invoiced, and the owner chose
+    // to net credit notes into the invoiced figure (docs/design/scope-reduction.md). The ceiling is
+    // still untouched — a credit note never RAISES it — which the unchanged `accepted` and
+    // `variations` columns below assert.
     const issue = await seal(1, 100_000n);
     await accept(issue);
     const invoiceId = await insertInvoice(issue, 40_000n);
-    const before = await totals(issue);
 
     await sql(
       `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
@@ -374,8 +374,7 @@ describe("J12 · which insert moves which balance column, executed rather than l
       [id(), TENANT, invoiceId],
     );
 
-    expect(await totals(issue)).toEqual(before);
-    expect((await totals(issue)).invoiced).toBe(40_000);
+    expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 25_000 });
   });
 
   it("a VOID does move invoiced_total_minor, down, because the invoice stops counting", async () => {
@@ -411,6 +410,175 @@ describe("J12 · which insert moves which balance column, executed rather than l
       [id(), TENANT, invoiceId, USER],
     );
     expect((await totals(issue)).accepted).toBe(100_000);
+  });
+});
+
+// ===========================================================================
+describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
+  // docs/design/scope-reduction.md. Accepted 100,000, invoiced 90,000, the client removes 20,000 of
+  // work. Before this block existed, every variation in the suite was positive, and the one line of
+  // the schema saying amounts may be negative had nothing executed behind it.
+  async function insertInvoice(issueId: string, amount: bigint) {
+    const invoiceId = id();
+    await sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [invoiceId, TENANT, issueId, amount.toString()],
+    );
+    return invoiceId;
+  }
+
+  async function vary(issueId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'bathroom removed', $4, $5, now())`,
+      [id(), TENANT, issueId, amount.toString(), USER],
+    );
+  }
+
+  async function credit(invoiceId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, $4, 'scope removed', now())`,
+      [id(), TENANT, invoiceId, amount.toString()],
+    );
+  }
+
+  async function voidInvoice(invoiceId: string) {
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'wrong amount', $4)`,
+      [id(), TENANT, invoiceId, USER],
+    );
+  }
+
+  /** Runs `work` as one transaction, rolling back and rethrowing on failure. */
+  async function inTransaction(work: () => Promise<void>) {
+    await db.exec("BEGIN");
+    try {
+      await work();
+      await db.exec("COMMIT");
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  async function totals(issueId: string) {
+    const row = await balance(issueId);
+    return {
+      variations: minor(row.variations_total_minor),
+      invoiced: minor(row.invoiced_total_minor),
+    };
+  }
+
+  it("records a negative variation that leaves the ceiling at or above what is invoiced", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await insertInvoice(issue, 60_000n);
+
+    await vary(issue, -20_000n);
+
+    expect(await totals(issue)).toEqual({ variations: -20_000, invoiced: 60_000 });
+    // And the lowered ceiling is the one enforced: 80,000 less 60,000 leaves exactly 20,000.
+    await insertInvoice(issue, 20_000n);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 80000/);
+  });
+
+  it("REFUSES a reduction below what is invoiced, leaves no row, and names the shortfall", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await insertInvoice(issue, 90_000n);
+
+    // 90,000 invoiced against a ceiling of 80,000: 10,000 must be credited first.
+    await expect(vary(issue, -20_000n)).rejects.toThrow(/exceeds the ceiling 80000 .* by 10000/);
+
+    // The review's original finding was a COMMITTED row the balance could never count. Assert it is
+    // not there, and that the issue is not stuck: it can still be invoiced up to its real ceiling.
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(0);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 90_000 });
+    await insertInvoice(issue, 10_000n);
+  });
+
+  it("ACCEPTS credit-then-reduce as one transaction — the remedy the finding said did not exist", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 90_000n);
+
+    await inTransaction(async () => {
+      await credit(invoiceId, 10_000n);
+      await vary(issue, -20_000n);
+    });
+
+    expect(await totals(issue)).toEqual({ variations: -20_000, invoiced: 80_000 });
+    // Exactly at the ceiling, so nothing more may be billed.
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 80000/);
+  });
+
+  it("rolls the credit back too when the reduction in the same transaction is still too deep", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 90_000n);
+
+    await expect(
+      inTransaction(async () => {
+        await credit(invoiceId, 5_000n);
+        await vary(issue, -20_000n);
+      }),
+    ).rejects.toThrow(/by 5000/);
+
+    expect(await sql(`SELECT 1 FROM credit_note`)).toHaveLength(0);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 90_000 });
+  });
+
+  it("REFUSES a credit note larger than its invoice", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+
+    await expect(credit(invoiceId, 40_001n)).rejects.toThrow(/would total more than the invoice/);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 40_000 });
+  });
+
+  it("REFUSES over-crediting across several notes, where each one alone is within the invoice", async () => {
+    // The shape of J2's two-invoice case, applied to credits: each is fine, together they are not, and
+    // an over-credited invoice would count as NEGATIVE and manufacture room under the ceiling.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+
+    await credit(invoiceId, 30_000n);
+    await expect(credit(invoiceId, 20_000n)).rejects.toThrow(/would total more than the invoice/);
+
+    await credit(invoiceId, 10_000n);  // exactly the invoice: allowed
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 0 });
+  });
+
+  it("REFUSES a credit note against an invoice that is already voided", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+    await voidInvoice(invoiceId);
+
+    await expect(credit(invoiceId, 10_000n)).rejects.toThrow(/is voided/);
+    expect(await sql(`SELECT 1 FROM credit_note`)).toHaveLength(0);
+  });
+
+  it("drops a voided invoice's earlier credit notes with it, so nothing is subtracted twice", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const kept = await insertInvoice(issue, 50_000n);
+    const voided = await insertInvoice(issue, 40_000n);
+    await credit(voided, 15_000n);
+    await credit(kept, 5_000n);
+    expect((await totals(issue)).invoiced).toBe(70_000);
+
+    await voidInvoice(voided);
+
+    // 50,000 less its own 5,000 credit. Were the voided invoice's 15,000 still counted, this would
+    // read 30,000 — and 15,000 of ceiling room would exist that nobody granted.
+    expect((await totals(issue)).invoiced).toBe(45_000);
   });
 });
 
