@@ -284,11 +284,16 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.20b** Release 1 verifies by **email**, because it needs no new service — only the verified sending
   domain already owed (§9 item 1a). SMS is a new paid sub-processor and absent from the register;
   WhatsApp Business sending is release 3.
-- **R1.20c** **A signed copy may be uploaded against an issue** — the PDF carries a signature block, and
-  the returned paper or file is attached to the immutable issue with its own render and hash. It is the
-  fallback where a client has no email, and the artefact for a job where real money is at stake. We record
-  who uploaded it and when; **we do not certify it** — a tenant can forge one as easily as a client can,
-  and saying so is the control.
+- **R1.20c** **A signed copy may be uploaded against an issue**, and it is recorded at **grade 1 —
+  witnessed by nobody** (finding J5). The PDF carries a signature block and the returned paper is attached
+  with its own render and hash. It is the fallback where a client has no email, and in a dispute between
+  the client and the tenant it may be the most useful thing in the file — but it arrives from the tenant's
+  device with the tenant's credentials, so **we do not certify it**, and the grade is our attestation
+  rather than a rating of the paperwork. A tenant-uploaded scan and a tenant-uploaded screenshot are the
+  same artefact class and are graded the same.
+- **R1.20i** **The grade measures who witnessed the acceptance, never how convincing the artefact looks.**
+  A signed page looks like strong evidence, which is precisely why the first version of the ladder ranked
+  it above the one grade with an uncontrolled third party in the chain.
 - **R1.20d** A **paid deposit is recorded as corroboration** of acceptance, linked to the issue. A client
   who pays 40% has behaved in a way no typed name matches, and R1.23 already builds the deposit.
 - **R1.21** Share by WhatsApp click-to-chat and by email, on every tier. Server-side WhatsApp Business

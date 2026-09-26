@@ -87,7 +87,7 @@ which is a live phantom.
 
 **What it would cost if built as written.** Precisely what M14 cost, with interest. A reader — human
 or Claude, at 2am, deciding whether a money change is safe — reads "`money-convention.test.ts`
-asserts it" and stops looking. There is no assertion that every money column is `BIGINT`. The next
+asserts it", a file which does not exist, and stops looking. There is no assertion that every money column is `BIGINT`. The next
 person to add a `NUMERIC` or `DOUBLE PRECISION` amount column will not be stopped by anything, and
 the migration will still carry a sentence saying they were. Worse: the phantom is inside the one
 guard the project built specifically so this could not happen again, and it passed CI green, which is

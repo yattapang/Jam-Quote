@@ -235,6 +235,84 @@ describe("1 · the ceiling, in one expression", () => {
 });
 
 // ===========================================================================
+describe("J2 · the ceiling is enforced by the database, not by callers remembering", () => {
+  /** An invoice inserted the way a forgetful repository, a script or a 2am fix would insert one. */
+  async function invoiceDirectly(issueId: string, amount: bigint) {
+    return sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [id(), TENANT, issueId, amount.toString()],
+    );
+  }
+
+  it("REFUSES an invoice over the ceiling even when nothing calls issue_balance_apply", async () => {
+    // The finding, executed: before this trigger, an invoice for 5,000,000 against a ceiling of
+    // 100,000 inserted cleanly and the balance still read zero. Three documents claimed it could not.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+
+    await expect(invoiceDirectly(issue, 5_000_000n)).rejects.toThrow(/exceeds the ceiling/);
+
+    expect(await sql(`SELECT 1 FROM invoice`)).toHaveLength(0);
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(0);
+  });
+
+  it("keeps the balance current without an explicit call, because the write cannot avoid it", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+
+    await invoiceDirectly(issue, 40_000n);
+
+    // Nothing called issue_balance_apply here. The trigger did.
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(40_000);
+  });
+
+  it("refuses the second of two invoices that are each under the ceiling and together over it", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+
+    await invoiceDirectly(issue, 60_000n);
+    await expect(invoiceDirectly(issue, 60_000n)).rejects.toThrow(/exceeds the ceiling/);
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(60_000);
+  });
+
+  it("REFUSES invoicing an issue that was never accepted — a second hole that was only prose", async () => {
+    // No acceptance means no balance row, and the function raises rather than treating a missing row as
+    // permission. Previously this was a sentence in the PRD and nothing in the database.
+    const issue = await seal(1, 100_000n);
+    await expect(invoiceDirectly(issue, 1_000n)).rejects.toThrow(/issue_balance row missing/);
+  });
+
+  it("updates the balance when a variation arrives, with no explicit call", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'A gate', 30000, $4, now())`,
+      [id(), TENANT, issue, USER],
+    );
+    expect(minor((await balance(issue)).variations_total_minor)).toBe(30_000);
+    // And the raised ceiling is usable, which proves the trigger ran rather than merely not failing.
+    await invoiceDirectly(issue, 130_000n);
+  });
+
+  it("frees the room again when an invoice is voided, with no explicit call", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoiceDirectly(issue, 100_000n);
+    const invoiceId = (await sql<{ id: string }>(`SELECT id FROM invoice LIMIT 1`))[0]!.id;
+
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong amount', $4)`,
+      [id(), TENANT, invoiceId, USER],
+    );
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(0);
+  });
+});
+
+// ===========================================================================
 describe("2 · issue_balance has exactly one writer", () => {
   it("refuses a direct UPDATE from the application, however it is granted", async () => {
     // The harness grants UPDATE on every table (see test-support), which is exactly why the control
@@ -402,6 +480,86 @@ describe("4 · withdrawal is a row, and the documents stay immutable", () => {
 
     await withdraw();
     await expect(withdraw()).rejects.toThrow(/unique|duplicate/i);
+  });
+});
+
+// ===========================================================================
+describe("J10 · at most one revision of a quote holds a live ceiling", () => {
+  async function invoiceDirect(issueId: string, amount: bigint) {
+    return sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [id(), TENANT, issueId, amount.toString()],
+    );
+  }
+  const ceiling = async (issueId: string) =>
+    minor((await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issueId]))[0]!.c);
+
+  it("REFUSES a later revision while an accepted revision has been invoiced", async () => {
+    // The executed finding: revision 1 accepted and part-invoiced, revision 2 sealed and accepted, two
+    // live ceilings totalling 230,000 for one 130,000 job. The prescribed remedy — withdraw first — is
+    // impossible here, because H4's trigger refuses a withdrawal once an invoice exists.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    await invoiceDirect(rev1, 60_000n);
+
+    await expect(seal(2, 130_000n)).rejects.toThrow(/Money has moved/);
+  });
+
+  it("REFUSES a later revision while an accepted revision has a recorded variation", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'A gate', 20000, $4, now())`,
+      [id(), TENANT, rev1, USER],
+    );
+
+    await expect(seal(2, 130_000n)).rejects.toThrow(/Money has moved/);
+  });
+
+  it("allows a later revision when nothing financial hangs off the accepted one, and zeroes its ceiling", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    expect(await ceiling(rev1)).toBe(100_000);
+
+    const rev2 = await seal(2, 130_000n);
+
+    // The two functions now agree about the same row, which is what the finding was.
+    expect(await state(rev1)).toBe("superseded");
+    expect(await ceiling(rev1)).toBe(0);
+    expect(await ceiling(rev2)).toBe(0); // not accepted yet
+  });
+
+  it("refuses an invoice against a superseded revision, even though its balance row survives", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    await seal(2, 130_000n);
+
+    await expect(invoiceDirect(rev1, 1_000n)).rejects.toThrow(/exceeds the ceiling/);
+    // The balance row is untouched and inert, exactly as after a withdrawal.
+    expect(minor((await balance(rev1)).accepted_total_minor)).toBe(100_000);
+  });
+
+  it("leaves one live ceiling for the quote once the new revision is accepted", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 130_000n);
+    await accept(rev2);
+
+    expect(await ceiling(rev1)).toBe(0);
+    expect(await ceiling(rev2)).toBe(130_000);
+
+    // The whole point, stated as the sum the finding measured: 130,000, not 230,000.
+    const live = (await ceiling(rev1)) + (await ceiling(rev2));
+    expect(live).toBe(130_000);
+  });
+
+  it("allows a first revision with nothing before it", async () => {
+    // Proves the trigger is not simply refusing everything, which a guard that always raises would.
+    const rev1 = await seal(1, 100_000n);
+    expect(await state(rev1)).toBe("sealed_awaiting_number");
   });
 });
 

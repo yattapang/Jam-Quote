@@ -72,14 +72,40 @@ produce *several* pieces for one acceptance — a WhatsApp reply *and* a deposit
 from the evidence rows, exactly as issue state and invoice status already are (ADR 0025 decision 3), so
 there is no stored grade to drift.
 
+**The doctrine, which comes before the table because getting it wrong is what produced finding J5: the
+grade measures WHO WITNESSED the acceptance, never how convincing the artefact looks.** A signed page looks
+like strong evidence, and that is exactly why it was mis-ranked.
+
 | Grade | Evidence | Who witnesses it | Available in R1? |
 |---|---|---|---|
-| 1 | Tenant records "the client agreed" | **nobody** | Yes |
+| 1 | Tenant records "the client agreed" — **including a tenant-uploaded signed document or screenshot** | **nobody** | Yes |
 | 2 | Someone holding the link tapped accept | possession of a link | Yes |
 | 3 | One-time code to a stored or typed channel | the channel holder — *if the channel is genuine* | Yes, by email |
 | 4 | The client's **own reply**, by email or WhatsApp | Google / Meta | **No — see §6** |
-| 5 | A signed document returned and uploaded | the client's hand | Yes |
+| ~~5~~ | **Retired 2026-09-26 (J5).** Was "a signed document returned and uploaded", witnessed by "the client's hand" | — | — |
 | 6 | **Deposit paid** | the bank or WiPay | Yes |
+
+**Why grade 5 was wrong, and why its number is tombstoned rather than reused.** A signed document
+*uploaded by the tenant* comes from the tenant's device, with the tenant's credentials, and no third party
+is in the chain at any point — so by §2's own test it cannot outrank anything, let alone grade 4, the one
+grade that has Google or Meta in it. §6 of this document already convicted a tenant-uploaded screenshot as
+"grade 1 dressed as grade 4"; a scanned signature arrives by the same path and the same argument applies.
+The design asserted "the client's hand" as a witness when nobody in the system has seen the client's hand.
+
+The number stays retired rather than being reused by grade 6, for the reason Rule 23.2 gives about rule
+numbers: other documents cite these grades, and a reused number turns an old citation into a confident lie.
+
+**The artefact is still recorded, and it still matters — as a fact, not as a grade.** `acceptance_evidence`
+holds "a signed document is on file", with who uploaded it and when. In a dispute between the client and
+the tenant that document may be the most useful thing in the file; we simply are not the ones vouching for
+it, and the grade is our attestation rather than a rating of the paperwork.
+
+**A client-uploaded document is a different thing and earns a real grade.** If the client attaches the
+signed page through the share link, the file arrives from a session the tenant does not control — the same
+difference as between a tenant's screenshot and an inbound reply. That is **deferred**, because it means an
+upload endpoint open to an unauthenticated party, which needs the malware scanning and object storage
+decisions that are still open (`../SERVICE-REGISTER.md` §3a). When it lands it becomes a new grade beside 4,
+and grade 5 stays retired.
 
 ### 4.3 The tenant chooses the bar
 
@@ -121,8 +147,9 @@ have it.**
   address we host, an endpoint that parses mail, and a new sub-processor — and brief §14 already lists
   "automated inbound-email handling can come later".
 
-So in release 1 the available grades are **1, 2, 3, 5 and 6**, and the strongest one that does not depend
-on new infrastructure is **6, the deposit** — which is why the owner's instinct to treat a deposit as
+So in release 1 the available grades are **1, 2, 3 and 6** — grade 5 is retired (§4.2) and a signed
+document uploaded by the tenant is grade 1 — and the strongest one that does not depend on new
+infrastructure is **6, the deposit** — which is why the owner's instinct to treat a deposit as
 confirmation is the right one, and not merely a convenience.
 
 A screenshot of a WhatsApp reply, uploaded by the tenant, is **grade 1 dressed as grade 4**, and this
@@ -138,7 +165,10 @@ Each by planting the defect it exists to catch:
 - an `acceptance_evidence` row updated or deleted → refused by the absence of a policy;
 - the derived grade computed with an evidence row removed → the grade falls, proving it is derived rather
   than stored;
-- a tenant-uploaded screenshot → recorded at grade 1, never higher.
+- a tenant-uploaded screenshot → recorded at grade 1, never higher;
+- a tenant-uploaded **signed document** → also grade 1, and the "a signed document is on file" fact
+  recorded beside it, proving the artefact is kept without being graded (J5);
+- the retired grade 5 asserted by any row → refused, so the number cannot come back by accident.
 
 ## 8. What this design does not prove (Rule 21.4)
 

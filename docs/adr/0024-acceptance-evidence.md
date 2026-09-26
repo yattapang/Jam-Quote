@@ -64,6 +64,12 @@ where nobody ever disputes anything.
 
 ### 3. Release 1 gains a signed-copy path, because it is cheap and it is what contractors already do
 
+> **Amended 2026-09-26 (finding J5).** This section stands, with one correction made in
+> `../design/acceptance-evidence.md` §4.2: a signed copy **uploaded by the tenant** is recorded at
+> **grade 1, witnessed by nobody**, because it arrives from the tenant's device with the tenant's
+> credentials. The path is worth having and the artefact is worth keeping; what was wrong was ranking it
+> above evidence with an uncontrolled third party in the chain.
+
 **R1: the quote PDF carries a signature block, and a signed copy can be uploaded against the issue.**
 The contractor prints or sends it, the client signs on paper or in a PDF reader, and the photograph or
 file is attached to the immutable issue as its own `document_render`-style record with its own hash. No
