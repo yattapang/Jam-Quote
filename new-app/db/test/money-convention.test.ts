@@ -145,9 +145,11 @@ describe("money is stored as integer minor units, everywhere", () => {
       const ceiling = 99_999_999_999n;
       await db.exec(`CREATE TEMP TABLE ceiling_probe ("v" BIGINT NOT NULL)`);
       await db.query(`INSERT INTO ceiling_probe ("v") VALUES ($1)`, [ceiling.toString()]);
-      const back = (await db.query<{ v: string | number | bigint }>(`SELECT "v" FROM ceiling_probe`))
-        .rows[0];
-      expect(BigInt(back.v)).toBe(ceiling);
+      const rows = (
+        await db.query<{ v: string | number | bigint }>(`SELECT "v" FROM ceiling_probe`)
+      ).rows;
+      expect(rows).toHaveLength(1);
+      expect(BigInt(rows[0]!.v)).toBe(ceiling);
       expect(ceiling > 2_147_483_647n).toBe(true);
     })();
   });

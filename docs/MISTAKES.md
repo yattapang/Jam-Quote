@@ -345,3 +345,18 @@ schema that answer "who did this?", both accepting any UUID as the actor. Both n
 
 **Cost:** none, because the plant ran before the claim. That is the entire value of Rule 21.2 and this
 entry exists so the next agent sees a plant catching a real defect rather than ceremony.
+
+### M22 · Pushed with a typecheck error in the file I had just written to prove a claim
+`Repeat of:` **M10's family** — an exit code from part of the gate treated as a result from the gate.
+
+I ran the database suite (87 green) and four checkers before committing `money-convention.test.ts`,
+and **not** `npm run typecheck`. CI failed on one line of the new file: `rows[0]` is possibly
+undefined under `strict`. The test was correct and the types were not, which makes it the cheap kind
+of failure and it still cost a red build on the commit whose whole subject was a guard being proved
+properly.
+
+**Cost:** one red build, one corrective commit, and the irony of it landing on M20's commit.
+
+**Prevented by:** the full local gate before a push is typecheck **and** lint **and** tests **and**
+the checkers — not the subset that relates to what I changed. A new test file is TypeScript being
+added to a strict project, so the compiler is part of its proof, not a formality afterwards.
