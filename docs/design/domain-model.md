@@ -101,7 +101,8 @@ These are settled by work already landed, and are stated here so no entity re-li
 | Entity | Purpose | Key invariants |
 |---|---|---|
 | `tenant` | The contracting business. | Country and trading currency set at creation and not casually changed. Suspension is a field, not a deletion. |
-| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally**, which is what enforces the owner's rule that a second business needs a second address (11a). |
+| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally**, which is what enforces the owner's rule that a second business needs a second address (11a). A user row is inserted at **verification**, never at registration — see `registration_claim` below. |
+| `registration_claim` | A pending registration: an address, a hashed token, an expiry. **Not a user** (ADR 0025 decision 5). | Deliberately **not unique on the address**, so two people may attempt the same one; and not tenant-scoped, because it exists before any tenant does. This is what makes the row above possible: the claim holds nothing, verification inserts the user, and the unique index decides — so **"first to verify wins" is a database guarantee rather than application logic** (finding H8). Claims expire in 72 hours and are deleted, so the table cannot become a shadow user list. |
 | `membership_role` | What a user may do inside the tenant. | At least one active owner at all times; the last owner cannot be demoted or deactivated. |
 | `platform_capability` | What one of **our** staff may do. | Every grant has a granter (least privilege is only real with an author). Holding one requires a confirmed second factor (ADR 0021). |
 | `document_settings` | Logo, header details, two colours, default terms. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. |
@@ -231,7 +232,7 @@ including which of three versions they accepted.
 | `quote_line` | A line on the working quote, in a section, ordered. | Belongs to one quote and one section. Recipe-expanded lines remember the recipe, so a recipe change can offer to refresh a draft — never an issue. |
 | `variation` | A change to accepted work: added, removed or altered scope, with its own price. Immutable once recorded; a mistake is corrected by another variation. Carries `client_reference`, a device-supplied idempotency key unique per issue, because it may be recorded offline and replayed — and a duplicate of an append-only row that feeds the ceiling raises it permanently (H11). | First-class, not a new quote — the client has already accepted the original. **Release 1 records it; release 2 makes it signable** (PRD W6a). Until then it carries `recorded_by_user_id` and is what the ceiling in §6.2a measures against, so "who agreed to the extra $40,000" has an answer of *known strength* rather than a signature it does not have. |
 | `acceptance` | The client accepting or declining an issue. | Records the signer's name, timestamp, IP, user agent, the verified channel and the consent-to-sign (ADR 0024), and **references the `document_render` row whose hash is the document signed** — it does not carry a hash of its own (F17). Immutable. One acceptance per issue. |
-| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices may never exceed the accepted total plus accepted variations, which is the single most important arithmetic invariant in the product. |
+| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices may never exceed the ceiling, which is defined once in SQL as `issue_ceiling_minor()` and is the single most important arithmetic invariant in the product. |
 | `invoice_line` | Either a share of the issue (percentage or amount) or a named extra. | Frozen at issue, like the quote. |
 | `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | Never exceeds the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments, retention and credits. |
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
@@ -250,7 +251,14 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
 **The invariant:** the sum of issued invoices against an accepted issue may never exceed the accepted
-total, plus accepted variations, where those exist.
+total, plus **recorded** variations.
+
+**"Recorded", not "accepted", and the definition is not here.** Release 1 builds no variation
+acceptance, so "accepted variations" would name something that does not exist — an invariant reading
+stronger than it is. The arithmetic lives in **`issue_ceiling_minor()`** in the Documents migration, and
+this paragraph deliberately does not restate it: restating it is how the two documents came to disagree
+(findings G1 and H1, the same defect twice). When release 2 makes variations signable, that one
+expression changes and this text does not.
 
 The first version of this document stated that twice in prose and never said where it is enforced —
 found by review as the exact thing Rule 1.10 names, *"an invariant with no owner"*. Prose is not an
@@ -279,9 +287,15 @@ than defending against it, and it is the only ordering that cannot be forgotten 
 | `variations_total` | **derived cache**, re-summed from `variation` rows | every variation, inside the lock |
 | `invoiced_total` | **derived cache**, re-summed from issued invoices | every invoice and credit note, inside the lock |
 
-**Every writer takes the lock.** The set is closed and named, because an unenumerated writer set is how a
-locked row stops being locked: issuing an invoice · voiding an invoice · a credit note · recording a
-variation · the reconciliation job. Any future writer joins this list or it does not ship.
+**Every writer takes the lock, and a prose list is no longer what says so.** The first version of this
+paragraph named the writers and omitted the two the same amendment had invented — including the row's own
+creator (finding H2, after G2). A list that can be wrong is not a control.
+
+What enforces it now: `issue_balance` has **no INSERT or UPDATE policy the application can satisfy**, so
+the only way in is `issue_balance_apply()` and `issue_balance_open()`, which set the transaction-local
+flag the write policies require. **The writer set is therefore the set of callers of those two functions,
+and it cannot go stale**, because there is no other door. `db/test/policy-parity.test.ts` asserts the flag
+predicate is present, so the mechanism is checked rather than described.
 
 Issuing an invoice is one transaction: lock the row · re-sum from the rows rather than trusting the
 cached figure · **refuse** if the new total would exceed `accepted_total + variations_total` · insert the
@@ -306,31 +320,38 @@ credited does not raise how much may be billed.
 defects: two concurrent invoices, a queued offline replay, and a variation arriving between the read
 and the write.
 
-### 6.3 The two state machines
+### 6.3 State, which is derived and defined in one place
 
-```
-quote:        draft ──issue──▶ issued ──▶ superseded (by a later revision)
-                │                │
-                └──abandon──▶ abandoned
-                                 └──expire──▶ expired  (per the jurisdiction's day boundary)
+**`quote_issue_state()` in the Documents migration is the definition.** This section had a state machine
+and §8 had a different one, in the same document, both added in the same commit (finding H6) — which is
+the two-documents-disagree failure happening inside a single file. There is now **no state column and no
+second diagram**: the state is a function of rows that already exist, so there is no value for two
+paragraphs to disagree about.
 
-issue:        issued ──accept──▶ accepted ──▶ invoiced (partly) ──▶ settled
-                │                    │
-                └──decline──▶ declined
-```
+| State | Is true when |
+|---|---|
+| `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered |
+| `issued` | an `issue_number` row exists |
+| `accepted` | an `acceptance` row exists with outcome `accepted` and no withdrawal |
+| `declined` | a declining `acceptance` row exists |
+| `superseded` | a later revision of the same quote exists |
 
-Transitions that must be impossible, and are therefore tested: editing an issue; accepting a
-superseded issue; accepting twice; **superseding an issue that has been accepted** (G8 — the
-acceptance hangs off it, so a revision would orphan it, and the path is a variation); invoicing a
-declined issue; invoicing past the accepted total; recording a payment against a draft invoice;
-releasing retention twice; **sealing a second issue for the same (quote, revision)** (G4).
+Read the function for the precedence between them; it is eleven lines and it is authoritative.
 
-**One transition that must be possible, and was missing (G8):** an acceptance may be **withdrawn** —
-recorded, audited, with a reason, and **only while no invoice exists against it** — which returns the
-issue to superseded-able. Without it a non-price error on an accepted issue (the wrong client, the
-wrong terms, the wrong tax treatment) had no remedy at all, because a variation answers "the scope
-changed" and nothing else. Once an invoice exists the remedy is a credit note and a fresh quote,
-since money has moved.
+**Transitions that must be impossible, and are therefore tested** (`db/test/documents-core.test.ts`):
+editing or deleting an issue · editing an acceptance · accepting twice · invoicing past the ceiling ·
+sealing a second issue for the same (quote, revision) (G4) · writing `issue_balance` outside its function
+· withdrawing an acceptance twice · deleting a balance row.
+
+**Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
+recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to
+zero. It is **refused while any invoice OR any recorded variation exists**, enforced by a trigger rather
+than by a caller: the first version named only invoices, and the same release had given an accepted issue
+two more financial dependants. Once either exists the remedy is a credit note and a fresh quote.
+
+So "superseding an accepted issue" is not a forbidden transition, it is an ordering: withdraw first —
+which is possible only while no money hangs off it — and the issue is no longer accepted, so superseding
+it orphans nothing.
 
 ---
 
@@ -437,16 +458,18 @@ sequence. It is not an issue — it is a record of a price given at a gate, whic
 needed kept. First to sync wins; both timestamps are stored, so who priced it first stays answerable
 without deciding anything.
 
-**"Sealed, awaiting number" is a state, so it belongs in the state machine (G5).** §6.3 had no node for it,
-which left ADR 0023's cross-month metering case nowhere to attach a test:
+**What happens to a seal between the device and a number (G5).** The states themselves are defined once,
+in `quote_issue_state()`, and §6.3 lists them — this section had a second diagram of the same thing and it
+is deleted, because two pictures of one state machine in one document is finding H6.
 
-```
-quote:  draft ──seal──▶ sealed (awaiting number) ──sync──▶ issued ──▶ ...
-                            │
-                            └──refused at sync──▶ blocked (a colleague sealed it, or the
-                                                  free-tier limit was reached) — the snapshot
-                                                  is kept, never destroyed
-```
+What belongs here is the part §6.3 cannot say, which is what the *sync* does:
+
+- a seal that pushes cleanly is numbered, and becomes `issued`;
+- a seal **refused** at sync is kept and numbered later, or never. Two reasons it is refused: a colleague
+  sealed that revision first (it becomes a `rejected_seal`, H7) or the free-tier limit is reached (it
+  waits, H12).
+
+Neither refusal destroys anything, which is the rule that matters: **the snapshot outlives every refusal.**
 
 **Nothing releases a blocked seal automatically, and that is the whole answer to "what is the queue?"
 (H12).** There is no queue because there is no automatic process: the tenant sees the blocked seals with

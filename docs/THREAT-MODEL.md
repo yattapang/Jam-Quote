@@ -161,6 +161,19 @@ malware-bearing phone, or a tenant's staff photographing a client list. Those ar
 we can control; the honest position is that a tenant's data on a tenant's phone is partly the tenant's
 responsibility, and the terms should say so rather than implying we can protect it there.
 
+## 4b. Registration, which is the one unauthenticated endpoint that creates rows (added 2026-09-26, H14)
+
+| Threat | What is actually true today | Control |
+|---|---|---|
+| **An email bomb aimed at a known tenant.** A duplicate registration deliberately does not reveal the address is taken and **mails the existing owner instead** (Rule 14) — so anyone who knows a tenant's address can make us send them a hundred messages | Nothing is built yet, and the PRD's own list of registration bounds had silently dropped the per-address limit while presenting itself as exhaustive | A rate limit **per address** as well as per IP (PRD R1.30d). The non-enumerating response is right and it is exactly what creates this, which is why the two must ship together |
+| **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message |
+| **Squatting on a competitor's address** to lock them out | The unique index is on `app_user.email`, and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
+| **CGNAT makes an IP bound useless or harmful** | Jamaican mobile networks put tens of thousands of subscribers behind one address | The IP limit is on *attempts* and deliberately loose; the real defences are verification and the free tier's own cost ceiling. **No device fingerprinting** — it was proposed and removed as a tracking technology nobody had weighed |
+
+**What this section does not cover:** a determined attacker with many real mailboxes. They can create many
+free tenants, and the bound on what each can consume (three numbered jobs a month) is what makes that
+pointless rather than any identity check.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

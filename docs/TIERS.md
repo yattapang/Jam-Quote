@@ -43,9 +43,9 @@ country. What each tier *includes* is the design.
 | Invoices and payment recording | — | ✓ | ✓ |
 | Payment reminders and overdue digest | — | ✓ | ✓ |
 | Card payment links (WiPay) | — | ✓ | ✓ |
-| Project costing and job profit | — | ✓ | ✓ |
-| Retention tracking | — | ✓ | ✓ |
-| Accountant exports (CSV) | — | ✓ | ✓ |
+| Project costing and job profit | — | ✓ *(release 2)* | ✓ *(release 2)* |
+| Retention tracking | — | ✓ *(release 2)* | ✓ *(release 2)* |
+| Accountant exports (CSV) | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Offline **sealing** — price and capture a job with no signal | ✓ | ✓ | ✓ |
 | Offline **issuing** — a number at the gate (release 2) | — | ✓ | ✓ |
 | Users on the account | 1 | 1 | up to 10, then per seat |
@@ -57,6 +57,11 @@ country. What each tier *includes* is the design.
 | WhatsApp Business sending (templated, receipts) | — | — | ✓ |
 | API access and integrations | — | — | ✓ |
 | Support | email | email | priority |
+
+**A tick with *(release 2)* means the tier will include it and release 1 does not** (finding H15). The
+site marks the same three the same way, and `new-app/web/test/site-guards.test.ts` fails if the site ever
+sells an unmarked feature the current release does not deliver — this table has no such guard, which is
+why the marking is written by hand and worth checking when the ladder changes.
 
 Notes on the boundaries, since they are the commercial decisions:
 
@@ -122,9 +127,20 @@ Each is one feature under the one-at-a-time rule, and each lands with its entitl
 claims against work done, retention held and released. Retention exists; staged claims do
 not. This is the most common reason a Jamaican contractor still uses a paper book.
 
-**3. Client approval on the quote page.** The public page can already accept or decline; add
-a typed name, a timestamp and a PDF record of the acceptance. Contractors need proof the
-client agreed to a price before work starts, which is exactly the dispute that costs them.
+**3. Client approval on the quote page.** The public page can already accept or decline. Contractors need
+proof the client agreed to a price before work starts, which is exactly the dispute that costs them.
+
+**Superseded in part by ADR 0024 (finding H15).** This item originally said "add a typed name, a timestamp
+and a PDF record of the acceptance", and both halves have since been overtaken:
+
+- the owner ruled that **a typed name is not legal in a dispute**, and that a properly constructed
+  e-signature can be — so release 1 builds a **one-time-code-verified signature** over a hashed document,
+  not a typed name;
+- the acceptance does **not** carry a PDF record of its own. One hash lives on `document_render` and the
+  acceptance references it (finding F17), because two hashes of one document is two things to keep in
+  step.
+
+The need this item names is real and unchanged; the mechanism it prescribed is not what gets built.
 
 **4. Material price index with supplier comparison.** — and see `PRODUCT-OPPORTUNITIES.md`: this
 is also the most defensible asset in the business, with two conditions that cannot be retro-fitted.

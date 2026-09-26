@@ -299,8 +299,10 @@ demonstrated, it is not a requirement, it is a hope.
   the schema can check it.**
 - **R1.22a** A **priced variation** may be recorded against an accepted issue: a description, lines
   priced the same way a quote is, and a total that may be positive or negative.
-- **R1.22b** Recording one **re-derives the accepted total** for that issue, which is what R1.24
-  measures against. Variations are immutable once recorded; a mistake is corrected by another variation.
+- **R1.22b** Recording one **re-derives the ceiling** for that issue — not the accepted total, which is
+  written once and never again (R1.24b). The distinction matters and getting it wrong was finding H3: the
+  ceiling is `accepted_total + variations_total`, and a variation moves the second term. Variations are
+  immutable once recorded; a mistake is corrected by another variation.
 - **R1.22c** Revising an **accepted** issue is refused in R1. The path is a variation, not a new issue —
   which prevents the two-accepted-issues state the model tests as impossible.
 - **R1.22d** The audit trail records who recorded a variation and when. R1 has **no client signature on
@@ -357,10 +359,10 @@ demonstrated, it is not a requirement, it is a hope.
 ### W9 · Subscribe — how we get paid
 - **R1.30** Self-service sign-up on the website, free tier, no card (ADR 0015).
 - **R1.30a** **Registration is the one unauthenticated endpoint that creates rows**, so Rule 14's
-  defences ship *with* it, not after: rate limiting per address and per IP · **email verification before
-  the account can cost us money** · a bound on tenants per address · and a duplicate registration that
-  **does not reveal the address is taken**. Review found none of the four in the PRD (F12) even though
-  Rule 14 and `TIERS.md` §2a both name them.
+  defences ship *with* it, not after. Quoting Rule 14 **as it now reads**, because the previous version of
+  this requirement quoted wording the same commit had deleted (finding H13): rate limiting per address and
+  per IP · **email verification before the account can cost us money** · **one tenant per verified
+  address** · and a duplicate registration that **does not reveal the address is taken**.
 - **R1.30b** Email verification is **load-bearing for ADR 0022**, not a nicety. Global email uniqueness
   is what enforces "one business per address"; without verification the first person to type an address
   owns it and can lock out its real holder — and because R1.30a's duplicate response deliberately does
@@ -369,9 +371,13 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.30c** Rule 14's *bound on tenants per address* and ADR 0022's *one person, several businesses, one
   address each* are reconciled as **one tenant per verified address**. That part is exact and is enforced
   by the unique index that already exists.
-- **R1.30d** **The rate bound is not an IP bound, because IP does not work here (G11).** Jamaican mobile
-  networks put tens of thousands of subscribers behind carrier-grade NAT, so an address bound either
-  blocks a whole network or permits everything. The bound is therefore:
+- **R1.30d** **The rate bound is not an IP bound alone, because IP does not work here (G11).** Jamaican
+  mobile networks put tens of thousands of subscribers behind carrier-grade NAT, so an IP bound either
+  blocks a whole network or permits everything. The bounds are therefore:
+  **(a0)** a rate limit **per email address**, which Rule 14 requires and the previous version of this
+  list silently dropped while presenting itself as exhaustive (finding H14). Without it, registration is
+  an **email bomb aimed at a known address**: R1.30a mails the existing owner on every duplicate attempt,
+  so an attacker who knows a tenant's address can have us send them a hundred messages;
   **(a)** a rate limit per IP on *attempts* — cheap, effective against a crude script, and deliberately
   loose enough not to lock out a whole carrier;
   **(b)** the **email verification requirement** (R1.30a) doing the real work: an unverified registration
@@ -457,12 +463,12 @@ R1 ships **Free and Pro only**. Business is R3, and until then the site must not
 
 | | Free | Pro |
 |---|---|---|
-| Jobs quoted | 3 per month | Unlimited |
+| Jobs **numbered** per month (ADR 0023: not sealed, not sent; revisions and declines free) | 3 | Unlimited |
 | Branded PDF, share, client accept | ✓ | ✓ |
 | Clients, catalog, labour, equipment | ✓ | ✓ |
 | Recipes | **create one**, then use it (ADR 0023) | unlimited |
 | Invoices, payments, reminders, WiPay | — | ✓ |
-| Offline **sealing** (the core promise — every tier, ADR 0023) | ✓ | ✓ |
+| Offline **sealing** (the core promise — every tier, ADR 0023) | ✓, and a seal past the monthly limit waits to be numbered rather than being lost (R1.32b) | ✓ |
 | Offline **issuing** (numbered at the gate) | — (R2) | — (R2, the Pro line when it lands) |
 | Users | 1 | 1 |
 
