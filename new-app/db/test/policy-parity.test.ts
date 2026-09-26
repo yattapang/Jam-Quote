@@ -193,7 +193,8 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
         rejected_seal_line:
           "The lines of a seal the server refused (finding H7). They record what a device actually " +
           "priced at the gate, so rewriting them would destroy the only reason the row is kept. The " +
-          "parent `rejected_seal` is NOT append-only, because a tenant resolves it later.",
+          "parent `rejected_seal` is NOT append-only, because a tenant resolves it later — it is " +
+          "in RESOLVE_ONLY, with a trigger freezing every column but the resolution (finding J16).",
         audit_entry:
           "The audit trail (ADR 0020). Its whole value is that it cannot be edited, so the " +
           "absence of an UPDATE or DELETE policy is the control rather than an omission.",
@@ -212,6 +213,23 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
        * property this guard checks. Without it, someone could drop the flag condition and leave a
        * table that reads as function-guarded and is not.
        */
+      /**
+       * Tables whose FACTS are frozen but which carry one field a tenant sets later, so they need
+       * exactly SELECT, INSERT and UPDATE — and NO DELETE. A third category, added by finding J16.
+       *
+       * Why it exists rather than these tables going through the general branch: the general branch
+       * requires a single policy FOR ALL, and FOR ALL is precisely J16's defect. `rejected_seal` was
+       * created with one unqualified policy, which granted DELETE along with the UPDATE it wanted, so
+       * a tenant could delete the record of the price a contractor quoted at a gate.
+       *
+       * Each entry names the trigger that freezes the columns the policy cannot, because a policy
+       * cannot restrict an UPDATE to particular columns and "the application prevents it" is not an
+       * owner (Rule 1.10).
+       */
+      const RESOLVE_ONLY: Record<string, string> = {
+        rejected_seal: "rejected_seal_is_frozen",
+      };
+
       const FUNCTION_GUARDED: Record<string, string> = {
         issue_balance:
           "current_setting('pryvis.balance_write'::text, true) = 'on'::text",
@@ -374,6 +392,51 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
                   );
                 }
               }
+            }
+            continue;
+          }
+
+          if (table in RESOLVE_ONLY) {
+            // Exactly SELECT, INSERT and UPDATE. A DELETE policy here, or an unqualified FOR ALL
+            // policy, is finding J16 returning — so both are named in the message rather than
+            // reported as a generic mismatch.
+            const byCommand = new Map(policies.rows.map((p) => [p.cmd, p]));
+            const commands = [...byCommand.keys()].sort().join(",");
+            if (commands !== "a,r,w") {
+              unprotected.push(
+                `${table} resolves later, so it must have exactly SELECT ('r'), INSERT ('a') and ` +
+                  `UPDATE ('w') policies and no DELETE — found '${commands}'. A policy for ALL ` +
+                  `('*') grants DELETE with the UPDATE, which is what finding J16 was.`,
+              );
+            }
+            for (const [cmd, label] of [
+              ["r", "USING"],
+              ["a", "WITH CHECK"],
+              ["w", "USING"],
+            ] as const) {
+              const policy = byCommand.get(cmd);
+              if (!policy) continue;
+              const expr = label === "USING" ? policy.using_expr : policy.check_expr;
+              if (expr !== null && normalise(expr) !== expected) {
+                unprotected.push(
+                  `${table}.${policy.polname} ${label} is not the canonical tenant expression — got ${expr}`,
+                );
+              }
+            }
+            // The columns a policy cannot protect are protected by a trigger, and the trigger is
+            // asserted to EXIST here. Without this, the category would document an intention.
+            const trigger = RESOLVE_ONLY[table]!;
+            const found = await db.query<{ tgname: string }>(
+              `SELECT t.tgname FROM pg_trigger t
+                 JOIN pg_class c ON c.oid = t.tgrelid
+                WHERE c.relname = $1 AND NOT t.tgisinternal AND t.tgname = $2`,
+              [table, trigger],
+            );
+            if (found.rows.length !== 1) {
+              unprotected.push(
+                `${table} has no trigger \`${trigger}\`, so nothing stops an UPDATE rewriting the ` +
+                  `frozen columns — which a policy cannot express and this category promises.`,
+              );
             }
             continue;
           }

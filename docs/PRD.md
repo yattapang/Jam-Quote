@@ -237,6 +237,11 @@ demonstrated, it is not a requirement, it is a hope.
   it and sealing that **online** as the next revision, whose `sealed_at` is honestly the moment of that
   new seal. The rejected row remains as the record of the gate price. Nothing is renumbered and the
   winner is never marked superseded by a document sealed before it.
+- **R1.18j** **The resolution is the only thing about a rejected seal that can change, and it cannot be
+  deleted at all (J16).** The price, the `sealed_at`, the client and the lines are frozen by a database
+  trigger rather than by the application remembering, and the absence of a DELETE policy is what makes
+  the row permanent. A tenant is the party a client would be in dispute with, so "the tenant can edit
+  the evidence" is not a limitation to note — it is the defect.
 - **R1.18d** **A sealed snapshot is never destroyed by a timer.** The outbox's retention limit may expire
   cached reads; it may not delete a sealed document that has not reached the server. A retention limit that
   can destroy the only copy of a financial document is data loss on a schedule (G5).

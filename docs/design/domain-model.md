@@ -450,8 +450,12 @@ unanswerable to an accountant. Append-only protects the row and says nothing abo
 **The defence: sealing claims the quote, and the claim is what conflicts.** A seal records the quote id and
 the revision it sealed, and the server enforces **one sealed issue per (quote, revision)** with a unique
 index. The second device's push is **refused, not merged** — it is told its colleague sealed this job, and
-its snapshot is kept as a **`rejected_seal`** — its own append-only row, outside `quote_issue`, holding
-what the device priced and its own true `sealed_at`. The rule is: *one sealed snapshot per revision of a
+its snapshot is kept as a **`rejected_seal`** — its own row, outside `quote_issue`, holding what the
+device priced and its own true `sealed_at`. It is **frozen except for its resolution**, and both halves
+of that are enforced: there is no DELETE policy, so the row cannot be removed, and a trigger
+(`rejected_seal_is_frozen`) refuses an UPDATE that touches anything but `resolution`, `resolved_at` and
+`version`. The first version granted ALL commands by writing a policy with no `FOR` clause, which made
+the gate price deletable and rewritable by the tenant it protects the client from (finding J16). The rule is: *one sealed snapshot per revision of a
 quote, and a revision cannot be created offline.*
 
 **Why a separate table and not a renumbered issue (H7).** "Offered as a revision" required renumbering a

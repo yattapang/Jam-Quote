@@ -731,6 +731,66 @@ describe("H7 · a refused seal is its own record, not an issue awaiting renumber
     ).rejects.toThrow(/resolution_check|violates check/i);
   });
 
+  // ---------------------------------------------------------------------------
+  // J16. The policy that made all of the above possible also granted DELETE, because it had no FOR
+  // clause. These four execute the corrected shape rather than reading it: the parity guard asserts
+  // which policies exist, and existing is not the same as refusing.
+  // ---------------------------------------------------------------------------
+  it("J16 · cannot be deleted, because there is no DELETE policy to permit it", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T06:00:00Z");
+
+    // No error: with FORCE ROW LEVEL SECURITY and no DELETE policy, no row is VISIBLE to the
+    // delete, so it affects nothing. That distinction matters — a caller checking only for an
+    // exception would believe the delete succeeded, which is why the row is read back.
+    const deleted = await db.query(`DELETE FROM rejected_seal WHERE id = $1`, [rejected]);
+    expect(deleted.affectedRows ?? 0).toBe(0);
+    expect(await sql(`SELECT 1 FROM rejected_seal WHERE id = $1`, [rejected])).toHaveLength(1);
+  });
+
+  it("J16 · refuses an UPDATE that rewrites the price quoted at the gate", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T06:00:00Z");
+
+    // The exact attack the original migration admitted it could not stop: "a tenant who can resolve
+    // a rejected seal can also, at the database level, rewrite the price it recorded."
+    await expect(
+      sql(`UPDATE rejected_seal SET total_minor = 500_000, subtotal_minor = 500_000 WHERE id = $1`, [
+        rejected,
+      ]),
+    ).rejects.toThrow(/quoted at the gate|J16/i);
+
+    const rows = await sql<{ total_minor: string }>(
+      `SELECT total_minor FROM rejected_seal WHERE id = $1`,
+      [rejected],
+    );
+    expect(BigInt(rows[0]!.total_minor)).toBe(97_500n);
+  });
+
+  it("J16 · refuses a quieter rewrite: the sealed_at that decides who priced it first", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T06:00:00Z");
+    await expect(
+      sql(`UPDATE rejected_seal SET sealed_at = now() WHERE id = $1`, [rejected]),
+    ).rejects.toThrow(/quoted at the gate|J16/i);
+  });
+
+  it("J16 · still lets the resolution and version through, so the freeze is not a wall", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T06:00:00Z");
+    await sql(
+      `UPDATE rejected_seal SET resolution = 'reissued', resolved_at = now(), version = version + 1
+        WHERE id = $1`,
+      [rejected],
+    );
+    const rows = await sql<{ resolution: string; version: number }>(
+      `SELECT resolution, version FROM rejected_seal WHERE id = $1`,
+      [rejected],
+    );
+    expect(rows[0]!.resolution).toBe("reissued");
+    expect(Number(rows[0]!.version)).toBe(2);
+  });
+
   it("cannot be promoted into the issue sequence by rewriting the winner", async () => {
     // The three impossible routes, as one test: the loser cannot become revision 2 by editing
     // anything, because `quote_issue` has no UPDATE path at all.
