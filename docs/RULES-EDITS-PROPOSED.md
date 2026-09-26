@@ -27,7 +27,7 @@ then they land in `docs/RULES.md` and this file becomes the record of *why*.
 > One gap was found *while* applying them and fixed in the same change: Rule 1's sub-rules were an
 > auto-numbered list, so inserting 1.2 had silently renumbered everything after it and left three
 > ADRs and the Phase 0 audit citing the wrong rules. Those numbers are now explicit, and
-> `tools/check-rule-references.py` gates every citation in CI.
+> `tools/check_rules.py` gates every citation in CI.
 
 ---
 

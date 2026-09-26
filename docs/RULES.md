@@ -20,7 +20,7 @@ attached.
 
 **Sub-rule numbers are stable and cited across the repository.** New sub-rules are appended, never
 inserted — inserting one renumbers every rule after it and silently invalidates existing citations,
-which happened on 2026-09-24 and cost four documents their accuracy. `tools/check-rule-references.py`
+which happened on 2026-09-24 and cost four documents their accuracy. `tools/check_rules.py`
 gates it, and runs in CI.
 
 Product: **Pryvis** (pryvis.com). Built as JamQuote; renamed per ADR 0009.
@@ -707,6 +707,23 @@ a row, a file, a deployed version — **the claim quotes that state, not the exi
 > remote — a successful no-op — while the work sat on the other branch. Exit 0, nothing pushed, and
 > a commit that would have arrived inside an unrelated pull request. `git ls-remote` would have said
 > so in one line.
+
+**21.8 A cited file, path or symbol must exist (added 2026-09-26).** Naming something that is not
+there reads as evidence and is not. `tools/check_citations.py` checks every backticked path, filename
+and "`symbol` in file" reference in tracked Markdown and source, and it gates in CI.
+
+> Why, and it is the clearest case in this rulebook: `PRD.md` credited a guard called
+> `honest-claims.test.ts` as the reason an over-claim on the public site was safe. **No such file
+> ever existed** (M14). The fix for M14 then cited a symbol that does not exist either (H16) — the
+> defect re-committed inside its own fix, which by 24.4 means it needed a mechanism rather than more
+> care. When the checker was finally written it found **four more** phantom citations in the site's
+> own source that three independent reviews had missed.
+
+**Exemptions are by a document's purpose, not by a turn of phrase.** A review register and the
+mistake ledger must be able to name a phantom in order to report it, so those documents are listed in
+the tool with a reason each. The first attempt exempted English idioms ("does not exist", "is
+actually") and became whack-a-mole — which is itself the lesson: an exemption belongs to why a
+document exists, not to how a sentence happens to be worded.
 
 **What Rule 21 does not fix.** It cannot make anyone honest; it makes an overstatement visible in a
 diff. It cannot catch a control that fires correctly on the wrong thing — a scanner whose rules miss

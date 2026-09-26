@@ -186,6 +186,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_dispositions.py
 
+      # A cited file, path or symbol must exist (Rule 21.8). Added after the same defect twice —
+      # `honest-claims.test.ts` (M14) and then a symbol inside M14's own fix (H16) — and when it was
+      # finally written it found four more phantom citations in the site's own source that three
+      # independent reviews had missed. Proved by planting; see the commit that introduced it.
+      - name: Citations name things that exist
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_citations.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

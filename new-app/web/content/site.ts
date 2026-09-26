@@ -6,7 +6,7 @@
  * This is what "convertible later" actually means: moving to a headless CMS becomes
  * replacing the loader, because no page has its words baked into markup. Put a sentence
  * directly in a component and you have quietly removed that option — which is why
- * `content-source.test.ts` fails when a page carries prose of its own.
+ * `site-guards.test.ts` ("keeps prose out of the pages") fails when a page carries its own prose.
  *
  * WHAT MUST NEVER APPEAR HERE (Rule 20)
  *
@@ -16,7 +16,7 @@
  * There are no customers yet. A prospect who finds an invented claim has learned
  * something true about us, and it is the one thing they will remember. `socialProof` is
  * deliberately an empty array rather than absent, so adding to it is a decision somebody
- * makes on purpose — and `honest-claims.test.ts` fails if social-proof language appears
+ * makes on purpose — and `site-guards.test.ts` fails if social-proof language appears
  * anywhere without evidence here.
  *
  * THE SPEED CLAIM IS CONDITIONAL, AND THE CONDITION TRAVELS WITH IT
@@ -25,7 +25,7 @@
  * defensible number in minutes, standing at the gate. That is true *once he has a saved
  * job recipe for the thing he is pricing*. His FIRST fence is not a three-minute job — it
  * is setting up the recipe. So every sentence claiming speed carries that condition in the
- * same breath, and `honest-claims.test.ts` refuses one that does not. A contractor who
+ * same breath, and `site-guards.test.ts` refuses one that does not. A contractor who
  * tries it at the gate on an empty account and fails will never open it again.
  */
 
@@ -189,7 +189,9 @@ export const site = {
         // they shipped: retention tracking, project costing, accountant exports, and offline use —
         // and release 1 contains none of them in the form stated. The owner chose to mark rather than
         // remove: a labelled roadmap is not a claim, and removing them makes the product look thinner
-        // than it is. `honestClaims` in site-guards.test.ts asserts every unmarked line is delivered.
+        // than it is. `site-guards.test.ts` asserts it, in the test named "sells nothing the
+        // current release does not deliver" — named by its description because the previous version
+        // of this comment cited a symbol that does not exist (finding H16).
         includes: [
           "Unlimited quotes",
           "Unlimited reusable job recipes",

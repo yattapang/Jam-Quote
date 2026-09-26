@@ -184,7 +184,11 @@
     },
     "21.7": {
       "title": "An exit code is not evidence of an effect",
-      "hash": "2903372a903188d3"
+      "hash": "e0df8c253f65c3a8"
+    },
+    "21.8": {
+      "title": "A cited file, path or symbol must exist (added 2026-09-26)",
+      "hash": "726861d1c837df86"
     },
     "22": {
       "title": "A scripted edit is verified mechanically, not by eye (added 2026-09-24)",

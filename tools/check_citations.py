@@ -17,8 +17,9 @@ Rule 24.5's test: would this have caught it mechanically? Both, yes, and in unde
 
 1. **Cited repository paths exist.** A backticked path containing `/` and a known extension, in any
    tracked Markdown or source comment, must resolve to a real file.
-2. **Cited bare filenames exist somewhere.** `` `honest-claims.test.ts` `` with no directory must
-   match some tracked file's basename. This is the M14 case exactly.
+2. **Cited bare filenames exist somewhere.** A backticked filename with no directory must match some
+   tracked file's basename. This is the M14 case exactly: a guard credited by a name that never
+   existed.
 3. **A symbol cited *in* a named file appears in that file.** The pattern `` `symbol` in `file` ``
    (or without the second pair of backticks) asserts the symbol's text is present in that file. This
    is the H16 case exactly.
@@ -44,10 +45,28 @@ from pathlib import Path
 
 SKIP_PREFIXES = ("original-app/",)
 
-# Closed registers ABOUT the old application. Their citations were accurate when written and the
-# files have since moved, been renamed or been deleted — that is what a historical record looks like,
-# and editing it to satisfy a guard would be falsifying it.
-HISTORICAL = {"REVIEW-FINDINGS.md", "docs/COMPLIANCE-REVIEW.md"}
+# Documents whose citations are EVIDENCE rather than claims, so a name that does not resolve is the
+# point rather than a defect. Two kinds, and each entry needs its reason:
+#
+#  - Closed registers about the old application. Their citations were accurate when written and the
+#    files have since moved or been deleted. That is what a historical record looks like, and editing
+#    one to satisfy a guard would be falsifying it.
+#  - Review registers and the mistake ledger, whose SUBJECT MATTER is broken citations. A review that
+#    could not name `honest-claims.test.ts` could not report that it never existed, and the ledger
+#    could not record the lesson.
+#
+# The alternative was a growing list of English idioms ("does not exist", "is actually", "survived
+# long enough to") which is whack-a-mole: the exemption belongs to the document's purpose, not to a
+# turn of phrase.
+EVIDENCE_DOCS = {
+    "REVIEW-FINDINGS.md": "Closed register about original-app; its paths are history.",
+    "docs/COMPLIANCE-REVIEW.md": "The same, for the compliance pass.",
+    "docs/PRD-REVIEW.md": "A review register: naming a broken citation is its job.",
+    "docs/PRD-REVIEW-2.md": "The same.",
+    "docs/PRD-REVIEW-3.md": "The same.",
+    "docs/MISTAKES.md": "The ledger records the phantom name as the lesson (M14, H16).",
+    "docs/RULES-ENFORCEMENT-AUDIT.md": "Cites the phantom as the evidence for this very guard.",
+}
 
 # A citation may deliberately name something that does NOT exist: the ledger and the reviews discuss
 # `honest-claims.test.ts` precisely because it never existed (M14). A sentence saying so is correct
@@ -55,7 +74,10 @@ HISTORICAL = {"REVIEW-FINDINGS.md", "docs/COMPLIANCE-REVIEW.md"}
 # list is narrow on purpose — a guard that cries wolf gets switched off.
 DENIALS = re.compile(
     r"does not exist|never existed|no such file|is not there|matches no file|"
-    r"that does not exist|not a real|never been|phantom",
+    r"that does not exist|not a real|never been|phantom|"
+    # A review QUOTES a broken citation and corrects it in the next breath ("the file is actually
+    # …"). That is the review doing its job, so the correction idiom is exempt too.
+    r"is actually",
     re.I,
 )
 
@@ -77,9 +99,11 @@ CODE_EXTS = (
 
 # `some/path/file.ts` — a path, with at least one slash.
 CITED_PATH = re.compile(r"`([A-Za-z0-9_@./-]+/[A-Za-z0-9_.-]+\.[a-z]{2,6})`")
-# `file.test.ts` — a bare filename, no slash.
+# A bare filename in backticks, no slash — the M14 case. Examples are described rather than
+# written, because a fake filename in a comment is itself a broken citation and this guard would
+# (correctly) flag its own documentation.
 CITED_FILE = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py|md|prisma|yml|yaml|toml))`")
-# `symbol` in `file.ts`  /  `symbol` in file.ts
+# A backticked identifier, then "in", then a filename with or without backticks — the H16 case.
 CITED_SYMBOL_IN = re.compile(
     r"`([A-Za-z_][A-Za-z0-9_]{2,})`\s+(?:is\s+)?in\s+`?([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py))`?"
 )
@@ -110,7 +134,7 @@ def scannable(files: list[str]) -> list[str]:
         if f.endswith(SCAN_EXTS)
         and not f.startswith(SKIP_PREFIXES)
         and not f.startswith(".claude/")
-        and f not in HISTORICAL
+        and f not in EVIDENCE_DOCS
     ]
 
 
@@ -121,8 +145,9 @@ def main() -> int:
     for f in files:
         by_basename.setdefault(Path(f).name, []).append(f)
 
-    # A path is only checkable if it is anchored at a real top-level entry. `docs/adr/0025.md` is;
-    # `packages/core/src/x.ts` is relative to some other root and unjudgeable from here.
+    # A path is only checkable if it is anchored at a real top-level entry: a path starting with a
+    # directory this repository actually has. One starting with a segment it does not have is
+    # relative to some other root and unjudgeable from here.
     top_level = {f.split("/", 1)[0] for f in files}
 
     problems: list[str] = []
