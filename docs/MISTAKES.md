@@ -360,3 +360,43 @@ properly.
 **Prevented by:** the full local gate before a push is typecheck **and** lint **and** tests **and**
 the checkers — not the subset that relates to what I changed. A new test file is TypeScript being
 added to a strict project, so the compiler is part of its proof, not a formality afterwards.
+
+### M23 · The same fact written in prose three times, wrong all three times
+`Repeat of:` **H1/G1's pattern**, and this is its third appearance in one section of one document.
+
+`domain-model.md` §6.2a carried a "who writes it" column for `issue_balance`. H2 found it wrong and
+omitting two writers. H2's fix deleted the *paragraph* that named the writers and left the *table
+column* standing two lines above it — in the very amendment that recorded the lesson. Review 4 (J12)
+then found that column crediting a **credit note** as a writer of `invoiced_total_minor`, which it has
+never been: the ceiling expression excludes credit notes deliberately, and the function never reads
+that table.
+
+**Cost:** a blocker closed on the strength of a disposition that was false when written, and a
+document that told a reader the opposite of what the code does about money.
+
+**Prevented by:** the column is gone rather than corrected. Which insert moves which balance column is
+now executed in `new-app/db/test/documents-core.test.ts` — including a credit note moving nothing —
+and what makes the call happen lives in the trigger migration, whose identifiers are checked against
+the real schema. **Correcting prose a third time was the option not taken**, because prose cannot hold
+an invariant (ADR 0025), and three attempts is enough evidence.
+
+Also fixed in passing, and it is the more insidious half: the near-miss column names. The table said
+`accepted_total`, `variations_total` and `invoiced_total` where every column carries a `_minor` suffix
+— M19's defect, corrected in the migrations months earlier and still alive in the documents, at eight
+sites. `tools/check_schema_citations.py` now reports an identifier that is *almost* a real column,
+which is a narrow enough rule to have produced exactly three findings and no noise.
+
+### M24 · A disposition row stopped being checked because I reworded it
+`Repeat of:` **M20's shape** — a guard quietly examining a smaller set than it claims.
+
+Correcting H2's disposition, I wrote "**Reopened by J12, then closed 2026-09-26.**"
+`check_dispositions.py` keys on `**Closed`, so the row silently left the set that carries the burden:
+it still claimed closure and nothing checked its citations any more. The only signal was the printed
+count dropping from 40 to 39.
+
+**Cost:** none, caught in the same minute — and only because the tool prints how many rows it checked.
+
+**Prevented by:** the pattern now accepts the ways a row says the same thing, and the count is the
+reason this was visible at all. The general lesson: **a guard keyed on a turn of phrase loses rows to
+rewording**, so it must state the size of the set it examined every time (Rule 21.1). A tool that
+printed only "OK" would have hidden this, and I would have trusted it.

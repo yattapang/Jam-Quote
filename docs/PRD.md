@@ -199,7 +199,7 @@ demonstrated, it is not a requirement, it is a hope.
   become a way to detach agreed money from the issue it was agreed against. Enforced by a database
   trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
-  `accepted_total` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
+  `accepted_total_minor` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
   simply inert.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from

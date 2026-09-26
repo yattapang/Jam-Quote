@@ -313,6 +313,107 @@ describe("J2 · the ceiling is enforced by the database, not by callers remember
 });
 
 // ===========================================================================
+describe("J12 · which insert moves which balance column, executed rather than listed", () => {
+  // §6.2a of the domain model carried a prose "who writes it" column three times, and it was wrong
+  // three times — the last time crediting a credit note as a writer of `invoiced_total_minor`, which
+  // it has never been. The document no longer says; this says, by doing it.
+  //
+  // Each test inserts ONE kind of row and reads all three columns, so a defect that moves the wrong
+  // column is caught as precisely as one that moves nothing.
+  async function insertInvoice(issueId: string, amount: bigint) {
+    const invoiceId = id();
+    await sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [invoiceId, TENANT, issueId, amount.toString()],
+    );
+    return invoiceId;
+  }
+
+  async function totals(issueId: string) {
+    const row = await balance(issueId);
+    return {
+      accepted: minor(row.accepted_total_minor),
+      variations: minor(row.variations_total_minor),
+      invoiced: minor(row.invoiced_total_minor),
+    };
+  }
+
+  it("a variation moves variations_total_minor and nothing else", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'extra gate post', 30000, $4, now())`,
+      [id(), TENANT, issue, USER],
+    );
+    expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 30_000, invoiced: 0 });
+  });
+
+  it("an invoice moves invoiced_total_minor and nothing else", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await insertInvoice(issue, 40_000n);
+    expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 40_000 });
+  });
+
+  it("a CREDIT NOTE moves nothing, which is the claim J12 found in the document", async () => {
+    // The document said "every invoice and credit note" writes `invoiced_total_minor`. A credit note
+    // reduces what is OWED on an invoice; it does not reduce what was invoiced, and the ceiling
+    // expression excludes it deliberately (documents_core: "what does NOT raise the ceiling:
+    // retention and credit notes"). So this is the assertion that the wrong writer stays wrong.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+    const before = await totals(issue);
+
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, 15000, 'agreed reduction', now())`,
+      [id(), TENANT, invoiceId],
+    );
+
+    expect(await totals(issue)).toEqual(before);
+    expect((await totals(issue)).invoiced).toBe(40_000);
+  });
+
+  it("a VOID does move invoiced_total_minor, down, because the invoice stops counting", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'issued to the wrong client', $4)`,
+      [id(), TENANT, invoiceId, USER],
+    );
+    expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 0 });
+  });
+
+  it("accepted_total_minor survives all four untouched, because it is written once", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'extra', 5000, $4, now())`,
+      [id(), TENANT, issue, USER],
+    );
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, 1000, 'rounding', now())`,
+      [id(), TENANT, invoiceId],
+    );
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'wrong client', $4)`,
+      [id(), TENANT, invoiceId, USER],
+    );
+    expect((await totals(issue)).accepted).toBe(100_000);
+  });
+});
+
 describe("2 · issue_balance has exactly one writer", () => {
   it("refuses a direct UPDATE from the application, however it is granted", async () => {
     // The harness grants UPDATE on every table (see test-support), which is exactly why the control
@@ -608,7 +709,7 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
   });
 
   it("drops the ceiling to zero on withdrawal, so nothing more can be invoiced", async () => {
-    // Nothing is mutated to achieve this. `accepted_total` stays written-once, and the CEILING is
+    // Nothing is mutated to achieve this. `accepted_total_minor` stays written-once, and the CEILING is
     // state-aware — which is how ADR 0025's own contradiction was resolved.
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);

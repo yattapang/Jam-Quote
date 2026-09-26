@@ -54,7 +54,12 @@ FINDING = re.compile(r"^## ([FGH]\d+) · (.+?) — severity: (\w+)", re.M)
 WHERE = re.compile(r"^\*\*Where:\*\* (.+?)(?=\n\*\*|\n\n)", re.M | re.S)
 # A disposition row: | **F1** | blocker | text |
 ROW = re.compile(r"^\|\s*\*\*([FGH]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M)
-CLAIMS_CLOSED = re.compile(r"\*\*Closed\b", re.I)
+# "**Closed", and the ways a disposition says the same thing in other words. A row rewritten as
+# "**Reopened by J12, then closed**" silently STOPPED being checked — which is how a disposition table
+# loses a row: not by lying, but by drifting out of the pattern that carries the burden. Caught while
+# correcting H2 after J12 reopened it, and only because the printed count dropped by one. That is the
+# argument for printing the count, and it is Rule 21.1 in miniature.
+CLAIMS_CLOSED = re.compile(r"\*\*(?:Closed|Re-?closed|Reopened[^*]{0,160}?clos)", re.I)
 
 
 def scope_of_findings(text: str) -> dict[str, set[str]]:

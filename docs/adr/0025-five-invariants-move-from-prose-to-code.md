@@ -112,8 +112,8 @@ because the row *is* the record.
 
 - **The `issue_balance` row is not deleted.** Deleting it would reintroduce Decision 2's empty-lock
   hole.
-- ~~`accepted_total` returns to zero while the issue is not accepted.~~ **CORRECTED 2026-09-26: this
-  contradicted Decision 2**, which says `accepted_total` is written once, "never again". Both cannot
+- ~~`accepted_total_minor` returns to zero while the issue is not accepted.~~ **CORRECTED 2026-09-26: this
+  contradicted Decision 2**, which says `accepted_total_minor` is written once, "never again". Both cannot
   hold, and the contradiction sat inside one ADR — the same failure the ADR was written to stop, one
   level up. Resolved in favour of Decision 2, because an immutable column is what makes the copy safe
   at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change.

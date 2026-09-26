@@ -124,6 +124,13 @@ OWED_IDS = {
     ),
 }
 
+# Suffixes that distinguish a real column from a plausible shortening of it. Deliberately the
+# suffixes this schema uses to carry MEANING — the unit, the kind, the relation — because dropping one
+# of those in prose is how a bare "accepted total" came to stand for the `accepted_total_minor` column
+# in six places. The wrong names are described rather than written here, because writing one would be a
+# near miss inside the guard that reports near misses.
+NEAR_MISS_SUFFIXES = ("minor", "thousandths", "id", "at", "key", "hash", "kind")
+
 CITED_PATH = re.compile(r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/[A-Za-z0-9_.-]+\.[a-z]{2,6})`")
 CITED_QUALIFIED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)`")
 CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
@@ -337,6 +344,23 @@ def main() -> int:
                 problems.append(
                     f"{where}: `{table}.{column}` — `{table}` is a real table and has no such column"
                 )
+
+            # A NEAR MISS of a real column, anywhere — including prose documents. This is the one
+            # identifier check that runs outside the migrations, and it is safe there precisely
+            # because it is a near miss: a document legitimately names tables that are planned and
+            # not yet built, but it does not accidentally drop the unit suffix from a money column's
+            # name. That was M19's defect surviving in a document after being
+            # fixed in the migrations, and it is what finding J12 found in the writer table.
+            for cited in CITED_IDENTIFIER.findall(line):
+                if cited in objects:
+                    continue
+                near = [cited + "_" + suffix for suffix in NEAR_MISS_SUFFIXES]
+                actual = next((n for n in near if n in objects), None)
+                if actual is not None:
+                    problems.append(
+                        f"{where}: `{cited}` is a near miss — the column is `{actual}`, and a name "
+                        f"that is almost right is worse than one that is obviously wrong (M19)"
+                    )
 
             if in_migration:
                 for cited in CITED_IDENTIFIER.findall(line):

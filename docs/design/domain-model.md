@@ -283,16 +283,43 @@ missing precondition is not a mechanism.
 accepted and acquires its balance row together, or neither happens. That removes the empty case rather
 than defending against it, and it is the only ordering that cannot be forgotten later.
 
-| Column | Kind | Who writes it |
-|---|---|---|
-| `issue_id` | identity | the acceptance transaction |
-| `accepted_total` | **derived, written once** from the accepted issue's own frozen lines | the acceptance transaction, never again |
-| `variations_total` | **derived cache**, re-summed from `variation` rows | every variation, inside the lock |
-| `invoiced_total` | **derived cache**, re-summed from issued invoices | every invoice and credit note, inside the lock |
+| Column | Kind |
+|---|---|
+| `issue_id` | identity |
+| `accepted_total_minor` | **derived, written once** from the accepted issue's own frozen lines |
+| `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
+| `invoiced_total_minor` | **derived cache**, re-summed from issued invoices |
 
-**Every writer takes the lock, and a prose list is no longer what says so.** The first version of this
-paragraph named the writers and omitted the two the same amendment had invented — including the row's own
-creator (finding H2, after G2). A list that can be wrong is not a control.
+**This table no longer says who writes each column, and the omission is the fix (findings H2 and J12).**
+It said so twice before. The first version named the writers and omitted two the same amendment had
+invented, including the row's own creator (H2). H2's fix deleted the *paragraph* and left the *table
+column* standing two lines above it — and that column was wrong on both of the rows that mattered: it
+credited a credit note as a writer of `invoiced_total_minor`, which it is not and was never meant to be,
+and it claimed every variation takes the lock, which at the time nothing made true (J12, and see J2).
+
+Three attempts, and the third failure was the same shape as the first two. So the fact now has **one
+home** per question, per Rule 7 and ADR 0025, and neither home is prose:
+
+- **Which insert moves which column** is `db/test/documents-core.test.ts`, in the J12 block. It inserts
+  each kind of row and reads all three columns, so a credit note moving nothing is an assertion rather
+  than a claim, and a defect that moved the *wrong* column would fail too.
+- **What makes the call happen at all** is
+  `new-app/db/migrations/20260926130000_ceiling_enforced_by_trigger/migration.sql`, whose every
+  identifier is checked against the real schema by `tools/check_schema_citations.py`.
+
+That migration's prose says the four trigger tables are the rows that "can move the ceiling or the
+invoiced total". Read strictly that is loose about `credit_note`: a credit note fires the trigger and the
+recompute leaves both totals where they were, deliberately. The trigger set is wider than the set of rows
+that change a number, and it is right to be — a table wired in without being named there raises rather
+than skipping the ceiling. This section does not repeat any of it, because repeating it is what produced
+H2, H2's own fix, and J12.
+
+What is worth stating here, because it is the *shape* rather than the list: **no caller chooses to
+maintain this row.** `issue_balance` has no INSERT or UPDATE policy the application can satisfy, so the
+only door is `issue_balance_apply()` and `issue_balance_open()`; and since J2 those are not reached by a
+caller remembering to call them but by triggers on every table that can move a total. The writer set is
+therefore a property of the schema, and `db/test/documents-core.test.ts` executes which insert moves
+which column — including the one that moves nothing.
 
 What enforces it now: `issue_balance` has **no INSERT or UPDATE policy the application can satisfy**, so
 the only way in is `issue_balance_apply()` and `issue_balance_open()`, which set the transaction-local
@@ -305,7 +332,7 @@ cached figure · **refuse** if the new total would exceed `accepted_total + vari
 invoice and update the balance. Re-summing inside the lock is what makes the cached columns a genuine
 cache rather than a second source of truth — the decision is never taken on the cached number alone.
 
-`accepted_total` is a **copy**, and Rule 7 says one rule lives in one place, so its producer is named:
+`accepted_total_minor` is a **copy**, and Rule 7 says one rule lives in one place, so its producer is named:
 the acceptance transaction computes it from the issue's frozen lines, and nothing else ever writes it.
 The issue is immutable, so the value it derives from cannot change — which is what makes the copy safe
 here and would not make it safe anywhere else.
