@@ -108,6 +108,22 @@ These are settled by work already landed, and are stated here so no entity re-li
 | `document_settings` | Logo, header details, two colours, default terms. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. |
 | `number_series` | Prefix, next number, reset rule (never / yearly / monthly). | One per tenant **per document kind**. Allocation is atomic and gapless per series. |
 
+**Isolation is three layers and the second one had a hole (finding J3, 2026-09-26).** Row-level security
+compares a row's own `tenant_id` to the session's. It does **not** compare it to its parent's, and
+PostgreSQL states that referential integrity checks "always bypass row security" — so a single-column
+foreign key resolved against a parent the inserting session could not see. A row carrying tenant A's own
+id and tenant B's `issue_id` satisfied the INSERT policy and the foreign key at once, and a global unique
+index above it then **permanently denied B the ability to accept their own quote**: B could not see the
+offending row, could not update it (no UPDATE policy) and could not delete it (no DELETE policy).
+
+So every parent-child foreign key here is **composite** — `(child_id, tenant_id)` referencing
+`(id, tenant_id)` — and every tenant-owned unique index is scoped to the tenant. A cross-tenant child is
+now unrepresentable rather than merely invisible, and a leaked id is useless rather than dangerous, which
+matters because ids are client-generated (ADR 0019) and travel through sync payloads, PDFs, share links
+and exports. One foreign key is deliberately single-column: `audit_entry.actor_user_id`, because that
+entry's tenant is the tenant whose data was *affected* and a staff actor belongs to another — the reason
+is recorded beside the exemption in `db/test/tenant-isolation.test.ts`.
+
 **Numbering, rewritten 2026-09-25 (review finding G3).** This section previously rejected "allocate at
 sync" and chose device number blocks — and then §6.1a split sealing from numbering and made the opposite
 choice for release 1. **The contradiction sat inside this one document**, in the commit that logged the

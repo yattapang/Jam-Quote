@@ -60,7 +60,11 @@
     },
     "4": {
       "title": "Tenant isolation (owner requirement)",
-      "hash": "95cffc49a14efa0e"
+      "hash": "a6eeb9c00bc83fb2"
+    },
+    "4.1": {
+      "title": "A child row carries its tenant into its foreign key (added 2026-09-26, finding J3)",
+      "hash": "4ba43b478aeac170"
     },
     "5": {
       "title": "Security and authentication, from each module's first commit",

@@ -206,6 +206,13 @@ describe("the row convention", () => {
       // The primary key is exempt and must be: it identifies a row whether that row is live or
       // tombstoned, and a foreign key pointing at a deleted row still has to resolve.
       if (index.index_name.endsWith("_pkey")) continue;
+      // `<table>_id_tenant_key` is exempt for exactly the same reason, one step further out. It is
+      // not a business uniqueness rule — `id` is already unique — it is the REFERENTIAL TARGET that
+      // makes a composite foreign key possible (finding J3), so it must cover tombstoned parents
+      // too. It also could not be partial even if we wanted: PostgreSQL cannot reference a partial
+      // unique index from a foreign key at all. Narrow suffix rather than a table list, because the
+      // constraint is generated for every parent and a list would go stale on the next one.
+      if (index.index_name.endsWith("_id_tenant_key")) continue;
       if (index.predicate === null) {
         problems.push(
           `${index.index_name} on ${index.table_name} is not partial; add WHERE deleted_at IS NULL ` +

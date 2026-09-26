@@ -178,6 +178,16 @@ is sent back.
 
 - `tenant_id` on every tenant-owned table, **row-level security** in the database, **and**
   tenant scoping in the application. Three layers, not one.
+- **4.1 A child row carries its tenant into its foreign key (added 2026-09-26, finding J3).** Row-level
+  security is not enough on its own, and this is not a theoretical gap: PostgreSQL states that
+  referential integrity checks "always bypass row security". A single-column foreign key therefore
+  resolves happily against a parent the inserting session cannot even see, so a row carrying the
+  attacker's own `tenant_id` and another tenant's parent id satisfied both the policy and the key. With
+  a global unique index above it, that row **permanently denied the rightful owner** the ability to
+  accept their own quote, with no in-product remedy. Every parent-child foreign key is composite —
+  `(child_id, tenant_id)` referencing `(id, tenant_id)` — every tenant-owned unique index is scoped to
+  the tenant, and a single-column exception must be named with its reason in
+  `db/test/tenant-isolation.test.ts`, which fails on any that is not.
 - Tenant context is set per request and per transaction; background jobs carry it explicitly.
 - Everything else is scoped too: file paths and signed URLs, cache keys, search indexes,
   exports, generated PDFs, outbound messages, analytics and logs.

@@ -400,3 +400,28 @@ count dropping from 40 to 39.
 reason this was visible at all. The general lesson: **a guard keyed on a turn of phrase loses rows to
 rewording**, so it must state the size of the set it examined every time (Rule 21.1). A tool that
 printed only "OK" would have hidden this, and I would have trusted it.
+
+### M25 · The isolation tests asserted the safe direction and made the dangerous one look covered
+`Repeat of:` **the H2/J12 family** — a control whose stated scope is wider than what it checks.
+
+`documents-core.test.ts` had a block titled "the tenant boundary still holds over all of it" whose
+write test inserted a `quote_issue` stamped with **another tenant's** id and asserted a refusal. That
+is refused, by `WITH CHECK`, and it is the easy direction. The dangerous direction — a row stamped with
+**one's own** tenant id, hung off another tenant's parent — was not tested anywhere, and it worked:
+every foreign key was single-column, and PostgreSQL states that referential integrity checks "always
+bypass row security". With a global unique index above it, one tenant could permanently deny another
+the ability to accept their own quote, with no in-product remedy (finding J3).
+
+**Cost:** the only cross-tenant defect found so far, in a product whose first security constraint is
+tenant isolation, and it lived behind a passing test whose title claimed the whole boundary.
+
+**Prevented by:** composite foreign keys on all 22 parent-child relations, tenant-scoped unique
+indexes, four behavioural tests executing the attack, and a **structural** guard in
+`db/test/tenant-isolation.test.ts` that fails on any tenant-owned child keyed on an id alone — so a
+table added next month is caught without anybody remembering J3. Proved by planting: reverting one
+foreign key to a single column turns both the guard and the behaviour test red, and reverting the
+unique index too makes the foreign acceptance insert **succeed**, which is the leak itself.
+
+The lesson about test titles: "the tenant boundary still holds over all of it" was a claim about a
+boundary, evidenced by two tests about one half of it. A block's title is a claim (Rule 21.1), and if
+it says "all" it has to mean it.

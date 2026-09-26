@@ -288,3 +288,146 @@ describe("the canonical policy expression, on a table this test creates", () => 
     expect(leaked.rows).toEqual([{ label: "A owns this" }, { label: "B owns this" }]);
   });
 });
+
+/**
+ * J3, the write direction. Everything above this point tests that tenant A cannot READ tenant B's
+ * rows. None of it tested whether A can WRITE a row into B's graph, and A could: every foreign key
+ * was single-column, and PostgreSQL states that referential integrity checks "always bypass row
+ * security". So a child row carrying A's own `tenant_id` and B's parent id satisfied the INSERT
+ * policy and the foreign key at once.
+ *
+ * This block is structural on purpose. The behavioural half — the attack executed end to end — lives
+ * in `db/test/documents-core.test.ts`, because that is where the documents graph is. What belongs
+ * here is the rule for the CLASS: no tenant-owned child may reference a tenant-owned parent without
+ * carrying the tenant into the key. A new table added next month is caught by this without anybody
+ * remembering J3.
+ */
+describe("J3 · a tenant-owned child carries its tenant into its foreign key", () => {
+  /**
+   * Foreign keys that are deliberately NOT composite, each with the reason. Two entries, and both
+   * are about a PERSON rather than a business — which is the line this rule turns on.
+   */
+  const SINGLE_COLUMN_ON_PURPOSE: Record<string, string> = {
+    "audit_entry.actor_user_id":
+      "`audit_entry.tenant_id` is the tenant whose data was AFFECTED, and a staff action against a " +
+      "tenant carries that tenant's id. The actor is then a platform staff user belonging to a " +
+      "different tenant, so a composite key would make staff accountability unrecordable (Rule 5.1).",
+  };
+
+  it("has no tenant-owned child referencing a tenant-owned parent on id alone", async () => {
+    const offenders = await db.query<{
+      child: string;
+      parent: string;
+      columns: string;
+      conname: string;
+    }>(`
+      SELECT child.relname AS child,
+             parent.relname AS parent,
+             con.conname,
+             (SELECT string_agg(att.attname, ',' ORDER BY att.attname)
+                FROM unnest(con.conkey) AS k(attnum)
+                JOIN pg_attribute att
+                  ON att.attrelid = con.conrelid AND att.attnum = k.attnum) AS columns
+        FROM pg_constraint con
+        JOIN pg_class child ON child.oid = con.conrelid
+        JOIN pg_class parent ON parent.oid = con.confrelid
+       WHERE con.contype = 'f'
+         AND parent.relname <> 'tenant'
+         -- Both sides tenant-owned: a child with no tenant_id of its own has no tenant to compare,
+         -- and a parent with none (there are none today) could not be compared against either.
+         AND EXISTS (SELECT 1 FROM pg_attribute a
+                      WHERE a.attrelid = child.oid AND a.attname = 'tenant_id' AND a.attnum > 0)
+         AND EXISTS (SELECT 1 FROM pg_attribute a
+                      WHERE a.attrelid = parent.oid AND a.attname = 'tenant_id' AND a.attnum > 0)
+       ORDER BY child.relname, con.conname
+    `);
+
+    const missing = offenders.rows
+      .filter((row) => !row.columns.split(",").includes("tenant_id"))
+      .map((row) => {
+        const column = row.columns.split(",")[0];
+        return { key: `${row.child}.${column}`, row };
+      })
+      .filter(({ key }) => SINGLE_COLUMN_ON_PURPOSE[key] === undefined)
+      .map(
+        ({ key, row }) =>
+          `${key} -> ${row.parent} is keyed on (${row.columns}) with no tenant_id, so a row of one ` +
+          `tenant can be hung off another tenant's parent (finding J3)`,
+      );
+
+    expect(missing).toEqual([]);
+  });
+
+  it("checked a real set, and the composite keys are actually there", async () => {
+    // Without this, the query above returning nothing — a typo in a relname, a schema that failed to
+    // apply — would read as "every key is composite". The number is the control (Rule 21.1).
+    const composite = await db.query<{ n: number }>(`
+      SELECT count(*)::int AS n
+        FROM pg_constraint con
+        JOIN pg_class child ON child.oid = con.conrelid
+       WHERE con.contype = 'f'
+         AND array_length(con.conkey, 1) = 2
+         AND EXISTS (SELECT 1 FROM pg_attribute a
+                      WHERE a.attrelid = child.oid AND a.attname = 'tenant_id' AND a.attnum > 0)
+    `);
+    expect(composite.rows[0]!.n).toBeGreaterThanOrEqual(20);
+  });
+
+  it("still has the one exempt key, so its reason cannot go stale", async () => {
+    for (const key of Object.keys(SINGLE_COLUMN_ON_PURPOSE)) {
+      const [table, column] = key.split(".");
+      const found = await db.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM pg_constraint con
+           JOIN pg_class child ON child.oid = con.conrelid
+           JOIN pg_attribute att
+             ON att.attrelid = con.conrelid AND att.attnum = ANY(con.conkey)
+          WHERE con.contype = 'f' AND child.relname = $1 AND att.attname = $2`,
+        [table, column],
+      );
+      expect(found.rows[0]!.n).toBeGreaterThan(0);
+    }
+  });
+
+  it("scopes every tenant-owned unique index to the tenant, or names why not", async () => {
+    // The second half of J3: even with composite keys, a GLOBAL unique index on a tenant-owned table
+    // lets one tenant consume a slot another tenant needs. `acceptance_issue_key` was the worst
+    // case — a foreign acceptance meant the rightful owner could never accept their own quote.
+    const GLOBAL_ON_PURPOSE: Record<string, string> = {
+      app_credential_email_key:
+        "A login address identifies one credential across the whole product; per-tenant would let " +
+        "two tenants hold the same sign-in.",
+      app_credential_user_id_key: "One credential per user, and a user belongs to one tenant already.",
+    };
+
+    const indexes = await db.query<{ indexname: string; tablename: string; columns: string }>(`
+      SELECT i.relname AS indexname,
+             t.relname AS tablename,
+             (SELECT string_agg(att.attname, ',' ORDER BY att.attname)
+                FROM unnest(ix.indkey) AS k(attnum)
+                JOIN pg_attribute att
+                  ON att.attrelid = t.oid AND att.attnum = k.attnum) AS columns
+        FROM pg_index ix
+        JOIN pg_class i ON i.oid = ix.indexrelid
+        JOIN pg_class t ON t.oid = ix.indrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE ix.indisunique
+         AND n.nspname = 'public'
+         AND NOT ix.indisprimary
+         AND EXISTS (SELECT 1 FROM pg_attribute a
+                      WHERE a.attrelid = t.oid AND a.attname = 'tenant_id' AND a.attnum > 0)
+       ORDER BY t.relname, i.relname
+    `);
+
+    expect(indexes.rows.length).toBeGreaterThan(8);
+    const global = indexes.rows
+      .filter((row) => !(row.columns ?? "").split(",").includes("tenant_id"))
+      .filter((row) => GLOBAL_ON_PURPOSE[row.indexname] === undefined)
+      .map(
+        (row) =>
+          `${row.indexname} on ${row.tablename} is unique across ALL tenants on (${row.columns}), ` +
+          `so one tenant can permanently consume a slot belonging to another (finding J3)`,
+      );
+    expect(global).toEqual([]);
+  });
+});

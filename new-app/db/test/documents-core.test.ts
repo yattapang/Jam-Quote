@@ -967,6 +967,85 @@ describe("the tenant boundary still holds over all of it", () => {
     expect(await sql(`SELECT 1 FROM issue_balance`)).toHaveLength(0);
   });
 
+  // -------------------------------------------------------------------------
+  // J3. The dangerous direction, which this block did not test before: a row carrying the attacker's
+  // OWN tenant_id, hung off another tenant's parent. The test above it — a seal stamped with another
+  // tenant's id — is refused by WITH CHECK and made this look covered.
+  // -------------------------------------------------------------------------
+  it("J3 · refuses an acceptance planted on our issue by another tenant, and we can still accept", async () => {
+    // The attack in full. Ids are client-generated (ADR 0019) and travel through sync payloads,
+    // PDFs, share links and exports, so knowing this id is a leak rather than a guess.
+    const issue = await seal(1, 100_000n);
+
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
+    await expect(
+      db.query(
+        `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
+                                 occurred_at)
+         VALUES ($1, $2, $3, 'declined', 'Not Their Client', true, now())`,
+        [id(), OTHER_TENANT, issue],
+      ),
+    ).rejects.toThrow(/foreign key|violates/i);
+
+    // And the consequence that made this a blocker rather than a curiosity: the rightful owner's
+    // acceptance still works. Before the composite key, the planted row satisfied the global
+    // `acceptance_issue_key` and this insert failed forever, with no in-product remedy.
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [TENANT]);
+    const acceptance = await accept(issue);
+    expect(acceptance).toBeTruthy();
+    expect(await sql(`SELECT 1 FROM acceptance WHERE issue_id = $1`, [issue])).toHaveLength(1);
+  });
+
+  it("J3 · refuses a seal hung off another tenant's quote, so a revision slot cannot be consumed", async () => {
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
+    await expect(
+      db.query(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'X', 'itemised', 'JMD', 'T', 0, 1, 0, 1, now(), $5, now())`,
+        // QUOTE and CLIENT belong to TENANT; the row claims OTHER_TENANT, which is now a
+        // contradiction the database itself refuses rather than merely hiding.
+        [id(), OTHER_TENANT, QUOTE, CLIENT, USER],
+      ),
+    ).rejects.toThrow(/foreign key|violates|policy/i);
+
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [TENANT]);
+    const mine = await seal(1, 100_000n);
+    expect(mine).toBeTruthy();
+  });
+
+  it("J3 · refuses an invoice hung off another tenant's issue", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
+    await expect(
+      db.query(
+        `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+         VALUES ($1, $2, $3, 'progress', 1000, 'JMD', now())`,
+        [id(), OTHER_TENANT, issue],
+      ),
+    ).rejects.toThrow(/foreign key|violates/i);
+  });
+
+  it("J3 · the balance write guard is a second line, and the first line is what fires", async () => {
+    // `issue_balance_apply` now checks ROW_COUNT and reads back what it wrote, because it used to
+    // continue to the ceiling check after an UPDATE that matched nothing. Stating honestly what is
+    // proved: through the documents graph that case is no longer REACHABLE — the composite keys make
+    // a cross-tenant balance row unrepresentable, and a foreign session hits the older missing-row
+    // guard (G2) before the write is ever attempted. This asserts which guard fires, rather than
+    // claiming the second one was exercised.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+
+    await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
+    await expect(sql(`SELECT issue_balance_apply($1)`, [issue])).rejects.toThrow(
+      /issue_balance row missing/i,
+    );
+  });
+
   it("refuses a seal planted into another tenant", async () => {
     await expect(
       db.query(

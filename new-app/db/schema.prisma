@@ -180,6 +180,10 @@ model AppUser {
   /// a schema that cannot state the truth needs something that can.
   @@unique([tenantId, email])
   @@index([tenantId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("app_user")
 }
 
@@ -198,7 +202,7 @@ model AppSession {
   id String @id @default(uuid()) @db.Uuid
 
   userId String  @map("user_id") @db.Uuid
-  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   /// Denormalised from app_user deliberately: reading it from there would require a
   /// tenant to already be set, which is the problem this table exists to solve.
@@ -254,7 +258,7 @@ model AppCredential {
   /// One password per user. A passkey or an OAuth identity will be its own table, not
   /// another row here, so this model stays "the password".
   userId String  @unique @map("user_id") @db.Uuid
-  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   /// Denormalised for the same reason AppSession does it: the tenant must be known
   /// before row-level security can be satisfied, and this is where it comes from.
@@ -273,6 +277,10 @@ model AppCredential {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([userId, tenantId])
   @@map("app_credential")
 }
 
@@ -491,6 +499,10 @@ model Client {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("client")
 }
 
@@ -512,6 +524,10 @@ model NumberSeries {
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@unique([tenantId, documentKind])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("number_series")
 }
 
@@ -520,7 +536,7 @@ model Quote {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   clientId String @map("client_id") @db.Uuid
-  client   Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client   Client @relation(fields: [clientId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   title String
 
@@ -540,6 +556,10 @@ model Quote {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([tenantId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("quote")
 }
 
@@ -548,7 +568,7 @@ model QuoteSection {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quoteId  String @map("quote_id") @db.Uuid
-  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quote    Quote  @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   title    String
   position Int
@@ -561,6 +581,10 @@ model QuoteSection {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([quoteId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("quote_section")
 }
 
@@ -569,9 +593,9 @@ model QuoteLine {
   tenantId  String       @map("tenant_id") @db.Uuid
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quoteId   String       @map("quote_id") @db.Uuid
-  quote     Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quote     Quote        @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Cascade)
   sectionId String       @map("section_id") @db.Uuid
-  section   QuoteSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section   QuoteSection @relation(fields: [sectionId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   description String
   position    Int
@@ -601,7 +625,7 @@ model QuoteIssue {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quoteId  String @map("quote_id") @db.Uuid
-  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quote    Quote  @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Restrict)
   revision Int
 
   clientId            String @map("client_id") @db.Uuid
@@ -633,10 +657,14 @@ model QuoteIssue {
 
   /// One sealed issue per revision of a quote. This index IS the answer to finding G4: two devices
   /// can both seal the same draft offline and neither push conflicts, because each is an INSERT.
-  @@unique([quoteId, revision])
+  @@unique([tenantId, quoteId, revision])
   @@index([tenantId])
   renders DocumentRender[]
 
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("quote_issue")
 }
 
@@ -645,7 +673,7 @@ model QuoteIssueLine {
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   issueId  String     @map("issue_id") @db.Uuid
-  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   sectionTitle        String @map("section_title")
   description         String
@@ -667,16 +695,20 @@ model IssueNumber {
   id       String       @id @default(uuid()) @db.Uuid
   tenantId String       @map("tenant_id") @db.Uuid
   tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  issueId  String       @unique @map("issue_id") @db.Uuid
-  issue    QuoteIssue   @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issueId  String       @map("issue_id") @db.Uuid
+  issue    QuoteIssue   @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
   seriesId String       @map("series_id") @db.Uuid
-  series   NumberSeries @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  series   NumberSeries @relation(fields: [seriesId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   number      BigInt
   formatted   String
   allocatedAt DateTime @default(now()) @map("allocated_at") @db.Timestamptz(6)
 
-  @@unique([seriesId, number])
+  @@unique([tenantId, seriesId, number])
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([issueId, tenantId])
   @@map("issue_number")
 }
 
@@ -684,8 +716,8 @@ model Acceptance {
   id       String     @id @default(uuid()) @db.Uuid
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  issueId  String     @unique @map("issue_id") @db.Uuid
-  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issueId  String     @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   outcome    String
   signerName String @map("signer_name")
@@ -699,7 +731,7 @@ model Acceptance {
   /// What was signed: the render, whose hash is the document. Not a hash of its own (finding F17).
   /// The foreign key arrived with the table, in finding J9's migration.
   documentRenderId String?         @map("document_render_id") @db.Uuid
-  documentRender   DocumentRender? @relation(fields: [documentRenderId], references: [id], onDelete: Restrict)
+  documentRender   DocumentRender? @relation(fields: [documentRenderId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   actorIp    String?  @map("actor_ip")
   userAgent  String?  @map("user_agent")
@@ -708,6 +740,14 @@ model Acceptance {
 
   withdrawal AcceptanceWithdrawal?
 
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([issueId, tenantId])
   @@map("acceptance")
 }
 
@@ -722,7 +762,7 @@ model DocumentRender {
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   issueId String     @map("issue_id") @db.Uuid
-  issue   QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issue   QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   /// Provider-agnostic on purpose: object storage is an owner decision still outstanding.
   storageKey String @map("storage_key")
@@ -736,12 +776,16 @@ model DocumentRender {
 
   renderedAt       DateTime @default(now()) @map("rendered_at") @db.Timestamptz(6)
   renderedByUserId String?  @map("rendered_by_user_id") @db.Uuid
-  renderedBy       AppUser? @relation(fields: [renderedByUserId], references: [id], onDelete: Restrict)
+  renderedBy       AppUser? @relation(fields: [renderedByUserId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   acceptances Acceptance[]
 
-  @@unique([issueId, sha256])
+  @@unique([tenantId, issueId, sha256])
   @@index([issueId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("document_render")
 }
 
@@ -751,13 +795,17 @@ model AcceptanceWithdrawal {
   id           String     @id @default(uuid()) @db.Uuid
   tenantId     String     @map("tenant_id") @db.Uuid
   tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  acceptanceId String     @unique @map("acceptance_id") @db.Uuid
-  acceptance   Acceptance @relation(fields: [acceptanceId], references: [id], onDelete: Restrict)
+  acceptanceId String     @map("acceptance_id") @db.Uuid
+  acceptance   Acceptance @relation(fields: [acceptanceId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   reason             String
   withdrawnByUserId  String   @map("withdrawn_by_user_id") @db.Uuid
   occurredAt         DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([acceptanceId, tenantId])
   @@map("acceptance_withdrawal")
 }
 
@@ -766,7 +814,7 @@ model Variation {
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   issueId  String     @map("issue_id") @db.Uuid
-  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   description String
 
@@ -784,7 +832,7 @@ model Variation {
   /// tell a retry from a genuine second variation of the same amount on the same day.
   clientReference String? @map("client_reference")
 
-  @@unique([issueId, clientReference])
+  @@unique([tenantId, issueId, clientReference])
   @@index([issueId])
   @@map("variation")
 }
@@ -794,7 +842,7 @@ model Invoice {
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   issueId  String     @map("issue_id") @db.Uuid
-  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   kind        String
   amountMinor BigInt @map("amount_minor")
@@ -808,6 +856,10 @@ model Invoice {
   creditNotes CreditNote[]
 
   @@index([issueId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("invoice")
 }
 
@@ -815,13 +867,17 @@ model InvoiceVoid {
   id        String  @id @default(uuid()) @db.Uuid
   tenantId  String  @map("tenant_id") @db.Uuid
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  invoiceId String  @unique @map("invoice_id") @db.Uuid
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoiceId String  @map("invoice_id") @db.Uuid
+  invoice   Invoice @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   reason          String
   voidedByUserId  String   @map("voided_by_user_id") @db.Uuid
   occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([invoiceId, tenantId])
   @@map("invoice_void")
 }
 
@@ -830,7 +886,7 @@ model CreditNote {
   tenantId  String  @map("tenant_id") @db.Uuid
   tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   invoiceId String  @map("invoice_id") @db.Uuid
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoice   Invoice @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   amountMinor BigInt   @map("amount_minor")
   reason      String
@@ -848,7 +904,7 @@ model CreditNote {
 /// the rule lives in the migration.
 model IssueBalance {
   issueId  String     @id @map("issue_id") @db.Uuid
-  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict)
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
@@ -863,6 +919,10 @@ model IssueBalance {
 
   recomputedAt DateTime @default(now()) @map("recomputed_at") @db.Timestamptz(6)
 
+  /// J3. Prisma requires this in the relation's field order; the real index is
+  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
+  /// uniqueness, different column order, and the migration owns the index.
+  @@unique([issueId, tenantId])
   @@map("issue_balance")
 }
 
@@ -899,7 +959,7 @@ model RejectedSeal {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quoteId  String @map("quote_id") @db.Uuid
-  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quote    Quote  @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   /// What the device believed it was sealing. Deliberately NOT unique with the quote: several devices
   /// may lose the same race and every attempt is worth keeping.
@@ -932,6 +992,10 @@ model RejectedSeal {
   lines RejectedSealLine[]
 
   @@index([quoteId])
+  /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
+  /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
+  /// the point.
+  @@unique([id, tenantId])
   @@map("rejected_seal")
 }
 
@@ -940,7 +1004,7 @@ model RejectedSealLine {
   tenantId       String       @map("tenant_id") @db.Uuid
   tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   rejectedSealId String       @map("rejected_seal_id") @db.Uuid
-  rejectedSeal   RejectedSeal @relation(fields: [rejectedSealId], references: [id], onDelete: Restrict)
+  rejectedSeal   RejectedSeal @relation(fields: [rejectedSealId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   sectionTitle        String @map("section_title")
   description         String
