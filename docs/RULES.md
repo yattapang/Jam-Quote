@@ -725,6 +725,27 @@ the tool with a reason each. The first attempt exempted English idioms ("does no
 actually") and became whack-a-mole — which is itself the lesson: an exemption belongs to why a
 document exists, not to how a sentence happens to be worded.
 
+**21.9 A guard patched twice for the same class is replaced, not patched a third time (added
+2026-09-26).** When the same kind of defect gets through a control twice, the control's *shape* is the
+defect and the next patch will be the one that gets through as well. Replace it with a tool that
+resolves against the real thing — parsed structure, a complete index — and have the new tool state the
+size of the set it examined, including what it skipped.
+
+> Why: `tools/check_citations.py` was patched after M14, after H16, after M18 and after M19, and then
+> review 4 found three defects it could not see by construction. It silently skipped any cited path
+> whose first segment was not a real top-level directory — **71 paths**, hiding five phantoms, one of
+> them a guard credited at eight sites that had never been written (J1) — and it resolved identifiers
+> by text presence, which a comment can satisfy, so a table no migration creates looked real (J9).
+> `tools/check_schema_citations.py` replaced it for that class and prints "0 citations skipped" beside
+> its result, because a guard that cannot state the set it examined will eventually examine a smaller
+> one (M20).
+
+**A new guard is planted against before it is reported, and its own first version is suspect.**
+21.9's own tool failed its first plant: the rule "a foreign key **or** a table of that name" passed
+when the foreign key was deleted, because by then the table existed. Tightened, it found two more
+unenforced actor references in the same schema (M21). A guard is not finished when it is written, nor
+when it passes — only when the defect it is named for makes it fail.
+
 **What Rule 21 does not fix.** It cannot make anyone honest; it makes an overstatement visible in a
 diff. It cannot catch a control that fires correctly on the wrong thing — a scanner whose rules miss
 our particular secret format fires, satisfies 21.2, and still misses. Rule 9's independent review is

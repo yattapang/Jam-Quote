@@ -39,7 +39,7 @@
  * - Nothing about tables outside the public schema.
  */
 import { PGlite } from "@electric-sql/pglite";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -70,16 +70,32 @@ function normalise(expression: string | null): string {
 }
 
 /**
- * Every policy file, not just the first.
+ * Every policy file, read from the directory.
  *
  * This was a single hardcoded filename until `002-documents-isolation.sql` arrived, at which point a
  * guard that still checked only 001 would have passed while the Documents context's isolation went
- * unverified — a control silently narrower than it reads (Rule 21.1). The list is explicit rather
- * than a directory scan, so adding a policy file is a deliberate act that shows in a diff.
+ * unverified — a control silently narrower than it reads (Rule 21.1). The list was then made
+ * explicit, with the argument that "adding a policy file is a deliberate act that shows in a diff".
+ *
+ * That argument loses, and finding J1 is why. A hardcoded list fails in one direction only: the file
+ * arrives, the list is not updated, and the guard reports success over a set that no longer matches
+ * reality — the same shape as the citation checker's silent skip. A directory scan shows in a diff
+ * just as clearly, because the new POLICY FILE shows in the diff. So the set is read, and the count
+ * is asserted below so an empty read cannot pass as "everything agrees".
  */
-const POLICY_FILES = ["001-tenant-isolation.sql", "002-documents-isolation.sql"];
+const POLICY_FILES = (await readdir(join(MIGRATIONS_DIR, "..", "policies")))
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
 
 describe("the readable policy files and the applied migrations agree", () => {
+  it("found policy files to check at all", () => {
+    // A directory scan that returns nothing would make every test below vacuously pass. Naming the
+    // two that must be there keeps the floor concrete rather than merely non-zero.
+    expect(POLICY_FILES).toContain("001-tenant-isolation.sql");
+    expect(POLICY_FILES).toContain("002-documents-isolation.sql");
+    expect(POLICY_FILES.length).toBeGreaterThanOrEqual(2);
+  });
+
   it.each(POLICY_FILES)("embeds db/policies/%s verbatim in a migration", async (POLICY_FILE) => {
     const BEGIN = `-- >>> BEGIN db/policies/${POLICY_FILE}`;
     const END = `-- <<< END db/policies/${POLICY_FILE}`;
@@ -161,6 +177,10 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
         acceptance_withdrawal:
           "The withdrawal itself. The row IS the audit record, so rewriting it would rewrite the " +
           "history it exists to provide.",
+        document_render:
+          "The produced PDF: its storage key, its hash and the settings it was made with. The hash " +
+          "IS the document for every later purpose, so a row that could be updated would let the " +
+          "document a client accepted be changed after they accepted it (finding J9, PRD R1.16a).",
         variation:
           "Agreed extra work, and an input to the invoiceable ceiling. Mutable variations would " +
           "make the ceiling unauditable.",

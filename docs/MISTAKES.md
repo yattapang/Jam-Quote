@@ -307,3 +307,41 @@ not scan and tells you to stage them before trusting a green result. Proved by p
 file and watching the notice appear. The deeper rule is Rule 21.1: a result computed over the wrong set
 of inputs is not a result, and a tool that cannot say which inputs it used invites exactly this.
 
+
+### M20 · Four rounds of patching one guard, when the guard's *shape* was the defect
+`Repeat of:` **M14 and M18's class**, and the reason review 4 could still find three instances of it.
+
+`check_citations.py` was patched after M14, after H16, after M18 and after M19. Each patch fixed the
+instance in front of me. Review 4 then found three defects the tool could not see **by construction**:
+it skipped, in silence, any cited path whose first segment was not a real top-level directory — 71
+distinct paths, hiding five phantoms including `db/test/money-convention.test.ts`, which was credited
+at eight sites as the guard keeping money columns `BIGINT` and **had never been written**; and it
+checked identifiers by text presence, which another comment can satisfy, so `document_render` looked
+resolved while no migration created the table.
+
+**Cost:** a guard that reported "Every cited path resolves" while checking 71 fewer paths than it
+claimed, for several days, in the one job built to stop exactly that.
+
+**Prevented by:** a new tool rather than a fifth patch — `tools/check_schema_citations.py` resolves
+paths against a full index with **no silent skip** and identifiers against **parsed DDL**, and prints
+the count of what it skipped (zero) alongside its result. The lesson is not "write better patches": it
+is that a guard which cannot state the set it examined will eventually examine a smaller one. Rule 21.1
+already said so about claims; this applies it to the tool itself.
+
+### M21 · My own new guard's first version failed its own plant
+`Repeat of:` **nothing — this is what a plant is for, and it is recorded because the near-miss is the
+evidence.**
+
+`check_schema_citations.py` was written to catch J9: a UUID `*_id` column with no foreign key naming a
+table no migration creates. Its rule was "has a foreign key **OR** names a table that exists". The
+plant — delete the foreign key J9's migration adds — **passed green**, because by then the table
+existed and the OR was satisfied. Had I reported the tool on the strength of reading it, I would have
+shipped a guard that could not see the defect it was named after.
+
+Tightened to require the key outright, it immediately reported two more real ones:
+`audit_entry.actor_user_id` and `platform_capability.granted_by_user_id` — the two columns in the
+schema that answer "who did this?", both accepting any UUID as the actor. Both now have foreign keys
+(`new-app/db/migrations/20260926160000_unenforced_references/migration.sql`).
+
+**Cost:** none, because the plant ran before the claim. That is the entire value of Rule 21.2 and this
+entry exists so the next agent sees a plant catching a real defect rather than ceremony.

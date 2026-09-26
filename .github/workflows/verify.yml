@@ -194,6 +194,18 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_citations.py
 
+      # The same class, resolved against PARSED DDL and a complete file index with no silent skip
+      # (findings J1 and J9). The step above stayed because it checks things this one does not —
+      # bare filenames and `symbol in file` claims — and this one exists because four rounds of
+      # patching that one could not reach the class: it skipped 71 paths in silence, and it checked
+      # identifiers by text presence, which a comment can satisfy. Proved by three plants: the J9
+      # foreign key removed, a phantom path cited, and a migration comment naming a column that does
+      # not exist. Its first version failed the first plant, which is why the rule is now "a foreign
+      # key is required" rather than "a key or a table of that name".
+      - name: Paths and database objects resolve against what exists
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_schema_citations.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

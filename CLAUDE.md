@@ -62,7 +62,8 @@ every CRUD path and every UI preview must route through it.
   the tax/money/totals logic. Enums in [enums.ts](packages/core/src/types/enums.ts)
   mirror the Prisma schema **exactly** — change one, change both.
 - **`packages/ui`** — design tokens (palette, type) derived from
-  `extracted/JamQuote.dc.html`.
+  `extracted/JamQuote.dc.html`, deleted from the repository on 2026-09-26 as an unrelated July
+  mockup — the tokens it carried live on in the design system, not in that file.
 - **`apps/api`** — NestJS owns all business logic. Per-feature modules
   (`business`, `clients`, `jobs`, `quotes`, `catalogs`, `payments`, …), Prisma
   for persistence, Zod for request validation.

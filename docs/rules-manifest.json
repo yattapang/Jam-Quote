@@ -188,7 +188,11 @@
     },
     "21.8": {
       "title": "A cited file, path or symbol must exist (added 2026-09-26)",
-      "hash": "726861d1c837df86"
+      "hash": "14d6953d1edb4d9a"
+    },
+    "21.9": {
+      "title": "A guard patched twice for the same class is replaced, not patched a third time (added\n2026-09-26)",
+      "hash": "bf5f1da4cdd68acf"
     },
     "22": {
       "title": "A scripted edit is verified mechanically, not by eye (added 2026-09-24)",

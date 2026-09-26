@@ -84,6 +84,7 @@ model Tenant {
   sessions     AppSession[]
   credentials  AppCredential[]
   auditEntries AuditEntry[]
+  documentRenders DocumentRender[]
 
   // The Documents core (ADR 0025). Prisma requires the back-relation for every model that names a
   // tenant; the schema-migration-parity guard resolves relations against model names so an optional
@@ -168,6 +169,9 @@ model AppUser {
   platformCapabilities PlatformCapability[]
   mfaTotp              MfaTotp?
   mfaRecoveryCodes     MfaRecoveryCode[]
+  documentRenders      DocumentRender[]
+  capabilitiesGranted  PlatformCapability[] @relation("CapabilityGrantedBy")
+  auditEntries         AuditEntry[]         @relation("AuditActor")
 
   /// The real index is PARTIAL - `WHERE deleted_at IS NULL` - so a deleted user's address is not
   /// held hostage forever and the business can re-invite the same person. Prisma cannot express a
@@ -317,6 +321,9 @@ model PlatformCapability {
   /// NULL only for the bootstrap grant created before any person exists. Every other grant names
   /// who made it.
   grantedByUserId String?  @map("granted_by_user_id") @db.Uuid
+  /// The foreign key was missing until finding J9's guard reported it: Rule 5.1 asks that a grant
+  /// have an author, and the database would previously have accepted any UUID as that author.
+  grantedBy       AppUser? @relation("CapabilityGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
   grantedAt       DateTime @default(now()) @map("granted_at") @db.Timestamptz(6)
 
   /// Revoked rather than deleted: who could do what, and when, is history.
@@ -422,7 +429,10 @@ model AuditEntry {
 
   /// NULL only for "system" - enforced by a CHECK, because a human action with no actor is not an
   /// audit entry, it is a rumour.
-  actorUserId String? @map("actor_user_id") @db.Uuid
+  actorUserId String?  @map("actor_user_id") @db.Uuid
+  /// Enforced from finding J9's guard onwards. An audit entry naming a user id that never existed
+  /// is not a gap in the trail, it is a false trail.
+  actorUser   AppUser? @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
 
   /// From the AuditAction union in @pryvis/core, so a typo cannot invent a new action and split
   /// one behaviour across two names nobody thinks to search for.
@@ -625,6 +635,8 @@ model QuoteIssue {
   /// can both seal the same draft offline and neither push conflicts, because each is an INSERT.
   @@unique([quoteId, revision])
   @@index([tenantId])
+  renders DocumentRender[]
+
   @@map("quote_issue")
 }
 
@@ -685,7 +697,9 @@ model Acceptance {
   consentedToSign     Boolean  @default(false) @map("consented_to_sign")
 
   /// What was signed: the render, whose hash is the document. Not a hash of its own (finding F17).
-  documentRenderId String? @map("document_render_id") @db.Uuid
+  /// The foreign key arrived with the table, in finding J9's migration.
+  documentRenderId String?         @map("document_render_id") @db.Uuid
+  documentRender   DocumentRender? @relation(fields: [documentRenderId], references: [id], onDelete: Restrict)
 
   actorIp    String?  @map("actor_ip")
   userAgent  String?  @map("user_agent")
@@ -695,6 +709,40 @@ model Acceptance {
   withdrawal AcceptanceWithdrawal?
 
   @@map("acceptance")
+}
+
+/// The produced PDF, whose hash IS the document (PRD R1.16a, finding F17). Built by finding J9's
+/// migration: `acceptance.documentRenderId` pointed at this table for a day before it existed.
+///
+/// Append-only. The render points at its issue rather than the reverse, because an issue is sealed
+/// before it is rendered and a sealed row has no UPDATE path by which to gain a pointer.
+model DocumentRender {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  issueId String     @map("issue_id") @db.Uuid
+  issue   QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+
+  /// Provider-agnostic on purpose: object storage is an owner decision still outstanding.
+  storageKey String @map("storage_key")
+  /// Lowercase hex, 64 characters, checked by the migration — a hash column that accepts anything
+  /// will one day hold "pending".
+  sha256   String
+  byteSize BigInt @map("byte_size")
+  /// Logo, terms version, tax configuration: what the render was produced WITH, so a later
+  /// re-render can be compared like with like.
+  settings Json
+
+  renderedAt       DateTime @default(now()) @map("rendered_at") @db.Timestamptz(6)
+  renderedByUserId String?  @map("rendered_by_user_id") @db.Uuid
+  renderedBy       AppUser? @relation(fields: [renderedByUserId], references: [id], onDelete: Restrict)
+
+  acceptances Acceptance[]
+
+  @@unique([issueId, sha256])
+  @@index([issueId])
+  @@map("document_render")
 }
 
 /// Withdrawal as its own insert-only row (ADR 0025 decision 4). A nullable `withdrawnAt` on

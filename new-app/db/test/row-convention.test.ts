@@ -52,6 +52,10 @@ const EXEMPT: Record<string, string> = {
     "Append-only: what a client signed. Withdrawal is its own row precisely so this one never " +
     "changes (ADR 0025 decision 4).",
   acceptance_withdrawal: "Append-only: the row IS the audit record of the withdrawal.",
+  document_render:
+    "Append-only: a render is a set of bytes that existed, and `version` would imply an UPDATE the " +
+    "policies refuse while `deleted_at` would imply a DELETE they also refuse. A superseded render " +
+    "is answered by a newer row, not by a tombstone.",
   variation: "Append-only: an input to the invoiceable ceiling, so a mutable one is unauditable.",
   invoice: "Append-only: a demand for money that was sent. Corrected by a credit note or a void row.",
   invoice_void: "Append-only: the void itself.",

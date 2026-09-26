@@ -21,7 +21,7 @@ Two failure modes are already visible in this codebase and must not be repeated:
 feature between tiers, then changes data — not call sites.
 
 **2. Tier definitions live in core, prices in the database.**
-- `packages/core/src/billing/tiers.ts` holds the baseline: the tier ladder, which
+- `packages/core/src/billing/entitlements.ts` holds the baseline: the tier ladder, which
   entitlements each tier grants, and each numeric limit. It is the floor, so a missing
   database row can never leave a tenant with no rules (same shape as the rule pack, ADR
   0005).

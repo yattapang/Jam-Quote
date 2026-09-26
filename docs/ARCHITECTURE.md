@@ -92,7 +92,8 @@ Jamaican suppliers that publish online prices (e.g. **H&L True Value**) are scra
 
 ## 8. Design system
 
-Tokens come from `extracted/JamQuote.dc.html` and are codified in `packages/ui`.
+Tokens came from `extracted/JamQuote.dc.html`, deleted on 2026-09-26, and are codified in
+`packages/ui`.
 - Fonts: **Archivo** (headings/numerals), **Public Sans** (UI/body).
 - Accent (worksite gold): `#9C6E1B` light / `#E0AA48` dark — primary actions & money-positive states only.
 - Status colors (good/warn/critical/info) are separate from the accent.
