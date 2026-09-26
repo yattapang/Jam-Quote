@@ -108,13 +108,13 @@ One class of defect has happened **twice** and no rule names it:
 > `honestClaims`, a symbol that does not exist either (H16). **The defect was re-committed inside its own
 > fix**, which by Rule 24.4 means it needs a mechanism rather than more care.
 
-This should become **Rule 21.8** with a checker, and it is the highest-priority item below.
+This should become **a new sub-rule under Rule 21** with a checker, and it is the highest-priority item below. (Written without a number on purpose: `check_rules.py` treats a cited number as a claim that the rule exists, and citing an unborn rule turned the build red — the checker being right about its own author, again.)
 
 ## Recommended, in order, with the reason each earns its place
 
 | # | Build | Why it, and not something else |
 |---|---|---|
-| 1 | **Cited paths and symbols exist** → new Rule 21.8 + `tools/check_citations.py` | **Broken twice, once inside its own fix.** ~30 lines. Scans committed Markdown and source comments for file paths and `symbol` references and asserts each resolves |
+| 1 | **Cited paths and symbols exist** → a new sub-rule under Rule 21, plus `tools/check_citations.py` | **Broken twice, once inside its own fix.** ~30 lines. Scans committed Markdown and source comments for file paths and `symbol` references and asserts each resolves |
 | 2 | **Money columns are 64-bit integers** (Rule 3) | The defect that motivated the rebuild. Becomes relevant the moment the Documents migration lands, which is the next batch — so it ships **with** it |
 | 3 | **"What this does not prove" in every control file** (Rule 21.4) | Its absence from `verify.yml` is how a scanner claimed full history for 429 unscanned commits (M3) |
 | 4 | **A committed migration is never modified** (Rule 6) | Not yet broken, but it is a trivial git check for a failure that corrupts a deployed database |
