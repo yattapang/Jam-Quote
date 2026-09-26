@@ -174,6 +174,29 @@ responsibility, and the terms should say so rather than implying we can protect 
 free tenants, and the bound on what each can consume (three numbered jobs a month) is what makes that
 pointless rather than any identity check.
 
+## 4c. The tenant supplies the client's address, so an acceptance proves little against the tenant (added 2026-09-26, H10)
+
+The threat nobody had written down: **the party most likely to be in a dispute with a client is the tenant,
+and the tenant is who tells us the client's email or WhatsApp number.** A one-time code sent to that
+address, confirmed by whoever holds it, is worth nothing if the tenant holds it.
+
+This is not a defect to fix. It is a structural limit of any flow where one party names the other's
+address, and the honest responses are the two the acceptance design uses
+(`docs/design/acceptance-evidence.md`):
+
+| Response | Why it helps |
+|---|---|
+| **A third party the tenant does not control enters the chain** | Money (a bank or WiPay), an inbound reply held by Google or Meta, or a signature provider doing identity checks. None can be fabricated by the tenant |
+| **The evidence is labelled** | A six-grade ladder with the grade **derived** from append-only evidence, so nothing in the product claims more than happened. A tenant-uploaded screenshot is grade 1 |
+
+**What this means for release 1:** the strongest grade available without new infrastructure is a **deposit**,
+because the bank is the witness. Grade 4 — the client's own reply — needs inbound handling we have not
+bought (`SERVICE-REGISTER.md` §3b).
+
+**What we must never do:** present a grade-3 acceptance as proof against the tenant. It proves someone
+holding the tenant-supplied channel confirmed a code, which is a different sentence, and the UI must say
+the second one.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

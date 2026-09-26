@@ -88,6 +88,21 @@ vendor to fill a table is not.
 **Until both are chosen, R1.36 cannot be met**, and any upload path built before then is building against
 a decision that has not been made. Both are on the owner's dependency list in `PRD.md` §9.
 
+## 3b. Inbound message handling — owed, deferred until after growth (2026-09-26)
+
+Grade 4 on the acceptance ladder is **the client's own reply**, witnessed by Google or Meta rather than by
+us or the tenant — the best evidence available short of money
+(`docs/design/acceptance-evidence.md`). The owner has deferred buying it until after growth, and release 1
+prepares for it rather than building it.
+
+| Needed for | What it must do | What choosing it costs |
+|---|---|---|
+| **Inbound email** | Receive a reply to a per-issue address, attribute it to the issue, store the message id and sender as the provider reports them | An address we host, an endpoint that parses mail, and a **new sub-processor holding client replies** — which is client personal data, so a privacy-policy mention and a residency answer |
+| **Inbound WhatsApp** | The same, for the channel most Jamaican clients prefer | The **Business API**: Meta verification, per-message cost, and release 3 in the plan. Release 1's click-to-chat sends the reply to the contractor's own phone, so we cannot see it at all |
+
+**Until either is bought, a tenant-uploaded screenshot of a reply is graded 1, not 4.** It is evidence the
+tenant holds and can fabricate, and the ladder refuses to grade it higher.
+
 ## 4. Software Bill of Materials
 
 Code dependencies are **not listed here by hand** — a hand-maintained dependency list is wrong

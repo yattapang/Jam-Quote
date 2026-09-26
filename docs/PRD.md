@@ -255,12 +255,28 @@ demonstrated, it is not a requirement, it is a hope.
 ### W5 · Share and accept — no login for the client
 - **R1.19** A share link is a **credential**: high-entropy token, hashed at rest, scoped to one issue,
   expiring, revocable (ADR 0022).
-- **R1.20** The client can accept or decline. **Acceptance is a verified electronic signature**
-  (ADR 0024): a one-time code sent to the channel the tenant holds for that client, an explicit signing
-  act labelled as one, consent to sign electronically, and a record carrying the signer's name, the
-  timestamp, the IP, the user agent, the channel verified — and a **reference to the `document_render`
-  row whose hash is the document signed**, not a hash of its own (F17). One acceptance per issue,
-  immutable.
+- **R1.20** The client can accept or decline, and **acceptance is a ladder of six grades with the grade
+  derived from append-only evidence** (`design/acceptance-evidence.md`, approved 2026-09-26). **The
+  default bar is grade 3**: a one-time code to a stored or typed channel, an explicit signing act
+  labelled as one, consent to sign electronically, and a record carrying the signer's name, the
+  timestamp, the IP, the user agent and the destination actually used — plus a **reference to the
+  `document_render` row whose hash is the document signed**, not a hash of its own (F17). One acceptance
+  per issue, immutable; many evidence rows.
+- **R1.20e** **A channel is required at the point of use, not on the client (H9).** A client may exist
+  with neither address — a walk-up at a gate is a real client — but a share link may only be minted for a
+  client with at least one channel, and it may be typed at send time.
+- **R1.20f** **The grade is derived, never stored**, so it rises when evidence arrives and cannot drift.
+  A tenant-uploaded screenshot of a reply is **grade 1**, not grade 4: it is evidence the tenant holds
+  and can fabricate, and grading it higher would be the comfortable lie (H10).
+- **R1.20g** **A deposit is suggested above a threshold the tenant sets** —
+  `document_settings.deposit_suggested_above_minor`, unset meaning never. Suggested, not enforced: the
+  contractor knows which clients are good for it and we do not, and a product that refuses to send a
+  quote until they demand money gets worked around.
+- **R1.20h** **Grade 4 — the client's own reply — is deferred and prepared for, precisely.** Release 1
+  cannot witness one: WhatsApp click-to-chat sends the reply to the contractor's own phone, and we have
+  no inbound mail handling. So release 1 adds the four nullable columns an inbound message needs, teaches
+  the grade function grade 4, reserves a per-issue reply address so a future reply is attributable, and
+  records the two costs in the register. **Nothing else** — no endpoint, no parsing, no provider.
 - **R1.20a** **The product never states what the record proves.** The owner's position is that a typed
   name alone is not legal in a dispute; a properly constructed e-signature can be. So the UI says what was
   recorded and never that it is binding, and the terms do not call the tap a signature. Whether our

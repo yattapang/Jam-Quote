@@ -1,11 +1,11 @@
 # Design: how a client accepts, and what that acceptance is worth
 
-**Status: Proposed — NOT a basis for building.** Two gates, and they ask different questions (Rule 1.10):
+**Status: APPROVED by the owner 2026-09-26 · independent review OUTSTANDING (Rule 1.10).**
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | **Outstanding** |
-| **Independent review** | Will this do what it says? | **Outstanding** |
+| **Owner approval** | Is this what you want built? | ✅ **2026-09-26**, with the three §9 decisions answered |
+| **Independent review** | Will this do what it says? | **Outstanding** — no code until it closes |
 
 Date: 2026-09-26 · Closes findings **H9** and **H10** · Supersedes part of
 [ADR 0024](../adr/0024-acceptance-evidence.md) · Delegation (Rule 16.5): Opus — it decides what a
@@ -149,11 +149,35 @@ Each by planting the defect it exists to catch:
 - **Nothing about the client's identity.** No grade below 6 involves anyone checking who a person is.
 - **Nothing about the UI.** Which grade a screen asks for, and how a refusal reads, is application work.
 
-## 9. What the owner needs to decide
+## 9. The owner's decisions, 2026-09-26
 
-1. **The default bar.** Grade 3 is my recommendation: a code to a channel, available in release 1, with
-   the tenant free to require a deposit for larger jobs.
-2. **Whether grade 4 is worth buying early.** Inbound email is a modest build and a new sub-processor; it
-   is the only way to get third-party-witnessed acceptance without money changing hands.
-3. **Whether a deposit-confirmed acceptance should be the default for jobs above some value** — the
-   product could suggest it rather than leaving it to be configured.
+**1. The default bar is grade 3** — a one-time code to a stored or typed channel. Available in release 1,
+and the tenant remains free to require a deposit on any quote.
+
+**2. Grade 4 (the client's own reply) is bought after growth, and release 1 prepares for it.** Deferred
+deliberately, so "prepare" has to mean something specific rather than a good intention. It means exactly
+four things and no more:
+
+- **`acceptance_evidence` carries what an inbound message needs from the start**: the channel, the
+  external message id, the sender as the provider reported it, and the received-at timestamp. Nullable
+  and unused in release 1. This is the one place a column is added ahead of need, and the reason is that
+  adding it later means migrating rows that are append-only financial evidence.
+- **The grade function already knows grade 4**, so switching it on is a row appearing, not a code change
+  to the derivation.
+- **The reply-to address convention is reserved now** — quotes are sent with a per-issue reply address so
+  a future inbound handler can attribute a reply without guessing. Reserving the shape costs a line;
+  retrofitting it means every quote already sent is unattributable.
+- **The register records it as an owed decision** with its two costs named — an inbound endpoint and a new
+  sub-processor holding client replies (Rule 18).
+
+**Nothing else is built.** No parsing, no endpoint, no provider. If growth never comes, release 1 carries
+four nullable columns and a reply address nobody reads, which is the cheapest failed bet available.
+
+**3. A deposit is suggested automatically above a value the tenant sets.** Not a hard rule and not our
+number: `document_settings` gains a `deposit_suggested_above_minor` threshold, the tenant sets it (unset
+means never), and above it the product **suggests** grade 6 when a quote is sent. The tenant can decline
+per quote.
+
+Suggested rather than enforced, because the contractor knows which clients are good for it and we do not —
+and a product that refuses to send a quote until the contractor agrees to demand money is a product that
+gets worked around.

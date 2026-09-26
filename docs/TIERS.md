@@ -140,7 +140,10 @@ and a PDF record of the acceptance", and both halves have since been overtaken:
   acceptance references it (finding F17), because two hashes of one document is two things to keep in
   step.
 
-The need this item names is real and unchanged; the mechanism it prescribed is not what gets built.
+The need this item names is real and unchanged; the mechanism it prescribed is not what gets built. What
+does get built is the six-grade ladder in `docs/design/acceptance-evidence.md` (approved 2026-09-26), whose
+default bar is a code to the client's channel and whose strongest release-1 grade is a **paid deposit** —
+suggested automatically above a value each tenant sets.
 
 **4. Material price index with supplier comparison.** — and see `PRODUCT-OPPORTUNITIES.md`: this
 is also the most defensible asset in the business, with two conditions that cannot be retro-fitted.
