@@ -236,17 +236,35 @@ describe("refusals", () => {
     });
   });
 
-  it("refuses a session whose tenant does not own its user", async () => {
-    // A tampered or corrupted session row pointing a tenant at someone else's user.
-    // Row-level security refuses the join in step 3, so this cannot resolve — which
-    // is the property that makes step 1's RLS exemption safe.
+  const CROSS_TENANT_SESSION = "88888888-8888-4888-8888-888888888888";
+
+  it("cannot even STORE a session whose tenant does not own its user (finding J3)", async () => {
+    // This test used to create that row and check the resolver refused it. Since J3 the row is
+    // unrepresentable: `app_session`'s foreign key is (user_id, tenant_id) -> app_user (id,
+    // tenant_id), so a session claiming tenant A and tenant B's user is refused by the database
+    // before any resolver sees it. The stronger property, asserted where it now lives.
     await db.exec("RESET ROLE");
-    await giveSession("88888888-8888-4888-8888-888888888888", USER_B, TENANT_A, 0);
+    await expect(giveSession(CROSS_TENANT_SESSION, USER_B, TENANT_A, 0)).rejects.toThrow(
+      /foreign key|violates/i,
+    );
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+  });
+
+  it("and the resolver still refuses one, with the database's guard removed to prove it", async () => {
+    // The resolver's own check is now the SECOND layer, and a second layer that cannot be reached
+    // is a second layer nobody has tested. So the first layer is dropped inside this one test — the
+    // only honest way to exercise the branch, and cheaper than leaving it asserted by reading.
+    await db.exec("RESET ROLE");
+    await db.exec(`ALTER TABLE "app_session" DROP CONSTRAINT "app_session_user_id_fkey"`);
+    await giveSession(CROSS_TENANT_SESSION, USER_B, TENANT_A, 0);
     await db.exec(`SET ROLE ${APP_ROLE};`);
 
-    expect(
-      await resolver.resolve({ sessionId: "88888888-8888-4888-8888-888888888888", version: 0 }),
-    ).toEqual({ ok: false, refusal: "unknown-session" });
+    // Row-level security refuses the join in step 3, which is the property that makes step 1's RLS
+    // exemption safe. Unchanged by J3; it is simply no longer the only thing standing there.
+    expect(await resolver.resolve({ sessionId: CROSS_TENANT_SESSION, version: 0 })).toEqual({
+      ok: false,
+      refusal: "unknown-session",
+    });
   });
 });
 

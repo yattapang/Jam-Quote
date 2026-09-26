@@ -425,3 +425,21 @@ unique index too makes the foreign acceptance insert **succeed**, which is the l
 The lesson about test titles: "the tenant boundary still holds over all of it" was a claim about a
 boundary, evidenced by two tests about one half of it. A block's title is a claim (Rule 21.1), and if
 it says "all" it has to mean it.
+
+### M26 · Ran one workspace's tests and called it the gate, twice in one session
+`Repeat of:` **M22**, four commits later, with the subset chosen differently.
+
+M22 was "ran the tests, not typecheck". This is "ran typecheck and `npm test -w @pryvis/db`, not
+`npm test`". J3's composite keys changed the schema every package sits on, and an existing API test —
+`db-caller-resolver.test.ts`, "refuses a session whose tenant does not own its user" — deliberately
+creates a cross-tenant session row to prove the resolver refuses it. That row is now unrepresentable,
+so the FIXTURE failed. CI found it; I had not run that package.
+
+**Cost:** one red build. The finding was benign and in a sense welcome — it is the new constraint
+working — but I did not know that until CI told me, and the next one may not be benign.
+
+**Prevented by:** the gate is `npm test` at the workspace root, not a `-w` subset, whatever the change
+appeared to touch. A schema change touches every package that reads the schema, which here is all of
+them. The test itself is now better for it: the database's refusal is asserted where it belongs, and
+the resolver's own check — now the second layer — is exercised by dropping the constraint inside that
+one test, because a second layer that cannot be reached is a second layer nobody has tested.
