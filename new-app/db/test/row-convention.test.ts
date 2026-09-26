@@ -32,6 +32,45 @@ import { APP_ROLE, applyMigrations } from "../test-support/index.js";
  * impossible to add silently.
  */
 const EXEMPT: Record<string, string> = {
+  // ---------------------------------------------------------------------------
+  // APPEND-ONLY DOCUMENTS (ADR 0025). These are exempt for the opposite reason to the rest: the
+  // convention asks for `version` and `deleted_at`, and BOTH WOULD BE WRONG HERE. A version column
+  // implies an UPDATE the policies refuse; a tombstone implies a DELETE they also refuse. Asking an
+  // immutable row how to handle a concurrent edit is asking the wrong question.
+  //
+  // Their protection is stronger, not weaker: `db/test/policy-parity.test.ts` holds each to an
+  // exactly-SELECT-and-INSERT policy set, so history cannot be rewritten even with a grant.
+  // ---------------------------------------------------------------------------
+  quote_issue:
+    "Append-only: the sealed snapshot. A version column would imply it can be edited, which is the " +
+    "one thing it must never be (domain model §6.1).",
+  quote_issue_line:
+    "Append-only: the frozen lines of a sealed issue. Editable lines live on `quote`.",
+  issue_number:
+    "Append-only, and the reason it exists at all is to avoid an UPDATE on a sealed document.",
+  acceptance:
+    "Append-only: what a client signed. Withdrawal is its own row precisely so this one never " +
+    "changes (ADR 0025 decision 4).",
+  acceptance_withdrawal: "Append-only: the row IS the audit record of the withdrawal.",
+  variation: "Append-only: an input to the invoiceable ceiling, so a mutable one is unauditable.",
+  invoice: "Append-only: a demand for money that was sent. Corrected by a credit note or a void row.",
+  invoice_void: "Append-only: the void itself.",
+  credit_note: "Append-only: the only way to reduce an issued invoice.",
+
+  // ---------------------------------------------------------------------------
+  // Two more, each for its own reason.
+  // ---------------------------------------------------------------------------
+  number_series:
+    "A counter, not a document. Its one mutable field (`next_number`) is allocated under a row " +
+    "lock, so optimistic versioning is not its concurrency control and would suggest a second one " +
+    "that does not exist. A series is never deleted — retiring one would orphan the numbers it " +
+    "issued.",
+  issue_balance:
+    "A derived cache behind a lock (ADR 0025 decision 2), rebuildable from the rows it summarises. " +
+    "The application cannot write it at all, so a version column would be a concurrency control " +
+    "for writes that cannot happen; the lock inside `issue_balance_apply()` is the real one. Never " +
+    "deleted, because a FOR UPDATE on a missing row takes no lock — which was finding G2.",
+
   app_session:
     "Authentication state, not business data. Nothing syncs a session to a phone, and a revoked " +
     "session already has revoked_at — a tombstone would be a second way to say the same thing.",

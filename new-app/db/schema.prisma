@@ -85,6 +85,25 @@ model Tenant {
   credentials  AppCredential[]
   auditEntries AuditEntry[]
 
+  // The Documents core (ADR 0025). Prisma requires the back-relation for every model that names a
+  // tenant; the schema-migration-parity guard resolves relations against model names so an optional
+  // back-relation is not mistaken for a missing table (finding F11's false positive).
+  clients               Client[]
+  numberSeries          NumberSeries[]
+  quotes                Quote[]
+  quoteSections         QuoteSection[]
+  quoteLines            QuoteLine[]
+  quoteIssues           QuoteIssue[]
+  quoteIssueLines       QuoteIssueLine[]
+  issueNumbers          IssueNumber[]
+  acceptances           Acceptance[]
+  acceptanceWithdrawals AcceptanceWithdrawal[]
+  variations            Variation[]
+  invoices              Invoice[]
+  invoiceVoids          InvoiceVoid[]
+  creditNotes           CreditNote[]
+  issueBalances         IssueBalance[]
+
   @@map("tenant")
 }
 
@@ -424,4 +443,387 @@ model AuditEntry {
   @@index([tenantId, occurredAt(sort: Desc), id(sort: Desc)])
   @@index([tenantId, subjectType, subjectId])
   @@map("audit_entry")
+}
+
+// ===========================================================================
+// THE DOCUMENTS CORE (migration 20260925120000_documents_core, ADR 0025)
+//
+// Every table below has a model here because `db/test/schema-migration-parity.test.ts`
+// fails otherwise — a table with no model is a table `prisma migrate diff` would
+// propose DROPPING, which is how finding F11 nearly lost four tables.
+//
+// The five invariants are NOT expressed here, and cannot be: Prisma has no way to say
+// "written only through a function", "no UPDATE policy" or "this column is derived".
+// They live in the migration, which is the point of ADR 0025 — the schema file
+// describes the shape, the migration holds the rules.
+// ===========================================================================
+
+model Client {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  name String
+
+  /// Nullable, and PRD finding H9 is open because of it: the e-signature's verification code
+  /// needs a channel and nothing requires a client to have one. Recorded rather than quietly
+  /// required, because making it mandatory is a decision about clients already on file.
+  email String?
+  phone String?
+
+  quotes Quote[]
+
+  version   Int       @default(1)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId])
+  @@map("client")
+}
+
+model NumberSeries {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  documentKind String @map("document_kind")
+  prefix       String @default("")
+
+  /// Allocated under a row lock, which is the shape ADR 0025 decision 2 copies for the balance.
+  nextNumber BigInt @default(1) @map("next_number")
+  resetRule  String @default("never") @map("reset_rule")
+
+  issueNumbers IssueNumber[]
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, documentKind])
+  @@map("number_series")
+}
+
+model Quote {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  clientId String @map("client_id") @db.Uuid
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+
+  title String
+
+  /// Frozen into the issue when sealed: changing it later would alter what a client was shown
+  /// (finding F14).
+  clientDetailLevel String @default("itemised") @map("client_detail_level")
+  currency          String
+
+  sections QuoteSection[]
+  lines    QuoteLine[]
+  issues   QuoteIssue[]
+
+  version   Int       @default(1)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([tenantId])
+  @@map("quote")
+}
+
+model QuoteSection {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quoteId  String @map("quote_id") @db.Uuid
+  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  title    String
+  position Int
+
+  lines QuoteLine[]
+
+  version   Int       @default(1)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([quoteId])
+  @@map("quote_section")
+}
+
+model QuoteLine {
+  id        String       @id @default(uuid()) @db.Uuid
+  tenantId  String       @map("tenant_id") @db.Uuid
+  tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quoteId   String       @map("quote_id") @db.Uuid
+  quote     Quote        @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sectionId String       @map("section_id") @db.Uuid
+  section   QuoteSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  description String
+  position    Int
+
+  /// Money is BigInt minor units and quantity is thousandths, both integers. No float touches
+  /// either (Rule 3, ADR 0011) — the old application capped at $21,474,836.47 on a 32-bit type.
+  quantityThousandths BigInt @map("quantity_thousandths")
+  unitPriceMinor      BigInt @map("unit_price_minor")
+  lineTotalMinor      BigInt @map("line_total_minor")
+
+  /// Which recipe produced it, so a recipe change can offer to refresh a draft — never an issue.
+  recipeId String? @map("recipe_id") @db.Uuid
+
+  version   Int       @default(1)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([quoteId])
+  @@map("quote_line")
+}
+
+/// The sealed snapshot. Append-only in the database (no UPDATE or DELETE policy), which Prisma
+/// cannot express — see the migration.
+model QuoteIssue {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quoteId  String @map("quote_id") @db.Uuid
+  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  revision Int
+
+  clientId            String @map("client_id") @db.Uuid
+  clientName          String @map("client_name")
+  title               String
+  clientDetailLevel   String @map("client_detail_level")
+  currency            String
+  termsText           String @map("terms_text")
+  taxRateBasisPoints  Int    @map("tax_rate_basis_points")
+  subtotalMinor       BigInt @map("subtotal_minor")
+  taxMinor            BigInt @map("tax_minor")
+  totalMinor          BigInt @map("total_minor")
+
+  sealedAt       DateTime @map("sealed_at") @db.Timestamptz(6)
+  sealedByUserId String   @map("sealed_by_user_id") @db.Uuid
+
+  /// When the prices this froze were last refreshed. PRD R1.13a gives it a reader, which is what
+  /// stops it being decoration (finding G6).
+  catalogSyncedAt DateTime  @map("catalog_synced_at") @db.Timestamptz(6)
+  expiresOn       DateTime? @map("expires_on") @db.Date
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  lines      QuoteIssueLine[]
+  number     IssueNumber?
+  acceptance Acceptance?
+  variations Variation[]
+  invoices   Invoice[]
+  balance    IssueBalance?
+
+  /// One sealed issue per revision of a quote. This index IS the answer to finding G4: two devices
+  /// can both seal the same draft offline and neither push conflicts, because each is an INSERT.
+  @@unique([quoteId, revision])
+  @@index([tenantId])
+  @@map("quote_issue")
+}
+
+model QuoteIssueLine {
+  id       String     @id @default(uuid()) @db.Uuid
+  tenantId String     @map("tenant_id") @db.Uuid
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueId  String     @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+
+  sectionTitle        String @map("section_title")
+  description         String
+  position            Int
+  quantityThousandths BigInt @map("quantity_thousandths")
+  unitPriceMinor      BigInt @map("unit_price_minor")
+  lineTotalMinor      BigInt @map("line_total_minor")
+  taxTreatment        String @map("tax_treatment")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([issueId])
+  @@map("quote_issue_line")
+}
+
+/// The number, in its own insert-only row rather than a nullable column on the issue — filling one
+/// in later would be an UPDATE on a sealed financial document (ADR 0025 decision 1).
+model IssueNumber {
+  id       String       @id @default(uuid()) @db.Uuid
+  tenantId String       @map("tenant_id") @db.Uuid
+  tenant   Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueId  String       @unique @map("issue_id") @db.Uuid
+  issue    QuoteIssue   @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  seriesId String       @map("series_id") @db.Uuid
+  series   NumberSeries @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+
+  number      BigInt
+  formatted   String
+  allocatedAt DateTime @default(now()) @map("allocated_at") @db.Timestamptz(6)
+
+  @@unique([seriesId, number])
+  @@map("issue_number")
+}
+
+model Acceptance {
+  id       String     @id @default(uuid()) @db.Uuid
+  tenantId String     @map("tenant_id") @db.Uuid
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueId  String     @unique @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+
+  outcome    String
+  signerName String @map("signer_name")
+
+  /// The verified channel and the consent are what make this an e-signature rather than a typed
+  /// name, which the owner ruled is not legal in a dispute (ADR 0024).
+  verifiedChannel     String?  @map("verified_channel")
+  verifiedDestination String?  @map("verified_destination")
+  consentedToSign     Boolean  @default(false) @map("consented_to_sign")
+
+  /// What was signed: the render, whose hash is the document. Not a hash of its own (finding F17).
+  documentRenderId String? @map("document_render_id") @db.Uuid
+
+  actorIp    String?  @map("actor_ip")
+  userAgent  String?  @map("user_agent")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  withdrawal AcceptanceWithdrawal?
+
+  @@map("acceptance")
+}
+
+/// Withdrawal as its own insert-only row (ADR 0025 decision 4). A nullable `withdrawnAt` on
+/// Acceptance would need an UPDATE grant on a document a client signed.
+model AcceptanceWithdrawal {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  acceptanceId String     @unique @map("acceptance_id") @db.Uuid
+  acceptance   Acceptance @relation(fields: [acceptanceId], references: [id], onDelete: Restrict)
+
+  reason             String
+  withdrawnByUserId  String   @map("withdrawn_by_user_id") @db.Uuid
+  occurredAt         DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@map("acceptance_withdrawal")
+}
+
+model Variation {
+  id       String     @id @default(uuid()) @db.Uuid
+  tenantId String     @map("tenant_id") @db.Uuid
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueId  String     @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+
+  description String
+
+  /// May be negative: a variation can remove scope as well as add it.
+  amountMinor BigInt @map("amount_minor")
+
+  recordedByUserId String   @map("recorded_by_user_id") @db.Uuid
+  occurredAt       DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([issueId])
+  @@map("variation")
+}
+
+model Invoice {
+  id       String     @id @default(uuid()) @db.Uuid
+  tenantId String     @map("tenant_id") @db.Uuid
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  issueId  String     @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+
+  kind        String
+  amountMinor BigInt @map("amount_minor")
+  currency    String
+
+  issuedAt  DateTime  @map("issued_at") @db.Timestamptz(6)
+  dueOn     DateTime? @map("due_on") @db.Date
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  void        InvoiceVoid?
+  creditNotes CreditNote[]
+
+  @@index([issueId])
+  @@map("invoice")
+}
+
+model InvoiceVoid {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoiceId String  @unique @map("invoice_id") @db.Uuid
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  reason          String
+  voidedByUserId  String   @map("voided_by_user_id") @db.Uuid
+  occurredAt      DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@map("invoice_void")
+}
+
+model CreditNote {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  invoiceId String  @map("invoice_id") @db.Uuid
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  amountMinor BigInt   @map("amount_minor")
+  reason      String
+  issuedAt    DateTime @map("issued_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([invoiceId])
+  @@map("credit_note")
+}
+
+/// The derived cache that carries the lock (ADR 0025 decision 2).
+///
+/// The application cannot write this table at all: its write policies require a transaction-local
+/// flag that only `issue_balance_apply()` sets. Prisma cannot express that, which is exactly why
+/// the rule lives in the migration.
+model IssueBalance {
+  issueId  String     @id @map("issue_id") @db.Uuid
+  issue    QuoteIssue @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  tenantId String     @map("tenant_id") @db.Uuid
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  /// Written once from the accepted issue's own frozen lines, never again. Safe as a copy ONLY
+  /// because the issue is immutable (finding G12).
+  acceptedTotalMinor BigInt @map("accepted_total_minor")
+
+  /// Re-summed from the rows inside the lock on every change, so these are a cache and never a
+  /// second source of truth.
+  variationsTotalMinor BigInt @default(0) @map("variations_total_minor")
+  invoicedTotalMinor   BigInt @default(0) @map("invoiced_total_minor")
+
+  recomputedAt DateTime @default(now()) @map("recomputed_at") @db.Timestamptz(6)
+
+  @@map("issue_balance")
+}
+
+/// A pending registration is not a user and never becomes one by waiting (ADR 0025 decision 5).
+///
+/// No tenant, because it exists before any tenant does — named in policy-parity's EXEMPT list with
+/// that reason. No unique constraint on the address either: many people may attempt the same one,
+/// and the user row is inserted at verification, where `AppUser.email`'s global unique index makes
+/// "first to verify wins" a database guarantee rather than application logic.
+model RegistrationClaim {
+  id    String @id @default(uuid()) @db.Uuid
+  email String
+
+  /// Hashed, because holding a claim token completes a registration — it is a credential.
+  tokenHash String @unique @map("token_hash")
+
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  @@index([email])
+  @@map("registration_claim")
 }

@@ -69,12 +69,20 @@ function normalise(expression: string | null): string {
   return (expression ?? "").replace(/\s+/g, " ").trim().toUpperCase();
 }
 
-const POLICY_FILE = "001-tenant-isolation.sql";
-const BEGIN = `-- >>> BEGIN db/policies/${POLICY_FILE}`;
-const END = `-- <<< END db/policies/${POLICY_FILE}`;
+/**
+ * Every policy file, not just the first.
+ *
+ * This was a single hardcoded filename until `002-documents-isolation.sql` arrived, at which point a
+ * guard that still checked only 001 would have passed while the Documents context's isolation went
+ * unverified — a control silently narrower than it reads (Rule 21.1). The list is explicit rather
+ * than a directory scan, so adding a policy file is a deliberate act that shows in a diff.
+ */
+const POLICY_FILES = ["001-tenant-isolation.sql", "002-documents-isolation.sql"];
 
-describe("the readable policy file and the applied migrations agree", () => {
-  it("embeds db/policies/001-tenant-isolation.sql verbatim in a migration", async () => {
+describe("the readable policy files and the applied migrations agree", () => {
+  it.each(POLICY_FILES)("embeds db/policies/%s verbatim in a migration", async (POLICY_FILE) => {
+    const BEGIN = `-- >>> BEGIN db/policies/${POLICY_FILE}`;
+    const END = `-- <<< END db/policies/${POLICY_FILE}`;
     const authoritative = (
       await readFile(join(MIGRATIONS_DIR, "..", "policies", POLICY_FILE), "utf8")
     ).trim();
@@ -135,12 +143,63 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
        * These are held to a STRICTER standard than the rest (see below), not excused from it.
        */
       const APPEND_ONLY: Record<string, string> = {
+        // The Documents context (ADR 0025). Each of these is a document somebody outside the tenant
+        // may have been shown, or a fact about one. Immutability is the absence of an UPDATE or
+        // DELETE policy, not a comment asking politely — so a policy appearing here for UPDATE or
+        // DELETE is the defect this registry exists to catch.
+        quote_issue:
+          "The sealed snapshot (domain model §6.1). Its whole value is that what was sent cannot " +
+          "change afterwards.",
+        quote_issue_line:
+          "The frozen lines of a sealed issue. Editable lines live on `quote`, which is mutable.",
+        issue_number:
+          "The number, in its own row so that filling it in later is an INSERT rather than an " +
+          "UPDATE on a sealed document (ADR 0025 decision 1).",
+        acceptance:
+          "What a client signed. A nullable `withdrawn_at` here would need an UPDATE grant on it, " +
+          "which is why withdrawal is its own row (ADR 0025 decision 4).",
+        acceptance_withdrawal:
+          "The withdrawal itself. The row IS the audit record, so rewriting it would rewrite the " +
+          "history it exists to provide.",
+        variation:
+          "Agreed extra work, and an input to the invoiceable ceiling. Mutable variations would " +
+          "make the ceiling unauditable.",
+        invoice:
+          "A demand for money that was sent. Corrected by a credit note or voided by its own row.",
+        invoice_void:
+          "The void. Same reasoning as the withdrawal.",
+        credit_note:
+          "A reduction of an issued invoice, which is the only way to reduce one.",
         audit_entry:
           "The audit trail (ADR 0020). Its whole value is that it cannot be edited, so the " +
           "absence of an UPDATE or DELETE policy is the control rather than an omission.",
       };
 
+      /**
+       * Tables the application may read but may only WRITE through a function.
+       *
+       * A third shape, and it exists because the other two could not express `issue_balance`
+       * (ADR 0025 decision 2). It is legitimately mutable — it is a derived cache — so append-only
+       * is wrong; and its write policies carry an extra predicate, so the "canonical expression for
+       * ALL commands" rule is wrong too.
+       *
+       * The value is the predicate that must appear in every write policy. Asserting it is the
+       * point: it turns "only a function writes this" from a sentence in a design document into a
+       * property this guard checks. Without it, someone could drop the flag condition and leave a
+       * table that reads as function-guarded and is not.
+       */
+      const FUNCTION_GUARDED: Record<string, string> = {
+        issue_balance:
+          "current_setting('pryvis.balance_write'::text, true) = 'on'::text",
+      };
+
       const EXEMPT: Record<string, string> = {
+        registration_claim:
+          "A pending registration is not a user and has no tenant — it exists BEFORE any tenant " +
+          "does (ADR 0025 decision 5). It holds an email address and a hashed token, is never " +
+          "unique on the address, and is read only by the unauthenticated registration path. The " +
+          "user row is inserted at verification, where app_user's global unique index makes " +
+          "'first to verify wins' a database guarantee.",
         app_session:
           "Read before any tenant is known, because it is what establishes app.tenant_id. " +
           "A policy requiring a tenant would make it unreadable exactly when it is needed. " +
@@ -247,6 +306,53 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
           // tenant-owned table compares `tenant_id`. Both must resolve the value the same way.
           const column = table === "tenant" ? "id" : "tenant_id";
           const expected = canonicalPolicyExpression(column);
+
+          if (table in FUNCTION_GUARDED) {
+            // Exactly a SELECT, an INSERT and an UPDATE; no DELETE, because a balance row is
+            // recomputed rather than removed — deleting it would reintroduce the empty-lock hole
+            // that finding G2 was about.
+            const byCommand = new Map(policies.rows.map((p) => [p.cmd, p]));
+            const commands = [...byCommand.keys()].sort().join(",");
+            if (commands !== "a,r,w") {
+              unprotected.push(
+                `${table} is function-guarded, so it must have exactly SELECT ('r'), INSERT ('a') ` +
+                  `and UPDATE ('w') policies and no DELETE — found '${commands}'.`,
+              );
+            }
+            const read = byCommand.get("r");
+            if (read && normalise(read.using_expr) !== expected) {
+              unprotected.push(
+                `${table}.${read.polname} USING is not the canonical tenant expression — got ${read.using_expr}`,
+              );
+            }
+            // THE POINT OF THIS BRANCH: every write policy must carry the guard predicate as well
+            // as the tenant expression. A write policy without it is a table that reads as
+            // function-guarded and is not.
+            const predicate = FUNCTION_GUARDED[table]!;
+            for (const cmd of ["a", "w"] as const) {
+              const policy = byCommand.get(cmd);
+              if (!policy) continue;
+              for (const [label, expr] of [
+                ["USING", policy.using_expr],
+                ["WITH CHECK", policy.check_expr],
+              ] as const) {
+                if (expr === null) continue;
+                if (!normalise(expr).includes(normalise(expected))) {
+                  unprotected.push(
+                    `${table}.${policy.polname} ${label} does not contain the canonical tenant ` +
+                      `expression — got ${expr}`,
+                  );
+                }
+                if (!normalise(expr).includes(normalise(predicate))) {
+                  unprotected.push(
+                    `${table}.${policy.polname} ${label} does not require the function's write ` +
+                      `flag, so anything with an UPDATE grant can write it — got ${expr}`,
+                  );
+                }
+              }
+            }
+            continue;
+          }
 
           if (table in APPEND_ONLY) {
             // A STRICTER rule, not a looser one.
