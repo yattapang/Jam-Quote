@@ -257,3 +257,35 @@ the writer set, the uniqueness rule, the immutability boundary — stop drifting
 migration, an enum and a test, because code cannot hold two definitions of the same thing. **Recorded
 here as owed, pending the owner's decision**, because it changes the order of work rather than a rule.
 
+---
+
+## 2026-09-26
+
+### M18 · A migration comment credited a column that did not exist
+`Repeat of:` **M14 and H16**, third occurrence of the class — and this one landed *in the same batch
+that built the checker for it*.
+
+`20260925120000_documents_core/migration.sql:326` said, present tense: *"`client_reference` is the
+idempotency key, and it exists because a variation can be recorded OFFLINE and replayed from an
+outbox."* **The column was not in the table.**
+
+**Cost if it had not been caught:** the offline variation path with no idempotency key is the worst
+shape a defect takes here — a replayed outbox entry inserts a second append-only row, the invoiceable
+ceiling rises **permanently**, and the nightly reconciliation job then certifies the inflated figure
+as correct. Self-ratifying over-billing, with a comment in the migration saying it was handled.
+
+**Prevented by:** Rule 21.8, extended to migrations in the same commit. `check_citations.py` now
+checks that a backticked snake_case identifier in a migration comment appears as real SQL in some
+migration. Fixed for real by `20260926100000_variation_idempotency`, a new migration rather than an
+edit (Rule 6) — the old comment stays wrong and the new migration explains why it was.
+
+**Two things the guard got wrong first, both found by planting:**
+- It matched **substrings**, so `client_reference` was satisfied by the index name
+  `variation_issue_client_reference_key` and a planted defect passed. Word boundaries now.
+- It read `git ls-files`, so the new migration was invisible until staged — which is worth knowing
+  about every one of these tools: **an untracked fix does not exist to them.**
+
+The honest summary: the same class of defect has now happened three times, each time inside the fix
+for the last. What finally stopped it was not care but a thirty-line script — and the script was wrong
+twice before it was right, which is why Rule 21.2 exists.
+

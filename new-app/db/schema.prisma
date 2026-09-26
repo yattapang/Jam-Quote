@@ -726,6 +726,14 @@ model Variation {
   occurredAt       DateTime @map("occurred_at") @db.Timestamptz(6)
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  /// The idempotency key for the offline path (migration 20260926100000). A variation can be
+  /// recorded with no signal and replayed from an outbox; without a key the retry inserts a second
+  /// append-only row, raising the invoiceable ceiling permanently, and the reconciliation job then
+  /// certifies the inflated figure as correct. Supplied by the device, because only the client can
+  /// tell a retry from a genuine second variation of the same amount on the same day.
+  clientReference String? @map("client_reference")
+
+  @@unique([issueId, clientReference])
   @@index([issueId])
   @@map("variation")
 }

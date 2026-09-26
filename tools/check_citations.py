@@ -77,7 +77,11 @@ DENIALS = re.compile(
     r"that does not exist|not a real|never been|phantom|"
     # A review QUOTES a broken citation and corrects it in the next breath ("the file is actually
     # …"). That is the review doing its job, so the correction idiom is exempt too.
-    r"is actually",
+    r"is actually|"
+    # Counterfactuals: a comment explaining the road NOT taken names the thing it rejected.
+    # "A nullable `withdrawn_at` would need an UPDATE grant" is a reason, not a claim.
+    r"would need|would be|would mean|would have|instead of|rather than|we did not|nobody|"
+    r"the alternative|alternative was|which needs an|rejected",
     re.I,
 )
 
@@ -103,6 +107,13 @@ CITED_PATH = re.compile(r"`([A-Za-z0-9_@./-]+/[A-Za-z0-9_.-]+\.[a-z]{2,6})`")
 # written, because a fake filename in a comment is itself a broken citation and this guard would
 # (correctly) flag its own documentation.
 CITED_FILE = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py|md|prisma|yml|yaml|toml))`")
+# A backticked snake_case identifier — a column, table or setting name — which must appear somewhere
+# in the SAME file outside its own backticks. This is the class the guard MISSED on the day it was
+# written: the Documents migration's comment said "`client_reference` is the idempotency key" and the
+# column did not exist, which is M14 wearing SQL. An underscore is required, because that is what
+# separates an identifier from an English word in backticks.
+CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
+
 # A backticked identifier, then "in", then a filename with or without backticks — the H16 case.
 CITED_SYMBOL_IN = re.compile(
     r"`([A-Za-z_][A-Za-z0-9_]{2,})`\s+(?:is\s+)?in\s+`?([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py))`?"
@@ -150,6 +161,14 @@ def main() -> int:
     # relative to some other root and unjudgeable from here.
     top_level = {f.split("/", 1)[0] for f in files}
 
+    # Every migration's text with its own backticks stripped, so a claim in a comment is checked
+    # against real SQL rather than against another comment repeating it.
+    migration_bodies = [
+        re.sub(r"`[^`]*`", "", Path(f).read_text(encoding="utf-8"))
+        for f in files
+        if "/migrations/" in f and f.endswith(".sql")
+    ]
+
     problems: list[str] = []
     scanned = 0
 
@@ -188,6 +207,31 @@ def main() -> int:
                 problems.append(
                     f"{where}: cited file `{cited}` matches no file in the repository"
                 )
+
+            # ONLY IN MIGRATIONS, and the narrowing is the lesson. The first version applied this to
+            # every source file and flagged six legitimate comments: a test header naming the tables
+            # it nearly dropped, and a core module explaining the created_at/updated_at convention.
+            # Those files DISCUSS names that live elsewhere, which is normal prose.
+            #
+            # A migration is different: it is the file that BRINGS a column into existence, so a
+            # comment there describing one in the present tense is a claim about its own contents.
+            # That is where `client_reference` was credited and absent.
+            if "/migrations/" in path and path.endswith(".sql"):
+                for cited in CITED_IDENTIFIER.findall(line):
+                    # Checked against EVERY migration, not this one. A migration's comment claims
+                    # something about the database, and the database is the sum of the migrations —
+                    # so a column introduced by a later one (a correction, Rule 6) resolves, which
+                    # is exactly the case `client_reference` turned out to be.
+                    # Word boundaries, not a substring. The first version matched `client_reference`
+                    # inside the index name `variation_issue_client_reference_key`, so a planted
+                    # defect passed — the guard was satisfied by a longer identifier that merely
+                    # contained the cited one.
+                    standalone = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(cited)}(?![A-Za-z0-9_])")
+                    if any(standalone.search(body) for body in migration_bodies):
+                        continue
+                    problems.append(
+                        f"{where}: `{cited}` is described here and appears nowhere else in this file"
+                    )
 
             for symbol, filename in CITED_SYMBOL_IN.findall(line):
                 targets = by_basename.get(Path(filename).name, [])
