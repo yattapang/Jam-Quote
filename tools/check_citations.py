@@ -243,7 +243,24 @@ def main() -> int:
                     f"{where}: `{symbol}` is cited as being in {filename}, and is not there"
                 )
 
+    # UNTRACKED FILES ARE INVISIBLE, and that has now cost two rounds: a green local run followed by
+    # a red CI run, both times because a new migration had not been staged yet. Saying so is cheap and
+    # the alternative is trusting a result that was computed over the wrong set of files (Rule 21.1).
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    unseen = [f for f in untracked if f.endswith(SCAN_EXTS) and not f.startswith(SKIP_PREFIXES)]
+
     print(f"scanned {scanned} tracked files")
+    if unseen:
+        print()
+        print(
+            f"NOTE: {len(unseen)} untracked file(s) were NOT scanned, because this reads "
+            f"git ls-files. Stage them and run again before trusting a green result:"
+        )
+        for f in unseen[:10]:
+            print(f"  {f}")
     if problems:
         print(f"\n{len(problems)} broken citation(s):")
         for problem in problems:

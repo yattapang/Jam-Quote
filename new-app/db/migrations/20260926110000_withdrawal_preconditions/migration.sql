@@ -5,7 +5,7 @@
 -- `PRD.md` R1.15a allowed an acceptance to be withdrawn "only before any invoice exists against it".
 -- The same commit that added the remedy also created two other things that hang off an acceptance:
 --
---   1. `issue_balance`, created in the acceptance transaction and asserting an `accepted_total`.
+--   1. `issue_balance`, created in the acceptance transaction and asserting an `accepted_total_minor`.
 --      After a withdrawal that row still existed, claiming an accepted total for an acceptance that
 --      no longer existed — and the nightly reconciliation job would rebuild it and report it as
 --      consistent, because it *was* internally consistent. Consistently wrong.
@@ -13,7 +13,7 @@
 --      $400,000 of variations are recorded, a wrong client name is discovered, the acceptance is
 --      withdrawn and the issue superseded. The variations are immutable rows pointing at a
 --      superseded issue whose acceptance is gone. They cannot be moved or deleted, and the corrected
---      issue's `variations_total` is zero — so the agreed extra work is either unbillable, or it is
+--      issue's `variations_total_minor` is zero — so the agreed extra work is either unbillable, or it is
 --      re-recorded, leaving two immutable copies of the same agreement with nothing marking which
 --      pair is live.
 --
@@ -23,8 +23,8 @@
 --
 -- ## AND ADR 0025 CONTRADICTED ITSELF, WHICH IS WHY THIS IS NOT A LITERAL IMPLEMENTATION OF IT
 --
--- Decision 2 says `accepted_total` is written once, "never again". Decision 4 says that on withdrawal
--- "`accepted_total` returns to zero". Both cannot hold. The ADR is amended in the same change, and
+-- Decision 2 says `accepted_total_minor` is written once, "never again". Decision 4 says that on withdrawal
+-- "`accepted_total_minor` returns to zero". Both cannot hold. The ADR is amended in the same change, and
 -- the contradiction is resolved in favour of decision 2, because an immutable column is the thing
 -- that makes the copy safe at all (Rule 7): it is safe precisely because the issue it derives from
 -- cannot change.

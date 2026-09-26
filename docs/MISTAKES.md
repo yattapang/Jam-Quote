@@ -289,3 +289,21 @@ The honest summary: the same class of defect has now happened three times, each 
 for the last. What finally stopped it was not care but a thirty-line script — and the script was wrong
 twice before it was right, which is why Rule 21.2 exists.
 
+### M19 · Trusted a green local checker run that had not seen the file under test
+`Repeat of:` **M18's second lesson**, written the same hour and walked into anyway. Also the same
+family as **M10** (an exit code is not evidence of an effect).
+
+`check_citations.py` reads `git ls-files`, so an unstaged file does not exist to it. I ran it, got
+"every cited path resolves", committed, and CI failed on four citations inside the new migration —
+which the local run had never opened. The findings were real: comments said `accepted_total` and
+`variations_total` where the columns are `accepted_total_minor` and `variations_total_minor`. Close
+enough to mislead, which is worse than obviously wrong.
+
+**Cost:** one red build and one corrective commit. Cheap this time, and it was cheap only because CI
+looks at the staged tree rather than my working directory.
+
+**Prevented by:** the tool now **says when it cannot see new work** — it lists untracked files it did
+not scan and tells you to stage them before trusting a green result. Proved by planting an untracked
+file and watching the notice appear. The deeper rule is Rule 21.1: a result computed over the wrong set
+of inputs is not a result, and a tool that cannot say which inputs it used invites exactly this.
+
