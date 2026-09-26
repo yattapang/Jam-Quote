@@ -190,10 +190,18 @@ demonstrated, it is not a requirement, it is a hope.
   the acceptance attached to it.
 - **R1.15a** **A non-price error on an accepted issue has a remedy (G8).** A variation answers "the scope
   changed"; it does not answer "the wrong client", "the wrong terms" or "the wrong tax treatment". For
-  those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason, and only
-  before any invoice exists against it — which returns the issue to superseded-able. Once an invoice
-  exists, the remedy is a credit note and a fresh quote, because money has moved. Without this, a typo in
-  a client name on an accepted quote had no path at all.
+  those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason — which
+  returns the issue to superseded-able. Without this, a typo in a client name on an accepted quote had
+  no path at all.
+- **R1.15b** **Withdrawal is refused while ANY financial dependant exists (H4):** an invoice *or* a
+  recorded variation. The first version named only invoices, and the same release created two other
+  things that hang off an acceptance — a balance row and immutable variations — so the typo remedy had
+  become a way to detach agreed money from the issue it was agreed against. Enforced by a database
+  trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
+- **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
+  `accepted_total` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
+  balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
+  simply inert.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from
   `document_settings` — a shared layout reading tenant data, never an uploaded template.
 - **R1.16a** The rendered PDF's hash is recorded once, on `document_render`, and the issue and any
@@ -263,6 +271,14 @@ demonstrated, it is not a requirement, it is a hope.
 ### W6a · Variations, minimal — added by review (F3)
 - **R1.22f** A variation may be **recorded offline** but its effect on the ceiling is computed
   **server-side, inside the lock** (G13). A device never decides how much may be billed.
+- **R1.22g** **An offline variation carries a client-supplied idempotency key** (`client_reference`,
+  migration `20260926100000_variation_idempotency`), unique per issue. Without one a replayed outbox
+  entry inserts a second append-only row, the ceiling rises **permanently**, and the nightly
+  reconciliation certifies the inflated figure as correct — self-ratifying over-billing (H11). The key
+  comes from the device because only the client can tell a retry from a genuine second variation of
+  the same amount on the same day. **What the database guarantees is that one key cannot produce two
+  rows; that the application sends the same key on every retry is the application's job and nothing in
+  the schema can check it.**
 - **R1.22a** A **priced variation** may be recorded against an accepted issue: a description, lines
   priced the same way a quote is, and a total that may be positive or negative.
 - **R1.22b** Recording one **re-derives the accepted total** for that issue, which is what R1.24

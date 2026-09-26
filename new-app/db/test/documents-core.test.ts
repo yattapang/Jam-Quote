@@ -406,6 +406,81 @@ describe("4 · withdrawal is a row, and the documents stay immutable", () => {
 });
 
 // ===========================================================================
+describe("H4 · withdrawal cannot detach money from the issue it was agreed against", () => {
+  async function withdraw(acceptanceId: string) {
+    return sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason,
+                                          withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+
+  it("allows a withdrawal while nothing financial hangs off the acceptance", async () => {
+    // The typo remedy, which is the point of the feature: discovered early, it is cheap.
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+
+    await withdraw(acceptance);
+    expect(await state(issue)).toBe("sealed_awaiting_number");
+  });
+
+  it("REFUSES a withdrawal once an invoice exists", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await invoice(issue, 40_000n);
+
+    await expect(withdraw(acceptance)).rejects.toThrow(/credit note and a fresh quote/);
+  });
+
+  it("REFUSES a withdrawal once a variation exists — the case the guard condition missed", async () => {
+    // Without this, $400,000 of immutable agreed work ends up pointing at a superseded issue whose
+    // acceptance is gone: unbillable, unmovable, and re-recording it leaves two identical copies
+    // with nothing marking which pair is live.
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'A gate', 400000, $4, now())`,
+      [id(), TENANT, issue, USER],
+    );
+
+    await expect(withdraw(acceptance)).rejects.toThrow(/recorded variation/);
+  });
+
+  it("drops the ceiling to zero on withdrawal, so nothing more can be invoiced", async () => {
+    // Nothing is mutated to achieve this. `accepted_total` stays written-once, and the CEILING is
+    // state-aware — which is how ADR 0025's own contradiction was resolved.
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+
+    const ceiling = await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issue]);
+    expect(minor(ceiling[0]!.c)).toBe(0);
+    await expect(invoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling/);
+  });
+
+  it("leaves accepted_total untouched, because an immutable copy is what makes it safe", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+
+    // The balance row survives — deleting it would reintroduce the empty-lock hole (G2) — and it is
+    // inert, because the ceiling is what decides, not the stored total.
+    expect(minor((await balance(issue)).accepted_total_minor)).toBe(100_000);
+  });
+
+  it("returns a ceiling of zero rather than NULL, so a refusal never rests on three-valued logic", async () => {
+    // An issue with no balance row at all: NULL here would make `invoiced > ceiling` evaluate to
+    // NULL, which is not TRUE, which would let an invoice through.
+    const issue = await seal(1, 100_000n);
+    const ceiling = await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issue]);
+    expect(minor(ceiling[0]!.c)).toBe(0);
+  });
+});
+
+// ===========================================================================
 describe("G4 · two devices cannot seal the same revision", () => {
   it("refuses the second seal of one (quote, revision)", async () => {
     // Both pushes are INSERTs, so neither "conflicts" in the sync sense — which is exactly why the

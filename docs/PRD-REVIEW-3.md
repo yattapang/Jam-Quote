@@ -5,6 +5,23 @@
 decisions", which claims all 17 G-findings Closed.
 **Numbering:** H1, H2, … so nothing collides with F (review 1) or G (review 2).
 
+## Disposition — updated as findings close
+
+Rule 24.6: a row may not claim **Closed** without citing, by file, every document the finding's own
+`Where:` line named, and `tools/check_dispositions.py` gates it. Closing a blocker earns a **fourth
+review**, not a tick.
+
+| # | Sev | Disposition |
+|---|---|---|
+| **H4** | blocker | **Closed.** `new-app/db/migrations/20260926110000_withdrawal_preconditions/migration.sql` refuses a withdrawal while an invoice **or a recorded variation** exists, by trigger rather than by caller, and makes `issue_ceiling_minor()` state-aware so a withdrawal drops the ceiling to zero while mutating nothing. `docs/PRD.md` R1.15a-c and `docs/design/domain-model.md` §6.2a/§6.3 amended; **ADR 0025's own contradiction corrected** — its decision 4 said `accepted_total` "returns to zero" while decision 2 said "written once, never again". Six tests, three plants, control green |
+| **H11** | blocker | **Closed.** `20260926100000_variation_idempotency` adds the `client_reference` key the earlier migration's comment already claimed, with a partial unique index per issue; `docs/PRD.md` R1.22g and `docs/design/domain-model.md` (the `variation` row and its §8 sync row) now state it, including what the database does NOT guarantee — that the application resends the same key. `docs/RULES.md` Rule 6 is why it is a new migration rather than an edit. Logged as M18: a comment crediting an absent column is the M14 class for the third time |
+| **H16** | major | **Closed.** Six broken citations fixed across `new-app/web/content/site.ts`, `docs/PRD.md`'s guard reference and `docs/RULES.md`; `new-app/web/test/site-guards.test.ts` now names itself rather than the phantom. Rule 21.8 plus `tools/check_citations.py` gate the class in CI, and it found four phantom citations in the site's own source that three reviews had missed |
+
+**Still open: 17 of 20.** H1, H2, H3, H5, H6, H7, H8, H9, H10, H12, H13, H14, H15, H17, H18, H19, H20.
+Most are documents still asserting what the migration has now settled, which is the prose pass; H7 and
+H12 need a decision; H9 and H10 are the owner's.
+
+
 **Why this pass exists and what it expected to find.** Review 2 found that *four of its five blockers
 had been created by the amendments that closed review 1*. The commit message under review says so
 itself and declines to claim otherwise. The prior was therefore that this pass introduced new

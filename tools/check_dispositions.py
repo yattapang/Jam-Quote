@@ -44,13 +44,16 @@ import re
 import sys
 from pathlib import Path
 
-REVIEWS = ("docs/PRD-REVIEW.md", "docs/PRD-REVIEW-2.md")
+# Every review register, and the list is explicit rather than a glob: adding one is a deliberate act
+# that shows in a diff. Review 3 was missing here for its first three dispositions, which meant this
+# guard silently checked nothing about them — a control narrower than it reads (Rule 21.1).
+REVIEWS = ("docs/PRD-REVIEW.md", "docs/PRD-REVIEW-2.md", "docs/PRD-REVIEW-3.md")
 # Files a "Where:" line may name. Anything else on that line is prose, not scope.
 KNOWN = re.compile(r"(PRD\.md|domain-model\.md|TIERS\.md|SERVICE-REGISTER\.md|RULES\.md|THREAT-MODEL\.md|PHASE-0-AUDIT\.md|site\.ts|site-guards\.test\.ts)")
-FINDING = re.compile(r"^## ([FG]\d+) · (.+?) — severity: (\w+)", re.M)
+FINDING = re.compile(r"^## ([FGH]\d+) · (.+?) — severity: (\w+)", re.M)
 WHERE = re.compile(r"^\*\*Where:\*\* (.+?)(?=\n\*\*|\n\n)", re.M | re.S)
 # A disposition row: | **F1** | blocker | text |
-ROW = re.compile(r"^\|\s*\*\*([FG]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M)
+ROW = re.compile(r"^\|\s*\*\*([FGH]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M)
 CLAIMS_CLOSED = re.compile(r"\*\*Closed\b", re.I)
 
 

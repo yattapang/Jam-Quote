@@ -233,8 +233,9 @@ describe("nothing untrue", () => {
     // WHY THIS EXISTS (PRD R1.40b, review finding F5). The site's Pro tier sold retention tracking,
     // project costing, accountant exports and offline use while the PRD's own §8 excluded three of
     // them from release 1 — and the PRD pointed at a guard called `honest-claims.test.ts` as the
-    // reason that was safe. No such file has ever existed. So the claim was protected by a citation
-    // rather than by a test, which is the failure Rule 21.1 is about.
+    // reason that was safe. No such file has ever existed — the guards live in this file. So the
+    // claim was protected by a citation rather than by a test, which is the failure Rule 21.1 is
+    // about, and Rule 21.8 now gates the class.
     //
     // The rule: every tier line is either delivered by the current release, or marked with the
     // release it lands in. A tier whose `theLine` marks the whole tier is exempt, because marking

@@ -110,13 +110,28 @@ because the row *is* the record.
 
 **And the two things withdrawal was silent about, now decided:**
 
-- **The `issue_balance` row is not deleted.** It is recomputed by the same locked function, and
-  `accepted_total` returns to zero while the issue is not accepted. Deleting it would reintroduce
-  Decision 2's empty-lock hole.
-- **Withdrawal is refused while any variation exists**, not only while an invoice exists. A recorded
-  variation is agreed extra work; orphaning it on a superseded issue loses the agreement. Remove the
-  variations first, or issue a credit note and start again — which is the same rule money already
-  imposes.
+- **The `issue_balance` row is not deleted.** Deleting it would reintroduce Decision 2's empty-lock
+  hole.
+- ~~`accepted_total` returns to zero while the issue is not accepted.~~ **CORRECTED 2026-09-26: this
+  contradicted Decision 2**, which says `accepted_total` is written once, "never again". Both cannot
+  hold, and the contradiction sat inside one ADR — the same failure the ADR was written to stop, one
+  level up. Resolved in favour of Decision 2, because an immutable column is what makes the copy safe
+  at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change.
+
+  **Nothing is mutated on withdrawal. `issue_ceiling_minor()` is state-aware instead** — it returns
+  zero unless an un-withdrawn acceptance exists (migration `20260926110000_withdrawal_preconditions`).
+  So a withdrawal drops the ceiling immediately, the balance row survives and is simply inert, and the
+  rule changed in **one expression** with no document needing an edit. That is the payoff this ADR was
+  arguing for, collected.
+- **Withdrawal is refused while any variation exists**, not only while an invoice exists — and this is
+  now enforced by a trigger rather than stated, because a precondition a caller can forget is not a
+  precondition (finding H4). A recorded variation is agreed extra work, and withdrawing would leave it
+  immutable, pointing at a superseded issue, unbillable and unmovable.
+
+  **The product consequence, stated rather than discovered:** once extra work has been agreed on top of
+  an acceptance, the cheap typo remedy is gone and the path is a credit note and a fresh quote. A wrong
+  client name found late costs more than one found early. That is worse for the tenant than a
+  withdrawal and better than a remedy that silently orphans an agreement.
 
 ---
 
