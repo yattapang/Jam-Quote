@@ -216,9 +216,27 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.18a** The outbox is **generic**: every offline create queues in it, not only issues.
 - **R1.18c** **Sealing claims the quote (G4).** Two devices holding the same draft can both seal it —
   neither push conflicts, because each is an append — which would give one job two issued identities.
-  So the server enforces **one sealed issue per (quote, revision)**; the second device is **refused, told
-  a colleague sealed this job, and its snapshot is kept and offered as a revision** rather than discarded.
-  A revision cannot be created offline.
+  So the server enforces **one sealed issue per (quote, revision)**, and the second device is refused
+  and told a colleague sealed this job. A revision cannot be created offline.
+- **R1.18g** **A refused seal is kept as a `rejected_seal`, not as an issue awaiting renumbering (H7).**
+  "Offered as a revision" was impossible three ways: renumbering is an UPDATE on a sealed document;
+  inserting a fresh issue from the same snapshot makes `sealed_at` either lie or be reset to sync time,
+  destroying the one fact the snapshot exists to record; and letting the device renumber is the offline
+  revision this very requirement forbids. It was never an issue.
+
+  The row keeps **what the device actually priced, with its own true `sealed_at`** — which is all the
+  promise was reaching for: the contractor stood in front of a client and said a number, and that number
+  must survive a colleague syncing first. Several devices may lose the same race and every attempt is
+  kept.
+- **R1.18h** **First to sync wins, and both timestamps are kept.** Earliest-sealed looks fairer and is
+  worse: it would let a device syncing on Friday retroactively take the identity of a job a colleague has
+  already numbered and sent. "Your colleague's version got there first" is explainable in one sentence,
+  and because `sealed_at` and `pushed_at` are both recorded, *who priced it first* stays answerable even
+  though it is not what decides.
+- **R1.18i** The tenant **resolves** a rejected seal — discarded, or reissued by opening a new draft from
+  it and sealing that **online** as the next revision, whose `sealed_at` is honestly the moment of that
+  new seal. The rejected row remains as the record of the gate price. Nothing is renumbered and the
+  winner is never marked superseded by a document sealed before it.
 - **R1.18d** **A sealed snapshot is never destroyed by a timer.** The outbox's retention limit may expire
   cached reads; it may not delete a sealed document that has not reached the server. A retention limit that
   can destroy the only copy of a financial document is data loss on a schedule (G5).
@@ -380,6 +398,20 @@ demonstrated, it is not a requirement, it is a hope.
   a Sunday gets three numbered and one refused when they sync, in the month of *syncing*. The refused
   snapshot is **kept, never destroyed**, the message explains what happened rather than reporting a sync
   error, and upgrading releases it.
+- **R1.32b** **Nothing numbers a blocked seal automatically, and that is the answer to "what is the
+  queue?" (H12).** There is no queue, because there is no automatic process. A seal blocked by the free
+  limit sits in a list the tenant can see — its price, its client, the date it was sealed — and the tenant
+  **releases one explicitly** when quota allows.
+
+  Automatic FIFO was the obvious design and it is wrong here: numbering is what turns a snapshot into a
+  document with a number the client will see, and spending a scarce monthly allowance on whichever job
+  happened to be sealed first — possibly one the contractor has since decided not to pursue — is a
+  commitment the product should not make on their behalf. So the three questions the finding asked
+  dissolve: **the tenant numbers it, in whatever order they choose, against the month they do it in
+  (ADR 0023), and the tenant decides.**
+- **R1.32c** A blocked seal **does not expire** (R1.18d already forbids deleting an unsynced or unnumbered
+  seal), and upgrading lifts the limit rather than releasing the seals — because releasing them would be
+  numbering on the tenant's behalf, which R1.32b just refused to do.
 - **R1.33** Manual payment: the tenant uploads a deposit receipt with amount, date, bank and reference.
   Status *submitted*.
 - **R1.34** **Separation of duties is structural** (Rule 13): submitter, approver and activator are

@@ -497,6 +497,110 @@ describe("G4 · two devices cannot seal the same revision", () => {
 });
 
 // ===========================================================================
+describe("H7 · a refused seal is its own record, not an issue awaiting renumbering", () => {
+  async function reject(revision: number, total: bigint, sealedAt: string) {
+    const sealId = id();
+    await sql(
+      `INSERT INTO rejected_seal
+         (id, tenant_id, quote_id, revision_attempted, refusal_reason, client_id, client_name, title,
+          currency, subtotal_minor, tax_minor, total_minor, sealed_at, sealed_by_user_id,
+          catalog_synced_at)
+       VALUES ($1, $2, $3, $4, 'a colleague sealed this revision first', $5, 'A Client', 'Fence',
+               'JMD', $6, 0, $6, $7::timestamptz, $8, now())`,
+      [sealId, TENANT, QUOTE, revision, CLIENT, total.toString(), sealedAt, USER],
+    );
+    return sealId;
+  }
+
+  it("keeps the price the device gave at the gate, with its own true sealed_at", async () => {
+    // This is the whole product need behind "offered as a revision": the contractor stood in front of
+    // a client and said a number, and that number must not be lost because a colleague synced first.
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T08:15:00Z");
+
+    const rows = await sql<{ total_minor: string; sealed_at: Date }>(
+      `SELECT total_minor, sealed_at FROM rejected_seal WHERE id = $1`,
+      [rejected],
+    );
+    expect(minor(rows[0]!.total_minor)).toBe(97_500);
+    expect(new Date(rows[0]!.sealed_at).toISOString()).toBe("2026-09-26T08:15:00.000Z");
+  });
+
+  it("does not touch the winner: no supersession, no renumbering", async () => {
+    // The ordering problem in the finding: the loser may have sealed EARLIER, so promoting it to the
+    // next revision would mark the winner superseded by a document sealed before it, and the audit
+    // trail would state the opposite of what happened.
+    const winner = await seal(1, 100_000n);
+    await reject(1, 97_500n, "2026-09-26T07:00:00Z");
+
+    expect(await state(winner)).toBe("sealed_awaiting_number");
+    const issues = await sql(`SELECT 1 FROM quote_issue`);
+    expect(issues).toHaveLength(1);
+  });
+
+  it("allows several devices to lose the same race", async () => {
+    // No unique index on (quote_id, revision_attempted), deliberately: every attempt is a thing
+    // somebody said to a client.
+    await seal(1, 100_000n);
+    await reject(1, 97_500n, "2026-09-26T07:00:00Z");
+    await reject(1, 99_000n, "2026-09-26T07:30:00Z");
+    expect(await sql(`SELECT 1 FROM rejected_seal`)).toHaveLength(2);
+  });
+
+  it("keeps both timestamps, so who priced it first is answerable even though sync order decides", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T06:00:00Z");
+    const rows = await sql<{ sealed_at: Date; pushed_at: Date }>(
+      `SELECT sealed_at, pushed_at FROM rejected_seal WHERE id = $1`,
+      [rejected],
+    );
+    expect(new Date(rows[0]!.sealed_at).getTime()).toBeLessThan(
+      new Date(rows[0]!.pushed_at).getTime(),
+    );
+  });
+
+  it("lets the tenant resolve it, and only to a decision that means something", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T07:00:00Z");
+
+    await sql(
+      `UPDATE rejected_seal SET resolution = 'discarded', resolved_at = now(), version = version + 1
+        WHERE id = $1`,
+      [rejected],
+    );
+    await expect(
+      sql(`UPDATE rejected_seal SET resolution = 'maybe later' WHERE id = $1`, [rejected]),
+    ).rejects.toThrow(/resolution_check|violates check/i);
+  });
+
+  it("cannot be promoted into the issue sequence by rewriting the winner", async () => {
+    // The three impossible routes, as one test: the loser cannot become revision 2 by editing
+    // anything, because `quote_issue` has no UPDATE path at all.
+    const winner = await seal(1, 100_000n);
+    const affected = await db.query(`UPDATE quote_issue SET revision = 2 WHERE id = $1`, [winner]);
+    expect(affected.affectedRows ?? 0).toBe(0);
+  });
+
+  it("does not let a rejected seal's lines be rewritten", async () => {
+    await seal(1, 100_000n);
+    const rejected = await reject(1, 97_500n, "2026-09-26T07:00:00Z");
+    await sql(
+      `INSERT INTO rejected_seal_line
+         (id, tenant_id, rejected_seal_id, section_title, description, position,
+          quantity_thousandths, unit_price_minor, line_total_minor)
+       VALUES ($1, $2, $3, 'Fencing', '40m of fence', 1, 40000, 2500, 97500)`,
+      [id(), TENANT, rejected],
+    );
+
+    const affected = await db.query(
+      `UPDATE rejected_seal_line SET line_total_minor = 1 WHERE rejected_seal_id = $1`,
+      [rejected],
+    );
+    expect(affected.affectedRows ?? 0).toBe(0);
+  });
+});
+
+// ===========================================================================
 describe("5 · a pending registration is not a user", () => {
   it("allows two people to claim the same address", async () => {
     // Which is impossible if a claim is a user row, because app_user.email is globally unique —

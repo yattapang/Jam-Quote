@@ -170,6 +170,10 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
           "The void. Same reasoning as the withdrawal.",
         credit_note:
           "A reduction of an issued invoice, which is the only way to reduce one.",
+        rejected_seal_line:
+          "The lines of a seal the server refused (finding H7). They record what a device actually " +
+          "priced at the gate, so rewriting them would destroy the only reason the row is kept. The " +
+          "parent `rejected_seal` is NOT append-only, because a tenant resolves it later.",
         audit_entry:
           "The audit trail (ADR 0020). Its whole value is that it cannot be edited, so the " +
           "absence of an UPDATE or DELETE policy is the control rather than an omission.",

@@ -56,6 +56,13 @@ const EXEMPT: Record<string, string> = {
   invoice: "Append-only: a demand for money that was sent. Corrected by a credit note or a void row.",
   invoice_void: "Append-only: the void itself.",
   credit_note: "Append-only: the only way to reduce an issued invoice.",
+  rejected_seal_line: "Append-only: what a device priced at the gate, which is the point of keeping it.",
+  rejected_seal:
+    "No tombstone: a refused seal is a RECORD of what was priced, and deleting it would lose the one " +
+    "thing it exists for — resolving it as discarded is the disposal (finding H7). It does carry a " +
+    "`version` column, for the `resolution` field two people may write at once; this exemption covers " +
+    "only the missing `deleted_at`, and the whole-table shape of this list is what makes that worth " +
+    "saying rather than assuming.",
 
   // ---------------------------------------------------------------------------
   // Two more, each for its own reason.

@@ -103,6 +103,8 @@ model Tenant {
   invoiceVoids          InvoiceVoid[]
   creditNotes           CreditNote[]
   issueBalances         IssueBalance[]
+  rejectedSeals         RejectedSeal[]
+  rejectedSealLines     RejectedSealLine[]
 
   @@map("tenant")
 }
@@ -517,9 +519,10 @@ model Quote {
   clientDetailLevel String @default("itemised") @map("client_detail_level")
   currency          String
 
-  sections QuoteSection[]
-  lines    QuoteLine[]
-  issues   QuoteIssue[]
+  sections      QuoteSection[]
+  lines         QuoteLine[]
+  issues        QuoteIssue[]
+  rejectedSeals RejectedSeal[]
 
   version   Int       @default(1)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -835,3 +838,72 @@ model RegistrationClaim {
   @@index([email])
   @@map("registration_claim")
 }
+
+/// A seal the server refused, kept as its own thing rather than forced into the issue sequence
+/// (finding H7, migration 20260926120000).
+///
+/// "Offered as a revision" was impossible three ways: renumbering is an UPDATE on a sealed document,
+/// a fresh issue from the same snapshot makes `sealedAt` lie, and letting the device renumber is the
+/// offline revision the same requirement forbids. It was never an issue — it is a rejected attempt,
+/// and what the product actually needed was the price the contractor gave at the gate, preserved.
+model RejectedSeal {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quoteId  String @map("quote_id") @db.Uuid
+  quote    Quote  @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+
+  /// What the device believed it was sealing. Deliberately NOT unique with the quote: several devices
+  /// may lose the same race and every attempt is worth keeping.
+  revisionAttempted Int    @map("revision_attempted")
+  refusalReason     String @map("refusal_reason")
+
+  clientId      String @map("client_id") @db.Uuid
+  clientName    String @map("client_name")
+  title         String
+  currency      String
+  subtotalMinor BigInt @map("subtotal_minor")
+  taxMinor      BigInt @map("tax_minor")
+  totalMinor    BigInt @map("total_minor")
+
+  /// The true moment of the seal on the device, never rewritten to sync time. With `pushedAt` it makes
+  /// "who priced it first" answerable, even though first-to-sync is what decides.
+  sealedAt        DateTime @map("sealed_at") @db.Timestamptz(6)
+  sealedByUserId  String   @map("sealed_by_user_id") @db.Uuid
+  catalogSyncedAt DateTime @map("catalog_synced_at") @db.Timestamptz(6)
+  pushedAt        DateTime @default(now()) @map("pushed_at") @db.Timestamptz(6)
+
+  resolvedAt DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolution String?
+
+  /// The one field written after insert, so the one that needs a concurrency control: two people
+  /// looking at the same list can resolve the same rejected seal, and this makes the second write fail
+  /// rather than silently win.
+  version Int @default(1)
+
+  lines RejectedSealLine[]
+
+  @@index([quoteId])
+  @@map("rejected_seal")
+}
+
+model RejectedSealLine {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @map("tenant_id") @db.Uuid
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  rejectedSealId String       @map("rejected_seal_id") @db.Uuid
+  rejectedSeal   RejectedSeal @relation(fields: [rejectedSealId], references: [id], onDelete: Restrict)
+
+  sectionTitle        String @map("section_title")
+  description         String
+  position            Int
+  quantityThousandths BigInt @map("quantity_thousandths")
+  unitPriceMinor      BigInt @map("unit_price_minor")
+  lineTotalMinor      BigInt @map("line_total_minor")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([rejectedSealId])
+  @@map("rejected_seal_line")
+}
+

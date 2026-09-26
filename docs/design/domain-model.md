@@ -426,8 +426,16 @@ unanswerable to an accountant. Append-only protects the row and says nothing abo
 **The defence: sealing claims the quote, and the claim is what conflicts.** A seal records the quote id and
 the revision it sealed, and the server enforces **one sealed issue per (quote, revision)** with a unique
 index. The second device's push is **refused, not merged** — it is told its colleague sealed this job, and
-its sealed snapshot is kept and offered as a revision rather than discarded. The rule is: *one sealed
-snapshot per revision of a quote, and a revision cannot be created offline.*
+its snapshot is kept as a **`rejected_seal`** — its own append-only row, outside `quote_issue`, holding
+what the device priced and its own true `sealed_at`. The rule is: *one sealed snapshot per revision of a
+quote, and a revision cannot be created offline.*
+
+**Why a separate table and not a renumbered issue (H7).** "Offered as a revision" required renumbering a
+sealed row (an UPDATE the model forbids), or a fresh issue whose `sealed_at` lies, or an offline revision
+forbidden in the same breath. The impossibility came from forcing a rejected attempt into the issue
+sequence. It is not an issue — it is a record of a price given at a gate, which is what the product
+needed kept. First to sync wins; both timestamps are stored, so who priced it first stays answerable
+without deciding anything.
 
 **"Sealed, awaiting number" is a state, so it belongs in the state machine (G5).** §6.3 had no node for it,
 which left ADR 0023's cross-month metering case nowhere to attach a test:
@@ -439,6 +447,14 @@ quote:  draft ──seal──▶ sealed (awaiting number) ──sync──▶ i
                                                   free-tier limit was reached) — the snapshot
                                                   is kept, never destroyed
 ```
+
+**Nothing releases a blocked seal automatically, and that is the whole answer to "what is the queue?"
+(H12).** There is no queue because there is no automatic process: the tenant sees the blocked seals with
+their prices and dates and **numbers one explicitly** when quota allows. Automatic FIFO was the obvious
+design and it is wrong here — numbering is what turns a snapshot into a document the client will see, and
+spending a scarce monthly allowance on whichever job happened to be sealed first, possibly one the
+contractor has since abandoned, is a commitment the product should not make on their behalf. So the
+ordering question dissolves rather than being answered.
 
 A refused seal is **blocked, not lost**, and nothing in the outbox's retention limit may delete a sealed
 snapshot that has never reached the server — a retention limit that can destroy the only copy of a
