@@ -233,6 +233,16 @@ the reviewer showed the old walk missed. Through Turbo: `PRYVIS_REQUIRE_PG` with
 URL the six races RUN. Each plant restored byte-identical.* **Next:** a fourth independent re-review
 before J4 or J10 is marked Closed; J15 goes Closed in the disposition rows.
 
+CI run 183 on `cfeac92`: all four jobs green; the `verify-new-app` log shows `concurrency.pg.test.ts
+(6 tests)` run against the `postgres:16` service, not skipped, and db `134 passed` — the first raced
+concurrency evidence in CI.
+
+**Fourth re-review of `cfeac92`, launched 2026-09-27 on the owner's instruction.** *Delegation (Rule
+16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of lock design over
+the money invariant and of the CI wiring that proves it; one agent live, no build work, commits or
+full-gate runs alongside it (Rule 16.2). Findings written to a file as found and brought into
+`PRD-REVIEW-4.md` afterwards.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
