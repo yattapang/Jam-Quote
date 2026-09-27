@@ -209,6 +209,12 @@ withdrawn half of the variation check removed, and the old K2 message restored. 
 first vacuous (counted from the oracle) and was fixed after its plant printed 0. The L6 lock is NOT
 proved.* **Next:** a third independent re-review before J4, J10 or J15 is marked Closed.
 
+**Third re-review of `23ca3a5`, launched 2026-09-27 on the owner's instruction.** *Delegation (Rule
+16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of withdrawal
+preconditions, the ceiling guard and a money oracle, where a defect leaves the suite green; one agent
+live, no build work, commits or full-gate runs alongside it (Rule 16.2). Findings written to a file as
+found and brought into `PRD-REVIEW-4.md` afterwards.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
