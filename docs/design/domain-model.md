@@ -251,11 +251,11 @@ including which of three versions they accepted.
 | `acceptance_evidence` | The pieces of evidence behind one acceptance: a code confirmed, a signed document, a deposit paid, later an inbound reply. Append-only. | **The grade is derived from these rows, never stored** (`../design/acceptance-evidence.md`, approved 2026-09-26) — so it rises when evidence arrives and cannot drift, and a tenant-uploaded screenshot **or signed document** is graded 1 rather than higher because it is
 evidence the tenant can fabricate — the grade measures who witnessed the acceptance, never how convincing
 the artefact looks (finding J5). Grade 5 is retired and its number is not reused. |
-| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices, net of credit notes, may never exceed the ceiling, which is defined once in SQL as `issue_ceiling_minor()` and is the single most important arithmetic invariant in the product. |
+| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The invoiced figure may never exceed the ceiling. Both are defined once, in SQL — `issue_balance_apply()` and `issue_ceiling_minor()` — and this is the single most important arithmetic invariant in the product. |
 | `invoice_line` | Either a share of the issue (percentage or amount) or a named extra. | Frozen at issue, like the quote. |
 | `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | Never exceeds the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments, retention and credits. |
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
-| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. Reduces the invoiced figure the ceiling is compared with, so it is also how scope is reduced below what is billed (J4, `docs/design/scope-reduction.md`); it can never exceed its invoice, and a voided invoice cannot be credited. |
+| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. Lowers the invoiced figure the ceiling is compared with, so it is also how scope is reduced below what is billed (J4, `docs/design/scope-reduction.md`). Its bounds are enforced in `issue_balance_enforce()`, not restated here. |
 
 **Two more fields the requirements need, named by review (F14).** `quote.client_detail_level`
 (summary or itemised) decides what the client is shown and is **frozen into the issue**, because
@@ -269,9 +269,10 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
-**The invariant:** the sum of issued invoices against an accepted issue, **net of credit notes and
-excluding voided invoices**, may never exceed the accepted total, plus **recorded** variations. ("Net of
-credit notes" added 2026-09-26 for J4; the executed definition is `issue_balance_apply()`.)
+**The invariant:** the invoiced figure against an accepted issue may never exceed the accepted total, plus
+**recorded** variations. What counts as invoiced — which invoices, and what credit notes and voids do to
+them — is defined once, in `issue_balance_apply()`, and deliberately not restated here (ADR 0025); J4
+changed it on 2026-09-26 and this sentence did not need to.
 
 **"Recorded", not "accepted", and the definition is not here.** Release 1 builds no variation
 acceptance, so "accepted variations" would name something that does not exist — an invariant reading
@@ -305,14 +306,15 @@ than defending against it, and it is the only ordering that cannot be forgotten 
 | `issue_id` | identity |
 | `accepted_total_minor` | **derived, written once** from the accepted issue's own frozen lines |
 | `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
-| `invoiced_total_minor` | **derived cache**, re-summed from issued invoices |
+| `invoiced_total_minor` | **derived cache**, re-summed by `issue_balance_apply()` |
 
 **This table no longer says who writes each column, and the omission is the fix (findings H2 and J12).**
 It said so twice before. The first version named the writers and omitted two the same amendment had
 invented, including the row's own creator (H2). H2's fix deleted the *paragraph* and left the *table
 column* standing two lines above it — and that column was wrong on both of the rows that mattered: it
-credited a credit note as a writer of `invoiced_total_minor`, which it is not and was never meant to be,
-and it claimed every variation takes the lock, which at the time nothing made true (J12, and see J2).
+credited a credit note as a writer of `invoiced_total_minor`, which it was not at the time — J4 later made
+it one, deliberately, and the test below records the change — and it claimed every variation takes the
+lock, which at the time nothing made true (J12, and see J2).
 
 Three attempts, and the third failure was the same shape as the first two. So the fact now has **one
 home** per question, per Rule 7 and ADR 0025, and neither home is prose:
@@ -394,9 +396,12 @@ sealing a second issue for the same (quote, revision) (G4) · writing `issue_bal
 
 **Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
 recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to
-zero. It is **refused while any invoice OR any recorded variation exists**, enforced by a trigger rather
-than by a caller: the first version named only invoices, and the same release had given an accepted issue
-two more financial dependants. Once either exists the remedy is a credit note and a fresh quote.
+zero. It is **refused while any invoice still has money billed on it, OR any recorded variation exists**,
+enforced by a trigger rather than by a caller (`acceptance_withdrawal_guard()`): the first version named
+only invoices, and the same release had given an accepted issue two more financial dependants. For a wrong
+document with money demanded, the remedy is to void or fully credit each invoice, withdraw, and issue the
+next revision (K4, owner's decision 2026-09-27; before it, a credited issue's ceiling reopened with no way
+to close it). Once a variation exists, the acceptance stays.
 
 So "superseding an accepted issue" is not a forbidden transition, it is an ordering: withdraw first —
 which is possible only while no money hangs off it — and the issue is no longer accepted, so superseding

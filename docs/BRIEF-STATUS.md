@@ -173,8 +173,20 @@ refused (K6's twin, found while preparing the fix). `no-stuck-state.test.ts` com
 that found K6 (MISTAKES M28). *Delegation (Rule 16.5): Opus, in-session — money arithmetic.*
 *Coverage (Rule 21.3): two plants on the migration each turned their named J10 test red; the walk went
 red on its `stuck` assertion with K6 reverted (7 and 8 stuck issues) and did NOT fire on the twin, which
-its header states; restored byte-identical each time.* Still owed on this line: K1, K2, K3, K4/J15, K5,
-then a second re-review before J4 or J10 is Closed.
+its header states; restored byte-identical each time.*
+
+**K4 with J15, K1, K2, K3, K5 fixed, 2026-09-27** — migration `20260926220000_withdrawal_after_full_credit`:
+withdrawal allowed once every invoice is voided or fully credited and no variation exists, under the
+balance lock; the over-credit check scoped to the invoice being credited, with an invoice never counting
+below zero; the voided-credit refusal's reason corrected. A cross-issue test for K3. Six stale sentences
+fixed and the arithmetic's restatements replaced with pointers to `issue_balance_apply()` (MISTAKES M29).
+Design §3a records the owner's K4 decision. *Delegation (Rule 16.5): Opus, in-session — money
+arithmetic and withdrawal preconditions.* *Coverage (Rule 21.3): seven plants on the migration —
+withdrawal counting every invoice, ignoring credits, ignoring variations; netting without the zero floor;
+no over-credit check; tenant-wide netting (the re-review's K3 plant); the original issue-wide over-credit
+scan (K1's defect) — each turned its named test red, each restored byte-identical. The withdrawal
+guard's lock is NOT proved: one PGlite connection cannot race it.* **Next:** a second independent
+re-review of `c35952d` and this commit before J4, J10 or J15 is marked Closed.
 
 ## The headline, stated plainly
 

@@ -497,3 +497,28 @@ planting: with K6's guard reverted it reports 7 and 8 stuck issues. **Its limit,
 catch the twin, whose damage is a quote that can never be revised again rather than a stuck issue, and a
 random walk is not exhaustive. The general lesson: a claim of the form "no sequence can…" is executed by a
 sequence test or it is not a claim.
+
+### M29 · J4's fix amended a sentence and left its twin standing beside it — and restated the arithmetic six times
+`Repeat of:` **M13, M15 and M23** — a claim corrected in one place and left standing in the next.
+Fourth occurrence of the class in this document set.
+
+`06e9b73` changed what a credit note does to the invoiced total, and amended the sentences that said
+otherwise — some of them. The re-review (K5) found six it made false and left: `domain-model.md` §6.2a's
+table and the paragraph under it, **two lines above text the same commit edited**; the J12 test block's
+header, above a test the commit rewrote to assert the opposite; the withdrawal paragraph; and R1.15b's
+own headline, found while fixing the others. It also wrote "net of credit notes and excluding voided
+invoices" into six places, when ADR 0025's point was that no document restates the arithmetic — and
+two of those restatements were already drifting from each other.
+
+**Correction to M23**, which cannot be edited: its "including a credit note moving nothing" was true when
+written and has been false since `06e9b73`. A credit note now lowers `invoiced_total_minor`, deliberately.
+
+**Cost if it had not been caught:** a reader of the domain model would have been told, beside the
+corrected sentence, that a credit note never touches the invoiced total — the opposite of the code about
+money, which is the M23 cost again.
+
+**Prevented by:** partly. The restatements are replaced by pointers to `issue_balance_apply()`, so the
+next change to the arithmetic has nothing in prose to leave behind — ADR 0025's mechanism, applied rather
+than cited. **Nothing mechanical finds a stale twin**: `check_dispositions.py` checks that a closure cites
+each named document, not that every sentence in it is still true, and a tool that detects one fact stated
+in two places is still owed (review 4 named it). Recorded as owed, not promised.

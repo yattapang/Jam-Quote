@@ -4,8 +4,8 @@
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes |
-| **Independent review** | Will this do what it says? | **Outstanding** — J4 is not closed until someone who did not write this checks it |
+| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes · ✅ **2026-09-27** — §3a, withdrawal after full credit (K4) |
+| **Independent review** | Will this do what it says? | **First re-review done 2026-09-26** (K1-K6, appended to `PRD-REVIEW-4.md`); its fixes await a **second** re-review before J4 is closed |
 
 Date: 2026-09-26 · Answers finding **J4** (`PRD-REVIEW-4.md`) · Delegation (Rule 16.5): **Opus** — money
 arithmetic, one of the three named exceptions: it decides how much may be billed.
@@ -33,6 +33,10 @@ title — **there is no way to reduce scope below what is invoiced**:
    already understands.
 2. **No stuck state can be entered.** Every write that could leave invoiced above the ceiling is refused
    in its own transaction, so the ceiling check never fires against history it cannot change.
+   **As first written this was false** and was argued write by write, not executed: sealing a third
+   revision could drop an invoiced revision's ceiling to 0 (K6, a J10 defect). It is now executed by
+   `new-app/db/test/no-stuck-state.test.ts`, a seeded random walk over every financial write — with the
+   limits its header states.
 3. A credit note **cannot be abused to manufacture room**: it cannot exceed what its invoice still has
    uncredited, and it cannot be raised against a voided invoice.
 4. Voiding an invoice that carries credit notes does **not** subtract the credit twice.
@@ -53,8 +57,13 @@ frees room within the same ceiling), and a variation with no credit note is refu
 **Three refusals come with it, all taken under the issue's balance lock:**
 
 - a credit note that would take its invoice's credits above the invoice amount;
-- a credit note against an invoice that is already voided (the void has already removed the whole invoice
-  from the figure, so a credit there is either meaningless or a second subtraction);
+- a credit note against an invoice that is already voided. The void has already removed the whole
+  invoice, credits included, so the figure would not change; the refusal is because it records a
+  reduction of nothing on a client's statement. (The first version said it would subtract money twice.
+  It would not — K2.)
+- and an invoice counts as never less than zero, so an over-credited invoice written before these checks
+  existed contributes nothing rather than manufacturing room, and the over-credit check judges only the
+  invoice being credited, never history elsewhere on the issue (K1);
 - the existing ceiling refusal, now naming the amount by which the ceiling is exceeded.
 
 **A voided invoice's credit notes drop out with it** (owner's decision). The invoice is excluded whole, so
@@ -66,6 +75,22 @@ its credits are too; counting them would subtract money twice.
 credited amount can be invoiced again. That is the same effect as voiding and re-issuing, at the
 granularity of an amount rather than a whole invoice, and the client's documents show both the invoice and
 the credit.
+
+## 3a. A wrong document, once money has been demanded (K4 — owner's decision 2026-09-27)
+
+The re-review found the "credit note and a fresh quote" remedy for a wrong document *reopened* the
+ceiling: crediting the wrong issue's invoice in full made its whole ceiling billable again, and nothing
+could close it — withdrawal was refused because an invoice existed, and J10 refused a new revision. So
+the fresh quote had to be a separate quote, and one job carried two live ceilings.
+
+**Decision:** an acceptance may be withdrawn once every invoice against the issue is voided or fully
+credited, and no variation exists. Withdrawal drops the ceiling to 0, and J10 ignores a withdrawn
+acceptance, so the fresh quote is the next revision of the same quote. Variations still block
+withdrawal (H4). This also answers J15, where a voided invoice blocked withdrawal forever. Enforced by
+`acceptance_withdrawal_guard()`, which now takes the balance row lock so a withdrawal and an invoice
+cannot each miss the other.
+
+**Rejected:** a separate "close issue" record — a second concept for the same job.
 
 ## 4. Trade-offs, and what was rejected
 
@@ -87,13 +112,17 @@ the credit.
 
 ## 6. How it is proved
 
-New migration `20260926200000_scope_reduction`, never an edit to a committed one (Rule 6), and executed
+Migrations `20260926200000_scope_reduction`, `20260926210000_live_ceiling_every_revision` (K6) and
+`20260926220000_withdrawal_after_full_credit` (K4, J15, K1, K2), never an edit to a committed one
+(Rule 6), and executed
 tests in `new-app/db/test/documents-core.test.ts`: a negative variation within the room left; one below
 what is invoiced, refused, with no row left behind and the shortfall named; the credit-then-reduce
 transaction accepted; over-crediting refused, including across several notes; a credit against a voided
 invoice refused; a voided invoice's credits not subtracted twice; and J12's credit-note assertion changed
-explicitly, because the decision behind it changed. Each guard is planted against before it is reported
-(Rule 1.5, Rule 21.2).
+explicitly, because the decision behind it changed. After the re-review: credits net only against their
+own issue (K3); an old over-credit strands nothing (K1); withdrawal after full credit or void, refused
+while anything is billed or a variation exists (K4, J15); and the random walk for stuck states (K6).
+Each guard is planted against before it is reported (Rule 1.5, Rule 21.2).
 
 ## 7. What this does not prove (Rule 21.4)
 

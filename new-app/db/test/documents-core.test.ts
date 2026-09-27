@@ -316,7 +316,8 @@ describe("J2 · the ceiling is enforced by the database, not by callers remember
 describe("J12 · which insert moves which balance column, executed rather than listed", () => {
   // §6.2a of the domain model carried a prose "who writes it" column three times, and it was wrong
   // three times — the last time crediting a credit note as a writer of `invoiced_total_minor`, which
-  // it has never been. The document no longer says; this says, by doing it.
+  // it was not then. J4 has since made it one, deliberately (the credit-note test below). The document
+  // no longer says; this says, by doing it.
   //
   // Each test inserts ONE kind of row and reads all three columns, so a defect that moves the wrong
   // column is caught as precisely as one that moves nothing.
@@ -580,6 +581,157 @@ describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
     // read 30,000 — and 15,000 of ceiling room would exist that nobody granted.
     expect((await totals(issue)).invoiced).toBe(45_000);
   });
+
+  it("K3 · a credit note nets only against its OWN issue, never against another job", async () => {
+    // The re-review planted "subtract every credit in the tenant" and all 113 db tests stayed green:
+    // every credit-note test used one issue. Two jobs here, one fully credited, the other at its ceiling.
+    const otherQuote = id();
+    await asSuperuser(db, () =>
+      sql(
+        `INSERT INTO quote (id, tenant_id, client_id, title, currency, updated_at)
+         VALUES ($1, $2, $3, 'Roof', 'JMD', now())`,
+        [otherQuote, TENANT, CLIENT],
+      ),
+    );
+    const jobX = await seal(1, 100_000n);
+    await accept(jobX);
+    const jobY = id();
+    await sql(
+      `INSERT INTO quote_issue
+         (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+          currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+          sealed_at, sealed_by_user_id, catalog_synced_at)
+       VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Roof', 'itemised', 'JMD', 'Terms', 0, 100000, 0, 100000,
+               now(), $5, now())`,
+      [jobY, TENANT, otherQuote, CLIENT, USER],
+    );
+    await accept(jobY);
+
+    const onX = await insertInvoice(jobX, 60_000n);
+    await credit(onX, 60_000n);
+    await insertInvoice(jobY, 100_000n);
+
+    // X's 60,000 of credit is not room on Y.
+    await expect(insertInvoice(jobY, 60_000n)).rejects.toThrow(/exceeds the ceiling 100000 .* by 60000/);
+    expect(await totals(jobX)).toEqual({ variations: 0, invoiced: 0 });
+    expect(await totals(jobY)).toEqual({ variations: 0, invoiced: 100_000 });
+  });
+
+  it("K1 · an invoice credited beyond its amount before the check existed strands nothing", async () => {
+    // Simulates history written before `20260926200000_scope_reduction`: the trigger is switched off
+    // as the table's owner, an over-credit is written, and it is switched back on. The first version of
+    // the check scanned every invoice on the issue, so this one row made every later write on the issue
+    // raise — a void included, so there was no exit.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const old = await insertInvoice(issue, 40_000n);
+    await asSuperuser(db, async () => {
+      await db.exec(`ALTER TABLE credit_note DISABLE TRIGGER credit_note_enforces_ceiling`);
+      await sql(
+        `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+         VALUES ($1, $2, $3, 50000, 'written before the check', now())`,
+        [id(), TENANT, old],
+      );
+      await db.exec(`ALTER TABLE credit_note ENABLE TRIGGER credit_note_enforces_ceiling`);
+    });
+
+    // Other writes on the issue proceed, and the over-credited invoice counts as zero, not -10,000:
+    // a negative contribution would be 10,000 of ceiling room nobody granted.
+    const other = await insertInvoice(issue, 100_000n);
+    expect((await totals(issue)).invoiced).toBe(100_000);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling/);
+    await credit(other, 1_000n);
+    await vary(issue, 5_000n);
+    // Further credit on the over-credited invoice itself is still refused.
+    await expect(credit(old, 1n)).rejects.toThrow(/would total more than the invoice/);
+  });
+});
+
+// ===========================================================================
+describe("K4 · a wrong document is withdrawn once nothing is still billed on it (and J15)", () => {
+  // Owner's decision 2026-09-27 (docs/design/scope-reduction.md): the "credit note and a fresh quote"
+  // remedy used to reopen the old issue's whole ceiling once its invoice was credited, with no way to
+  // close it — withdrawal refused while an invoice existed, a new revision refused by J10.
+  async function insertInvoice(issueId: string, amount: bigint) {
+    const invoiceId = id();
+    await sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [invoiceId, TENANT, issueId, amount.toString()],
+    );
+    return invoiceId;
+  }
+  async function credit(invoiceId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, $4, 'wrong client', now())`,
+      [id(), TENANT, invoiceId, amount.toString()],
+    );
+  }
+  async function withdraw(acceptanceId: string) {
+    return sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+  const ceiling = async (issueId: string) =>
+    minor((await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issueId]))[0]!.c);
+
+  it("allows withdrawal once the invoice is fully credited, closes the ceiling, and frees the next revision", async () => {
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
+    const wrong = await insertInvoice(rev1, 100_000n);
+    await credit(wrong, 100_000n);
+
+    await withdraw(acceptance);
+
+    // The re-review's K4: before, the credited issue took a second 100,000 invoice. Now its ceiling is 0.
+    expect(await ceiling(rev1)).toBe(0);
+    await expect(insertInvoice(rev1, 100_000n)).rejects.toThrow(/exceeds the ceiling 0/);
+    // And the fresh quote is the next revision of the SAME quote, not a second job.
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+    await insertInvoice(rev2, 100_000n);
+  });
+
+  it("J15 · allows withdrawal once the invoice is voided", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    const wrong = await insertInvoice(issue, 40_000n);
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'wrong client', $4)`,
+      [id(), TENANT, wrong, USER],
+    );
+
+    await withdraw(acceptance);
+    expect(await ceiling(issue)).toBe(0);
+  });
+
+  it("REFUSES withdrawal while any invoice still has money billed — a partial credit is not enough", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    const partly = await insertInvoice(issue, 40_000n);
+    await credit(partly, 39_999n);
+
+    await expect(withdraw(acceptance)).rejects.toThrow(/1 invoice\(s\) against the issue still have money/);
+  });
+
+  it("REFUSES withdrawal when a variation exists, even with every invoice credited (H4 still holds)", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    const inv = await insertInvoice(issue, 40_000n);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'A gate', 20000, $4, now())`,
+      [id(), TENANT, issue, USER],
+    );
+    await credit(inv, 40_000n);
+
+    await expect(withdraw(acceptance)).rejects.toThrow(/recorded variation/);
+  });
 });
 
 describe("2 · issue_balance has exactly one writer", () => {
@@ -767,7 +919,8 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
   it("REFUSES a later revision while an accepted revision has been invoiced", async () => {
     // The executed finding: revision 1 accepted and part-invoiced, revision 2 sealed and accepted, two
     // live ceilings totalling 230,000 for one 130,000 job. The prescribed remedy — withdraw first — is
-    // impossible here, because H4's trigger refuses a withdrawal once an invoice exists.
+    // impossible here, because H4's trigger refuses a withdrawal while an invoice still has money
+    // billed on it (since K4, a voided or fully credited invoice no longer blocks it).
     const rev1 = await seal(1, 100_000n);
     await accept(rev1);
     await invoiceDirect(rev1, 60_000n);
@@ -897,7 +1050,7 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     expect(await state(issue)).toBe("sealed_awaiting_number");
   });
 
-  it("REFUSES a withdrawal once an invoice exists", async () => {
+  it("REFUSES a withdrawal once an invoice with money billed on it exists", async () => {
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await invoice(issue, 40_000n);

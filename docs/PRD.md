@@ -193,14 +193,16 @@ demonstrated, it is not a requirement, it is a hope.
   those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason — which
   returns the issue to superseded-able. Without this, a typo in a client name on an accepted quote had
   no path at all.
-- **R1.15b** **Withdrawal is refused while ANY financial dependant exists (H4):** an invoice *or* a
-  recorded variation. The first version named only invoices, and the same release created two other
+- **R1.15b** **Withdrawal is refused while ANY financial dependant is live (H4, amended by K4):** an
+  invoice that still has money billed on it, *or* any recorded variation. The first version named only invoices, and the same release created two other
   things that hang off an acceptance — a balance row and immutable variations — so the typo remedy had
   become a way to detach agreed money from the issue it was agreed against. Enforced by a database
   trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
-  That path is for a *wrong document*; for *less work*, the path is a credit note and a negative
-  variation on the same issue (R1.22a). Until J4 the credit note half of both did nothing, because
-  credit notes did not reduce the invoiced figure.
+  That path is for a *wrong document*: void or fully credit each invoice, then withdraw — allowed once
+  nothing is still billed and no variation exists (K4 and J15, owner's decision 2026-09-27) — then issue
+  the next revision. For *less work*, the path is a credit note and a negative variation on the same
+  issue (R1.22a). Until J4 the credit note half of both did nothing, and until K4 a fully credited
+  issue's ceiling reopened with no way to close it.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
   `accepted_total_minor` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
@@ -348,10 +350,10 @@ demonstrated, it is not a requirement, it is a hope.
   an accurate description of what exists, not as a decision to preserve it; staged invoicing is #34, the
   audit's top-ranked absent feature, and the two cannot both hold. Recorded here rather than left as two
   documents disagreeing.
-- **R1.24** The sum of issued invoices against an accepted issue, **net of credit notes and excluding
-  voided invoices**, may never exceed its **accepted total plus recorded variations** (R1.22b). **This
-  is the most important arithmetic invariant in the product.** "Net of credit notes" was added
-  2026-09-26 (J4, `docs/design/scope-reduction.md`); the executed definition is `issue_balance_apply()`.
+- **R1.24** The invoiced figure against an accepted issue may never exceed its **accepted total plus
+  recorded variations** (R1.22b). **This is the most important arithmetic invariant in the product.**
+  What counts as invoiced is defined once, in `issue_balance_apply()`, and not restated here (ADR 0025):
+  since J4 a credit note lowers it (`docs/design/scope-reduction.md`).
 - **R1.24d** **"Recorded", not "accepted", and the weakness is stated rather than hidden (G1).** In
   release 1 a variation has no client signature, so recording one **does** let the contractor raise their
   own invoiceable ceiling. R1.24 therefore protects against *mistake and drift*, not against a contractor
@@ -385,7 +387,7 @@ demonstrated, it is not a requirement, it is a hope.
   held back or credited does not increase how much may be billed. **A credit note does reduce the
   invoiced figure the ceiling is compared with** (J4, amended 2026-09-26) — it frees room within the
   same ceiling, the same effect as voiding and re-issuing but for an amount rather than a whole
-  invoice. Credits on one invoice may not exceed it, and a voided invoice cannot be credited. A stored
+  invoice. Its bounds are enforced in `issue_balance_enforce()`. A stored
   status is the second source of truth that produced the old application's negative amount due.
 - **R1.26** Recording a client payment: amount, date, method, reference, optional receipt file. Never
   more than the balance.
