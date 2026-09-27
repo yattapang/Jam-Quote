@@ -1495,3 +1495,133 @@ All CONFIRMED by reading the file at HEAD (commands: `sed -n 306,315p docs/desig
 ## Gate (uncached: npx turbo run typecheck test --force --concurrency=1)
 Tasks 10 successful, 10 total; Cached 0; api 183, db 113, contract 2, core 9, web 11 passed. Checkers: check_rules "66 rules defined · 763 citations"; check_dispositions "40 dispositions claiming Closed, checked across 3 review files"; check_citations "scanned 164 tracked files ... resolves"; check_schema_citations "scanned 163 files against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped"; all exit 0.
 Final git status --porcelain: empty.
+
+---
+
+# Second re-review of the J4 line (commits c35952d and 8e8236a), findings L1-L6
+
+**Reviewer:** `commit-reviewer` agent (Opus class), 2026-09-27, commissioned under Rules 1.10 and 24.6; tier declared in `BRIEF-STATUS.md` before launch. **Did not write** either commit. Appended verbatim from the file it wrote as it worked; its probes (`probe/…`, `plant.py`) lived in the session scratchpad and are not retained. The author independently re-ran L1 (section B) and L3 (plant W2) and observed the same output. **Its verdict: none of J4, J10 or J15 should be marked Closed on this evidence.**
+
+## Second independent re-review of c35952d (K6/J10) and 8e8236a (K4/J15/K1/K2/K3/K5)
+
+Reviewer: commit-reviewer (Opus class), 2026-09-27. Did not write either commit. Rules applied: 0, 1.5, 1.10/24.6,
+4.1, 6, 16.3, 16.4, 16.5, 21.1-21.4, 21.7, 22.1-22.3. Probes: scratchpad/review2/probe/*.mjs (PGlite, SET ROLE pryvis_app).
+
+### L1 · K4's twin: with any variation on the issue, the wrong-document remedy still reopens the whole ceiling and nothing closes it except an undocumented zeroing variation; the fresh quote must be a SEPARATE quote — two live ceilings on one job — major
+- Where: new-app/db/migrations/20260926220000_withdrawal_after_full_credit/migration.sql:221-263 (guard: any variation blocks);
+  docs/PRD.md R1.15b ("Once either exists, the path is a credit note and a fresh quote. That path is for a wrong
+  document: void or fully credit each invoice, then withdraw ... then issue the next revision"); docs/design/scope-reduction.md §3a;
+  docs/design/domain-model.md withdrawal paragraph ("Once a variation exists, the acceptance stays.").
+- CONFIRMED, `node probe/k4.mjs` section B: r1 accepted 100,000, variation +10,000, invoice 110,000, credited 110,000 (the
+  documented wrong-document remedy):
+  ```
+  RAISE withdraw r1 -> cannot withdraw this acceptance: 1 recorded variation(s) exist ...
+  RAISE seal r2 of same quote -> cannot seal revision 2 of this quote: revision 1 is accepted and has 1 invoice(s) and 1 variation(s) ...
+  OK    bal r1 after full credit {"a":100000,"v":10000,"i":0,"c":110000}
+  OK    fresh quote as separate quote: seal / accept fresh / invoice fresh 100000
+  OK    invoice OLD r1 again 110000 (reopened ceiling)
+  OK    bal r1 {"a":100000,"v":10000,"i":110000,"c":110000}
+  ```
+  Section B2: the only closure is a variation of -110,000 taking the ceiling to exactly 0 (`OK variation -110000`, bal c:0);
+  withdrawal and a next revision stay refused for ever after (`RAISE withdraw r1 ... 2 recorded variation(s)`, `RAISE seal r2 ...`).
+- Failure scenario: exactly K4's, for the case the owner's decision excluded. A wrong document is found after one variation
+  was recorded. Following R1.15b the contractor credits the invoice in full; the old issue now has 110,000 of room again, can
+  be neither withdrawn (variation) nor superseded (J10), so the "fresh quote" has to be a separate quote and the job carries
+  two live ceilings (210,000 billable for one job). No document states this remains, and none names the zeroing-variation
+  closure. R1.15b's "path ... then withdraw ... then issue the next revision" is unreachable once a variation exists, and the
+  PRD sentence says "Once either exists" — i.e. it prescribes that path for the variation case too.
+
+### L2 · A variation already recorded on a superseded revision (legal until c35952d) makes the quote permanently unrevisable after the migration; the migration neither detects it nor says so — minor (major if any database holds new-app documents data)
+- Where: new-app/db/migrations/20260926210000_live_ceiling_every_revision/migration.sql:52-72 (guard now counts a variation on
+  ANY accepted non-withdrawn earlier revision, superseded ones included) and :31-38 ("WHAT THIS DOES NOT DO" — silent on existing
+  rows). The migration's own header (:19-22) predicts this exact consequence ("would then block every later revision of the
+  quote, permanently") but only prevents NEW such rows.
+- CONFIRMED, `node probe/k6pre.mjs`: migrations up to 20260926200000; r1 accepted, r2 sealed, `+30000` variation on superseded r1
+  (`OK [pre-K6] variation +30000 on superseded r1`), r2 accepted and invoiced; then 210000 and 220000 applied as superuser:
+  ```
+  RAISE withdraw r1 (superseded, has variation) -> cannot withdraw this acceptance: 1 recorded variation(s) exist ...
+  RAISE seal r3 -> cannot seal revision 3 of this quote: revision 1 is accepted and has 0 invoice(s) and 1 variation(s) against it. Money has moved ...
+  OK    bal r1 {"a":100000,"v":30000,"i":0,"c":0}
+  ```
+- Failure scenario: the quote can never be revised again, the refusal blames a revision whose ceiling is 0 and on which "money
+  has moved" is false, and r1 can never be withdrawn. Same class as K1 (a migration that changes what history means without
+  validating history). Not reachable on a fresh database: the twin check refuses new such variations (confirmed, k4.mjs F).
+
+### L3 · The random walk's oracle is the code under test: a netting defect that over-bills by 50% and the original J10 two-live-ceilings defect both leave it green; it reaches withdrawal-after-full-credit zero times — major as a guard weakness (not a user-visible defect)
+- Where: new-app/db/test/no-stuck-state.test.ts:216-227 (both "stuck" and "overCeiling" are judged by `issue_balance_apply()`'s
+  own sum and `issue_ceiling_minor()`'s own ceiling; the walk keeps no model of what was invoiced/credited/agreed), :1-42 header
+  (the Rule 21.4 section does not state this limit), commit c35952d message ("asserting no issue is stuck or above its ceiling").
+- CONFIRMED, plants on the real file new-app/db/migrations/20260926220000_withdrawal_after_full_credit/migration.sql via
+  `python3 plant.py` (backup copy, anchor count asserted == 1, restore, `diff -q` empty), running
+  `npx -w @pryvis/db vitest run test/no-stuck-state.test.ts`:
+  - W2 netting subtracts each invoice's credits twice (`- 2 * (SELECT COALESCE(SUM(c."amount_minor"), 0) ...`):
+    `✓ seed 1 ... ✓ seed 2 ... Tests 2 passed (2)`, `restored; diff -q output: '' rc=0`.
+    Effect (`node probe/w2demo.mjs`): `[real] invoice 100000 more after a 50000 credit -> RAISE ... exceeds the ceiling 100000 by 50000`
+    vs `[W2] ... OK`, `[W2] true net billed {"net":"150000"}` on a 100,000 ceiling, and the walk-style check `apply ok` with
+    `{"a":100000,"v":0,"i":100000,"c":100000}` — 50,000 over-billed and the walk's own figures say "at ceiling".
+  - W1 `issue_ceiling_minor()` without its supersession branch (review 4's original J10 blocker) appended as a CREATE OR REPLACE:
+    `Tests 2 passed (2)`, restored, `diff -q` empty. Effect (`node probe/w1demo.mjs`): `[W1] billed on the quote {"s":"230000"}`
+    for a 130,000 job, both balances "apply ok".
+  - Control, W3 withdrawal guard ignoring billed invoices (`IF v_billed > 0 THEN` -> `IF false THEN`): walk RED, `rc=1`, a list of
+    stuck issue ids at `expect(result.stuck).toEqual([])` — so the walk does catch permissive withdrawals.
+- Reach, measured (`node probe/walkcount.mjs`, the walk's generator ported with counters, both seeds): withdrawals that succeeded
+  on an issue with an unvoided, fully credited invoice: **0 and 0**; with a voided invoice: 2 and 2; withdrawals refused as billed
+  26/28. The K4 decision's main path is never walked, and the asserted floors (succeeded/examined/invoicedIssues) cannot notice.
+- Consequence: the walk proves "no sequence makes `issue_balance_apply()` raise at rest" and nothing about whether the figures it
+  raises on are right. Any defect that errs on the permissive side — the class that over-bills a client — is invisible to it by
+  construction. It must not be cited as covering J10, K3 or K4, and its header should say what it trusts.
+
+### L4 · Three parts of the two fixes have no test that fails when they are reverted — minor (test gaps; the shipped code is right in each case)
+- CONFIRMED, each via `python3 plant.py` on the real migration, `npx -w @pryvis/db vitest run` (all 124 db tests), restored, `diff -q` empty:
+  1. **K6's twin, the "no longer accepted" half** (20260926220000.../migration.sql:184-191; claimed in c35952d's message: "refuses a
+     variation on an issue that is superseded or no longer accepted"). Plant `OR NOT EXISTS (` -> `OR false AND NOT EXISTS (`:
+     `Tests 124 passed (124)`. Effect (`node probe/c3demo.mjs`): `[real] +30000 variation on a WITHDRAWN (not superseded) issue -> RAISE ...`
+     vs `[C3] ... OK`, `bal {"a":100000,"v":30000,"i":0,"c":0}` — agreed work recorded on a withdrawn document, the H4 shape.
+     The twin test uses only a superseded revision.
+  2. **K2's corrected reason** (migration.sql:198-201). Plant restoring the old "would subtract money the void already removed" text:
+     `Tests 124 passed (124)`. The false user-facing message K2 was about can return silently; the voided-credit test matches only a
+     substring common to both texts.
+  3. **The balance lock in the withdrawal guard** (migration.sql:229-233). Plant deleting the `IF EXISTS ... PERFORM issue_balance_apply ... END IF;`
+     block: `Tests 124 passed (124)`. The commit and BRIEF-STATUS say "NOT proved", which is honest; recorded so the gap is not read as covered.
+- Author's claimed plants, re-executed (all RED as claimed): c35952d "first-match" -> 3 failed (the K6 J10 test + both walk seeds);
+  "twin" -> 1 failed (K6's twin test), walk green as its header says. 8e8236a: every invoice counted -> 3 failed; credits ignored ->
+  2 failed; variations ignored -> 2 failed; no zero floor -> 1 failed (K1 test); no over-credit check -> 3 failed; tenant-wide netting
+  -> 7 failed (incl. K3 test); issue-wide scan restored -> 1 failed (K1 test). Plus voided-credit refusal disabled -> 1 failed.
+
+### L5 · Stale and overclaimed sentences the two commits left or wrote — minor (documentation)
+- CONFIRMED by reading at HEAD:
+  1. docs/design/domain-model.md:406-408 and docs/PRD.md R1.15 ("This applies to an issue that has NOT been accepted ... once accepted,
+     the path is a variation"): "withdraw first" as the ordering for superseding an accepted issue. c35952d's design depends on the
+     opposite — an accepted revision with no money is superseded WITHOUT withdrawal and stays "live-but-inert"
+     (20260926210000.../migration.sql:33-35; the J10 control test `K6 · still allows revision 3 when no live revision has money`
+     executes it). Neither commit amended these; the one-of-two-twins shape again.
+  2. docs/adr/0025-five-invariants-move-from-prose-to-code.md:131-134: "once extra work has been agreed on top of an acceptance ... the
+     path is a credit note and a fresh quote" presented as the safe consequence — with a variation, that path is L1's reopened ceiling.
+     Not amended by 8e8236a, which amended the same rule's other statements (PRD R1.15b, domain model).
+  3. docs/MISTAKES.md M28: "after 1,900+ writes per seed". The walk ATTEMPTS fewer: ops 6, 7 and 9 are skipped when their list is
+     empty. `node probe/walkattempts.mjs` (the walk's generator ported with a counter): `seed 1 attempted=1619`, `seed 2 attempted=1635`
+     (the test's own comment gives 877-914 successful). Overclaim of the guard's size, the Rule 21.1 class. (Port, not the test file
+     itself; the generator and selection logic are copied verbatim.)
+  4. docs/design/scope-reduction.md:34-39: "No stuck state can be entered ... It is now executed by `no-stuck-state.test.ts` ... with the
+     limits its header states" — the header does not state L3's limit (oracle = code under test), and L2 shows the unrevisable state is
+     still enterable from existing data. The "withdrawn-issue variation" guard (L4.1) is unexecuted.
+- Checked and found corrected/discoverable: "subtract money twice" survives only in the committed 20260926200000 (:36, :187) and
+  20260926210000 (:140) migrations, both superseded by 20260926220000, whose header (:45-50) quotes and corrects it; scope-reduction.md:42
+  and :70 use "twice" about a voided invoice's own credits, which is true. No live document still states "refused while any invoice exists";
+  the remaining hits (20260926110000 message, 20260926140000 header, PRD-REVIEW-3 H5 row) are superseded migrations or history.
+
+### L6 · A seal of revision N+1 racing a VARIATION on revision N lets the variation land on a superseded revision — minor, PLAUSIBLE (read, not raced)
+- Where: 20260926220000.../migration.sql:180-192 (twin check reads `quote_issue_state()` with no lock shared with `quote_issue` inserts);
+  20260926210000.../migration.sql:52-72 (the seal guard takes no lock on the prior revision's balance row).
+- Reasoning: T1 inserts r3 and its guard sees r2 without money (T2's variation uncommitted); T2 inserts a variation on r2, takes r2's
+  balance lock, and its twin check sees r2 not superseded (T1 uncommitted). Both commit. Result: the L2 state — r2 superseded, accepted,
+  with a variation, never withdrawable, and every later revision refused. c35952d names only the seal/INVOICE race (whose damage is a
+  stuck issue); the seal/variation race, whose damage is a permanently unrevisable quote, is not named. Not executable on one PGlite
+  connection.
+
+### Gate (uncached)
+`cd new-app && npx turbo run typecheck test --force --concurrency=1`: `Tasks: 10 successful, 10 total`, `Cached: 0 cached, 10 total`;
+api 183, core 9, contract 2, db 124 (7 files), web 11 passed. check_rules "66 rules defined · 779 citations across 57 distinct rules" rc=0;
+check_dispositions "40 dispositions claiming Closed, checked across 3 review files" rc=0; check_citations "scanned 166 tracked files" rc=0;
+check_schema_citations "scanned 166 files against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped" rc=0.
+Final `git status --porcelain`: empty. HEAD unchanged at 3672490 throughout.
