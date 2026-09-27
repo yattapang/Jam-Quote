@@ -321,6 +321,13 @@ ten legacy disposition gaps in reviews 2-3; J3's re-review with Q4 (ON UPDATE CA
 issue's quote id); the "write flag in exactly one place" test narrower than its title; Q1's deferred
 SQL-level fix; and the governance proposals awaiting the owner.
 
+**Re-review of the seven "Fixed, re-review owed" findings (J1, J2, J3, J5, J9, J12, J16, with Q4 inside
+J3), launched 2026-09-27 on the owner's instruction to continue in the recommended order.** *Delegation
+(Rule 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of tenant-isolation
+keys (J3), the ceiling trigger (J2) and the guards (J1, J9), where a defect leaves the suite green; one
+agent live, no build work alongside it (Rule 16.2). Findings to a file as found, brought into
+`PRD-REVIEW-4.md` afterwards.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
