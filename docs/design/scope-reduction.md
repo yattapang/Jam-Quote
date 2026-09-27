@@ -4,8 +4,8 @@
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes · ✅ **2026-09-27** — §3a, withdrawal after full credit (K4) |
-| **Independent review** | Will this do what it says? | **First re-review done 2026-09-26** (K1-K6, appended to `PRD-REVIEW-4.md`); its fixes await a **second** re-review before J4 is closed |
+| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes · ✅ **2026-09-27** — §3a, withdrawal after full credit (K4) · ✅ **2026-09-27** — §3b, withdrawal with variations (L1) |
+| **Independent review** | Will this do what it says? | Re-reviews done 2026-09-26 (K1-K6) and 2026-09-27 (L1-L6), both appended to `PRD-REVIEW-4.md`; the L fixes await a **third** before J4 is closed |
 
 Date: 2026-09-26 · Answers finding **J4** (`PRD-REVIEW-4.md`) · Delegation (Rule 16.5): **Opus** — money
 arithmetic, one of the three named exceptions: it decides how much may be billed.
@@ -35,8 +35,12 @@ title — **there is no way to reduce scope below what is invoiced**:
    in its own transaction, so the ceiling check never fires against history it cannot change.
    **As first written this was false** and was argued write by write, not executed: sealing a third
    revision could drop an invoiced revision's ceiling to 0 (K6, a J10 defect). It is now executed by
-   `new-app/db/test/no-stuck-state.test.ts`, a seeded random walk over every financial write — with the
-   limits its header states.
+   `new-app/db/test/no-stuck-state.test.ts`, a seeded random walk over every financial write. **Its first
+   version could not carry this claim** (L3): it judged results with the functions it was testing, so
+   double-subtracted credits and the original J10 defect both passed it, and it never reached withdrawal
+   after money had moved. It now checks against an oracle of its own and asserts that reach. Still not
+   proved, and stated: sequences the walk does not reach; real concurrency; and a stuck state entered by
+   data older than a fix (K1, L2), which each migration answers but no walk over a fresh database can see.
 3. A credit note **cannot be abused to manufacture room**: it cannot exceed what its invoice still has
    uncredited, and it cannot be raised against a voided invoice.
 4. Voiding an invoice that carries credit notes does **not** subtract the credit twice.
@@ -85,12 +89,32 @@ the fresh quote had to be a separate quote, and one job carried two live ceiling
 
 **Decision:** an acceptance may be withdrawn once every invoice against the issue is voided or fully
 credited, and no variation exists. Withdrawal drops the ceiling to 0, and J10 ignores a withdrawn
-acceptance, so the fresh quote is the next revision of the same quote. Variations still block
-withdrawal (H4). This also answers J15, where a voided invoice blocked withdrawal forever. Enforced by
+acceptance, so the fresh quote is the next revision of the same quote. (Variations still blocked
+withdrawal here, per H4; §3b removes that.) This also answers J15, where a voided invoice blocked withdrawal forever. Enforced by
 `acceptance_withdrawal_guard()`, which now takes the balance row lock so a withdrawal and an invoice
 cannot each miss the other.
 
 **Rejected:** a separate "close issue" record — a second concept for the same job.
+
+## 3b. A wrong document that already has variations (L1 — owner's decision 2026-09-27)
+
+The second re-review found §3a's fix failed whenever the issue had a variation: fully credited, it could
+be neither withdrawn (H4) nor revised (J10), so the fresh quote was a separate quote and the old issue
+then took another 110,000 invoice — two live ceilings on one job again.
+
+**Decision:** withdrawal is allowed once nothing is still billed, whether or not variations exist. H4's
+reason for refusing was that the variations would become a live second copy of agreed work on a dead
+issue. Since K6's twin check, a withdrawn or superseded issue takes no new variation and has a ceiling of
+0, so its variations are inert history, still readable; the live agreement is whatever the next revision
+carries, with the agreed work re-priced into its lines by the tenant.
+
+**And the J10 guard judges only the latest revision** (L2, L6): it is the only one that can hold a live
+ceiling, so older superseded revisions — including one given a variation by code older than the twin
+check — can no longer block the quote. The seal takes that revision's balance lock, so a variation
+racing the seal waits and is then refused. Migration `20260927100000_withdrawal_with_variations`.
+
+**Rejected:** a separate "close issue" record (a second concept for the same job), and keeping the
+refusal (a wrong document with variations would have no correction at all).
 
 ## 4. Trade-offs, and what was rejected
 
@@ -121,7 +145,9 @@ transaction accepted; over-crediting refused, including across several notes; a 
 invoice refused; a voided invoice's credits not subtracted twice; and J12's credit-note assertion changed
 explicitly, because the decision behind it changed. After the re-review: credits net only against their
 own issue (K3); an old over-credit strands nothing (K1); withdrawal after full credit or void, refused
-while anything is billed or a variation exists (K4, J15); and the random walk for stuck states (K6).
+while anything is billed (K4, J15, L1); a variation left on a superseded revision no longer blocks
+the quote (L2); and the random walk for stuck states (K6), judged since L3 by an oracle of its own rather
+than by the functions under test.
 Each guard is planted against before it is reported (Rule 1.5, Rule 21.2).
 
 ## 7. What this does not prove (Rule 21.4)

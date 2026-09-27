@@ -562,7 +562,11 @@ describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
     const invoiceId = await insertInvoice(issue, 40_000n);
     await voidInvoice(invoiceId);
 
-    await expect(credit(invoiceId, 10_000n)).rejects.toThrow(/is voided/);
+    // L4: the reason is asserted, not only the refusal. The first version claimed a double subtraction
+    // that the arithmetic does not have (K2), and reverting to that text left every test green.
+    await expect(credit(invoiceId, 10_000n)).rejects.toThrow(
+      /is voided and no longer counts; a credit note against it would record a reduction of nothing/,
+    );
     expect(await sql(`SELECT 1 FROM credit_note`)).toHaveLength(0);
   });
 
@@ -718,19 +722,46 @@ describe("K4 · a wrong document is withdrawn once nothing is still billed on it
     await expect(withdraw(acceptance)).rejects.toThrow(/1 invoice\(s\) against the issue still have money/);
   });
 
-  it("REFUSES withdrawal when a variation exists, even with every invoice credited (H4 still holds)", async () => {
-    const issue = await seal(1, 100_000n);
-    const acceptance = await accept(issue);
-    const inv = await insertInvoice(issue, 40_000n);
+  it("L1 · withdraws a wrong document WITH a variation once fully credited, and the next revision replaces it", async () => {
+    // The second re-review's executed case: variation +10,000, invoiced 110,000, credited in full.
+    // Withdrawal and a new revision were both refused, so the fresh quote had to be a separate quote,
+    // and the old issue then took another 110,000 invoice — two live ceilings on one job.
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
     await sql(
       `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
                               recorded_by_user_id, occurred_at)
-       VALUES ($1, $2, $3, 'A gate', 20000, $4, now())`,
-      [id(), TENANT, issue, USER],
+       VALUES ($1, $2, $3, 'A gate', 10000, $4, now())`,
+      [id(), TENANT, rev1, USER],
     );
-    await credit(inv, 40_000n);
+    const wrong = await insertInvoice(rev1, 110_000n);
+    await credit(wrong, 110_000n);
 
-    await expect(withdraw(acceptance)).rejects.toThrow(/recorded variation/);
+    await withdraw(acceptance);
+
+    expect(await ceiling(rev1)).toBe(0);
+    await expect(insertInvoice(rev1, 110_000n)).rejects.toThrow(/exceeds the ceiling 0/);
+    const rev2 = await seal(2, 110_000n);
+    await accept(rev2);
+    await insertInvoice(rev2, 110_000n);
+    // One live ceiling across the quote, not two.
+    expect((await ceiling(rev1)) + (await ceiling(rev2))).toBe(110_000);
+  });
+
+  it("L4 · REFUSES a variation on a WITHDRAWN (not superseded) issue — the other half of K6's twin check", async () => {
+    // The second re-review removed this half of the check and all 124 db tests stayed green.
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 30000, $4, now())`,
+        [id(), TENANT, issue, USER],
+      ),
+    ).rejects.toThrow(/superseded or no longer accepted/);
   });
 });
 
@@ -1010,6 +1041,29 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     expect(await ceiling(rev2)).toBe(0);
   });
 
+  it("L2 · a variation left on a superseded revision by older code no longer blocks the quote", async () => {
+    // Legal until `20260926210000`: simulated by switching the variation trigger off as the owner. The
+    // guard then treated revision 1 as "accepted with money" and refused every later revision, blaming a
+    // revision whose ceiling is 0. It now judges the live revision only.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await asSuperuser(db, async () => {
+      await db.exec(`ALTER TABLE variation DISABLE TRIGGER variation_enforces_ceiling`);
+      await sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'recorded before the check', 30000, $4, now())`,
+        [id(), TENANT, rev1, USER],
+      );
+      await db.exec(`ALTER TABLE variation ENABLE TRIGGER variation_enforces_ceiling`);
+    });
+
+    await seal(3, 100_000n);
+    expect(await ceiling(rev1)).toBe(0);
+    expect(await ceiling(rev2)).toBe(0);
+  });
+
   it("K6's twin · REFUSES a variation against a superseded revision", async () => {
     // Its ceiling is 0 but so is what is invoiced, so the ceiling check alone let a +30,000 variation
     // through — agreed work on a document nobody can bill, which also blocks withdrawal (H4) and so
@@ -1058,10 +1112,12 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     await expect(withdraw(acceptance)).rejects.toThrow(/credit note and a fresh quote/);
   });
 
-  it("REFUSES a withdrawal once a variation exists — the case the guard condition missed", async () => {
-    // Without this, $400,000 of immutable agreed work ends up pointing at a superseded issue whose
-    // acceptance is gone: unbillable, unmovable, and re-recording it leaves two identical copies
-    // with nothing marking which pair is live.
+  it("ALLOWS a withdrawal once a variation exists, and the variation becomes inert history — changed by L1", async () => {
+    // This test asserted the opposite until 2026-09-27. H4 refused it because $400,000 of agreed work
+    // would point at a dead issue with two copies and nothing marking which was live. Since K6's twin
+    // check a withdrawn issue takes no new variation, so the old rows are history, not a live copy —
+    // and keeping the refusal left a wrong document with variations uncorrectable (L1). Owner's
+    // decision, docs/design/scope-reduction.md §3b.
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await sql(
@@ -1071,7 +1127,21 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
       [id(), TENANT, issue, USER],
     );
 
-    await expect(withdraw(acceptance)).rejects.toThrow(/recorded variation/);
+    await withdraw(acceptance);
+
+    // What H4 feared, asserted absent: the agreement stays on record, and nothing can grow it or bill it.
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(1);
+    const ceiling = await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issue]);
+    expect(minor(ceiling[0]!.c)).toBe(0);
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'another', 1000, $4, now())`,
+        [id(), TENANT, issue, USER],
+      ),
+    ).rejects.toThrow(/no longer accepted/);
+    await expect(invoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 0/);
   });
 
   it("drops the ceiling to zero on withdrawal, so nothing more can be invoiced", async () => {

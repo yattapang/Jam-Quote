@@ -185,22 +185,25 @@ demonstrated, it is not a requirement, it is a hope.
   rule, allocated atomically into an insert-only `issue_number` row. **Gapless per series in R1** —
   server allocation makes that free — and a number is never reused.
 - **R1.15** A revision is a **new issue** at the next revision number; the previous one is marked
-  superseded and remains readable exactly as sent. **This applies to an issue that has NOT been accepted**
-  (see R1.22c): once accepted, the path is a variation, because superseding an accepted issue would orphan
-  the acceptance attached to it.
+  superseded and remains readable exactly as sent. **An accepted issue may be superseded only while
+  nothing financial hangs off it** — no invoice and no variation — and its ceiling then falls to 0
+  (J10, K6; `quote_issue_one_live_ceiling()`). Once money has moved, the path is a variation (R1.22c),
+  or for a wrong document, withdrawal first (R1.15b). Until 2026-09-27 this said a revision applied only
+  to an issue NOT accepted, which the J10 guard and its tests had already stopped being true of (L5).
 - **R1.15a** **A non-price error on an accepted issue has a remedy (G8).** A variation answers "the scope
   changed"; it does not answer "the wrong client", "the wrong terms" or "the wrong tax treatment". For
   those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason — which
   returns the issue to superseded-able. Without this, a typo in a client name on an accepted quote had
   no path at all.
-- **R1.15b** **Withdrawal is refused while ANY financial dependant is live (H4, amended by K4):** an
-  invoice that still has money billed on it, *or* any recorded variation. The first version named only invoices, and the same release created two other
+- **R1.15b** **Withdrawal is refused while any invoice still has money billed on it (H4, amended by K4
+  and L1).** Variations no longer block it (owner's decision 2026-09-27): since a withdrawn or superseded
+  issue can take no new variation, its recorded ones are history rather than a live second copy, and the
+  agreed work is re-priced into the next revision. The first version named only invoices, and the same release created two other
   things that hang off an acceptance — a balance row and immutable variations — so the typo remedy had
   become a way to detach agreed money from the issue it was agreed against. Enforced by a database
   trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
   That path is for a *wrong document*: void or fully credit each invoice, then withdraw — allowed once
-  nothing is still billed and no variation exists (K4 and J15, owner's decision 2026-09-27) — then issue
-  the next revision. For *less work*, the path is a credit note and a negative variation on the same
+  nothing is still billed (K4, J15 and L1, owner's decisions 2026-09-27) — then issue the next revision. For *less work*, the path is a credit note and a negative variation on the same
   issue (R1.22a). Until J4 the credit note half of both did nothing, and until K4 a fully credited
   issue's ceiling reopened with no way to close it.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:

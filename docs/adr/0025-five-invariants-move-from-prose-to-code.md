@@ -128,6 +128,13 @@ because the row *is* the record.
   precondition (finding H4). A recorded variation is agreed extra work, and withdrawing would leave it
   immutable, pointing at a superseded issue, unbillable and unmovable.
 
+  **Amended 2026-09-27 (findings K4 and L1, owner's decisions).** Variations no longer block withdrawal,
+  and neither does an invoice that is voided or fully credited: since a withdrawn or superseded issue can
+  take no new variation, its variations are history rather than a live copy, and refusing left a wrong
+  document with no correction at all. Withdrawal is now refused only while an invoice still has money
+  billed on it (`acceptance_withdrawal_guard()`, `docs/design/scope-reduction.md` §3a-3b). The paragraph
+  below is kept as the reasoning of its day.
+
   **The product consequence, stated rather than discovered:** once extra work has been agreed on top of
   an acceptance, the cheap typo remedy is gone and the path is a credit note and a fresh quote. A wrong
   client name found late costs more than one found early. That is worse for the tenant than a

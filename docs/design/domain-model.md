@@ -396,16 +396,18 @@ sealing a second issue for the same (quote, revision) (G4) · writing `issue_bal
 
 **Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
 recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to
-zero. It is **refused while any invoice still has money billed on it, OR any recorded variation exists**,
-enforced by a trigger rather than by a caller (`acceptance_withdrawal_guard()`): the first version named
-only invoices, and the same release had given an accepted issue two more financial dependants. For a wrong
-document with money demanded, the remedy is to void or fully credit each invoice, withdraw, and issue the
-next revision (K4, owner's decision 2026-09-27; before it, a credited issue's ceiling reopened with no way
-to close it). Once a variation exists, the acceptance stays.
+zero. It is **refused while any invoice still has money billed on it**, enforced by a trigger rather than
+by a caller (`acceptance_withdrawal_guard()`). For a wrong document with money demanded, the remedy is to
+void or fully credit each invoice, withdraw, and issue the next revision (K4 and L1, owner's decisions
+2026-09-27; before them, a credited issue's ceiling reopened with no way to close it). Variations used to
+block withdrawal too (H4), because they would have become a live second copy of agreed work on a dead
+issue; since a withdrawn or superseded issue takes no new variation, they are inert history instead.
 
-So "superseding an accepted issue" is not a forbidden transition, it is an ordering: withdraw first —
-which is possible only while no money hangs off it — and the issue is no longer accepted, so superseding
-it orphans nothing.
+So "superseding an accepted issue" is not a forbidden transition, it is an ordering. An accepted issue with
+nothing financial against it may be superseded directly, and its ceiling falls to 0. Once money has moved,
+withdraw first — possible once nothing is still billed — and the issue is no longer accepted, so
+superseding it orphans nothing. Only the latest revision can hold a live ceiling, so it is the only one a
+new revision is judged against (`quote_issue_one_live_ceiling()`, L2).
 
 ---
 

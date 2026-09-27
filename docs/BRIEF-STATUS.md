@@ -192,7 +192,22 @@ re-review of `c35952d` and this commit before J4, J10 or J15 is marked Closed.
 *Delegation (Rule 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of
 money arithmetic, ceiling state and withdrawal preconditions, where a defect leaves the suite green;
 one agent live, no build work, commits or full-gate runs alongside it (Rule 16.2). Findings are
-written to a file as found and brought into `PRD-REVIEW-4.md` afterwards.*
+written to a file as found and brought into `PRD-REVIEW-4.md` afterwards.* It reported L1-L6 and
+advised that none of J4, J10, J15 be closed; brought into `PRD-REVIEW-4.md` as `7fd27cb`.
+
+**L1-L6 fixed, 2026-09-27** — migration `20260927100000_withdrawal_with_variations`: withdrawal allowed
+once nothing is still billed, variations or not (the owner's L1 decision, design §3b); the J10 guard
+judges only the latest revision, under its balance lock (L2, L6). The walk now has an independent oracle
+in TypeScript, asserts its reach, and checks J10 on the database's ceilings (L3). Tests for L1, L2 and
+both L4 gaps; documents corrected (L5), with ADR 0025 amended by a dated note. MISTAKES M30, M31.
+*Delegation (Rule 16.5): Opus, in-session — withdrawal preconditions, the ceiling guard, and a money
+oracle.* *Coverage (Rule 21.3): eight plants, each restored byte-identical — on the walk: K6 back (15 and
+9 stuck), credits subtracted twice (10 disagreements per seed), supersession removed from the ceiling
+(88-89 disagreements, 43 quotes with two live ceilings), withdrawal ignoring billed invoices (20 and 15
+stuck); on the unit tests: variations blocking withdrawal again, the guard judging an old revision, the
+withdrawn half of the variation check removed, and the old K2 message restored. The walk's J10 check was
+first vacuous (counted from the oracle) and was fixed after its plant printed 0. The L6 lock is NOT
+proved.* **Next:** a third independent re-review before J4, J10 or J15 is marked Closed.
 
 ## The headline, stated plainly
 

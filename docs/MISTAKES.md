@@ -522,3 +522,49 @@ next change to the arithmetic has nothing in prose to leave behind — ADR 0025'
 than cited. **Nothing mechanical finds a stale twin**: `check_dispositions.py` checks that a closure cites
 each named document, not that every sentence in it is still true, and a tool that detects one fact stated
 in two places is still owed (review 4 named it). Recorded as owed, not promised.
+
+### M30 · The guard written for M28 judged its results with the code it was guarding
+`Repeat of:` **M21 and M20** — a guard that examines less than it claims — inside **M28's own fix**.
+
+`no-stuck-state.test.ts` was committed in `c35952d` as the mechanism answering M28. It decided "stuck" by
+calling `issue_balance_apply()` and "over the ceiling" by calling `issue_ceiling_minor()` — the functions
+under test. The second re-review (L3) planted credits subtracted twice, and the original J10 defect: 150,000
+billed against a 100,000 ceiling, and 230,000 of live ceiling on one quote, and **the walk stayed green on
+both**. It also reached withdrawal after money had moved zero times, so K4's own path was never walked, and
+its asserted counts could not notice.
+
+And the fix nearly repeated it. The rewritten walk's J10 check first counted live ceilings from the
+**oracle's** figures, which cannot show two by construction — so under the J10 plant it read 0 while
+every other check fired. Caught before commit, by reading the plant's printed counts rather than the
+pass/fail line; recorded here because it is the same defect one hour later.
+
+**Correction to M28**, which cannot be edited: "1,900+ writes per seed" counted writes *attempted*. The
+committed test's own comment said 877-914 *succeeded*. Now 200 runs per seed, measured at 1,347-1,357
+successful writes.
+
+**Cost if it had not been caught:** the one test standing behind "no stuck state can be entered" would
+have passed over the exact defects that claim excludes, and M28 would have named it as the mechanism.
+
+**Prevented by:** the walk now re-derives every figure from raw rows in TypeScript, from the PRD's
+wording and sharing no SQL with the functions under test, and fails on any disagreement. It asserts the
+reach it needs (full credits, withdrawals after money). It is planted against K6, W1, W2 and W3, and
+every check was seen to fire on its own plant. **The general rule this is evidence for:** a guard's
+oracle must not be the thing guarded, and a check is proved by watching *its own count* move under a
+plant, not by the test going red for some other reason.
+
+### M31 · The K4 decision was designed for the case in front of it, and its twin had a variation
+`Repeat of:` **M29, M23, M15** — one of two twins, now in a *design decision* rather than a sentence.
+
+K4's remedy (withdraw once every invoice is credited or voided) was designed, approved, built and planted
+against an issue with invoices only. H4's refusal of withdrawal over variations was left standing beside
+it without being re-examined — although K6's twin check, in the commit before, had removed H4's reason.
+The second re-review (L1) executed the variation case: the remedy failed, and the old issue took another
+110,000 invoice. L5 found five more sentences still stating superseded rules, including R1.15, which had
+contradicted the J10 guard since J10 was built.
+
+**Cost if it had not been caught:** the wrong-document remedy would have shipped working only when no
+variation had been recorded — the job that has changed most, which is the one most likely to need it.
+
+**Prevented by:** the walk now exercises withdrawal after full credit with variations present, and the
+L1 test executes the exact case. **Nothing mechanical checks that a decision was tested against the
+states its neighbours create**; that is what independent re-review found, twice, and stays its job.
