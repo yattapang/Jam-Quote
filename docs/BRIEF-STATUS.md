@@ -270,6 +270,12 @@ cited a path their `Where:` line names, now printed on every run as owed an audi
 scope enforced on 1 of them)", 10 legacy gaps listed; planted — J15's row without its migration fails,
 naming it; restored byte-identical.*
 
+**Fifth re-review of `2bf1816` and `e0b80a3`, launched 2026-09-27.** *Delegation (Rule 16.5), declared
+before launch: `commit-reviewer` agent, Opus — adversarial review of the isolation guard, lock tenancy and
+lock order over the money invariant, and of the disposition checker that gates Rule 24.6; one agent live,
+no build work, commits or full-gate runs alongside it (Rule 16.2). Findings to a file as found, brought
+into `PRD-REVIEW-4.md` afterwards.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
