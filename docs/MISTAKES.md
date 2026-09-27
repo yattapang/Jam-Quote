@@ -628,3 +628,26 @@ every race names the KIND of lock it must observe, with a failure message saying
 instead. Five plants on real PostgreSQL each failed their own race, including the two the old suite missed.
 **The rule this is evidence for:** a mechanism that is correct only under a condition enforces the
 condition, or it is not a mechanism — writing the condition down is the M32 defect again.
+
+### M34 · The disposition checker reported "every document" while reading a fixed list of names
+`Repeat of:` **M20 and M24** — a guard examining a smaller set than its closing line claims — in the
+tool that guards Rule 24.6 itself, which review 4 had already said "two passes owed".
+
+`tools/check_dispositions.py` built each finding's scope from `KNOWN`, a regex of nine document names.
+Anything else a `Where:` line named — an ADR, a tool, a migration, a test, another review — was not
+scope, so a Closed row that never cited it passed, and the tool printed "Every Closed disposition cites
+every document its finding named." Review 4's `Where:` lines are almost entirely such paths, so adding it
+to `REVIEWS` as it stood would have checked each J finding against `PRD.md` and little else (P7).
+
+Widening the scope to every backticked path found **ten existing Closed rows** in reviews 2 and 3 that do
+not cite a path their own `Where:` line names — ADRs 0023 and 0024, `PRD-REVIEW-2.md`, `check_rules.py`,
+`rules-manifest.json`, `MISTAKES.md`. Whether each closure is actually incomplete, or merely uncited, is
+not known: that needs each one re-audited, not a filename pasted into it.
+
+**Cost if it had not been caught:** a review-4 closure could have passed the Rule 24.6 gate while leaving
+the migration or test the finding named untouched — the F1/M13 failure the tool was built to stop.
+
+**Prevented by:** path-level scope, enforced on review 4 and printed as a named, counted legacy list for
+reviews 1-3 on every run; the closing line now says which scope it covers. Planted: removing the
+migration from J15's Closed row fails the check, naming the path. **Owed:** the audit of the ten legacy
+rows, after which their reviews join `WIDE_SCOPE`.

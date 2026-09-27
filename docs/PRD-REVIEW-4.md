@@ -14,6 +14,32 @@ a 67-test suite, and a design approved the day before with its independent revie
 **Scope of what was actually read** is at the end, under "What this review did not examine" (Rule
 21.4).
 
+## Disposition — updated as findings close (added 2026-09-27, by the author, not the reviewer)
+
+**Only an independently re-checked fix reads Closed (Rule 24.6).** Seven findings were fixed and planted
+by the session that wrote them, and no independent reviewer has checked those fixes as a set; they read
+**Fixed, re-review owed**, which `tools/check_dispositions.py` deliberately does not count as a closure.
+The J4 line's four re-reviews are appended at the end of this file (K, L, N and P findings).
+
+| # | Sev | Disposition |
+|---|---|---|
+| **J1** | blocker | **Fixed, re-review owed.** `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
+| **J2** | blocker | **Fixed, re-review owed.** `683a638`, migration `20260926130000_ceiling_enforced_by_trigger`: every insert on `invoice`, `invoice_void`, `credit_note` and `variation` fires `issue_balance_apply()`, so the ceiling in `20260925120000_documents_core` is enforced whatever the caller does; `new-app/db/policies/002-documents-isolation.sql` unchanged; executed in `new-app/db/test/documents-core.test.ts` (J2 block); ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 amended. The four J4 re-reviews exercised this trigger heavily but were not commissioned to review it |
+| **J3** | blocker | **Fixed, re-review owed.** `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing |
+| **J4** | blocker | **Open — fixed, four re-reviews in, fifth owed.** The design `docs/design/scope-reduction.md` (owner decisions 2026-09-26/27) and migrations `20260926200000`, `20260926210000`, `20260926220000`, `20260927100000`, `20260927110000` and `20260927120000`, correcting what `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions` got wrong; tested in `new-app/db/test/documents-core.test.ts`, `no-stuck-state.test.ts` and `concurrency.pg.test.ts` (real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `2bf1816`. The P findings' fixes (`2bf1816`) are not yet independently checked |
+| **J5** | blocker | **Fixed, re-review owed.** `683a638`: grade 5 demoted in `docs/design/acceptance-evidence.md` so the ladder's third-party principle holds, with `docs/PRD.md` R1.20c, `docs/adr/0024-acceptance-evidence.md` and `docs/design/domain-model.md` agreeing |
+| **J6** | blocker | **Open.** The grade derivation is still undefined for conflicting evidence. Not started |
+| **J7** | blocker | **Open.** The uniqueness key on the inbound message id is not specified. Not started |
+| **J8** | blocker | **Open.** The acceptance bar is not frozen into the issue; `document_settings` does not exist. Not started |
+| **J9** | blocker | **Fixed, re-review owed.** `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
+| **J10** | blocker | **Open — reopened by K6.** First fixed in `683a638` (migration `20260926140000_one_live_ceiling_per_quote`); its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and isolation level (P1). Now `20260927100000`, `20260927110000`, `20260927120000`, over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` and the two newer suites; `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. Fifth re-review owed |
+| **J11** | major | **Open.** `quote_issue.subtotal_minor` is not tied to its frozen lines. Not started |
+| **J12** | major | **Fixed, re-review owed.** `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
+| **J13** | major | **Open, and more reachable.** A withdrawn issue reads "issued" and can never be re-accepted. Since K4 and L1 made withdrawal the wrong-document remedy, this is the common path (N3). Needs a product decision |
+| **J14** | major | **Open.** The RLS exemption list still covers the credential tables. Not started |
+| **J15** | minor | **Closed.** Migration `20260926220000_withdrawal_after_full_credit` (`8e8236a`) replaced the guard in `20260926110000_withdrawal_preconditions`: a voided or fully credited invoice no longer blocks withdrawal; `20260927100000_withdrawal_with_variations` kept it. Tested in `new-app/db/test/documents-core.test.ts` ("J15 · allows withdrawal once the invoice is voided"), which goes red when the guard is reverted. Independently checked: the third re-review (N) and the fourth (P) both found nothing against it, the fourth re-running the revert |
+| **J16** | minor | **Fixed, re-review owed.** `9115d8f`, migration `20260926170000_rejected_seal_no_delete`: `rejected_seal` from `20260926120000_rejected_seals` loses its DELETE path; executed in `new-app/db/test/documents-core.test.ts` |
+
 ---
 
 ## J1 · `check_citations.py` cannot see any citation written relative to `new-app/`, and a phantom test file is sitting in that blind spot right now — severity: blocker

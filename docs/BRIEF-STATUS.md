@@ -259,6 +259,17 @@ recompute without the quote lock (P3), shared lock made exclusive (P5 plus both 
 seeing the wrong lock kind), supersession removed from the ceiling (N4 c, which the old suite missed).
 Each restored byte-identical.*
 
+**P7 and item 2 of the owner's list, 2026-09-27** — `PRD-REVIEW-4.md` has its disposition table: J15
+**Closed** (independently checked by the N and P re-reviews); J1, J2, J3, J5, J9, J12, J16 **Fixed,
+re-review owed** (no independent check recorded, so Rule 24.6 does not let them read Closed); J4, J10
+open pending a fifth re-review; J6, J7, J8, J11, J13, J14 open. `tools/check_dispositions.py` now reads
+review 4 with path-level scope; widening it exposed ten legacy Closed rows in reviews 2-3 that never
+cited a path their `Where:` line names, now printed on every run as owed an audit (MISTAKES M34).
+*Delegation (Rule 16.5): Opus, in-session — the rows decide what counts as closed.* *Coverage (Rule
+21.3): check_dispositions "41 dispositions claiming Closed, checked across 4 review files (path-level
+scope enforced on 1 of them)", 10 legacy gaps listed; planted — J15's row without its migration fails,
+naming it; restored byte-identical.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
