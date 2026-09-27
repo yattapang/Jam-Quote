@@ -1825,3 +1825,153 @@ check_citations "scanned 167 tracked files" rc=0; check_dispositions "40 disposi
 files" rc=0; check_rules "66 rules defined · 787 citations across 57 distinct rules" rc=0; check_schema_citations "scanned 167 files
 against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped" rc=0.
 Final `git -C /home/user/Jam-Quote status --porcelain`: empty. HEAD 7649c0a throughout; no change to the tree observed from outside.
+
+---
+
+# Fourth re-review of the J4 line (commit cfeac92), findings P1-P7
+
+**Reviewer:** `commit-reviewer` agent (Opus class), 2026-09-27, commissioned under Rules 1.10 and 24.6; tier declared in `BRIEF-STATUS.md` before launch (`e1180b8`). **Did not write** the commit. Appended verbatim from the file it wrote as it worked; its probes lived in the session scratchpad and are not retained. It raced real PostgreSQL 16.13, including 150 unscheduled seal/accept/invoice races with 0 violations under READ COMMITTED. The author re-ran P1 and observed the same output under all three isolation levels. **Its verdict: J15 closable on substance once a checkable disposition row exists; J4 and J10 not, on P1 (the fix holds only under READ COMMITTED, which nothing enforces).**
+
+### Fourth re-review of cfeac92 (J4/J10/J15 line)
+
+Rules applied: 0, 1.5, 1.10, 4, 4.1, 6, 16.3-16.5, 21.1-21.4, 21.7, 22.1-22.3, 24.6.
+
+### P1 — HIGH (latent) — the quote lock is correct only under READ COMMITTED, and nothing enforces it
+Where: new-app/db/migrations/20260927110000_one_lock_per_quote/migration.sql:27-29 (claim), :60-72 (lock), :97-107.
+CONFIRMED on PostgreSQL 16.13 (probe `scratchpad/review4/probe/rr.mjs`, db r4probe, all migrations).
+Scenario: rev1 accepted, balance open, nothing billed. Writer session: `BEGIN ISOLATION LEVEL <iso>`; reads
+`quote_issue` (any first statement takes the snapshot). Another session seals rev2 (autocommit, allowed — nothing billed).
+Writer invoices rev1 50,000 and commits. Output:
+    repeatable read | seal: true | invoice: true  | commit: true  | rev1: {"inv":50000,"ceil":0,"st":"superseded"}
+    serializable | seal: true | invoice: true  | commit: true  | rev1: {"inv":50000,"ceil":0,"st":"superseded"}
+    read committed | seal: true | invoice: false 23514 | commit: true  | rev1: {"inv":0,"ceil":0,"st":"superseded"}
+The shared lock is taken and granted, but the ceiling is judged on the transaction's old snapshot, in which rev2 does not
+exist: N4's end state (50,000 billed against a ceiling of 0 on a superseded revision), reached without any race at all.
+The migration's rationale "READ COMMITTED gives each statement a fresh snapshot" is stated as a fact, not as a
+precondition; its "WHAT THIS DOES NOT DO" omits it; design §3c, PRD R1.15b and new-app/CLAUDE.md never mention isolation.
+Only the test header (concurrency.pg.test.ts:29) says "the migrations assume it". Nothing checks
+`current_setting('transaction_isolation')`; one `ALTER DATABASE ... SET default_transaction_isolation` or a Prisma
+`isolationLevel` option (tenant-context.ts:102 uses interactive `$transaction`) silently disables the fix.
+Not a regression versus the parent (the balance lock had the same snapshot dependence), but the claim is new.
+
+### P2 — LOW (Rule 4 isolation; no money wrong) — the quote lock is not tenant-scoped: one tenant can hold another tenant's quote lock
+Where: migration.sql:60-72 (`quote_money_lock(p_quote_id, …)`: no ownership check, EXECUTE is PUBLIC), :30-31 and :36-38 (claims).
+CONFIRMED (probe `probe/xt.mjs`). Two UUIDs with equal hashtext, found by grouping 300,000 random UUIDs:
+412245d4-1a26-480f-aa86-93e4f3680b53 and d4895c55-0c82-484f-90a0-b31df3f15341 (hashtext 485419273). X is tenant A's
+quote, Y is tenant B's.
+ (a) Ordinary app writes only: B seals its own quote Y in an open transaction; A's invoice on its own quote X blocks:
+     `tenant A invoice on its own quote X waits on: advisory [{"locktype":"advisory","mode":"ShareLock","granted":false,"classid":725001,"objid":485419273,...}]`
+     `A invoice after B commit: true waited ms: 1563`
+ (b) Direct call with an id B cannot see: `tenant B sees X rows: 0 | quote_money_lock(X,true) as B: true`, then
+     `A invoice waits on: advisory` until B rolls back. The helper `quote_money_lock_for_issue` resolves through RLS, but
+     the lock function it wraps accepts any caller-supplied id (Rule 4: "A caller-supplied id is ownership-checked before use").
+ (c) pg_locks is readable by the app role and shows the other tenant's lock key and mode:
+     `pg_locks visible to tenant B: [{"locktype":"advisory","classid":725001,"objid":485419273,"mode":"ShareLock","granted":false},{..."mode":"ExclusiveLock","granted":true}]`
+     — given a candidate quote id, B can observe when A's quote is being sealed or billed.
+Claim vs observed: line 30-31 "writes on different quotes do not touch the same lock" is false under collision (line 37
+concedes sharing but not that it crosses tenants). "Never correctness": with collisions, N5's deadlock (40P01) can be
+delivered to a tenant whose own transaction touched only its own quote. Exploit needs SQL-level access for (b)/(c);
+(a) needs a 1-in-2^32 collision per pair (birthday: ~1 colliding pair per ~93k quotes). Guard/isolation weakness, not a money defect.
+
+### P3 — LOW (claim false; outcome is a detected deadlock, nothing left wrong) — "the order is always quote lock, then balance row lock, so no single-quote cycle exists"
+Where: migration.sql:32 (claim), :48-51 (N5's stated scope). `issue_balance_apply()` (migration 20260926190000 / redefined
+earlier) takes the balance row lock FOR UPDATE and is public; it does not take the quote lock. domain-model.md:338 calls it
+one of the two "doors", notStuck() (concurrency.pg.test.ts:164) and the walk (no-stuck-state.test.ts:389) call it directly.
+CONFIRMED (probe `probe/dl.mjs`, case D3), one quote, rev1 accepted with nothing billed:
+  T1: BEGIN; SELECT issue_balance_apply(rev1)   -- balance row lock, no quote lock
+  T2: BEGIN; seal rev2                           -- exclusive quote lock (allowed: nothing billed)
+  T1: INSERT invoice on rev1                     -- waits on the quote lock ("D3 t1 waits: advisory")
+  T2: SELECT issue_balance_apply(rev1)           -- waits on T1's balance row lock
+Output: `D3 t1 invoice: 40P01 deadlock detected` / `D3 t2 recompute: ok`.
+Neither transaction is in N5's stated scope ("mix writes on two quotes" / "write on a quote and then seal the same quote");
+the cycle exists because one door to the balance lock skips the quote lock. For the record, the three-session variant
+(T1 recompute-then-invoice, T2 single invoice, T3 single seal; case D2) did NOT deadlock — PostgreSQL rearranged the wait
+queue: `D2 t1 invoice: ok / D2 t2 invoice: ok / D2 t3 seal: 23514 ... has 2`. A single-statement-only workload found no cycle.
+
+### P4 — MINOR (guard weakness, not user-visible) — N4 (a)'s invoice refusal comes from a missing balance row, not from the seal; the race suite stays green with supersession no longer zeroing the ceiling
+Where: new-app/db/test/concurrency.pg.test.ts:238-271 (esp. :254 `accept` outcome never asserted, :263 `expect(invoiced.ok).toBe(false)` with no reason checked).
+CONFIRMED. Replica of N4 (a) (probe `probe/n4a.mjs`), 5 runs, printing the refusal:
+    accept: true  | invoice: false P0002 issue_balance row missing for issue e5708100-...   (x5)
+When the seal commits, the acceptance and the invoice are released at the same moment; the invoice's trigger runs before
+`issue_balance_open` and is refused for the missing row. The seal's effect (ceiling 0 on a superseded revision) is never
+what refuses it. The acceptance of the superseded revision SUCCEEDS and the test does not look.
+Plant 1 (appended to the new migration: `issue_ceiling_minor` without its "superseded -> 0" branch — N4's end state
+directly): race suite `Tests  6 passed (6)`; restored, `diff -q` clean. The PGlite suites do catch it
+(`Tests  7 failed | 121 passed | 6 skipped (134)`: 5 J10 tests and both walk seeds), so no defect escapes the full gate;
+but the one race titled "holds back ... an invoice on the revision it supersedes" does not test the invoice half of its
+title. No race covers the direct N4 path: rev1 ALREADY accepted with a balance row, seal rev2 in flight, invoice rev1
+(only the variation twin is raced, L6 test :330).
+
+### P5 — MINOR (guard weakness) — two of the six races never touch the quote lock; the withdrawal's quote lock and the lock's "shared" mode have no failing test
+Where: concurrency.pg.test.ts:355-380 (R1.24a) and :382-412 (K4); migration.sql:246 (withdrawal lock), :69 (shared).
+CONFIRMED. In unplanted code the second session waits on the balance row, not the advisory lock (probe `probe/k4w.mjs`):
+    K4 withdrawal waits on: transactionid [{"locktype":"transactionid","mode":"ShareLock","granted":false,...}]
+    R1.24a second invoice waits on: transactionid [...]
+Plants, each applied with an anchor-count==1 check and restored from backup (`diff -q` clean after each):
+  J — delete `PERFORM quote_money_lock_for_issue(v_issue_id);` from acceptance_withdrawal_guard: `Tests  6 passed (6)`.
+  K — `quote_money_lock_for_issue` takes the lock EXCLUSIVE (`false` -> `true`): `Tests  6 passed (6)`.
+So "withdrawal ... take[s] it shared" (commit message) and "financial writes do not block each other" (design §3c,
+migration :30) are claims with no test behind them (Rule 1.5). I could not construct a wrong money outcome from plant J
+(without it, a racing seal is at worst spuriously refused and retried), and plant K costs only throughput, so these are
+coverage gaps, not defects. `waitsOnLock()` (:68-80) accepts ANY `wait_event_type = 'Lock'`, which is why the K4 race
+passes on the row lock; it does not check which lock (locktype 'advisory', classid 725001).
+Author's claimed plant re-executed: shared branch -> `NULL;` fails N4 (a) and both L6 races with "never waited on a lock"
+(3 failed) — reproduces as claimed.
+
+### P6 — MINOR (documentation; one of two twins, M13/L5/N1/N9 pattern again) — three live sentences, two in files this commit edited, still describe the superseded mechanism or call the race "owed"
+CONFIRMED by reading (grep and git blame quoted):
+ (a) docs/design/scope-reduction.md:115-116 (§3b, blame 23ca3a57, left untouched while §3c was added below it):
+     "The seal takes that revision's balance lock, so a variation racing the seal waits and is then refused."
+     The same commit removed that call (migration :124 "no `issue_balance_apply()` here any more") and describes the
+     replacement in §3c. §3b is not marked superseded (ADR 0025's twin bullet WAS marked).
+ (b) docs/design/scope-reduction.md:181-182 (§7 "What this does not prove", blame 06e9b735):
+     "Concurrency. The checks run under the balance row lock, and the suite is one PGlite connection, so that
+     serialisation is read rather than raced. The two-connection Postgres test remains owed."
+     The commit edited §2 of the same file to say the opposite ("§3c closes it and ... concurrency.pg.test.ts races it").
+     The contradiction now sits inside one document.
+ (c) new-app/db/test/documents-core.test.ts:18-20 (header, blame 21c1ce9e; this commit added the N2/N6 tests to the file):
+     "Real concurrency needs a two-connection test against Postgres, and it is owed."
+Not counted: committed migrations' historical comments (Rule 6 forbids editing them), and BRIEF-STATUS.md:160, a dated log entry.
+Also imprecise (not counted as a finding): design §3c "financial writes do not block each other". Two writes on one issue
+do block each other on the balance row (probe dl.mjs case D1: a variation behind an open invoice waited until the
+15 s statement_timeout, 57014). The migration's own "WHAT THIS DOES NOT DO" states this correctly at :52-53.
+
+### P2 addendum (d) — CONFIRMED: an ordinary seal INSERT naming another tenant's quote waits on that tenant's lock before it is refused
+Where: migration.sql:99 — `quote_money_lock(NEW."quote_id", true)` runs in the BEFORE trigger, before the composite FK
+(Rule 4.1) rejects the row. Probe `probe/foreign2.mjs`: A holds an open invoice on its quote; B inserts a quote_issue
+naming A's quote id:
+    B's seal attempt waits on: advisory
+    B seal: 23503 after 1205 ms
+A foreign id that is not in flight (or does not exist) is refused at once. So a foreign id is NOT "answered exactly as
+one that does not exist" (Rule 4, last bullet): the latency reveals whether the other tenant's quote has a financial
+write in flight, and B's request hangs for as long as A's transaction does. No persistent hold: when B's statement fails,
+the aborted transaction releases the lock at once (`A's own invoice now waits on: null` after B's failed seal inside an
+open BEGIN). Every other foreign write was refused by its composite FK, with A's figures unchanged (probe `foreign.mjs`):
+invoice, acceptance, withdrawal, void and credit all 23503; B's `issue_balance_apply(A issue)` P0002 (row invisible).
+
+### P7 — MINOR (claim not carried out; Rule 24.6 mechanism blind to it) — "J15 goes Closed in the disposition rows": no such row exists, and the disposition checker does not read review 4
+Where: commit message's last paragraph; docs/BRIEF-STATUS.md:234 ("J15 goes Closed in the disposition rows");
+tools/check_dispositions.py:50.
+CONFIRMED:
+    $ grep -rn "J15" docs/*.md | grep -i closed    -> only BRIEF-STATUS.md:189,196,210,234 and PRD-REVIEW-4.md:1503,1633 (narrative); no disposition row
+    tools/check_dispositions.py:50: REVIEWS = ("docs/PRD-REVIEW.md", "docs/PRD-REVIEW-2.md", "docs/PRD-REVIEW-3.md")
+    $ python3 tools/check_dispositions.py -> "40 dispositions claiming Closed, checked across 3 review files"
+PRD-REVIEW-4.md's J-table (:1276-1287) carries severity and summary only. Neither cfeac92 nor e1180b8 changes a J15 row.
+When J15 is closed, Rule 24.6's check ("every document the finding named") will not run on it, because review 4 is outside
+the checker's list. J15's Where: names the withdrawal_preconditions migration and documents-core.test.ts.
+
+### Evidence with no finding
+- Author's plant "no shared lock": reproduces (3 races fail, "never waited on a lock"). N2 revert: 1 failed (N2 test). N6 plant (ceiling from subtotal): 1 failed (N6 test).
+- My tax plant (balance recomputes tax half-up from the rate instead of using frozen tax_minor): walk disagreements 22 / 11, both seeds red. N6 unit test NOT red (100000 x 15% has no rounding). The walk sees tax.
+- J15 revert (void exclusion dropped from the withdrawal guard): unit test red (1 failed). Walk green: wrong-document withdrawals 27->19 and 26->19, still above the floor of 12.
+- Walk printed counts (seed 1 / 2): succeeded 1364/1326, examined 297/274, invoiced 28/23, fullCredits 18/13, withdrawalsAfterMoney 8/5, wrongDoc 27/26, wrongDocWithVar 13/10, taxed 145/135. These match the header ranges; each floor sits at about half the lower value.
+- Stress: 150 unscheduled seal/accept/invoice races under READ COMMITTED gave 0 violations (seals ok 130, acceptances ok 75, invoices ok 20).
+- N5 as stated: 40P01. D2 three-session case: no deadlock (queue rearranged).
+- Foreign writes (invoice, acceptance, withdrawal, void, credit, seal): all refused 23503, A's figures unchanged.
+- The app role cannot SET session_replication_role (permission denied).
+- CI: the YAML parses; the service is on verify-new-app only; the Test step env is set. Through Turbo with no URL and PRYVIS_REQUIRE_PG=1: "1 failed | 128 passed | 6 skipped", which is the intended failure.
+### Gate
+turbo typecheck+test --force --concurrency=1 with PRYVIS_PG_URL + PRYVIS_REQUIRE_PG=1: "Tasks: 10 successful, 10 total / Cached: 0 cached";
+api 183, db 134 (8 files; concurrency.pg.test.ts 6 tests ran), contract 2, core 9, web 11.
+check_citations "scanned 169 tracked files ... resolves"; check_dispositions "40 ... across 3 review files"; check_rules "66 rules · 796 citations across 57"; check_schema_citations "28 tables, 11 functions, 8 triggers, 38 policies; 0 citations skipped". All exit 0.
+git status --porcelain: empty.
