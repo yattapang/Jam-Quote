@@ -64,6 +64,9 @@ EVIDENCE_DOCS = {
     "docs/PRD-REVIEW.md": "A review register: naming a broken citation is its job.",
     "docs/PRD-REVIEW-2.md": "The same.",
     "docs/PRD-REVIEW-3.md": "The same.",
+    # Review 4 asked for this itself, in its housekeeping note: J1 and J9 exist only by naming phantoms.
+    # Added 2026-09-27 together with its K1-K6 re-review, which names scratchpad probes not retained here.
+    "docs/PRD-REVIEW-4.md": "The same.",
     "docs/MISTAKES.md": "The ledger records the phantom name as the lesson (M14, H16).",
     "docs/RULES-ENFORCEMENT-AUDIT.md": "Cites the phantom as the evidence for this very guard.",
 }

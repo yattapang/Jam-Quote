@@ -1390,3 +1390,108 @@ That note is a genuinely good control and it did its job here. Keep it.
 **Disposition table.** Deliberately not started. Per Rule 24.6 a row may not claim `Closed` without
 citing every document its finding's `Where:` line named, and per Rule 1.10 every finding must be closed
 or accepted in writing with a reason. Sixteen rows are owed, and none of them is mine to write.
+
+---
+
+# Re-review of the J4 fix (commit 06e9b73), findings K1-K6
+
+**Reviewer:** `commit-reviewer` agent (Opus class), 2026-09-26, commissioned under Rules 1.10 and 24.6. **Did not write** the commit under review. Appended here verbatim from the file it wrote as it worked; the probe scripts it names (`probe/…`, `plant.py`) lived in the session scratchpad and are **not** retained in the repository, so its CONFIRMED results are reproducible from the steps described, not from those files. The author independently re-ran K3, K4 and K6 and observed the same output.
+
+## J4 re-review of 06e9b73 (Rule 1.10 / 24.6 independent re-review)
+
+Rules applied: 0 (read RULES.md), 1.5 (a test counts once shown failing), 1.10 + 24.6 (re-review of a closed blocker),
+4.1 (composite tenant keys), 6 (no edit of committed migration; plants only, restored), 16.1/16.3 (plant+restore via backup, quote commands),
+16.5 (money arithmetic is judgement-class), 21.1-21.4, 21.7 (state what controls do not prove; quote state), 22.1-22.3.
+
+### Findings
+
+### K1 · A credit note inserted before this migration can leave an issue permanently unwritable; the migration neither validates nor recomputes existing rows — minor (major if any database already holds new-app documents data)
+- Where: new-app/db/migrations/20260926200000_scope_reduction/migration.sql:85-96 (issue-wide over-credit scan, including VOIDED invoices) and :42-44 (claim "No stuck state can be entered"); same claim in docs/design/scope-reduction.md:34-35 and docs/design/README.md (scope-reduction row: "no stuck state can be entered").
+- CONFIRMED. Probe `node probe/p2.mjs` (scratchpad): migrations applied up to 20260926190000, invoice 40,000 credited 50,000 (the pre-J4 function did not look at credit_note), then 20260926200000 applied as superuser.
+  Output quoted:
+  ```
+  OK    pre-J4: credit 50000 on 40000 invoice
+  J4 migration applied over existing data without error
+  RAISE post-J4: invoice 1 -> credit notes on invoice ...0008 would total more than the invoice itself
+  RAISE post-J4: variation +50000 -> (same)
+  RAISE post-J4: variation -1 -> (same)
+  RAISE post-J4: void the over-credited invoice -> (same)
+  RAISE post-J4: void the other invoice -> (same)
+  RAISE post-J4: credit the other invoice -> (same)
+  OK    post-J4: bal (cache still pre-J4 figure) {"a":100000,"v":0,"i":50000,"c":100000}
+  ```
+- Failure scenario: any issue carrying an over-credited invoice at migration time (including a VOIDED one — the scan at :87-92 has no void filter) can never again take an invoice, a variation of either sign, a void, or a credit. No in-product remedy; void does not escape. The design's "no stuck state can be entered" is true only of an empty database. Secondary: the migration does not re-run issue_balance_apply() for existing issues, so every issue with pre-existing credit notes keeps a gross invoiced_total_minor cache (observed "i":50000 above) until its next write — a stale figure for any reader of the cache.
+- Not established: whether any deployed database has the new-app documents migrations applied (pre-launch; not examined).
+
+### K2 · The voided-invoice credit refusal gives a reason the arithmetic does not have: nothing would be subtracted twice — minor (overclaim in a user-facing message and two comments; no money defect)
+- Where: new-app/db/migrations/20260926200000_scope_reduction/migration.sql:35-36 ("a credit there would subtract money twice") and :187-188 (RAISE text "a credit note against it would subtract money the void already removed"); docs/PRD.md R1.25 and domain-model.md credit_note row repeat the refusal without the reason.
+- CONFIRMED. Probe `node probe/p3.mjs`: migrations applied, then issue_balance_enforce() replaced in-memory with the void check disabled (`IF false THEN`), invoice 50,000 kept, invoice 40,000 voided, credit 40,000 on the voided one. Output:
+  ```
+  before credit on voided (void check disabled): {"a":100000,"v":0,"i":50000,"c":100000}
+  OK    credit 40000 on voided invoice
+  after: {"a":100000,"v":0,"i":50000,"c":100000}
+  RAISE invoice 50000 more ... exceeds the ceiling 100000 ... by 1
+  ```
+- The netting at :104-110 excludes voided invoices whole, so their credits never enter the sum. The refusal is document hygiene (design §3's "meaningless" branch), not a guard against double subtraction; the message tells the contractor something false about why. Also consequence for tests: plant P3 (check removed) is caught only by the message/row-count assertion, correctly — no money assertion could catch it because there is no money effect.
+
+### K3 · No test pins that a credit note nets only against ITS OWN issue: a netting that lets a credit on job X make room on job Y passes all 113 db tests — major (test gap on money arithmetic; the shipped code is correct)
+- Where: new-app/db/migrations/20260926200000_scope_reduction/migration.sql:104-110 (the netting); new-app/db/test/documents-core.test.ts J4 block (:416-583) and J12 credit test (:361-378) — every credit-note test uses one issue.
+- CONFIRMED, plant executed on the real file via `python3 plant.py P6-cross-issue-netting-fulldb ...` (backup copy, anchor count asserted == 1, restored, `diff -q` empty). Planted netting: this issue's unvoided gross MINUS every unvoided credit note in the tenant (no invoice/issue correlation). Result: `Tests  113 passed (113)` for `npx -w @pryvis/db vitest run`; restored `diff -q output: [] rc= 0`. (Same plant against documents-core alone: `Tests  71 passed (71)`.)
+- Effect of that plant, executed (`node probe/p6.mjs` vs `node probe/p6.mjs plant`): issues X and Y each accepted at 100,000; X invoiced 60,000 and fully credited; Y invoiced 100,000; then Y +60,000:
+  ```
+  RAISE [real] invoice Y +60000 over its 100000 ceiling -> ... exceeds the ceiling 100000 ... by 60000
+  OK    [planted] invoice Y +60000 over its 100000 ceiling
+  ```
+  i.e. the product's "most important arithmetic invariant" (R1.24) broken by 60,000 on job Y with the suite green. The commit's "five plants" all perturb within one issue; the cross-issue shape (brief attack 1) has no test. Rule 1.5 / 16.5: this is exactly the green-suite money defect class.
+
+### K4 · The "credit note and a fresh quote" remedy (R1.15b, amended by this commit) now RE-OPENS the full ceiling on the old issue, which can then never be withdrawn or superseded — two live ceilings on one job, the J10 shape — major (introduced for the credit path; the void path already had it)
+- Where: docs/PRD.md:200-203 (R1.15b as amended: "That path is for a wrong document ... Until J4 the credit note half of both did nothing"); new-app/db/migrations/20260926200000_scope_reduction/migration.sql:104-110 (netting); interacting with 20260926110000_withdrawal_preconditions (withdrawal refused while ANY invoice exists, voided or credited) and 20260926140000_one_live_ceiling_per_quote (new revision refused while any invoice exists).
+- CONFIRMED. `node probe/p7.mjs` runs the same sequence against migrations up to 20260926190000 and against all migrations: accept X 100,000, invoice 100,000, credit it whole (wrong document), try to withdraw, try to seal revision 2, then invoice X again 100,000.
+  ```
+  RAISE [pre-J4] withdraw acceptance of X -> cannot withdraw this acceptance: 1 invoice(s) exist ...
+  RAISE [pre-J4] seal revision 2 of the same quote -> ... (finding J10)
+  OK    [pre-J4] bal X {"a":100000,"v":0,"i":100000,"c":100000}
+  RAISE [pre-J4] invoice X again 100000 after the credit -> invoiced total 200000 exceeds the ceiling 100000
+  RAISE [post-J4] withdraw acceptance of X -> cannot withdraw this acceptance: 1 invoice(s) exist ...
+  RAISE [post-J4] seal revision 2 of the same quote -> ... (finding J10)
+  OK    [post-J4] bal X {"a":100000,"v":0,"i":0,"c":100000}
+  OK    [post-J4] invoice X again 100000 after the credit
+  ```
+- Failure scenario: contractor issues a wrong invoice, follows the documented remedy (credit it, issue a fresh quote — which must be a NEW quote, because J10 refuses a revision). The fresh quote is accepted at 100,000 and billed. The old issue now also shows 100,000 of unbilled room, permanently: withdrawal is refused (invoice count 1) and it cannot be superseded (J10). The DB will accept a further 100,000 against the old issue; the job's combined billable ceiling is 200,000. Pre-J4 the credit left the old issue's room consumed (safe side). The void path already produced this shape before J4 (voided invoices are excluded and still counted by the withdrawal guard) — so this is the one-of-two-twins shape: J4 made the credit twin behave like the void twin without either one gaining a way to close the old ceiling. Neither the design (§3 "a credited amount can be invoiced again") nor R1.15b states that the remedy leaves the old issue live and unclosable.
+
+### K5 · One-of-two-twins: sentences the same commit made false, left standing beside the lines it did amend — minor (documentation; the executed test is right)
+All CONFIRMED by reading the file at HEAD (commands: `sed -n 306,315p docs/design/domain-model.md`, `grep -rn -i "credit note" ...` quoted in the report):
+1. docs/design/domain-model.md:314 — "it credited a credit note as a writer of `invoiced_total_minor`, which it is not and was never meant to be". Since 20260926200000 a credit note IS a writer of that column (the J12 test at documents-core.test.ts:361 now asserts invoiced 40,000 -> 25,000). The commit edited the same section at :321 and :328 and left :314.
+2. new-app/db/test/documents-core.test.ts:316-319 — the J12 describe-block header: "crediting a credit note as a writer of `invoiced_total_minor`, which it has never been". The test forty lines below in the same block was rewritten by this commit to assert the opposite.
+3. docs/design/domain-model.md:308 — `invoiced_total_minor` "derived cache, re-summed from issued invoices": no longer the definition (net of credit notes). Same table the commit's §6.2a amendment sits under.
+4. docs/design/domain-model.md:399 — "Once either exists the remedy is a credit note and a fresh quote." PRD R1.15b was amended in this commit to split wrong-document from less-work remedies; its twin in the domain model was not.
+5. docs/MISTAKES.md:370-378 (M23) — "which it has never been ... now executed ... including a credit note moving nothing". Append-only ledger, so not editable, but M27 (added by this commit) does not record that M23's "Prevented by" line is now false.
+6. Doctrine: ADR 0025 Decision 1 (docs/adr/0025-five-invariants-move-from-prose-to-code.md:41-43) says "Neither document restates the arithmetic; both link to it", and M23 records prose restatement as the failure "not taken" a third time. This commit restates the arithmetic ("net of credit notes and excluding voided invoices") in PRD R1.24, R1.25, domain-model §6.2a (twice) and the invoice and credit_note table rows — i.e. the same fact is now in prose in six places again, three of which item 1-3 show already drifted in the same commit.
+
+### K6 · "No stuck state can be entered" is false: a quote_issue insert can drop an invoiced issue's ceiling to 0 (J10's guard checks only ONE accepted prior revision), after which the issue refuses every write except crediting or voiding ALL it has billed — major (pre-existing J10 defect; falsifies J4's central claim)
+- Where: the claim — new-app/db/migrations/20260926200000_scope_reduction/migration.sql:42-44 ("Every row that can raise the invoiced figure (`invoice`) or lower the ceiling (a negative `variation`) is checked in its own transaction ... So the check never fires against history it cannot change"), docs/design/scope-reduction.md:34-35, docs/design/README.md scope-reduction row. The cause — new-app/db/migrations/20260926140000_one_live_ceiling_per_quote/migration.sql:108-120 (`SELECT prior."id" INTO v_blocking ... LIMIT 1`, then counts invoices on that one prior only). The hand-listed set at :42-44 omits two writes that lower the ceiling without passing through issue_balance_apply(): a later `quote_issue` (ceiling -> 0 via issue_ceiling_minor's supersession branch) and `acceptance_withdrawal` (ceiling -> 0). Taxonomy #6: correctness asserted over hand-listed cases; the defect is in an unlisted one.
+- Found by a random-sequence fuzz (`node probe/fuzz.mjs`: `{ runs: 150, ops: 3750, okOps: 1006, stuck: 1 }`, `STUCK issue ... {"a":106,"v":0,"i":32,"c":0}`), then reproduced deterministically. CONFIRMED, `node probe/p9.mjs` (same sequence pre-J4 and post-J4):
+  ```
+  OK    [post-J4] accept r2 while r1's acceptance is still live
+  OK    [post-J4] r2 after invoice {"a":100000,"v":0,"i":90000,"c":100000}
+  OK    [post-J4] seal r3 (J10 should refuse: r2 is accepted with an invoice)
+  OK    [post-J4] r2 now {"a":100000,"v":0,"i":90000,"c":0}
+  RAISE [post-J4] r2: variation +50000 -> invoiced total 90000 exceeds the ceiling 0 ... by 90000
+  RAISE [post-J4] r2: invoice 1 -> ... by 90001
+  RAISE [post-J4] r2: credit 10000 -> invoiced total 80000 exceeds the ceiling 0 ... by 80000
+  OK    [post-J4] r2: credit 90000 (whole)
+  ```
+  Pre-J4 the same sequence ends with every write refused including the whole credit (`RAISE [pre-J4] r2: credit 90000 (whole) -> invoiced total 90000 exceeds the ceiling 0`); only a void escapes. Control (`node probe/p9b.mjs`): with r1 NOT accepted, sealing r3 IS refused ("revision 2 is accepted and has 1 invoice(s)"), isolating the cause to LIMIT 1 picking the earlier, invoice-free accepted revision.
+- Failure scenario: contractor seals r1, client accepts; contractor revises to r2 (allowed, nothing billed), client accepts r2; 90,000 billed on r2; contractor seals r3. The DB accepts r3, and job r2 now carries 90,000 invoiced against a ceiling of 0 — R1.24 violated at rest — and the issue refuses any further variation, invoice or partial credit. J4 changes the escape from "void only" to "void or credit the full 90,000": there is still no way to keep the legitimately billed money and continue. Not introduced by 06e9b73, but it is exactly the state the commit, design and README assert cannot be entered.
+
+## Author's five plants, re-executed (plant.py: backup copy, anchor count == 1, restore, diff -q empty each time)
+- P1 netting removed -> 5 failed | 66 passed (J12 credit test + 4 J4 tests)
+- P2 over-credit check disabled -> 2 failed (larger-than-invoice; across several notes)
+- P3 voided-credit check disabled -> 1 failed (REFUSES ... already voided)
+- P4 voided credits subtracted twice -> 1 failed (drops a voided invoice's earlier credit notes)
+- P5 shortfall dropped from message -> 2 failed (names the shortfall; rolls the credit back)
+- My P6 cross-issue netting -> 0 failed, db 113/113 (K3)
+
+## Gate (uncached: npx turbo run typecheck test --force --concurrency=1)
+Tasks 10 successful, 10 total; Cached 0; api 183, db 113, contract 2, core 9, web 11 passed. Checkers: check_rules "66 rules defined · 763 citations"; check_dispositions "40 dispositions claiming Closed, checked across 3 review files"; check_citations "scanned 164 tracked files ... resolves"; check_schema_citations "scanned 163 files against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped"; all exit 0.
+Final git status --porcelain: empty.

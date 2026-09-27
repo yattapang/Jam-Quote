@@ -830,6 +830,51 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     const rev1 = await seal(1, 100_000n);
     expect(await state(rev1)).toBe("sealed_awaiting_number");
   });
+
+  it("K6 · REFUSES revision 3 when revision 2 has money, even though revision 1 is still accepted and has none", async () => {
+    // The J4 re-review's stuck state, executed. Revision 1's acceptance is superseded, not withdrawn,
+    // so it still matches "accepted"; the guard took the first match with LIMIT 1, found no money on
+    // it, and let revision 3 seal — taking revision 2's ceiling to 0 with 90,000 invoiced against it.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+    await invoiceDirect(rev2, 90_000n);
+
+    await expect(seal(3, 100_000n)).rejects.toThrow(/revision 2 is accepted and has 1 invoice/);
+    // And revision 2 stays billable to its real ceiling — the issue is not stuck.
+    expect(await ceiling(rev2)).toBe(100_000);
+    await invoiceDirect(rev2, 10_000n);
+  });
+
+  it("K6 · still allows revision 3 when no live revision has money — the control", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+
+    await seal(3, 100_000n);
+    expect(await ceiling(rev2)).toBe(0);
+  });
+
+  it("K6's twin · REFUSES a variation against a superseded revision", async () => {
+    // Its ceiling is 0 but so is what is invoiced, so the ceiling check alone let a +30,000 variation
+    // through — agreed work on a document nobody can bill, which also blocks withdrawal (H4) and so
+    // would block every later revision of the quote for good.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    await seal(2, 130_000n);
+
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 30000, $4, now())`,
+        [id(), TENANT, rev1, USER],
+      ),
+    ).rejects.toThrow(/superseded or no longer accepted/);
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(0);
+  });
 });
 
 // ===========================================================================

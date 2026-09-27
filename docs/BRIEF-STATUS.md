@@ -160,6 +160,22 @@ not yet in its set.*
 **Owed before J4 is Closed (Rule 24.6):** an independent re-review of this commit; the two-connection
 Postgres test (the credit checks' lock serialisation is read, not raced); J4's disposition row.
 
+**Re-review of `06e9b73`, 2026-09-26.** *Delegation (Rule 16.5): `commit-reviewer` agent, Opus —
+adversarial review of money arithmetic; one agent live, no build work alongside it (Rule 16.2).* Six
+findings, K1-K6, appended to `PRD-REVIEW-4.md` (its findings file was in the scratchpad): the fix held for J4's own case, and "no stuck state can
+be entered" was false (K6). K4 put a product question to the owner, answered 2026-09-27: a wrong-document
+acceptance may be withdrawn once every invoice is voided or fully credited and no variation exists (this
+also answers J15). **J10 is reopened by K6.**
+
+**K6 fixed, 2026-09-27** — migration `20260926210000_live_ceiling_every_revision`: a new revision is
+checked against every live earlier revision, and a variation on a superseded or withdrawn issue is
+refused (K6's twin, found while preparing the fix). `no-stuck-state.test.ts` commits the random walk
+that found K6 (MISTAKES M28). *Delegation (Rule 16.5): Opus, in-session — money arithmetic.*
+*Coverage (Rule 21.3): two plants on the migration each turned their named J10 test red; the walk went
+red on its `stuck` assertion with K6 reverted (7 and 8 stuck issues) and did NOT fire on the twin, which
+its header states; restored byte-identical each time.* Still owed on this line: K1, K2, K3, K4/J15, K5,
+then a second re-review before J4 or J10 is Closed.
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**

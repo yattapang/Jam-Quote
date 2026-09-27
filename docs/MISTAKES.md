@@ -469,3 +469,31 @@ executed finding's probe as a test that is *expected to fail* (`it.fails`) until
 that changes the behaviour then flips the test and forces the description to be revisited. Recorded as
 owed rather than promised. The migrations themselves stay as written (Rule 6); the correcting migration
 `20260926200000_scope_reduction` says why they are wrong.
+
+### M28 · A guard trusted a comment's invariant, and a design claimed a property nobody executed
+`Repeat of:` **M14's class** (a comment crediting a state that is not there), and **J10's own fix**.
+
+`20260926140000_one_live_ceiling_per_quote` found the blocking earlier revision with `LIMIT 1`, justified
+by its comment: *"At most one can match, because this trigger is what keeps it so."* It does not keep it
+so. A revision accepted with nothing billed may be superseded, and the next one accepted, so two earlier
+revisions are accepted-and-not-withdrawn at once. The guard took the first, found no money on it, and let
+a third revision seal — taking an invoiced revision's ceiling to 0, after which every write on it raised
+(K6 of the J4 re-review). Every J10 test used two revisions; the defect needs three.
+
+Then my J4 design said "**no stuck state can be entered**" — a claim about every sequence of writes,
+supported by reasoning about each write alone. The independent re-review disproved it with a seeded random
+walk, which found K6 in a few thousand writes where no scenario test had. Preparing the fix turned up its
+twin by the same shape: a variation accepted against a superseded revision, blocking every later revision
+of the quote.
+
+**Cost if it had not been caught:** a contractor whose client re-accepted a revised quote could be left
+with a job they cannot bill, variation or credit, with 90,000 already invoiced — in the ordinary course
+of revising a quote twice.
+
+**Prevented by:** `new-app/db/test/no-stuck-state.test.ts` — the walk, committed and seeded, asserting
+that no issue is stuck and none sits above its ceiling after 1,900+ writes per seed, and asserting the
+size of what it examined so a generator that stops reaching the interesting states fails. Proved by
+planting: with K6's guard reverted it reports 7 and 8 stuck issues. **Its limit, stated:** it did not
+catch the twin, whose damage is a quote that can never be revised again rather than a stuck issue, and a
+random walk is not exhaustive. The general lesson: a claim of the form "no sequence can…" is executed by a
+sequence test or it is not a claim.
