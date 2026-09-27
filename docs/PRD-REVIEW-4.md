@@ -32,7 +32,7 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 | **J7** | blocker | **Open.** The uniqueness key on the inbound message id is not specified. Not started |
 | **J8** | blocker | **Open.** The acceptance bar is not frozen into the issue; `document_settings` does not exist. Not started |
 | **J9** | blocker | **Fixed, re-review owed.** `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
-| **J10** | blocker | **Open — reopened by K6.** First fixed in `683a638` (migration `20260926140000_one_live_ceiling_per_quote`); its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and isolation level (P1). Now `20260927100000`, `20260927110000`, `20260927120000`, over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` and the two newer suites; `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. Fifth re-review owed |
+| **J10** | blocker | **Closed.** Reopened by K6 after `683a638` (migration `20260926140000_one_live_ceiling_per_quote`): its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and by isolation level (P1). Fixed by `20260927100000_withdrawal_with_variations` (judge the live revision), `20260927110000_one_lock_per_quote` (a per-quote lock) and `20260927120000_lock_isolation_and_tenancy` (READ COMMITTED enforced), over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` (J10 block), `no-stuck-state.test.ts` (one live ceiling per quote, on the database's own ceilings) and `concurrency.pg.test.ts` (N4 a, b, c on real PostgreSQL, in CI); `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. **Independently checked:** the fifth re-review (2026-09-27) judged it closable — N4's three races pass and their plants are caught, P1 is refused on every path, and unscheduled stress found no quote with two live ceilings |
 | **J11** | major | **Open.** `quote_issue.subtotal_minor` is not tied to its frozen lines. Not started |
 | **J12** | major | **Fixed, re-review owed.** `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
 | **J13** | major | **Open, and more reachable.** A withdrawn issue reads "issued" and can never be re-accepted. Since K4 and L1 made withdrawal the wrong-document remedy, this is the common path (N3). Needs a product decision |
@@ -2001,3 +2001,211 @@ turbo typecheck+test --force --concurrency=1 with PRYVIS_PG_URL + PRYVIS_REQUIRE
 api 183, db 134 (8 files; concurrency.pg.test.ts 6 tests ran), contract 2, core 9, web 11.
 check_citations "scanned 169 tracked files ... resolves"; check_dispositions "40 ... across 3 review files"; check_rules "66 rules · 796 citations across 57"; check_schema_citations "28 tables, 11 functions, 8 triggers, 38 policies; 0 citations skipped". All exit 0.
 git status --porcelain: empty.
+
+---
+
+# Fifth re-review of the J4 line (commits 2bf1816 and e0b80a3), findings Q1-Q7
+
+**Reviewer:** `commit-reviewer` agent (Opus class), 2026-09-27, commissioned under Rules 1.10 and 24.6; tier declared in `BRIEF-STATUS.md` before launch (`3200f8f`). **Did not write** either commit. Appended verbatim from the file it wrote as it worked; its probes lived in the session scratchpad and are not retained. The author re-ran Q3 plant C (the quote lock taken after the balance row lock: all 12 races stayed green). **Its verdict: J10 can be Closed; J4 not yet, on Q3 plant C and the false sentences in Q2 and Q5.**
+
+### Fifth re-review of J4/J10 line — commits 2bf1816, e0b80a3 (tier declared in 3200f8f)
+
+Rule 0: read docs/RULES.md. Applying: 0, 1.5 (plant/restore), 1.10 (findings appended as found; state
+what was not examined), 4 / 4.1 (tenant isolation), 6 (data integrity, numbering, migrations not
+edited), 16.3/16.4 (quote command+output; report is evidence), 16.5 (tier declared in 3200f8f),
+21.1-21.4, 21.7 (coverage in the tool's own words, controls fired on purpose, does-not-prove),
+22.1-22.3 (scripted edits verified; prose via files), 24.6 (closing a blocker earns re-review).
+
+Findings are appended below as found.
+
+### Q1 — LOW (Rule 4; same SQL-level threat model as P2 (b)/(c); no money wrong) — P2 is closed only for the wrapper: another tenant takes, holds and observes a quote's lock by calling `pg_advisory_xact_lock` / `pg_advisory_lock` on the key the migration publishes
+Where: new-app/db/migrations/20260927120000_lock_isolation_and_tenancy/migration.sql:29-34 (claims), :47-48 ("one tenant can
+no longer take or wait on another's"), :70-77 (key recipe; pg_advisory_* EXECUTE is PUBLIC, nothing revokes it).
+CONFIRMED (probe `scratchpad/review5/probe/xt.mjs`, db r5, all 25 migrations, app role `pryvis_app`, tenant B session):
+    B sees A's quote rows: 0
+    [B: BEGIN; SELECT pg_advisory_xact_lock(('x'||substr(md5(<A quote id>),1,16))::bit(64)::bigint)]
+    A's invoice on its own quote waits on: advisory
+    B reads pg_locks for A's key: [{"mode":"ShareLock","granted":false},{"mode":"ExclusiveLock","granted":true}]
+    A invoice after B releases: ok (1565ms)
+    [B: SELECT pg_advisory_lock(<same key>)   -- session level, survives B's transactions]
+    A's seal waits on: advisory            ... released only by B's pg_advisory_unlock_all()/disconnect
+Scenario: a tenant-B SQL session that knows (or is handed) one of A's quote UUIDs holds A's quote lock for as long as its
+connection lives: every seal, acceptance, invoice, void, credit, variation, withdrawal and recompute on that quote hangs
+until statement_timeout — and, via pg_locks, B can watch A's writes queue. The visibility check in quote_money_lock()
+only stops B going THROUGH the wrapper; the md5 key is a deterministic public recipe, so it hides the id from someone
+who does not know it and from nobody who does. Claim vs observed: ":47-48 one tenant can no longer take or wait on
+another's" — false at the level of access P2 (b)/(c) itself assumed. Needs a known foreign quote UUID and raw SQL, hence LOW.
+
+### Q2 — LOW (documentation; detected deadlock, nothing left wrong; one-of-two-twins) — "no single-quote cycle exists" is restated by this commit, and the developer-facing note names only the two-quote deadlock, while the documented wrong-document remedy run as one transaction deadlocks on ONE quote
+Where: new-app/db/migrations/20260927120000_lock_isolation_and_tenancy/migration.sql:100 ("Quote lock before balance row
+lock, on every path, so no single-quote cycle exists" — new text in this commit); new-app/CLAUDE.md:104-105 ("A
+transaction that writes on two quotes can deadlock (SQLSTATE 40P01) and must be retried" — the only rule a builder of
+the application will read); docs/design/scope-reduction.md:157-158 ("a direct recompute can no longer deadlock against a
+seal"). The same migration's header (:46-48) and design :137 do state the upgrade case correctly — so the contradiction
+is inside one file.
+CONFIRMED (probes `scratchpad/review5/probe/dl.mjs`, `d6.mjs`, db r5, one quote each):
+    D5  A: BEGIN; issue_balance_apply(rev1)  B: BEGIN; issue_balance_apply(rev1) -> waits on: transactionid
+        A: seal rev2 -> waits on: advisory     => "D5 b recompute: 40P01 deadlock detected" / "D5 a seal: ok"
+    D6  the remedy R1.15b documents, in one transaction: A: BEGIN; void the invoice; (B: invoice rev1 -> waits on:
+        transactionid); A: withdraw ok; A: seal rev2 ok  => "B invoice: 40P01 deadlock detected"; rev1 superseded, 0/0.
+    D1  (N5 as stated) "D1 b variation: 40P01 deadlock detected".  D3 (P3's case): no deadlock — the fix holds.
+Scenario: an application written from CLAUDE.md treats single-quote transactions as never needing a 40P01 retry, runs
+"void/credit, withdraw, issue next revision" as one unit of work (the natural shape of the remedy), and surfaces the
+concurrent user's aborted invoice as an error rather than retrying it. The outcome after retry is correct (rev1 is
+superseded and refuses), so no money is wrong: this is a false statement about the lock, not a money defect.
+
+### Q3 — MINOR (guard weakness, not user-visible) — three of the P fixes' own properties survive a plant with all 12 races green: lock ORDER (P3), the key's per-quote spread (P2), and the visibility check on the shared path (P2)
+Where: new-app/db/test/concurrency.pg.test.ts:590-626 (P3 race), :531-555 and :557-588 (P5 shared, P2 races);
+migration 20260927120000 :74 (key), :69 (visibility), :100-101 (order in issue_balance_apply).
+CONFIRMED. Each plant applied to the committed migration with an anchor-count==1 check (`scratchpad/review5/plant.py`),
+race suite run, restored from `scratchpad/review5/migration.120000.backup.sql`, `diff -q` silent ("RESTORED") each time:
+  Plant A — `v_key := 0;` (EVERY quote of every tenant shares one lock):         `Tests  12 passed (12)`
+     Consequence, executed (probe k0.mjs on db r5k = r5 + this plant): "[r5k] tenant A invoice on its own quote, while
+     tenant B seals ITS OWN quote, waits on: advisory"; on unplanted r5: "waits on: null". P2 (a)'s cross-tenant
+     interference, maximised, and no race compares two quotes.
+  Plant B — visibility check only when exclusive (`p_exclusive AND NOT EXISTS …`):  `Tests  12 passed (12)`
+     The P2 race only ever calls the wrapper with `true` and seals; a foreign shared take is never attempted.
+  Plant C — in issue_balance_apply, the quote lock moved AFTER the balance row FOR UPDATE (P3's exact defect: row then
+     quote):                                                                      `Tests  12 passed (12)`
+     Consequence, executed (probe d7.mjs, db r5c = r5 + plant C): T2 seals rev2; T1 `issue_balance_apply(rev1)` waits on
+     advisory; T2 `issue_balance_apply(rev1)` => "[r5c] t1 recompute: 40P01 deadlock detected"; unplanted r5: "t1
+     recompute: ok". The P3 race (T1 recompute, T2 seal, T1 invoice) never has the sealer ask for the balance row, so it
+     detects only that the recompute takes the quote lock AT ALL, not that it takes it FIRST — its title
+     ("takes the quote lock first, so it cannot deadlock against a seal") claims the order.
+  Plant D (control, mine) — acceptance trigger takes no lock: caught, N4 (a) "never waited on the quote lock".
+Scenario: a later edit that reorders issue_balance_apply, or "simplifies" the key, ships with the race suite green and
+reintroduces a single-quote deadlock or cross-tenant blocking. Commit message's "five plants each failed their named
+race" is true (three re-executed, below); the gap is in the properties no plant was aimed at.
+
+### Q4 — MINOR, seen in passing (pre-existing since 20260925120000, NOT introduced by these commits; Rule 6) — a sealed issue's `quote_id` is rewritten by `UPDATE quote SET id = …` through ON UPDATE CASCADE, so "no UPDATE path … mean it literally" does not hold, and the lock key of every revision changes with it
+Where: new-app/db/migrations/20260926180000_tenant_composite_keys/migration.sql:140-143 (quote_issue → quote, ON UPDATE
+CASCADE; same on every issue child FK), policies/002-documents-isolation.sql `quote_tenant_isolation` (FOR ALL, so the
+tenant may UPDATE quote.id), and the "no UPDATE path" comment in the same file.
+CONFIRMED (`scratchpad/review5/cascade.sql`, db r5, as pryvis_app in the owning tenant): rev1 sealed, accepted, invoiced;
+    before: 86bfe4cf-9dfe-42a6-a995-dc01a8238316
+    UPDATE quote SET id = gen_random_uuid() WHERE id = <q>;   -- succeeds
+    after:  005d2d19-5fa7-47ab-a209-bd20906e45fc | issue_rewritten: t
+Referential actions bypass row security (Rule 4.1's own quotation), so the append-only policy set never sees it. I
+tried to turn it into a lock bypass (id changed while a seal or invoice is in flight) and could not: the in-flight FK
+KEY SHARE locks serialise the id change behind them. Reported because J3 is "Fixed, re-review owed" and its migration
+recreated these keys with ON UPDATE CASCADE; not a blocker for J4/J10.
+
+### Q5 — MINOR (documentation; one-of-two-twins, the P6/N9/L5 pattern again) — sentences the commit left false beside the ones it amended
+CONFIRMED by reading (all in files 2bf1816 edited):
+ (a) new-app/db/test/concurrency.pg.test.ts:29 — "The isolation level is the default, READ COMMITTED; the migrations
+     assume it." This is the exact sentence P1 quoted as the only statement of the assumption; the same commit made the
+     migrations ENFORCE it and added a race proving the refusal (:452), and left this line saying "assume".
+ (b) new-app/db/test/concurrency.pg.test.ts:30-31 — "Deadlocks (N5) are not tested" — the same commit added the P3
+     deadlock race (:594, asserting `not.toMatch(/deadlock/)`).
+ (c) docs/design/scope-reduction.md:139 — "`concurrency.pg.test.ts` races six cases"; the commit amended §3c twelve
+     lines below and took the suite to 12 races ("Tests  12 passed (12)").
+ (d) migration 20260927120000:17 and docs/design/scope-reduction.md:149 — "quote_money_lock(), which every financial
+     path reaches" / "Every financial write now refuses to run outside READ COMMITTED". `issue_balance_open()` writes
+     issue_balance (accepted_total_minor) without reaching it: executed under REPEATABLE READ it succeeds, and does so
+     for an issue with NO acceptance (`scratchpad/review5/rr.sql`: "open_no_accept … balance_rows 1"). I found no wrong
+     figure from this (the total it copies is frozen), so it is an overclaim, not a money defect. Every other path
+     listed in the brief was refused with the P1 message under REPEATABLE READ (see "nothing found").
+ (e) Q2's CLAUDE.md sentence (two quotes only) belongs here too.
+
+### Q6 — MINOR (guard weakness in the Rule 24.6 gate, not user-visible; categories 7 and 8) — `check_dispositions.py` still passes a Closed row that cites nothing, in five executed ways, and its new path keys match by substring
+Where: tools/check_dispositions.py:81 (`path_key` → bare file name), :134 (`{key for key in scope if key in disposition}`
+— substring), :61-62 (FINDING/WHERE regexes), :98-100 (no Where → empty scope, silently), :89 (CLAIMS_CLOSED).
+CONFIRMED on the real docs/PRD-REVIEW-4.md (each edit via anchor-count==1 plant, tool run, restored from
+`scratchpad/review5/PRD-REVIEW-4.backup.md`, `diff -q` silent "RESTORED"). Control first — J4 row replaced by
+`| **J4** | blocker | **Closed.** Nothing cited. |`: "J4 claims Closed but does not cite: 20260925120000_documents_core,
+20260926110000_withdrawal_preconditions, PRD.md, documents-core.test.ts … FAILED: 1", exit 1. Then, each exit 0:
+  (a) substring key — J5 row set to **Closed.**, `docs/design/acceptance-evidence.md` removed, citing only
+      `docs/adr/0024-acceptance-evidence.md`: "42 dispositions claiming Closed … Every Closed disposition cites every
+      document in the scope enforced", exit=0. Key `acceptance-evidence.md` is a substring of `0024-acceptance-evidence.md`.
+  (b) substring key — J3 row set to **Closed.** with `docs/RULES.md` replaced by `docs/BUILD-RULES.md`: 42 counted,
+      exit=0 (`RULES.md` ⊂ `BUILD-RULES.md`; both files exist). Same shape for any two files sharing a name
+      (`schema.prisma` in new-app/ and original-app/, any `index.ts`).
+  (c) heading variant — J4 heading "— severity: **blocker**" + the nothing-cited Closed row: 42 counted, exit=0 (the
+      finding no longer parses, so its scope is the empty set and the row trivially cites all of it).
+  (d) Where variant — `**Where**:` instead of `**Where:**` + nothing-cited Closed row: 42 counted, exit=0.
+  (e) wording/shape — `| J4 |` (id not bold), `Closed.` (not bold), `**Resolved.**`: 41 counted (row silently not a
+      closure), exit=0. Only the printed count moves, by one.
+No current row is affected: I re-ran every Closed row in the four reviews with a whole-name match and found no key that
+is cited only through a longer name. The ten printed legacy gaps are real by the tool's own rule (each row checked: none
+contains the key). Scenario: a J4 or J10 closure row citing the adr but not the design, or a finding whose Where line
+is typed `**Where**:`, passes the gate that Rule 24.6 names as its mechanism, while the tool prints that every Closed
+row cites every document in scope. The K/L/N/P re-review findings (`### K4 …`, plain `Where:`) cannot be dispositioned
+under the checker at all — FINDING/ROW accept only F, G, H, J.
+
+### Q7 — MINOR (disposition row overstates; Rule 24.6) — J2's "Fixed, re-review owed" row says ADR 0025 decision 2 was amended; no commit amended it, and it still describes the rejected mechanism
+Where: docs/PRD-REVIEW-4.md:27 (J2 row: "`683a638` … ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2
+amended"); docs/adr/0025-five-invariants-move-from-prose-to-code.md:47-62 (Decision 2).
+CONFIRMED:
+    $ git show --name-only --format= 683a638   -> PRD-REVIEW-4.md, PRD.md, adr/0024-…, design/acceptance-evidence.md,
+      design/domain-model.md, two migrations, documents-core.test.ts      (no adr/0025)
+    $ git log --format='%h %s' -- docs/adr/0025-…md -> cfeac92, 23ca3a5, 51a58c9, 94d3516, f054aac; none of their
+      diffs to the ADR touches Decision 2 except 51a58c9's one-word rename in Decision 4 (`accepted_total_minor`).
+    ADR 0025:54-55 still reads "`issue_balance` has **no UPDATE or INSERT grant to the application role at all.** Every
+    change goes through one `SECURITY DEFINER` function that takes the row lock itself" — the two mechanisms
+    policies/002-documents-isolation.sql explicitly rejects ("*Grants* cannot carry this … *SECURITY DEFINER alone*
+    cannot carry it either"), and it names no trigger.
+Every other "Fixed, re-review owed" row matches its commit (J1 becd1dd, J3 065154e, J5 683a638, J9 becd1dd, J12 51a58c9,
+J16 9115d8f checked by `git show --name-only`). Scenario: the J2 re-review owed is scoped from this row and takes the ADR
+as done; the checker cannot see it because J2 is not Closed, and when it is closed the checker will only test that
+the row CITES the ADR, which it already does.
+
+### Evidence with no finding
+- Isolation guard (P1), every path under `BEGIN ISOLATION LEVEL REPEATABLE READ` as pryvis_app (`rr.sql`): seal, accept,
+  DECLINED accept, invoice, void, credit, variation, withdrawal, direct issue_balance_apply — all "ERROR: financial writes
+  must run under READ COMMITTED, not repeatable read"; SQLSTATE printed as 25000 (`nonins.sql`, VERBOSITY verbose).
+  `SET default_transaction_isolation='serializable'` + autocommit invoice: refused ("not serializable").
+  SERIALIZABLE READ ONLY DEFERRABLE: "cannot execute INSERT in a read-only transaction". SET TRANSACTION after a query,
+  inside a SAVEPOINT, or via set_config: "SET TRANSACTION ISOLATION LEVEL must be called before any query". SET
+  TRANSACTION to READ COMMITTED before the first query genuinely yields read committed (allowed, correct).
+  READ UNCOMMITTED is refused ("not read uncommitted") although PostgreSQL runs it as READ COMMITTED — harmless.
+  RC controls: invoice ok; read-only queries under RR (ceiling/state) ok. No isolationLevel anywhere in new-app.
+  UPDATE/DELETE of invoice, invoice_void, variation, withdrawal, quote_issue, acceptance: silently 0 rows (voids_left 1).
+  issue_number / rejected_seal: not money writes; not exercised beyond reading.
+- Tenant scoping: quote and quote_issue carry identical tenant predicates, so the rightful tenant always sees the quote
+  it locks; superuser sees everything (locks more, not less); an unset tenant cannot write at all. I found no real path
+  in the rightful tenant that skips the lock. Key: 200,000 random ids -> 200,000 distinct keys, full signed range
+  (min -9223370102189589767, max 9223333677643881823); pg_locks shows objsubid 1 (single-key space, apart from the
+  two-key 725001 space), classid<<32|objid recomposes to the key. Unique indexes on the document tables are all
+  tenant-scoped, so no foreign insert waits on a unique conflict.
+- Lock order: D3 (P3's case) no longer deadlocks ("D3 t1 invoice: ok"; seal then refused 23514). D4 (one shared holder
+  upgrading while a seal waits) is granted by queue-jump, no deadlock. Deadlocks remaining are all the upgrade case (Q2).
+- Race suite: baseline "Tests 12 passed (12)". Author's plants re-executed, each failing its named race: isolation
+  check removed -> P1 race; supersession removed from the ceiling -> N4 (c); shared lock made exclusive -> R1.24a, K4
+  ("waited on advisory") and P5 shared. My plant D (acceptance lock removed) -> N4 (a). withinMs: returns the settled
+  outcome or "blocked" after ms without cancelling the query; each use holds the blocker open past the window, so a
+  "not blocked" result does mean no wait on that lock. P2's foreign-seal assertion accepts ANY error (reason not pinned).
+  N4 (a) still does not assert the acceptance outcome (the acceptance of the superseded revision succeeds).
+- Unscheduled stress (`probe/stress.mjs`, 3 x 40 quotes x 8 sessions, RC): 0 issues billed over their ceiling, 0 quotes
+  with more than one live ceiling. Weak: only 4-6 invoices succeeded per run (most were refused P0002 because the
+  acceptance had not yet opened a balance row), so this adds little to the scheduled races.
+- J15: revert of the void exclusion in the live guard (20260927110000) -> "J15 · allows withdrawal once the invoice is
+  voided" red, 1 failed | 83 passed; restored.
+- check_dispositions: the ten legacy gaps are real by the tool's rule; no existing Closed row relies on a substring match.
+
+### Gate (uncached, after every plant restored)
+`npx turbo run typecheck test --force --concurrency=1` with PRYVIS_PG_URL + PRYVIS_REQUIRE_PG=1: "Tasks: 10 successful,
+10 total / Cached: 0 cached, 10 total"; api 183, db 140 (8 files; "test/concurrency.pg.test.ts (12 tests)"), contract
+2, core 9, web 11. check_rules "66 rules defined · 818 citations across 58 distinct rules", exit 0; check_dispositions
+"41 dispositions claiming Closed, checked across 4 review files (path-level scope enforced on 1 of them)", 10 legacy
+gaps, exit 0; check_citations "scanned 170 tracked files … Every cited path, filename and symbol resolves.", exit 0;
+check_schema_citations "28 tables, 11 functions, 8 triggers, 38 policies; 0 citations skipped", exit 0.
+
+### Verdicts
+- J10: closable on this evidence. What it defends (one live ceiling per quote, including under concurrency and
+  isolation level) held in every execution: the N4 (a/b/c) races and their plants, P1 refused on every path, 0 quotes
+  with two live ceilings under stress. Q1-Q3 affect the Rule 4 surface, deadlocks and test strength, not the
+  two-ceilings invariant.
+- J4: not yet. No money defect or stuck state was found. What blocks it is the commit's own P3 claim: it has no race
+  that fails when the order is reversed (Q3 plant C, a real 40P01), and "no single-quote cycle" is restated in the
+  migration, CLAUDE.md and design (Q2), beside stale lines in the race-suite header and design (Q5). Those are narrow
+  fixes and need a narrow check, not a sixth full re-review.
+- J15: the revert still goes red; the Closed row is supported (and the L review also covered 8e8236a).
+- J2: not closable as its row stands (Q7).
+- J3: not reviewed; Q4 (ON UPDATE CASCADE rewrites a sealed issue) belongs in its re-review.
+- J1, J5, J9, J12, J16: not examined, so I cannot speak to them.
+
+### Not examined (Rule 21.4)
+The application layer (none exists for these writes); PGlite suites beyond the J15 revert and the gate; the walk
+(no-stuck-state.test.ts); PostgreSQL versions other than 16.13; pg_stat_activity query-text exposure between
+tenants sharing one role; issue_number and rejected_seal semantics; the CI workflow (not re-run); J1, J5, J6-J9,
+J11-J14, J16 as findings; original-app/.
