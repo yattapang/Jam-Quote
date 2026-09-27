@@ -269,7 +269,7 @@ demonstrated, it is not a requirement, it is a hope.
 ### W5 · Share and accept — no login for the client
 - **R1.19** A share link is a **credential**: high-entropy token, hashed at rest, scoped to one issue,
   expiring, revocable (ADR 0022).
-- **R1.20** The client can accept or decline, and **acceptance is a ladder of six grades with the grade
+- **R1.20** The client can accept or decline, and **acceptance is a ladder of graded evidence — grades 1, 2, 3, 4 and 6 (grade 5 retired by J5, its number tombstoned) — with the grade
   derived from append-only evidence** (`design/acceptance-evidence.md`, approved 2026-09-26). **The
   default bar is grade 3**: a one-time code to a stored or typed channel, an explicit signing act
   labelled as one, consent to sign electronically, and a record carrying the signer's name, the

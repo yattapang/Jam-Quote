@@ -187,7 +187,7 @@ address, and the honest responses are the two the acceptance design uses
 | Response | Why it helps |
 |---|---|
 | **A third party the tenant does not control enters the chain** | Money (a bank or WiPay), an inbound reply held by Google or Meta, or a signature provider doing identity checks. None can be fabricated by the tenant |
-| **The evidence is labelled** | A six-grade ladder with the grade **derived** from append-only evidence, so nothing in the product claims more than happened. A tenant-uploaded screenshot is grade 1 |
+| **The evidence is labelled** | A graded ladder (grades 1, 2, 3, 4 and 6 (grade 5 retired by J5, its number tombstoned)) with the grade **derived** from append-only evidence, so nothing in the product claims more than happened. A tenant-uploaded screenshot is grade 1 |
 
 **What this means for release 1:** the strongest grade available without new infrastructure is a **deposit**,
 because the bank is the witness. Grade 4 — the client's own reply — needs inbound handling we have not

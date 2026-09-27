@@ -326,7 +326,17 @@ J3), launched 2026-09-27 on the owner's instruction to continue in the recommend
 (Rule 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of tenant-isolation
 keys (J3), the ceiling trigger (J2) and the guards (J1, J9), where a defect leaves the suite green; one
 agent live, no build work alongside it (Rule 16.2). Findings to a file as found, brought into
-`PRD-REVIEW-4.md` afterwards.*
+`PRD-REVIEW-4.md` afterwards.* It reported R1-R18 (probed on real PostgreSQL). **Closed:** J2, J16, and J5
+after its stale "six grades" was corrected in four documents (R14). **Re-opened with named blockers:**
+J1 (R11, R3), J3 (Q4 confirmed as R1, and R2 — a cross-tenant audit rewrite through ON UPDATE CASCADE),
+J9 (R9, a blocker, reproduced by the author: an acceptance can bind another issue's render, or none), J12
+(R13). Also found: R4, a tenant deleting its own audit trail by deleting its tenant row. Text claims R5,
+R7 and R8 corrected in the ADR, the test header and the J16 row.
+
+**J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
+declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
+withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
+committed after it reported. Not yet built.
 
 ## The headline, stated plainly
 

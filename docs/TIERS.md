@@ -141,7 +141,7 @@ and a PDF record of the acceptance", and both halves have since been overtaken:
   step.
 
 The need this item names is real and unchanged; the mechanism it prescribed is not what gets built. What
-does get built is the six-grade ladder in `docs/design/acceptance-evidence.md` (approved 2026-09-26), whose
+does get built is the graded ladder in `docs/design/acceptance-evidence.md` (grades 1, 2, 3, 4 and 6 (grade 5 retired by J5, its number tombstoned)) (approved 2026-09-26), whose
 default bar is a code to the client's channel and whose strongest release-1 grade is a **paid deposit** —
 suggested automatically above a value each tenant sets.
 

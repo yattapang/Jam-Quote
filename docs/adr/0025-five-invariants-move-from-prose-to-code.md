@@ -66,8 +66,12 @@ by a comment asking politely.
 There is no `SECURITY DEFINER` function, and the application role does hold table grants — the test
 harness grants write on every table. What enforces the writer set is **row security**:
 `new-app/db/policies/002-documents-isolation.sql` gives `issue_balance` write policies that require a
-transaction-local flag only `issue_balance_open()` and `issue_balance_apply()` set, and since J2 those two
-are reached through triggers on every table that moves a total. The decision stands — the writer set is
+transaction-local flag only `issue_balance_open()` and `issue_balance_apply()` set. Since J2,
+`issue_balance_apply()` is reached through triggers on every table that moves a total; `issue_balance_open()`
+is NOT — the acceptance path must call it, and an acceptance inserted without that call has no balance row
+(so it can be invoiced against nothing: the recompute raises). *Corrected the same day, finding R7.* And
+the flag is not a secret: a caller that sets it itself can write `issue_balance` directly — the policies
+stop the application forgetting, not a hostile caller (finding R5). The decision stands — the writer set is
 enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and the bullet above
 naming a `SECURITY DEFINER` function is kept as the decision of its day. J2's disposition credited this
 amendment before it existed; that is what Q7 found.

@@ -20,8 +20,10 @@
  *   themselves are in `concurrency.pg.test.ts`, against real PostgreSQL (this line called them owed
  *   until 2026-09-27; P6).
  * - **Nothing about the application.** These tests call the functions directly. A repository that
- *   never calls `issue_balance_apply` cannot insert an invoice without it — the policies see to
- *   that — but one that computes a wrong line total is wrong in a way only its own tests catch.
+ *   never calls `issue_balance_apply` cannot insert an invoice without it — the triggers on
+ *   `invoice`, `invoice_void`, `credit_note` and `variation` see to that (J2; this said "the policies"
+ *   until the R7 finding) — but one that computes a wrong line total is wrong in a way only its own
+ *   tests catch.
  * - **Nothing about money arithmetic below the ceiling:** per-line GCT, markup, discount, rounding.
  * - **Nothing about the offline path.** Sealing on a device, the outbox and sync are application
  *   concerns; what is proved here is that the database refuses the *outcomes* they must not produce.
