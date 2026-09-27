@@ -26,7 +26,7 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 | **J1** | blocker | **Fixed, re-review owed.** `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
 | **J2** | blocker | **Fixed, re-review owed.** `683a638`, migration `20260926130000_ceiling_enforced_by_trigger`: every insert on `invoice`, `invoice_void`, `credit_note` and `variation` fires `issue_balance_apply()`, so the ceiling in `20260925120000_documents_core` is enforced whatever the caller does; `new-app/db/policies/002-documents-isolation.sql` unchanged; executed in `new-app/db/test/documents-core.test.ts` (J2 block); ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 was **not** amended by `683a638`, as this row first claimed (Q7) — it was amended on 2026-09-27 to describe the real mechanism, policies plus triggers. The four J4 re-reviews exercised this trigger heavily but were not commissioned to review it |
 | **J3** | blocker | **Fixed, re-review owed.** `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
-| **J4** | blocker | **Open — fixed, four re-reviews in, fifth owed.** The design `docs/design/scope-reduction.md` (owner decisions 2026-09-26/27) and migrations `20260926200000`, `20260926210000`, `20260926220000`, `20260927100000`, `20260927110000` and `20260927120000`, correcting what `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions` got wrong; tested in `new-app/db/test/documents-core.test.ts`, `no-stuck-state.test.ts` and `concurrency.pg.test.ts` (real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `2bf1816`. The P findings' fixes (`2bf1816`) are not yet independently checked |
+| **J4** | blocker | **Closed.** Agreed scope can be reduced after it is invoiced: credit notes net into the invoiced figure, so the remedy is credit-then-reduce in one transaction, and a wrong document is withdrawn once nothing is billed (owner's decisions 2026-09-26/27, `docs/design/scope-reduction.md`). This corrects what `20260925120000_documents_core` ("may be negative" with no path) and `20260926110000_withdrawal_preconditions` (a credit note that moved nothing) got wrong, through migrations `20260926200000` to `20260927140000`; tested in `new-app/db/test/documents-core.test.ts` (J4, K4, H4 blocks), `no-stuck-state.test.ts` (a seeded walk with its own oracle) and `concurrency.pg.test.ts` (15 races on real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `422d9e8`. **Independently checked:** five Opus re-reviews (K, L, N, P, Q — their findings all answered), then two Sonnet closing checks: every plant failed exactly its named race and the gate matched; the one item not passed was the brief's own list omitting a register, as the checker read and stated. Closed on that evidence with the owner's acceptance, 2026-09-27 |
 | **J5** | blocker | **Fixed, re-review owed.** `683a638`: grade 5 demoted in `docs/design/acceptance-evidence.md` so the ladder's third-party principle holds, with `docs/PRD.md` R1.20c, `docs/adr/0024-acceptance-evidence.md` and `docs/design/domain-model.md` agreeing |
 | **J6** | blocker | **Open.** The grade derivation is still undefined for conflicting evidence. Not started |
 | **J7** | blocker | **Open.** The uniqueness key on the inbound message id is not specified. Not started |
@@ -2288,3 +2288,86 @@ It did NOT review: the design in `docs/design/scope-reduction.md` beyond the two
 
 ## Final git status
 `git -C /home/user/Jam-Quote status --porcelain` → (empty)
+
+---
+
+# J4 closing re-check (Sonnet, mechanical) on 422d9e8
+
+**Checker:** `commit-reviewer` agent run on Sonnet, 2026-09-27, against a brief whose expectations were executed before handover. **Did not write** the commit. Appended verbatim. Verdict: NOT PASSED on one item — check A found the phrase in a seventh file, `docs/BRIEF-STATUS.md`, which the checker itself read and described as a register quoting the phrase to report it, like the two registers on the expected list. The expected list was stale because the author edited `BRIEF-STATUS.md` after testing it (MISTAKES M37). Every other check passed. **The owner accepted closing J4 on this evidence, 2026-09-27.**
+
+## J4 closing re-check on 422d9e8
+
+Rule 0: Rules applying to this task — 1.5, 16.3, 21.7, 24.6 (see task brief header for citation).
+
+### 1. Step table
+
+| Step | Expected | Actual (quoted) | Result |
+|---|---|---|---|
+| 0a `git log --oneline -1` | starts `422d9e8` | `422d9e8 db+docs: the last copy of "no single-quote cycle exists" is corrected, and the lock's contract lives on the function` | PASS |
+| 0b `pg-up.sh` | ends "pg: up" or "pg: already up" | `pg: already up` | PASS |
+| 1 Check A (`no single-quote cycle exists`) | exactly 6 named files | `['new-app/db/migrations/20260927110000_one_lock_per_quote/migration.sql', 'new-app/db/migrations/20260927120000_lock_isolation_and_tenancy/migration.sql', 'new-app/db/migrations/20260927130000_balance_open_takes_lock/migration.sql', 'new-app/db/migrations/20260927140000_quote_lock_contract/migration.sql', 'docs/BRIEF-STATUS.md', 'docs/MISTAKES.md', 'docs/PRD-REVIEW-4.md']` — 7 files | FINDING |
+| 1 Check B | exactly `docs/design/scope-reduction.md` | `['docs/design/scope-reduction.md']` | PASS |
+| 1 Check C | exactly `new-app/db/test/concurrency.pg.test.ts` | `['new-app/db/test/concurrency.pg.test.ts']` | PASS |
+| 1 Check D | exactly `20260927120000_lock_isolation_and_tenancy/migration.sql` | `['new-app/db/migrations/20260927120000_lock_isolation_and_tenancy/migration.sql']` | PASS |
+| 1 Check E | exactly `20260927140000_quote_lock_contract/migration.sql` | `['new-app/db/migrations/20260927140000_quote_lock_contract/migration.sql']` | PASS |
+| 1a grep 140000 for 110000 name | at least one match | line 6: `` -- `20260927110000_one_lock_per_quote` says, in its FIX section: "the order is always quote lock, then `` (and line 25) | PASS |
+| 1b grep 130000 for "no single-quote cycle" inside its corrections section | match under "CORRECTIONS TO `20260927120000_lock_isolation_and_tenancy`" | match at line 18, under heading at line 16: `## CORRECTIONS TO \`20260927120000_lock_isolation_and_tenancy\`, WHICH CANNOT BE EDITED` | PASS |
+| 2 `comment-check.sh` | one line with the required substrings, no MIGRATION FAILED | `Per-quote advisory lock for financial writes (docs/design/scope-reduction.md section 3c). Exclusive for a seal, shared for acceptance, invoice, void, credit note, variation, withdrawal, opening a balance row and a balance recompute; always taken before the issue's balance row lock. Refuses to run outside READ COMMITTED (SQLSTATE 25000). Locks only a quote visible under row security; the key is 64 bits of md5(quote id). Deadlocks that remain, detected as SQLSTATE 40P01 and to be retried: a transaction writing on two quotes, and one that writes on a quote and then seals the same quote. Not closed at the SQL level: any session can call pg_advisory_* with the key (THREAT-MODEL 4d).` — contains READ COMMITTED, SQLSTATE 40P01, "writes on a quote and then seals the same quote", THREAT-MODEL 4d; no MIGRATION FAILED line | PASS |
+| 3 gate: turbo typecheck+test | Tasks 10/10; api 183, db 143, contract 2, core 9, web 11; concurrency.pg.test.ts (15 tests) | `@pryvis/web:test: Tests 11 passed (11)`; `@pryvis/contract:test: Tests 2 passed (2)`; `@pryvis/db:test: ✓ test/concurrency.pg.test.ts (15 tests) 1560ms`; `@pryvis/db:test: Tests 143 passed (143)`; `@pryvis/core:test: Tests 9 passed (9)`; `@pryvis/api:test: Tests 183 passed (183)`; `Tasks: 10 successful, 10 total` | PASS |
+| 3 `check_rules.py` | exit 0 | `66 rules defined · 846 citations across 58 distinct rules` / `All citations resolve, and no rule has changed unreviewed.` / EXIT:0 | PASS |
+| 3 `check_dispositions.py` | exit 0; contains "42 dispositions claiming Closed, checked across 4 review files" | `42 dispositions claiming Closed, checked across 4 review files (path-level scope enforced on 1 of them)` plus a "LEGACY GAPS" list of 10 unrelated older-review items; EXIT:0 | PASS |
+| 3 `check_citations.py` | exit 0; contains "scanned 172 tracked files" | `scanned 172 tracked files` / `Every cited path, filename and symbol resolves.` / EXIT:0 | PASS |
+| 3 `check_schema_citations.py` | exit 0; contains "0 citations skipped" | `scanned 172 files against 28 tables, 11 functions, 8 triggers, 38 policies; 0 citations skipped` / 1 OWED reference (quote_line.recipe_id) / "Every cited path and every named database object resolves." / EXIT:0 | PASS |
+
+### 2. Findings
+
+**FINDING (Step 1, Check A).** The whole-file phrase "no single-quote cycle exists" was expected in exactly
+six files. It appears in a **seventh**: `docs/BRIEF-STATUS.md:301`:
+
+> a third committed copy of "no single-quote cycle exists", in `20260927110000_one_lock_per_quote` — and is
+> answered by migration `20260927140000_quote_lock_contract`, which corrects it and puts the lock's contract
+> on the function as `COMMENT ON FUNCTION`.
+
+This is narrative prose in the status tracker quoting the phrase to describe the earlier closing check's
+result (the same J4 closing-check entry that this re-check exists to verify) — it reads the same way the
+expected `docs/MISTAKES.md` and `docs/PRD-REVIEW-4.md` hits do, i.e. as a report referencing the phrase
+rather than a migration or design document asserting it as a true claim about locking order. It was not on
+the brief's enumerated list of six, so per the brief's own rule ("A seventh file is a FINDING") it is
+reported here rather than silently accepted. No corrective action was taken (Rule 0 of this brief: no edits
+to the repository).
+
+No other findings from Steps 0, 1 (checks B–E, 1a, 1b), 2 or 3: every other expected output matched the
+actual output verbatim or by the substrings the brief specified.
+
+### 3. BRIEF INCOMPLETE
+
+None. Every step could be run exactly as written.
+
+### 4. Overall
+
+J4 closing re-check: NOT PASSED — Step 1 Check A (docs/BRIEF-STATUS.md is an extra file matching the phrase)
+
+### 5. What this did NOT examine (Rule 21.4)
+
+This re-check covers only the six listed steps: whole-file sentence checks A–E plus verifications 1a/1b, the
+database-stored function comment (Step 2), and the single full-gate run plus the four `tools/check_*.py`
+scripts (Step 3). It does not repeat:
+- the four "plants" from the original J4 closing check (verified there, not here, per this brief's own scope
+  statement);
+- any review of the substance of the lock design itself, the correctness of the SQL in any migration, or
+  whether the migrations' claimed corrections are semantically right beyond the two grep-level pointer
+  checks in Step 1 (1a/1b only confirm the corrections *name* what they correct and *where* they sit, not
+  that the correction is right);
+- the 10 "LEGACY GAPS" that `check_dispositions.py` printed for PRD-REVIEW-2.md/PRD-REVIEW-3.md — those are
+  pre-existing, unrelated to J4, and out of this brief's scope;
+- the 1 OWED (not enforced) schema reference (`quote_line.recipe_id`) that `check_schema_citations.py`
+  reported — pre-existing and unrelated to J4;
+- anything outside the exact commands and files named in the brief.
+
+### 6. Final git status
+
+```
+$ git -C /home/user/Jam-Quote status --porcelain
+(no output — clean)
+```
+No `tools/__pycache__` directory was created or left behind.

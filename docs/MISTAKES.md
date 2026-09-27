@@ -695,3 +695,21 @@ not "model too weak": the tier was right and the specification was not.
 **Prevented by:** nothing mechanical yet. The owed control is the one proposed on 2026-09-27: a brief is a
 file, checked before delegation — and a grep-shaped expectation is itself tested against the current tree
 before it is handed over, so an expected output that is already wrong never reaches the agent.
+
+### M37 · M36's prevention was applied, then undone by the next edit
+`Repeat of:` **M36**, within the hour — which by Rule 24.4 says M36's stated prevention was decorative as
+practised.
+
+M36 said: test every expected output against the tree before handing a brief over. For the re-check I did
+— and then wrote a `BRIEF-STATUS.md` entry that quotes the very phrase check A counts, committed it, and
+launched without re-running the expectations. The checker found the seventh file, read it, identified it as
+a register, and reported it as a finding because the brief said to. It was right to.
+
+**Cost:** one "NOT PASSED" line on a check whose substance passed, and a closure decision the owner had to
+make instead of a clean result.
+
+**Prevented by:** the order, stated as the rule it is: **the brief's expectations are executed as the last
+step before launch, after the final commit, on the exact HEAD the brief names** — not while the tree is
+still being edited. A brief that names a HEAD and was not checked at that HEAD is not a checked brief.
+Still not mechanical: it belongs to the brief-as-a-file control proposed on 2026-09-27, which would run
+the expectations itself at launch.

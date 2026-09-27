@@ -309,6 +309,18 @@ recorded as BRIEF INCOMPLETE.* Report appended to `PRD-REVIEW-4.md`.
 executed against the current tree (M36's lesson applied before the handover). Scope: the three failed
 steps, the new migration, and the gate.*
 
+**Re-check result, 2026-09-27: every check passed except one list item** — check A found the phrase in
+this file too, in the entry above, which I wrote after testing the brief (MISTAKES M37, a repeat of M36).
+The checker read it and identified it as a register. **The owner accepted closing J4 on this evidence.**
+*Tier log: Sonnet was right for both checks; both non-passes were brief errors, recorded as BRIEF
+INCOMPLETE.*
+
+**The J4 line is finished: J4, J10 and J15 Closed.** Review 4 now stands at: J4, J10, J15 Closed; J1, J2,
+J3, J5, J9, J12, J16 Fixed, re-review owed; J6, J7, J8, J11, J13, J14 open. Also owed from this line: the
+ten legacy disposition gaps in reviews 2-3; J3's re-review with Q4 (ON UPDATE CASCADE rewrites a sealed
+issue's quote id); the "write flag in exactly one place" test narrower than its title; Q1's deferred
+SQL-level fix; and the governance proposals awaiting the owner.
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
