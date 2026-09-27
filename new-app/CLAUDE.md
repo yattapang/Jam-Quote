@@ -98,11 +98,14 @@ which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a s
 `turbo.json`, because Turbo drops undeclared environment variables — and did, silently, the first time.
 
 **Financial writes must run under READ COMMITTED** (the PostgreSQL default). Acceptance, invoice, void,
-credit note, variation, withdrawal, sealing and a balance recompute all take a per-quote lock that is
+credit note, variation, withdrawal, sealing, opening a balance row and a balance recompute all take a per-quote lock that is
 only correct when each statement sees what the transaction it waited for committed; under REPEATABLE
 READ or SERIALIZABLE they are refused with SQLSTATE 25000 (finding P1). Do not pass an `isolationLevel`
-to a transaction that writes any of them. A transaction that writes on two quotes can deadlock
-(SQLSTATE 40P01) and must be retried.
+to a transaction that writes any of them. Two shapes can deadlock (SQLSTATE 40P01, detected by
+PostgreSQL, nothing left wrong) and must be retried: a transaction that writes on two quotes, and one that
+writes on a quote and then seals the same quote — which includes the wrong-document remedy (void or credit,
+withdraw, seal the next revision) if it is run as ONE transaction. Run those steps as separate
+transactions.
 
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work

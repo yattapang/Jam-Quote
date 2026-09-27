@@ -197,6 +197,21 @@ bought (`SERVICE-REGISTER.md` §3b).
 holding the tenant-supplied channel confirmed a code, which is a different sentence, and the UI must say
 the second one.
 
+## 4d. A quote's money lock can be taken at the SQL level by any session (added 2026-09-27, Q1)
+
+The per-quote advisory lock (`quote_money_lock()`, migrations `20260927110000` and `20260927120000`)
+refuses to lock a quote the caller cannot see under row security. That protects the function, not the
+lock: the key is a published recipe (64 bits of an md5 of the quote id), and PostgreSQL lets any session
+call `pg_advisory_lock` and friends directly. A session that knew another tenant's quote id could hold
+that quote's lock — session-level, until it disconnects — blocking its seals, and could watch its writes
+queue in `pg_locks`. No money is ever wrong: the lock only delays.
+
+**Accepted as LOW by the owner on 2026-09-27.** Tenants never hold a SQL session; only our own server
+does, so this needs a SQL-injection-class defect in our code, which would be worse in other ways first.
+**The fix, deferred and named:** revoke `EXECUTE` on the `pg_advisory_*` functions from the application
+role and take the lock inside a `SECURITY DEFINER` function that re-checks visibility — after confirming
+the managed PostgreSQL provider permits revoking from `pg_catalog`.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

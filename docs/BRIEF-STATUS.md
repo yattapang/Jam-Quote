@@ -274,7 +274,28 @@ naming it; restored byte-identical.*
 before launch: `commit-reviewer` agent, Opus — adversarial review of the isolation guard, lock tenancy and
 lock order over the money invariant, and of the disposition checker that gates Rule 24.6; one agent live,
 no build work, commits or full-gate runs alongside it (Rule 16.2). Findings to a file as found, brought
-into `PRD-REVIEW-4.md` afterwards.*
+into `PRD-REVIEW-4.md` afterwards.* It reported Q1-Q7 and judged J10 closable — **J10 Closed** in
+`5920a37` — and J4 not yet, on Q3 plant C and the false sentences in Q2 and Q5.
+
+**Q1-Q7 answered, 2026-09-27.** The owner accepted Q1 as LOW (tenants hold no SQL session; the fix is
+named in `THREAT-MODEL.md` §4d) and approved Sonnet for J4's closing check. Migration
+`20260927130000_balance_open_takes_lock`: `issue_balance_open()` takes the lock and the isolation check
+(Q5), and its header corrects the committed P migration's false sentences (Q1, Q2, Q5; Rule 6). Three
+races, one per property the P fixes claimed (Q3). `check_dispositions.py`: whole-token citation, a
+finding that does not parse fails, a row with an unknown status fails (Q6). ADR 0025 decision 2 amended to
+the real mechanism, so J2's row is true (Q7); Q4 recorded against J3. Design, CLAUDE.md and the race
+suite's header corrected (Q2, Q5). MISTAKES M35. *Delegation (Rule 16.5): Opus, in-session — lock order
+and isolation over the money invariant.* *Coverage (Rule 21.3): 15 races pass on PostgreSQL 16.13; the
+reviewer's plants A (one key for all quotes), B (visibility on the exclusive path only), C (row lock before
+quote lock) and a Q5 plant (open without the lock) each failed exactly their named race; the five checker
+escapes Q6 listed each now fail; every plant restored byte-identical.*
+
+**J4 closing check, launched 2026-09-27 on the owner's instruction.** *Delegation (Rule 16.5), declared
+before launch: `commit-reviewer` agent run on **Sonnet** — a deviation from its Opus default, approved by
+the owner, because this is mechanical verification against a written list: every plant, command and
+expected output is named in the brief, so the cheapest reliable tier is the one that can follow it
+exactly. If the brief proves incomplete, the escalation is recorded here with its cause (brief incomplete
+vs genuinely hard). One agent live, no build work alongside it (Rule 16.2).*
 
 ## The headline, stated plainly
 

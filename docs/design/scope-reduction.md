@@ -137,7 +137,7 @@ Migration `20260927110000_one_lock_per_quote`, which also removes the seal's bal
 **Cost, stated:** a transaction that writes on two quotes, or writes on a quote and then seals it, can
 deadlock; PostgreSQL aborts one side with SQLSTATE 40P01 and the application must retry (N5).
 
-**And the proof runs in CI:** `concurrency.pg.test.ts` races six cases against a PostgreSQL 16 service
+**And the proof runs in CI:** `concurrency.pg.test.ts` races every lock claim (fifteen races as of 2026-09-27) against a PostgreSQL 16 service
 container, proving each race by observing the second session *waiting on a lock*, and it fails rather
 than skips in CI when the database is missing (`PRYVIS_REQUIRE_PG`, passed through by `turbo.json`).
 
@@ -150,12 +150,20 @@ than skips in CI when the database is missing (`PRYVIS_REQUIRE_PG`, passed throu
   before the wait, and 50,000 was billed on a superseded revision with no race at all. Every financial
   write now refuses to run outside READ COMMITTED. The application cannot run them in a SERIALIZABLE
   transaction, and has no need to.
-- **The lock is tenant-scoped (P2).** It is taken only on a quote the caller can see under row security,
-  so another tenant can neither take it nor wait on it, and a foreign quote id is refused at once rather
-  than after a revealing delay. The key is 64 bits of an md5 of the quote id, not the id's own bits,
-  because `pg_locks` is readable by the application role.
+- **The lock is tenant-scoped (P2), through `quote_money_lock()`.** It is taken only on a quote the
+  caller can see under row security, so another tenant cannot take it or wait on it *through that
+  function*, and a foreign quote id is refused at once rather than after a revealing delay. The key is 64
+  bits of an md5 of the quote id, not the id's own bits, because `pg_locks` is readable by the
+  application role. **Not closed at the SQL level (Q1, accepted as LOW by the owner 2026-09-27):** any
+  session can call PostgreSQL's own advisory functions with the key; only our server holds a session, so
+  reaching it needs a SQL-injection-class defect. The deferred fix is in `docs/THREAT-MODEL.md` §4d.
 - **Every path orders quote lock, then balance row lock (P3).** `issue_balance_apply()` takes the shared
-  quote lock itself, so a direct recompute can no longer deadlock against a seal.
+  quote lock itself, which removes the cycle P3 found, and since `20260927130000_balance_open_takes_lock`
+  so does `issue_balance_open()` (Q5). **One single-quote deadlock remains, by design (Q2):** a
+  transaction that holds the shared lock and then seals the same quote — for example the wrong-document
+  remedy run as one transaction — deadlocks against another holder. Detected (SQLSTATE 40P01), nothing
+  left wrong; run the steps as separate transactions or retry. This sentence said "can no longer
+  deadlock" until the fifth re-review.
 
 ## 4. Trade-offs, and what was rejected
 

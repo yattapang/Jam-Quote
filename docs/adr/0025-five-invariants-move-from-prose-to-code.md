@@ -62,6 +62,16 @@ acceptance transaction that creates the row — the exact fix the previous findi
 This is the project's existing pattern: the audit log is append-only *by the absence of a policy*, not
 by a comment asking politely.
 
+**Amended 2026-09-27 (finding Q7 of the fifth J4 re-review).** The mechanism built is not the one above.
+There is no `SECURITY DEFINER` function, and the application role does hold table grants — the test
+harness grants write on every table. What enforces the writer set is **row security**:
+`new-app/db/policies/002-documents-isolation.sql` gives `issue_balance` write policies that require a
+transaction-local flag only `issue_balance_open()` and `issue_balance_apply()` set, and since J2 those two
+are reached through triggers on every table that moves a total. The decision stands — the writer set is
+enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and the bullet above
+naming a `SECURITY DEFINER` function is kept as the decision of its day. J2's disposition credited this
+amendment before it existed; that is what Q7 found.
+
 ---
 
 ## Decision 3 — A document's state is derived, never stored

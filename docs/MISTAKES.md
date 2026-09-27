@@ -651,3 +651,28 @@ the migration or test the finding named untouched — the F1/M13 failure the too
 reviews 1-3 on every run; the closing line now says which scope it covers. Planted: removing the
 migration from J15's Closed row fails the check, naming the path. **Owed:** the audit of the ten legacy
 rows, after which their reviews join `WIDE_SCOPE`.
+
+### M35 · Each fix was proved against its finding, not against each property it claimed
+`Repeat of:` **M33, M30, M21** — a guard shown to fire, but not for every claim credited to it — and
+**M14** in a disposition row.
+
+The P fixes claimed three properties: the quote lock is taken FIRST (P3), each quote has its OWN lock
+(P2), and another tenant's request takes NOTHING on either path (P2). The races added were planted
+against the defects the fourth re-review had reported, and passed. The fifth re-review planted each
+property on its own — the lock taken second, one key for every quote, the visibility check on the
+exclusive path only — and all twelve races stayed green through every one (Q3). A test that goes red
+for the reported defect had been read as proof of the property the fix claimed.
+
+Alongside it: J2's disposition row credited an amendment to ADR 0025 that no commit had made (Q7) — the
+M14 class, a citation to a change that is not there, written by the author into the table built to
+stop overclaiming.
+
+**Cost if it had not been caught:** a later change reordering the locks, or collapsing the key, would
+have deadlocked or serialised every tenant's quotes behind each other with CI green.
+
+**Prevented by:** partly. Each of the three properties now has its own race, and each was seen to fail
+under exactly the plant the reviewer used; `issue_balance_open()` joined the lock and has its own. The
+J2 row now points at the amendment that exists. **No mechanism yet makes "one plant per claimed
+property" a checked obligation** — a migration header's list of claims is prose, and nothing pairs each
+claim with a plant. That is Rule 1.5 applied per property rather than per fix, and it is recorded as
+owed, not promised. Independent re-review is what found it, twice in a row.

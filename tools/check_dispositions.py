@@ -40,6 +40,8 @@ gaps owed an audit, so the narrower historical check can no longer read as clean
   Rule 1.10's re-review is not replaced by this.
 - Nothing about findings whose `**Where:**` line omits a file it should have named.
 - Not that the ten legacy gaps it prints were closed properly — only that nothing cited those paths.
+- Shape checks (Q6) run on WIDE_SCOPE reviews only. A disposition row whose id is not bolded is caught,
+  but reported as a bad status: the first bold row for that id is then the reviewer's summary table.
 - Nothing about sections cited by a name that does not exist — a stricter check could verify anchors, and
   that is owed rather than promised.
 """
@@ -74,6 +76,44 @@ ROW = re.compile(r"^\|\s*\*\*([FGHJ]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M
 # that audit.
 WIDE_SCOPE = {"docs/PRD-REVIEW-4.md"}
 BACKTICKED_PATH = re.compile(r"`([^`\s]+/[^`\s]+\.[a-z]+)`")
+
+
+# Q6 (fifth J4 re-review): a key is cited only as a whole token. Plain substring matching let a row
+# "cite" `acceptance-evidence.md` by naming `0024-acceptance-evidence.md`, and `RULES.md` by naming
+# `BUILD-RULES.md`. The character before a key may be a path separator but not part of a file name.
+def cites(key: str, text: str) -> bool:
+    return re.search(r"(?:^|[^\w.-])" + re.escape(key) + r"(?![\w.-])", text) is not None
+
+
+# In WIDE_SCOPE reviews a disposition row must open with one of these, exactly. Anything else — a
+# non-bold "Closed.", "**Resolved.**", a typo — used to drop the row out of the closure count silently,
+# visible only as the printed count moving by one (Q6, and M24 before it).
+STATUSES = ("**Closed.**", "**Fixed, re-review owed.**", "**Open")
+ANY_FINDING_HEADING = re.compile(r"^## ([A-Z]\d+)\b", re.M)
+ANY_FINDING_ROW = re.compile(r"^\|\s*\**([A-Z]\d+)\**\s*\|", re.M)
+
+
+def shape_failures(review: str, text: str, scopes: dict[str, set[str]]) -> list[str]:
+    """For WIDE_SCOPE reviews: every finding parses with a scope, and every row has a known status."""
+    problems = []
+    parsed = set(scopes)
+    for heading_id in dict.fromkeys(ANY_FINDING_HEADING.findall(text)):
+        if heading_id not in parsed:
+            problems.append(f"{review}: finding {heading_id}'s heading does not parse, so its scope is unknown")
+        elif not scopes[heading_id]:
+            problems.append(f"{review}: finding {heading_id} has no parsable Where line, so its scope is empty")
+    # The FIRST row per id is the disposition. Review 4 also carries the reviewer's summary table,
+    # whose rows share the same shape; judging the last occurrence checked that table instead.
+    rows: dict[str, str] = {}
+    for row_id, disposition in ROW.findall(text):
+        rows.setdefault(row_id, disposition)
+    for row_id in ANY_FINDING_ROW.findall(text):
+        if row_id not in rows:
+            problems.append(f"{review}: the row for {row_id} does not parse (bold id, three columns)")
+    for row_id, disposition in rows.items():
+        if not disposition.startswith(STATUSES):
+            problems.append(f"{review}: {row_id}'s status is not one of {', '.join(STATUSES)}")
+    return problems
 
 
 def path_key(path: str) -> str:
@@ -125,13 +165,17 @@ def main() -> int:
             continue
         text = path.read_text(encoding="utf-8")
         scopes = scope_of_findings(text)
+        if review in WIDE_SCOPE:
+            for problem in shape_failures(review, text, scopes):
+                failures += 1
+                print(problem)
 
         for finding_id, disposition in ROW.findall(text):
             if not CLAIMS_CLOSED.search(disposition):
                 continue  # Only "Closed" carries the burden.
             checked += 1
             scope = scopes.get(finding_id, set())
-            cited = set(KNOWN.findall(disposition)) | {key for key in scope if key in disposition}
+            cited = {key for key in scope if cites(key, disposition)}
             # A disposition that cites a bare section ("§6.1a", "R1.24") without its file is not
             # enough: the whole failure was citing one document's section and calling it done.
             missing = scope - cited

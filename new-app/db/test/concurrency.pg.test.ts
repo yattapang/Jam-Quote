@@ -26,9 +26,12 @@
  * ## WHAT THIS DOES NOT PROVE (Rule 21.4)
  *
  * - One interleaving per race, hand-scheduled — not a stress run, and not every possible interleaving.
- * - PostgreSQL 16 only. The isolation level is the default, READ COMMITTED; the migrations assume it.
- * - Deadlocks (N5) are not tested: they are detected by PostgreSQL and abort one transaction, which the
- *   application must retry, and that application does not exist yet.
+ * - PostgreSQL 16 only. The migrations REQUIRE READ COMMITTED and refuse financial writes outside it;
+ *   the P1 race proves the refusal (this line said "assume" until 2026-09-27; Q5).
+ * - The deadlocks that remain are not asserted absent. The P3 and lock-order races prove the cycles they
+ *   name are gone; the shared-to-exclusive upgrade on one quote (write, then seal, in one transaction)
+ *   and transactions spanning two quotes still deadlock, are detected (SQLSTATE 40P01) and must be
+ *   retried by an application that does not exist yet.
  */
 import { APP_ROLE, migrationNames, migrationSql } from "@pryvis/db/test-support";
 import pg from "pg";
@@ -467,6 +470,11 @@ suite("concurrency against real PostgreSQL", () => {
         expect(result.ok).toBe(false);
         expect(result.ok ? "" : result.error).toMatch(/must run under READ COMMITTED/);
         await w.client.query("ROLLBACK");
+        // Q5: opening a balance row was the one financial write that skipped the lock, and so the check.
+        await w.client.query(`BEGIN ISOLATION LEVEL ${level}`);
+        const opened = await outcome(w.client.query(`SELECT issue_balance_open($1)`, [rev1]));
+        expect(opened.ok ? "" : opened.error).toMatch(/must run under READ COMMITTED/);
+        await w.client.query("ROLLBACK");
       } finally {
         await w.client.end();
       }
@@ -622,6 +630,87 @@ suite("concurrency against real PostgreSQL", () => {
       await t2.client.query("ROLLBACK");
     } finally {
       for (const s of [t1, t2]) await s.client.end();
+    }
+  });
+
+  it("Q3 · lock ORDER: a recompute waiting on a seal holds no balance row lock, so the seal's own recompute proceeds", async () => {
+    // The fifth re-review put P3's exact defect back — the recompute taking the balance row lock BEFORE
+    // the quote lock — and all twelve races stayed green, because the P3 race only proved the lock was
+    // taken, not that it was taken first. Here the order is what decides the outcome: T2 seals (the
+    // exclusive quote lock), T1 recomputes (must wait on the quote lock WITHOUT holding the row), then
+    // T2 recomputes the same issue. In the wrong order T1 holds the row while it waits and T2's recompute
+    // waits on T1: SQLSTATE 40P01.
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const t1 = await session();
+    const t2 = await session();
+    try {
+      await t2.client.query("BEGIN");
+      await seal(t2.client, quote, 2);
+
+      const recomputing = outcome(t1.client.query(`SELECT issue_balance_apply($1)`, [rev1]));
+      await waitsOnLock(t1.pid, "quote");
+
+      const own = await outcome(t2.client.query(`SELECT issue_balance_apply($1)`, [rev1]));
+      expect(own).toEqual({ ok: true });
+      await t2.client.query("COMMIT");
+
+      expect(await recomputing).toEqual({ ok: true });
+    } finally {
+      for (const s of [t1, t2]) await s.client.end();
+    }
+  });
+
+  it("Q3 · each quote has its own lock: a seal on one quote does not delay a write on another", async () => {
+    // Plant A of the fifth re-review: every quote given the same key. All twelve races stayed green, and
+    // on that database one tenant's invoice waited for another tenant's seal.
+    const quoteX = await newQuote();
+    const quoteY = await newQuote();
+    const setup = await session();
+    await seal(setup.client, quoteX, 1);
+    const onY = await seal(setup.client, quoteY, 1);
+    await accept(setup.client, onY);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await seal(a.client, quoteX, 2); // holds X's exclusive lock until commit
+
+      const invoicing = await withinMs(b.client.query(invoiceSql(onY, 10_000)), 3_000);
+      expect(invoicing).toEqual({ ok: true });
+      await a.client.query("COMMIT");
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("Q3 · another tenant's SHARED lock request on a quote takes nothing, so it cannot delay that quote's seal", async () => {
+    // Plant B of the fifth re-review: the visibility check kept on the exclusive path only. The P2 race
+    // tried the exclusive path, so it stayed green while another tenant could hold a quote's shared lock
+    // and block its seals.
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await setup.client.end();
+
+    const a = await session();
+    const other = await session(OTHER_TENANT);
+    try {
+      await other.client.query("BEGIN");
+      await other.client.query(`SELECT quote_money_lock($1, false)`, [quote]);
+
+      const sealing = await withinMs(seal(a.client, quote, 2), 3_000);
+      expect(sealing).toEqual({ ok: true });
+      await other.client.query("ROLLBACK");
+      expect((await figures(rev1)).state).toBe("superseded");
+    } finally {
+      for (const s of [a, other]) await s.client.end();
     }
   });
 });
