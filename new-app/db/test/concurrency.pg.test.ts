@@ -40,6 +40,10 @@ const REQUIRED = Boolean(process.env.PRYVIS_REQUIRE_PG);
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CLIENT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+// A second tenant, for P2: one tenant must not be able to take, or wait on, another's quote lock.
+const OTHER_TENANT = "22222222-2222-4222-8222-222222222222";
+const OTHER_USER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const OTHER_CLIENT = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 let admin: pg.Client;
 let owner: pg.Client;
@@ -53,30 +57,49 @@ function id(): string {
 }
 
 /** A session as the unprivileged application role, scoped to the tenant — what production connects as. */
-async function session() {
+async function session(tenant = TENANT) {
   const client = new pg.Client({ connectionString: databaseUrl });
   await client.connect();
   await client.query(`SET ROLE ${APP_ROLE}`);
-  await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [TENANT]);
+  await client.query(`SELECT set_config('app.tenant_id', $1, false)`, [tenant]);
   // A lock bug must fail this test, not hang it.
   await client.query(`SET statement_timeout = '20s'`);
   const [row] = (await client.query<{ pid: number }>(`SELECT pg_backend_pid() AS pid`)).rows;
   return { client, pid: row!.pid };
 }
 
-/** Resolves once `pid` is waiting on a lock; fails if it never does. */
-async function waitsOnLock(pid: number): Promise<void> {
+/**
+ * Resolves once `pid` is waiting on the KIND of lock the race is about; fails if it never does.
+ *
+ * The kind matters (finding P5): the first version accepted any lock wait, so two races that were
+ * credited to the quote lock were in fact waiting on the balance row, and removing the quote lock from
+ * withdrawal broke nothing. `quote` is the advisory per-quote lock; `row` is the balance row lock, which
+ * surfaces as a wait on the holding transaction.
+ */
+async function waitsOnLock(pid: number, kind: "quote" | "row"): Promise<void> {
+  const events = kind === "quote" ? ["advisory"] : ["transactionid", "tuple"];
+  let seen = "";
   for (let attempt = 0; attempt < 100; attempt++) {
-    const rows = (
-      await admin.query(
-        `SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND datname = $2 AND wait_event_type = 'Lock'`,
+    const [row] = (
+      await admin.query<{ event: string }>(
+        `SELECT wait_event AS event FROM pg_stat_activity
+          WHERE pid = $1 AND datname = $2 AND wait_event_type = 'Lock'`,
         [pid, databaseName],
       )
     ).rows;
-    if (rows.length > 0) return;
+    if (row && events.includes(row.event)) return;
+    if (row) seen = row.event;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error(`session ${pid} never waited on a lock — the lock under test was not taken`);
+  throw new Error(
+    `session ${pid} never waited on the ${kind} lock${seen ? ` (it waited on "${seen}")` : ""} — the lock under test was not taken`,
+  );
+}
+
+/** Settles `pending` within `ms`, or reports that it was still blocked — for "must NOT wait" claims. */
+async function withinMs(pending: Promise<unknown>, ms: number) {
+  const timer = new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), ms));
+  return Promise.race([outcome(pending), timer]);
 }
 
 /** Settles a pending query into a value the test can assert on either way. */
@@ -223,6 +246,20 @@ suite("concurrency against real PostgreSQL", () => {
       `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'A Client', now())`,
       [CLIENT, TENANT],
     );
+    await owner.query(
+      `INSERT INTO tenant (id, name, country_code, currency, updated_at)
+       VALUES ($1, 'Someone Else', 'JM', 'JMD', now())`,
+      [OTHER_TENANT],
+    );
+    await owner.query(
+      `INSERT INTO app_user (id, tenant_id, email, role, session_version, updated_at)
+       VALUES ($1, $2, 'other@example.com', 'owner', 0, now())`,
+      [OTHER_USER, OTHER_TENANT],
+    );
+    await owner.query(
+      `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'Their Client', now())`,
+      [OTHER_CLIENT, OTHER_TENANT],
+    );
     // The owner runs as the superuser that created the database, so it sees every row: used only for
     // set-up and for reading the figures afterwards, never for a write under test.
   }, 120_000);
@@ -252,9 +289,9 @@ suite("concurrency against real PostgreSQL", () => {
       await seal(a.client, quote, 2);
 
       const accepting = outcome(accept(b.client, rev1));
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "quote");
       const invoicing = outcome(c.client.query(invoiceSql(rev1, 50_000)));
-      await waitsOnLock(c.pid);
+      await waitsOnLock(c.pid, "quote");
 
       await a.client.query("COMMIT");
       await accepting;
@@ -289,7 +326,7 @@ suite("concurrency against real PostgreSQL", () => {
       await a.client.query(invoiceSql(rev2, 50_000));
 
       const sealing = outcome(seal(b.client, quote, 3));
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "quote");
       await a.client.query("COMMIT");
 
       const result = await sealing;
@@ -316,7 +353,7 @@ suite("concurrency against real PostgreSQL", () => {
       await a.client.query(variationSql(rev1, 10_000));
 
       const sealing = outcome(seal(b.client, quote, 2));
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "quote");
       await a.client.query("COMMIT");
 
       const result = await sealing;
@@ -341,7 +378,7 @@ suite("concurrency against real PostgreSQL", () => {
       await seal(a.client, quote, 2);
 
       const varying = outcome(b.client.query(variationSql(rev1, 10_000)));
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "quote");
       await a.client.query("COMMIT");
 
       const result = await varying;
@@ -367,7 +404,7 @@ suite("concurrency against real PostgreSQL", () => {
       await a.client.query(invoiceSql(rev1, 60_000));
 
       const second = outcome(b.client.query(invoiceSql(rev1, 60_000)));
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "row");
       await a.client.query("COMMIT");
 
       const result = await second;
@@ -399,7 +436,7 @@ suite("concurrency against real PostgreSQL", () => {
           [id(), TENANT, acceptanceId, USER],
         ),
       );
-      await waitsOnLock(b.pid);
+      await waitsOnLock(b.pid, "row");
       await a.client.query("COMMIT");
 
       const result = await withdrawing;
@@ -408,6 +445,183 @@ suite("concurrency against real PostgreSQL", () => {
       await notStuck(rev1);
     } finally {
       for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("P1 · refuses a financial write outside READ COMMITTED, so a stale snapshot cannot judge the ceiling", async () => {
+    // The fourth re-review's case: a writer under REPEATABLE READ reads once, a seal of revision 2
+    // commits, then the writer invoices revision 1 — judged on its old snapshot, 50,000 landed on a
+    // superseded revision with a ceiling of 0. No race was needed. Now the write is refused outright.
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    for (const level of ["REPEATABLE READ", "SERIALIZABLE"]) {
+      const w = await session();
+      try {
+        await w.client.query(`BEGIN ISOLATION LEVEL ${level}`);
+        await w.client.query(`SELECT count(*) FROM quote_issue`); // takes the snapshot
+        const result = await outcome(w.client.query(invoiceSql(rev1, 50_000)));
+        expect(result.ok).toBe(false);
+        expect(result.ok ? "" : result.error).toMatch(/must run under READ COMMITTED/);
+        await w.client.query("ROLLBACK");
+      } finally {
+        await w.client.end();
+      }
+    }
+    expect((await figures(rev1)).invoiced).toBe(0);
+  });
+
+  it("N4 (c) · an invoice on an already-accepted revision waits for the seal and is refused by the ceiling", async () => {
+    // The direct path the fourth re-review found unraced (P4): N4 (a)'s invoice was refused only
+    // because no balance row existed yet, so breaking supersession left that race green. Here the
+    // revision is accepted first, and the refusal asserted is the superseded revision's zero ceiling.
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const a = await session();
+    const c = await session();
+    try {
+      await a.client.query("BEGIN");
+      await seal(a.client, quote, 2);
+
+      const invoicing = outcome(c.client.query(invoiceSql(rev1, 50_000)));
+      await waitsOnLock(c.pid, "quote");
+      await a.client.query("COMMIT");
+
+      const result = await invoicing;
+      expect(result.ok).toBe(false);
+      expect(result.ok ? "" : result.error).toMatch(/exceeds the ceiling 0/);
+      await notStuck(rev1);
+    } finally {
+      for (const s of [a, c]) await s.client.end();
+    }
+  });
+
+  it("P5 · a withdrawal in flight holds back a seal of the next revision, which then proceeds", async () => {
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    const acceptanceId = await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(
+        `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+         VALUES ($1, $2, $3, 'wrong client', $4)`,
+        [id(), TENANT, acceptanceId, USER],
+      );
+
+      const sealing = outcome(seal(b.client, quote, 2));
+      await waitsOnLock(b.pid, "quote");
+      await a.client.query("COMMIT");
+
+      // Withdrawn before the seal judged it, so the next revision is allowed.
+      expect((await sealing).ok).toBe(true);
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("P5 · financial writes on one quote do not block each other — the lock really is shared", async () => {
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(invoiceSql(rev1, 10_000)); // holds the shared quote lock until commit
+
+      // A second shared holder on the same quote must not wait while A is still open.
+      const second = await withinMs(b.client.query(`SELECT quote_money_lock($1, false)`, [quote]), 3_000);
+      expect(second).toEqual({ ok: true });
+      await a.client.query("COMMIT");
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("P2 · another tenant can neither take a quote's lock nor wait on it", async () => {
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const a = await session();
+    const other = await session(OTHER_TENANT);
+    try {
+      // The other tenant "takes" the lock exclusively and holds it: it must lock nothing, because the
+      // quote is invisible to it under row security.
+      await other.client.query("BEGIN");
+      await other.client.query(`SELECT quote_money_lock($1, true)`, [quote]);
+      const invoicing = await withinMs(a.client.query(invoiceSql(rev1, 10_000)), 3_000);
+      expect(invoicing).toEqual({ ok: true });
+      await other.client.query("ROLLBACK");
+
+      // And a seal naming this tenant's quote, while this tenant has a write in flight, is refused at
+      // once — not after waiting, which would tell the other tenant the quote is busy.
+      await a.client.query("BEGIN");
+      await a.client.query(invoiceSql(rev1, 10_000));
+      const issueId = id();
+      const foreignSeal = await withinMs(
+        other.client.query({
+          text: sealSql(issueId, quote, 2, 100_000).text,
+          values: [issueId, OTHER_TENANT, quote, 2, OTHER_CLIENT, 100_000, OTHER_USER],
+        }),
+        3_000,
+      );
+      expect(foreignSeal).not.toBe("blocked");
+      expect(foreignSeal).toMatchObject({ ok: false });
+      await a.client.query("COMMIT");
+    } finally {
+      for (const s of [a, other]) await s.client.end();
+    }
+  });
+
+  it("P3 · a direct balance recompute takes the quote lock first, so it cannot deadlock against a seal", async () => {
+    // The fourth re-review's D3: T1 recomputes (then only the balance row lock), T2 starts a seal
+    // (the quote lock), T1 invoices (waits for the quote lock), T2 recomputes (waits for the row) —
+    // SQLSTATE 40P01. With the recompute taking the quote lock first, T2's seal simply waits for T1.
+    const quote = await newQuote();
+    const setup = await session();
+    const rev1 = await seal(setup.client, quote, 1);
+    await accept(setup.client, rev1);
+    await setup.client.end();
+
+    const t1 = await session();
+    const t2 = await session();
+    try {
+      await t1.client.query("BEGIN");
+      await t1.client.query(`SELECT issue_balance_apply($1)`, [rev1]);
+
+      await t2.client.query("BEGIN");
+      const sealing = outcome(seal(t2.client, quote, 2));
+      await waitsOnLock(t2.pid, "quote");
+
+      const invoiced = await outcome(t1.client.query(invoiceSql(rev1, 10_000)));
+      expect(invoiced).toEqual({ ok: true });
+      await t1.client.query("COMMIT");
+
+      const sealed = await sealing;
+      expect(sealed.ok).toBe(false);
+      expect(sealed.ok ? "" : sealed.error).toMatch(/Money has moved/);
+      expect(sealed.ok ? "" : sealed.error).not.toMatch(/deadlock/);
+      await t2.client.query("ROLLBACK");
+    } finally {
+      for (const s of [t1, t2]) await s.client.end();
     }
   });
 });

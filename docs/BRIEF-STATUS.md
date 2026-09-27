@@ -241,7 +241,23 @@ concurrency evidence in CI.
 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of lock design over
 the money invariant and of the CI wiring that proves it; one agent live, no build work, commits or
 full-gate runs alongside it (Rule 16.2). Findings written to a file as found and brought into
-`PRD-REVIEW-4.md` afterwards.*
+`PRD-REVIEW-4.md` afterwards.* It reported P1-P7 (150 unscheduled races, 0 violations under READ
+COMMITTED) and advised J15 closable once a checkable disposition exists, J4 and J10 not; brought in as
+`68c07b8`.
+
+**P1-P6 answered, 2026-09-27** — the owner approved refusing financial writes outside READ COMMITTED.
+Migration `20260927120000_lock_isolation_and_tenancy`: the quote lock enforces READ COMMITTED (P1), locks
+only a quote visible under row security with a 64-bit hashed key (P2), and `issue_balance_apply()` takes it
+first (P3). The race suite names the lock kind each race must observe (P5) and gains six races: isolation
+refused, an invoice on an accepted revision against a seal with its reason asserted (P4), withdrawal
+against a seal, two shared holders not blocking, cross-tenant lock attempts, and the P3 deadlock sequence.
+Stale sentences fixed (P6); READ COMMITTED stated in `new-app/CLAUDE.md`. MISTAKES M33. P7 (disposition
+rows) is the next commit. *Delegation (Rule 16.5): Opus, in-session — lock and isolation design over the
+money invariant, and tenant isolation.* *Coverage (Rule 21.3): 12 races pass on PostgreSQL 16.13; five
+plants each failed their named race — isolation check removed (P1), visibility check removed (P2),
+recompute without the quote lock (P3), shared lock made exclusive (P5 plus both balance-row races, now
+seeing the wrong lock kind), supersession removed from the ceiling (N4 c, which the old suite missed).
+Each restored byte-identical.*
 
 ## The headline, stated plainly
 

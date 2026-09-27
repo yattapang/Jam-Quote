@@ -16,8 +16,9 @@
  *
  * - **Nothing about true concurrency.** PGlite is a single connection, so "two devices at once"
  *   cannot be simulated here. What is proved is the *serial* case the lock exists to make safe:
- *   two invoices that are each individually under the ceiling and together over it. Real
- *   concurrency needs a two-connection test against Postgres, and it is owed.
+ *   two invoices that are each individually under the ceiling and together over it. The races
+ *   themselves are in `concurrency.pg.test.ts`, against real PostgreSQL (this line called them owed
+ *   until 2026-09-27; P6).
  * - **Nothing about the application.** These tests call the functions directly. A repository that
  *   never calls `issue_balance_apply` cannot insert an invoice without it — the policies see to
  *   that — but one that computes a wrong line total is wrong in a way only its own tests catch.

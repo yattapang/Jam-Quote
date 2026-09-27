@@ -601,3 +601,30 @@ proves each race by observing the second session **waiting on a lock** rather th
 rather than skips when CI's database is missing. Four plants on real PostgreSQL each failed their own
 race. **The rule this is evidence for:** a sentence saying a lock serialises something is a claim about
 two sessions, and is written as owed until two sessions have been run against it.
+
+### M33 · The lock fix rested on an isolation level it never named, and claimed a lock order it did not have
+`Repeat of:` **M32** — a concurrency claim written in the indicative — one commit later, and **M20/M30**
+(a guard examining less than it claims) in the races that were meant to answer M32.
+
+`20260927110000_one_lock_per_quote` explained its correctness by "READ COMMITTED gives each statement a
+fresh snapshot" and never said the fix *depends* on that. Under REPEATABLE READ the writer waits for the
+seal and then judges on its old snapshot; the fourth re-review billed 50,000 onto a superseded revision
+with no race at all (P1). The same migration said "the order is always quote lock, then balance row lock,
+so no single-quote cycle exists", while the public `issue_balance_apply()` took the row lock without the
+quote lock — executed to SQLSTATE 40P01 (P3). And its lock was cluster-wide under a comment saying writes
+on different quotes "do not touch the same lock": one tenant could hold, or time, another's (P2).
+
+The races added to prove the fix were weaker than their titles (P4, P5): two waited on the balance row,
+not the quote lock, because the wait check accepted any lock; and N4 (a)'s invoice was refused for a
+missing balance row, so breaking supersession left the whole race suite green.
+
+**Cost if it had not been caught:** a single `isolationLevel` option in the future application would have
+silently restored N4's stuck state, with a CI job reporting the races green.
+
+**Prevented by:** the isolation level is now **enforced** where it is relied on — `quote_money_lock()`
+refuses a financial write outside READ COMMITTED — so the assumption cannot be broken silently; the lock is
+taken only on a quote visible under row security; `issue_balance_apply()` takes the quote lock first; and
+every race names the KIND of lock it must observe, with a failure message saying which lock it saw
+instead. Five plants on real PostgreSQL each failed their own race, including the two the old suite missed.
+**The rule this is evidence for:** a mechanism that is correct only under a condition enforces the
+condition, or it is not a mechanism — writing the condition down is the M32 defect again.

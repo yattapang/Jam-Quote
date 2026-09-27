@@ -112,8 +112,9 @@ carries, with the agreed work re-priced into its lines by the tenant.
 
 **And the J10 guard judges only the latest revision** (L2, L6): it is the only one that can hold a live
 ceiling, so older superseded revisions — including one given a variation by code older than the twin
-check — can no longer block the quote. The seal takes that revision's balance lock, so a variation
-racing the seal waits and is then refused. Migration `20260927100000_withdrawal_with_variations`.
+check — can no longer block the quote. Migration `20260927100000_withdrawal_with_variations`. *(That
+migration also made the seal take the revision's balance lock against a racing variation. Superseded:
+a row lock missed acceptances the seal could not yet see (N4), and §3c replaces it with a per-quote lock.)*
 
 **Rejected:** a separate "close issue" record (a second concept for the same job), and keeping the
 refusal (a wrong document with variations would have no correction at all).
@@ -141,6 +142,20 @@ container, proving each race by observing the second session *waiting on a lock*
 than skips in CI when the database is missing (`PRYVIS_REQUIRE_PG`, passed through by `turbo.json`).
 
 **Rejected:** accepting N4 in writing as unlikely — the outcome is a job that cannot be billed.
+
+**Amended 2026-09-27 after the fourth re-review** (migration `20260927120000_lock_isolation_and_tenancy`):
+
+- **READ COMMITTED is required, and enforced (P1, owner's decision).** The lock makes a writer wait for
+  a seal and then judge; under REPEATABLE READ or SERIALIZABLE the judgement reads the snapshot taken
+  before the wait, and 50,000 was billed on a superseded revision with no race at all. Every financial
+  write now refuses to run outside READ COMMITTED. The application cannot run them in a SERIALIZABLE
+  transaction, and has no need to.
+- **The lock is tenant-scoped (P2).** It is taken only on a quote the caller can see under row security,
+  so another tenant can neither take it nor wait on it, and a foreign quote id is refused at once rather
+  than after a revealing delay. The key is 64 bits of an md5 of the quote id, not the id's own bits,
+  because `pg_locks` is readable by the application role.
+- **Every path orders quote lock, then balance row lock (P3).** `issue_balance_apply()` takes the shared
+  quote lock itself, so a direct recompute can no longer deadlock against a seal.
 
 ## 4. Trade-offs, and what was rejected
 
@@ -178,8 +193,10 @@ Each guard is planted against before it is reported (Rule 1.5, Rule 21.2).
 
 ## 7. What this does not prove (Rule 21.4)
 
-- **Concurrency.** The checks run under the balance row lock, and the suite is one PGlite connection, so
-  that serialisation is read rather than raced. The two-connection Postgres test remains owed.
+- **Concurrency beyond what is raced.** Since §3c, `new-app/db/test/concurrency.pg.test.ts` races the
+  lock claims on real PostgreSQL 16 in CI — one hand-scheduled interleaving each, not a stress run —
+  and they hold only under READ COMMITTED, which the lock now enforces. *(This line said the
+  two-connection test was owed until 2026-09-27; P6.)*
 - **The application.** Nothing yet offers "reduce scope" as one action; the database refuses the outcomes,
   it does not build the flow.
 - **The reconciliation job**, which does not exist yet. When it is built it must use this same net figure,
