@@ -1625,3 +1625,203 @@ api 183, core 9, contract 2, db 124 (7 files), web 11 passed. check_rules "66 ru
 check_dispositions "40 dispositions claiming Closed, checked across 3 review files" rc=0; check_citations "scanned 166 tracked files" rc=0;
 check_schema_citations "scanned 166 files against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped" rc=0.
 Final `git status --porcelain`: empty. HEAD unchanged at 3672490 throughout.
+
+---
+
+# Third re-review of the J4 line (commit 23ca3a5), findings N1-N10
+
+**Reviewer:** `commit-reviewer` agent (Opus class), 2026-09-27, commissioned under Rules 1.10 and 24.6; tier declared in `BRIEF-STATUS.md` before launch (`7649c0a`). **Did not write** the commit. Appended verbatim from the file it wrote as it worked; its probes and race scripts lived in the session scratchpad and are not retained. It raced real PostgreSQL 16 sessions for N4 and N5, the first executed concurrency evidence on this line. The author re-ran N2 and observed the same output, and confirmed N6 by reading. **Its verdict: J15 can be closed; J4 and J10 cannot on this evidence.**
+
+### Third independent re-review of 23ca3a5 (J4, J10, J15; L1-L6)
+Reviewer: commit-reviewer, Opus. Rules applied: 0, 1.5, 1.10, 4.1, 6, 16.1, 16.3, 16.4, 16.5, 21.1-21.4, 21.7, 22.1-22.3, 24.6.
+Findings are appended as found.
+
+### N1 — PRD R1.22c still says revising an accepted issue is refused (one of two twins, L5 again). Severity: medium (documents; R1.15 and R1.22c contradict each other)
+Where: docs/PRD.md:344-345.
+CONFIRMED by reading HEAD:
+  $ sed -n 344,345p docs/PRD.md
+  - **R1.22c** Revising an **accepted** issue is refused in R1. The path is a variation, not a new issue —
+    which prevents the two-accepted-issues state the model tests as impossible.
+The commit rewrote R1.15 (docs/PRD.md:187-192) to say "An accepted issue may be superseded only while nothing
+financial hangs off it", and cites R1.22c from that very sentence ("the path is a variation (R1.22c)"), and
+states that until 2026-09-27 R1.15 wrongly said a revision applied only to a non-accepted issue (L5). R1.22c,
+four lines of the same PRD further down, still says the old rule, and additionally claims the
+two-accepted-issues state is "impossible" — false: an accepted revision with nothing against it may be
+superseded and the next revision accepted, leaving two rows with outcome 'accepted' and no withdrawal (the
+repo's own J10/K6 tests build exactly this). The brief asked for this sentence shape by name.
+
+### N2 — The seal guard now RAISES when the latest revision is accepted but has no balance row; before this commit that seal succeeded. Severity: minor (introduced; a legitimate seal is refused with a message about the wrong thing; escape exists via withdrawal)
+Where: new-app/db/migrations/20260927100000_withdrawal_with_variations/migration.sql:120 (`PERFORM issue_balance_apply(v_latest);`
+unguarded), contrast :59-61 in the SAME migration, where the withdrawal guard wraps the identical call in
+`IF EXISTS (SELECT 1 FROM "issue_balance" ...)`. issue_balance_apply() raises no_data_found on a missing row (20260926220000:83-87).
+Nothing in the schema forces issue_balance_open() with an acceptance (no trigger on "acceptance"; R1.24a states it as the caller's duty).
+CONFIRMED, probe/p1.mjs section A1 (PGlite, SET ROLE pryvis_app), HEAD vs the same migrations minus 20260927100000:
+  HEAD:  OK    accept r1 WITHOUT issue_balance_open []
+         RAISE seal r2 -> issue_balance row missing for issue f0000000-...0001; it is created with the acceptance, and a FOR UPDATE on no row takes no lock at all
+  old:   OK    seal r2 "f0000000-0000-4000-8000-000000000003"
+Failure scenario: an acceptance written by any path that does not also call issue_balance_open() (a sync replay, an import, a
+future caller that forgets — the walk itself never generates one, it always opens in the same attempt) now also blocks the next
+revision of the quote, with SQLSTATE no_data_found and text that talks about locks rather than the seal. The walk cannot see it:
+no-stuck-state.test.ts:329 skips every issue without a balance row. No test covers the seal-with-no-balance-row case.
+
+### N3 — J13 is still open and the commit makes it the common path: a withdrawn issue reads "issued" although it can never be accepted, now including after invoices and variations. Severity: major as J13 (pre-existing, not introduced; not claimed fixed); the path onward is NOT dead
+Where: quote_issue_state() (20260925120000_documents_core/migration.sql:502-526, ELSE 'issued'); acceptance_issue_key
+(20260926180000_tenant_composite_keys/migration.sql:186).
+CONFIRMED, probe/p1.mjs section B1 (issue numbered, accepted 100,000, +10,000 variation, invoice 60,000 fully credited, invoice
+50,000 voided, withdrawn):
+  OK    withdraw r1 (var+10000, i1 fully credited, i2 voided)
+  OK    state r1 after withdrawal "issued"
+  RAISE re-accept r1 (J13) -> duplicate key value violates unique constraint "acceptance_issue_key"
+The onward path works: after withdrawal r2 sealed, accepted and invoiced 110,000; r1 then reads "superseded", ceilings [0,110000];
+every financial write on r1 is refused except a void of the already fully credited invoice, which moves no figure
+(`OK void credited i1 on withdrawn r1`; bal r1 {"a":100000,"v":10000,"i":0,"c":0}).
+What the tenant sees between withdrawal and the next seal: a document with a variation and two invoices shown as "issued" —
+i.e. awaiting the client — which the client cannot accept. Before L1 this state was reachable only without variations.
+
+### N4 — The L6 lock is taken only if the revision's acceptance is already VISIBLE to the seal; a seal racing an acceptance still lands an invoice (or variation) on a superseded revision — K6's stuck state, entered by concurrency. Severity: major if reached (stuck issue with money on it), low likelihood; pre-existing, NOT introduced, but the L6 claim overstates what the fix covers
+Where: new-app/db/migrations/20260927100000_withdrawal_with_variations/migration.sql:106-120 — the NOT EXISTS acceptance test
+returns before `PERFORM issue_balance_apply(v_latest)`, with no lock; the migration's L6 text (:30-35) says "one waits for the other".
+Nothing an acceptance or issue_balance_open() does takes a lock the seal also takes.
+CONFIRMED on a real PostgreSQL 16.13 (scratch cluster, 127.0.0.1:55439, two/three psql sessions; probe/race.py, race2.py, output
+probe/race2.out), database headdb = all migrations, olddb = all but 20260927100000:
+  L6 as claimed, seal first then variation on accepted r1:
+    headdb: ERROR: issue ... is superseded or no longer accepted ...   RESULT r1 state=superseded ceiling=0 vars=0
+    olddb:  (variation commits)                                         RESULT r1 state=superseded ceiling=0 vars=1
+  L6 reverse order, variation first:  headdb: seal ERROR "cannot seal revision 2 ... 0 invoice(s) and 1 variation(s)"; olddb: both commit, vars=1.
+  seal first then invoice on r1:      headdb: ERROR exceeds the ceiling 0; olddb: RESULT invoiced=1 on superseded r1.
+  => the L6 fix works, in both orders, when r1's acceptance is committed before the seal reads it. Credit where due.
+  But, r1 sealed and NOT yet accepted; session A: BEGIN; seal r2 (open); session B: accept r1 + issue_balance_open (autocommit);
+  session C: invoice 50,000 on r1 (autocommit); A: COMMIT:
+    headdb: RESULT r2 exists=true r1 state=superseded r1 ceiling=0 r1 vars=0 r1 invoiced=1
+  and with B = BEGIN; accept r1; variation +30,000; COMMIT inside A's open seal:
+    headdb: RESULT r2 exists=true r1 state=superseded r1 ceiling=0 r1 vars=1
+  The same probe run earlier (race1.py) then showed every later write on r1 refusing:
+    apply r1: ERROR: invoiced total 50000 exceeds the ceiling 0 ... by 50000
+    variation -1 on r1: ERROR: invoiced total 50000 exceeds the ceiling 0 ...
+Failure scenario: the contractor seals revision 2 (a transaction that stays open while its lines are written) at the moment the
+client accepts revision 1 from the link already sent, and a deposit invoice is raised on revision 1: revision 1 ends superseded
+with 50,000 invoiced against a ceiling of 0 — K6's stuck state; only crediting or voiding all of it gets out. The second variant
+is L2's state (a variation on a superseded revision), which since this commit no longer blocks the quote but is exactly what
+"the variation that waits then sees the committed revision and is refused" says cannot happen.
+Claims affected: migration :30-35 ("so one waits for the other"); design §3b ("The seal takes that revision's balance lock, so a
+variation racing the seal waits and is then refused"); commit message ("L6: a seal could race a variation" listed as fixed). The
+commit's "not proved" list says the lock is read, not raced — so this is recorded as a gap in a stated-as-unproved claim, now
+executed. Note also that nothing refuses an acceptance of an already-superseded issue (accepting r1 after r2 committed succeeds
+and opens a balance row), which is what makes the acceptance side lock-free.
+
+### N5 — The seal now takes a balance-row lock, so a transaction mixing a variation/invoice on one quote with a seal on another can deadlock. Severity: informational (introduced; PostgreSQL detects it and aborts one transaction, no data wrong; the application, not built, will need to retry SQLSTATE 40P01)
+Where: new-app/db/migrations/20260927100000_withdrawal_with_variations/migration.sql:120.
+CONFIRMED, real PostgreSQL 16.13, probe/race3.py: quotes Q1 and Q2 each with r1 accepted. A: BEGIN; variation on Q1.r1; seal Q2.r2.
+B: BEGIN; variation on Q2.r1; seal Q1.r2.
+  headdb, A: ERROR: deadlock detected ... CONTEXT: while locking tuple (0,2) in relation "issue_balance" ... PL/pgSQL function
+             quote_issue_one_live_ceiling() line 34 at PERFORM;  B then commits its seal (A's variation rolled back).
+  olddb: no error at all — and both seals committed over variations on the revisions they superseded (the L6 defect).
+So the new behaviour is the correct trade (a retryable abort instead of silent corruption). Recorded because the brief asked about
+lock order, and because an offline-outbox replay that batches writes on several quotes in one transaction would meet it.
+No inversion found between a seal and a withdrawal or variation on the SAME quote (each takes only r_latest's balance row, and
+the seal takes nothing before it).
+
+### N6 — A ceiling that silently drops the tax passes all 126 db tests; the walk cannot see it because every issue it seals has tax 0, and its header does not say so. Severity: major as a test gap on money arithmetic (the shipped code is correct); guard weakness, not a user-visible defect
+Where: new-app/db/test/no-stuck-state.test.ts:231 (`'Terms', 0, $6, 0, $6` — tax_rate 0, subtotal = total, tax 0), header :57
+("One tenant, small amounts, no declines and no issue numbering" — no mention of tax); oracle :178 takes the ceiling from
+quote_issue.total_minor, the DB from issue_balance.accepted_total_minor written by issue_balance_open()
+(20260925120000_documents_core/migration.sql:607).
+CONFIRMED, plant P1 via scratchpad/review3/plant.py (backup, anchor count asserted 1, restore, diff -q):
+  `SELECT q."tenant_id", q."total_minor" INTO v_tenant, v_total` -> `q."subtotal_minor"`; `npx -w @pryvis/db vitest run`:
+    walk seed 1: {...,"stuck":0,"disagreements":0,"overCeiling":0,"twoLiveCeilings":0}
+    walk seed 2: {...,"stuck":0,"disagreements":0,"overCeiling":0,"twoLiveCeilings":0}
+    Test Files  7 passed (7)   Tests  126 passed (126)
+    restored; diff -q output: '' rc=0
+Failure scenario it would let through: a client accepts 100,000 + 15% GCT = 115,000; the balance row records 100,000; the final
+invoice for 115,000 is refused ("exceeds the ceiling 100000 by 15000") — every GCT-registered tenant under-billed or blocked on
+every job. The oracle, described as "independent", agrees with the database on this defect by construction of its inputs. Not
+introduced by this commit; recorded because the commit's claim is that the oracle makes the walk a check on the figures.
+
+### N7 — The walk does not guard the path this commit exists for; M31's "the walk now exercises withdrawal after full credit with variations present" rests on ONE occurrence across both seeds, and no floor asserts it. Severity: minor (overclaim of a guard's coverage, Rule 21.1; guard weakness, not a user-visible defect)
+Where: docs/MISTAKES.md M31 "Prevented by" (added by 23ca3a5); new-app/db/test/no-stuck-state.test.ts:286 and :390
+(`hadMoney` = any invoice exists, voided ones included; floor `withdrawalsAfterMoney > 2`); commit message "reach asserted
+(full credits, withdrawals after money)".
+CONFIRMED, (1) instrumenting the walk temporarily (scratchpad/review3/instr.py; backup, restore, diff -q '' 0; walk counts identical
+to the untouched run) — per successful withdrawal, the state of its issue at that moment:
+    withdrawals seed 1: {"ok":94,"superseded":30,"withVariation":20,"fullyCredited":1,"voided":11,"fullyCreditedAndVariation":1,"liveFullyCreditedAndVariation":1}
+    withdrawals seed 2: {"ok":94,"superseded":41,"withVariation":10,"fullyCredited":1,"voided":6,"fullyCreditedAndVariation":0,"liveFullyCreditedAndVariation":0}
+  so "withdrawalsAfterMoney" 12 and 7 are 11+1 and 6+1: voided-invoice withdrawals (J15) carry the floor; K4's full-credit
+  withdrawal occurs once per seed, and L1's (full credit WITH a variation) once in seed 1 and never in seed 2.
+(2) plant P2 — the withdrawal guard counting a fully credited invoice as still billed (`>` -> `>=`, i.e. K4 and L1 reverted for
+  the credit path): the walk stays green, only unit tests catch it:
+    walk seed 1: {...,"withdrawalsAfterMoney":11,"stuck":0,"disagreements":0,...}   walk seed 2: {...,"withdrawalsAfterMoney":6,...}
+    × K4 ... allows withdrawal once the invoice is fully credited ...   × K4 ... L1 · withdraws a wrong document WITH a variation ...
+    Tests  2 failed | 124 passed (126); restored; diff -q output: '' rc=0
+  Likewise P3 (seal ignoring withdrawal — the "frees the next revision" half of L1): walk green, 2 unit tests red.
+The unit tests hold K4 and L1; the walk must not be credited with them. M31's mechanism sentence is the part that is false.
+
+### N8 — "The oracle is written from the PRD's words, not from the SQL" is false for its netting rule: the PRD delegates that rule to the function under test, so the oracle's per-invoice zero floor can only have been copied from the SQL. Severity: minor (overclaim about a guard's independence; guard weakness)
+Where: new-app/db/test/no-stuck-state.test.ts:22-24 and :127-128 ("Net billed (R1.24, R1.25): ... never below zero");
+docs/MISTAKES.md M30 ("from the PRD's wording and sharing no SQL"). Against docs/PRD.md R1.24 (:356-359): "What counts as
+invoiced is defined once, in `issue_balance_apply()`, and not restated here".
+CONFIRMED by reading: `grep -n -i "below zero\|never below\|floor" docs/PRD.md` returns nothing on the netting (output above in the
+review log); the floor is K1's `GREATEST(0, ...)` in 20260926220000_withdrawal_after_full_credit/migration.sql:95-100. R1.24/R1.25 cited
+by the oracle say that credits lower the invoiced figure and never raise the ceiling; neither says an invoice counts as zero
+rather than negative. So on netting, the two "implementations" share a source; a defect in K1's floor is one both would agree on.
+Executed consequence (not a user-visible defect): the walk cannot exercise the floor at all — the over-credit check refuses any
+credit that would make it bite — so the oracle's floor is never compared against anything the database could get wrong on a
+fresh database. The supersession/withdrawal rules (R1.15, R1.15c) are genuinely stated in the PRD and the oracle follows them.
+
+### N9 — PRD R1.15b, amended by this commit, still says the variation case is "enforced by a database trigger" and that once a variation (or a balance row) exists "the path is a credit note and a fresh quote" — the sentence L1 quoted, left standing beside the amendment that reverses it. Severity: minor (documentation; one of two twins inside one paragraph)
+Where: docs/PRD.md:198-208, specifically :201-204:
+  "... the same release created two other things that hang off an acceptance — a balance row and immutable variations — so the
+   typo remedy had become a way to detach agreed money from the issue it was agreed against. Enforced by a database trigger, not by
+   the caller. Once either exists, the path is a **credit note and a fresh quote**."
+CONFIRMED by reading HEAD (sed -n 198,208p docs/PRD.md). Two sentences earlier the same paragraph says "Variations no longer block
+it". Read in order, R1.15b now says variations do not block withdrawal AND that a trigger enforces that they do; and "either"
+includes the balance row, which every accepted issue has, so literally it says every accepted issue's path is a credit note and
+a fresh quote. The second re-review's L1 quoted "Once either exists" as a sentence prescribing an unreachable path; it survives.
+Related, milder: docs/adr/0025-five-invariants-move-from-prose-to-code.md:126 keeps the bullet lead "**Withdrawal is refused while
+any variation exists** ... now enforced by a trigger" ABOVE the dated amendment, whose text says "The paragraph below is kept as
+the reasoning of its day" — the bullet lead above it is not marked, and it is the sentence a reader skimming the decisions sees.
+
+### N4, variant (b) — the seal picks "the latest revision" BEFORE it waits for the lock and never re-picks after it (added as found)
+CONFIRMED, real PostgreSQL 16.13, probe/race4.py (headdb) and race4old.py (olddb): r1 accepted, nothing billed. A: BEGIN; seal r2
+(judges r1, takes r1's balance lock, passes); B: BEGIN; seal r3 — its guard chooses r1 as "latest" (r2 uncommitted) and then
+WAITS on r1's lock; A: accept r2, invoice 40,000 on r2, COMMIT; B resumes, re-counts money on r1 only (0), passes, COMMIT:
+  headdb:  1|superseded|0|0   2|superseded|0|1   3|sealed_awaiting_number|0|0
+           apply r2: ERROR: invoiced total 40000 exceeds the ceiling 0 ... by 40000
+  olddb:   identical result.
+Pre-existing (same outcome without this commit), but it contradicts the migration's own argument (:30-35, and :38-39 "each
+statement inside the function takes a fresh snapshot after the lock"): the fresh snapshot is used to count money on a row
+chosen from the stale one. "At most one live ceiling" still holds — only the maximum revision is ever unsuperseded, which the
+unique (tenant, quote, revision) index makes structural — so J10's two-live-ceilings shape is NOT reachable this way; the
+money-stranding half (K6's stuck state) is.
+
+### N10 — The L6 lock has no failing test: deleting it leaves all 126 db tests and both walk seeds green. It DOES work on real PostgreSQL (N4's first two cases), so this is a test gap, which the commit acknowledges. Severity: minor (test gap; shipped code right within N4's limits)
+Where: new-app/db/migrations/20260927100000_withdrawal_with_variations/migration.sql:120.
+CONFIRMED, plant A8 (`  PERFORM issue_balance_apply(v_latest);` deleted), `npx -w @pryvis/db vitest run`:
+    walk seed 1: {...,"stuck":0,"disagreements":0,"overCeiling":0,"twoLiveCeilings":0}  walk seed 2: {... same zeros}
+    Test Files  7 passed (7)   Tests  126 passed (126)   restored; diff -q output: '' rc=0
+Recorded because Rule 1.5 says a fix without a failing test is not proved; the commit's "Not proved" paragraph says so too. The
+two-connection harness used for N4 (probe/race.py, a scratch PostgreSQL 16 cluster) is the shape that would hold it.
+
+### Author's eight plants, re-executed — all reproduce as claimed (no finding)
+plant.py, each backed up, anchor asserted unique, restored, `diff -q` '' rc=0; full `npx -w @pryvis/db vitest run` each:
+- K6 back (latest -> earliest, `DESC`->`ASC`): walk stuck 15 / 9 (overCeiling 15 / 9); unit: K6 test and L2 test red. Tests 4 failed | 122 passed.
+- W2 credits twice: walk disagreements 10 / 10; unit: 4 red (J12 credit, J4 x3). 6 failed | 120.
+- W1 supersession removed: walk disagreements 88 / 89, twoLiveCeilings 43 / 43, overCeiling 5 / 6; 5 J10 unit tests red. 7 failed | 119.
+- W3 withdrawal ignoring billed: walk stuck 20 / 15; 2 unit red. 4 failed | 122.
+- variations block again: L1 test and rewritten H4 test red; WALK GREEN (withdrawalsAfterMoney 4 / 6, floor is >2) — see N7.
+- withdrawn half of twin check removed: L4 test red (+ rewritten H4 test); walk green.
+- old K2 message restored: "REFUSES a credit note against an invoice that is already voided" red.
+- whole L1 guard change reverted (new withdrawal guard renamed away so 20260926220000's is live): 2 unit red; walk green.
+My additional plants: P1 subtotal as accepted total — nothing red (N6); P2 full credit counted as billed — 2 unit red, walk green
+(N7); P3 seal ignoring withdrawal — 2 unit red, walk green; P4 ceiling ignoring withdrawal — 5 unit + walk red (stuck 1/5,
+disagreements 21/22, overCeiling 11/15); P5 ceiling RAISE removed — 15 unit + walk red via overCeiling ONLY (43/49; stuck 0,
+disagreements 0), so overCeiling is not vacuous and is the walk's only catch for that plant; P6 twin's superseded half removed —
+1 unit red, walk green, as its header states (:46-48); P7 seal ignoring variations — 1 unit red, walk green.
+
+### Gate (uncached), after all plants restored
+`cd new-app && npx turbo run typecheck test --force --concurrency=1` (scratchpad/review3/gate.out): Tasks: 10 successful, 10 total;
+Cached: 0 cached, 10 total; rc=0. core 9, contract 2, api 183 (13 files), db 126 (7 files), web 11. Walk: seed 1 succeeded 1347,
+examined 287, withdrawalsAfterMoney 12; seed 2 1357 / 279 / 7; all four defect counts 0.
+check_citations "scanned 167 tracked files" rc=0; check_dispositions "40 dispositions claiming Closed, checked across 3 review
+files" rc=0; check_rules "66 rules defined · 787 citations across 57 distinct rules" rc=0; check_schema_citations "scanned 167 files
+against 28 tables, 8 functions, 7 triggers, 38 policies; 0 citations skipped" rc=0.
+Final `git -C /home/user/Jam-Quote status --porcelain`: empty. HEAD 7649c0a throughout; no change to the tree observed from outside.
