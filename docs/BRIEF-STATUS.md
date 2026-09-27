@@ -188,6 +188,12 @@ scan (K1's defect) — each turned its named test red, each restored byte-identi
 guard's lock is NOT proved: one PGlite connection cannot race it.* **Next:** a second independent
 re-review of `c35952d` and this commit before J4, J10 or J15 is marked Closed.
 
+**Second re-review of `c35952d` and `8e8236a`, launched 2026-09-27 on the owner's instruction.**
+*Delegation (Rule 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of
+money arithmetic, ceiling state and withdrawal preconditions, where a defect leaves the suite green;
+one agent live, no build work, commits or full-gate runs alongside it (Rule 16.2). Findings are
+written to a file as found and brought into `PRD-REVIEW-4.md` afterwards.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**
