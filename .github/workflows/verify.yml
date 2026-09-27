@@ -103,6 +103,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # Real PostgreSQL, for `db/test/concurrency.pg.test.ts` only. Every other database suite runs on
+    # PGlite, which is one connection and so cannot race two sessions; the lock claims in the
+    # migrations went unraced for three reviews until the J4 line's third re-review raced them by hand
+    # and found one that did not hold (finding N4). Throwaway: trust auth, no volume, nothing kept.
+    #
+    # What it does NOT prove (Rule 21.4): anything about the production database's version or
+    # settings beyond "PostgreSQL 16, default isolation"; and only the interleavings the test schedules.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     defaults:
       run:
         working-directory: new-app
@@ -126,9 +146,14 @@ jobs:
 
       # The database and tenancy tests replay the real migrations against PGlite,
       # which needs no service container: it is Postgres compiled to WebAssembly,
-      # in process.
+      # in process. The one exception is the concurrency suite, which races real
+      # sessions against the service above. PRYVIS_REQUIRE_PG makes that suite FAIL,
+      # not skip, if the database is missing — a skipped proof must not read as a pass.
       - name: Test
         if: ${{ !cancelled() }}
+        env:
+          PRYVIS_PG_URL: postgres://postgres@127.0.0.1:5432/postgres
+          PRYVIS_REQUIRE_PG: "1"
         run: npm test
 
       # Proves the checked-in wire contract still matches the API's @wire types.

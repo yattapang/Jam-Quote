@@ -568,3 +568,36 @@ variation had been recorded — the job that has changed most, which is the one 
 **Prevented by:** the walk now exercises withdrawal after full credit with variations present, and the
 L1 test executes the exact case. **Nothing mechanical checks that a decision was tested against the
 states its neighbours create**; that is what independent re-review found, twice, and stays its job.
+
+### M32 · A lock was described as serialising a race nobody had raced
+`Repeat of:` **M28's second half** ("a claim of the form 'no sequence can…' is executed or it is not a
+claim"), applied to concurrency one commit later.
+
+`20260927100000_withdrawal_with_variations` said of its new lock: "one waits for the other; the variation
+that waits then sees the committed revision and is refused", and the design repeated it. That was an
+argument about READ COMMITTED, written in the indicative, and the commit's own "not proved" line admitted
+nobody had raced it. The third re-review raced it on real PostgreSQL 16 and found the case it did not
+cover: a row lock protects only a row that exists and is visible, so an acceptance and an invoice made
+while a seal was open slipped past, leaving money on a superseded revision (N4). PostgreSQL 16 had been
+installed on this machine the whole time; the "PGlite is one connection" limit had been repeated for
+four reviews as a property of the project when it was a property of the test setup.
+
+**Two more in the same batch, caught before commit, recorded because they are the same defect:**
+- **Turbo dropped the environment variables** that tell the new concurrency suite a database is present
+  and required. Run through `npm test`, as CI does, `PRYVIS_REQUIRE_PG=1` produced "6 skipped" and a
+  green run — the silent skip the variable exists to prevent. Found only by running the guard the way CI
+  would; `turbo.json` now declares both.
+- **A pre-existing guard is narrower than its title.** "sets the write flag in exactly one place" in
+  `documents-core.test.ts` reads only the first Documents migration, while four later migrations
+  redefine `issue_balance_apply()` and each sets the flag. True of one file, false of the schema, since
+  J2. Not fixed in this batch; recorded as owed.
+
+**Cost if it had not been caught:** a job that can never be billed, reached by two people using the
+product at the same moment — and a CI job that would have reported the proof as passing while running
+none of it.
+
+**Prevented by:** `new-app/db/test/concurrency.pg.test.ts` against a PostgreSQL 16 service in CI, which
+proves each race by observing the second session **waiting on a lock** rather than by timing, and fails
+rather than skips when CI's database is missing. Four plants on real PostgreSQL each failed their own
+race. **The rule this is evidence for:** a sentence saying a lock serialises something is a claim about
+two sessions, and is written as owed until two sessions have been run against it.

@@ -11,6 +11,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema schema.prisma"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.0",
     "prisma": "^6.1.0"
   },
   "exports": {

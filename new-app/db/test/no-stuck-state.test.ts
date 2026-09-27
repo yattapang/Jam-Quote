@@ -21,13 +21,19 @@
  *
  * This is a second implementation of the rules in `issue_balance_apply()` and `issue_ceiling_minor()`,
  * deliberately. Two implementations that disagree is the finding; the risk is that both are wrong the
- * same way, which is why the one here is written from the PRD's words, not from the SQL.
+ * same way. Where each rule comes from, honestly (finding N8): supersession, withdrawal and the ceiling
+ * are from the PRD's words (R1.15, R1.15c, R1.22b, R1.24); the netting of credits and voids is from
+ * `docs/design/scope-reduction.md` §3 — the PRD delegates it to `issue_balance_apply()` and does not
+ * state it — and the per-invoice floor at zero is K1's decision in that design, which the SQL also
+ * implements. So a defect in the design's netting rule would be shared by both, and is not caught.
  *
  * ## WHAT IT DOES
  *
- * For each run: a fresh quote, then sixteen writes chosen by a seeded generator — seal a revision,
- * accept, invoice, credit part of an invoice, credit ALL that is left on one, void, record a variation
- * (negative ones included), withdraw — each in its own transaction, refusals expected and ignored.
+ * For each run: a fresh quote, then sixteen writes chosen by a seeded generator — seal a revision (half
+ * of them with 15% tax, so a ceiling that dropped the tax would disagree; finding N6), accept, invoice,
+ * credit part of an invoice, credit ALL that is left on one, void, record a variation (negative ones
+ * included), withdraw, and the whole wrong-document remedy (fully credit every invoice on an accepted
+ * issue, then withdraw it; findings N7, K4, L1) — each write in its own transaction, refusals expected.
  * Afterwards, every issue with a balance row must:
  *
  *   * let `issue_balance_apply()` run. If it raises with nothing new written, every future write on the
@@ -56,6 +62,8 @@
  * - **Not concurrency.** Writes are serial on one PGlite connection.
  * - **One tenant, small amounts, no declines and no issue numbering.** A defect that needs a declined
  *   acceptance or a numbered issue is outside this walk.
+ * - **Not the locks.** One connection cannot race; `concurrency.pg.test.ts` does that against real
+ *   PostgreSQL.
  * - **Not a defect both implementations share.** If the PRD's rule itself is wrong, both agree.
  */
 import { APP_ROLE, applyMigrations, asSuperuser } from "@pryvis/db/test-support";
@@ -192,6 +200,9 @@ async function walk(seed: number) {
   let invoicedIssues = 0;
   let fullCredits = 0;
   let withdrawalsAfterMoney = 0;
+  let wrongDocumentWithdrawals = 0;
+  let wrongDocumentWithVariation = 0;
+  let taxedAcceptances = 0;
   const stuck: string[] = [];
   const disagreements: string[] = [];
   const overCeiling: string[] = [];
@@ -215,12 +226,14 @@ async function walk(seed: number) {
       const issue = issues.length
         ? issues[issues.length - 1 - (next(3) === 0 ? next(issues.length) : 0)]!
         : "";
-      const op = issues.length ? next(11) : 0;
+      const op = issues.length ? next(12) : 0;
       let ok = false;
 
       if (op <= 1) {
         const issueId = id();
-        const total = String(50 + next(100));
+        const subtotal = 50 + next(100);
+        const taxed = next(2) === 0;
+        const tax = taxed ? Math.floor((subtotal * 15) / 100) : 0;
         revision += 1;
         ok = await attempt(() =>
           sql(
@@ -228,9 +241,9 @@ async function walk(seed: number) {
                (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
                 currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
                 sealed_at, sealed_by_user_id, catalog_synced_at)
-             VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
-                     now(), $7, now())`,
-            [issueId, TENANT, quote, revision, CLIENT, total, USER],
+             VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', $6, $7, $8, $9,
+                     now(), $10, now())`,
+            [issueId, TENANT, quote, revision, CLIENT, taxed ? 1500 : 0, subtotal, tax, subtotal + tax, USER],
           ),
         );
         if (ok) issues.push(issueId);
@@ -245,7 +258,11 @@ async function walk(seed: number) {
           );
           await sql(`SELECT issue_balance_open($1)`, [issue]);
         });
-        if (ok) acceptances.push({ id: acceptanceId, issue });
+        if (ok) {
+          acceptances.push({ id: acceptanceId, issue });
+          const [row] = await sql<{ tax: string }>(`SELECT tax_minor AS tax FROM quote_issue WHERE id = $1`, [issue]);
+          if (Number(row!.tax) > 0) taxedAcceptances += 1;
+        }
       } else if (op <= 5) {
         const invoiceId = id();
         ok = await attempt(() =>
@@ -312,6 +329,47 @@ async function walk(seed: number) {
           );
           if (ok) fullCredits += 1;
         }
+      } else if (op === 11 && acceptances.length) {
+        // The wrong-document remedy end to end (K4, L1): fully credit every invoice still billed on an
+        // accepted issue, then withdraw its acceptance. Several writes, each in its own transaction.
+        const chosen = acceptances[next(acceptances.length)]!;
+        const open = await sql<{ id: string; left: string }>(
+          `SELECT i.id, i.amount_minor - COALESCE((SELECT SUM(c.amount_minor) FROM credit_note c
+                                                    WHERE c.invoice_id = i.id), 0) AS left
+             FROM invoice i
+            WHERE i.issue_id = $1
+              AND NOT EXISTS (SELECT 1 FROM invoice_void z WHERE z.invoice_id = i.id)`,
+          [chosen.issue],
+        );
+        for (const inv of open) {
+          if (Number(inv.left) <= 0) continue;
+          if (
+            await attempt(() =>
+              sql(
+                `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+                 VALUES ($1, $2, $3, $4, 'walk: wrong document', now())`,
+                [id(), TENANT, inv.id, inv.left],
+              ),
+            )
+          ) {
+            succeeded += 1;
+          }
+        }
+        const expected = await oracle(chosen.issue);
+        ok = await attempt(() =>
+          sql(
+            `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason,
+                                                withdrawn_by_user_id)
+             VALUES ($1, $2, $3, 'walk: wrong document', $4)`,
+            [id(), TENANT, chosen.id, USER],
+          ),
+        );
+        if (ok && expected.invoiceCount > 0) {
+          wrongDocumentWithdrawals += 1;
+          if (expected.variations !== 0 || (await sql(`SELECT 1 FROM variation WHERE issue_id = $1`, [chosen.issue])).length > 0) {
+            wrongDocumentWithVariation += 1;
+          }
+        }
       }
       if (ok) succeeded += 1;
     }
@@ -355,6 +413,9 @@ async function walk(seed: number) {
     invoicedIssues,
     fullCredits,
     withdrawalsAfterMoney,
+    wrongDocumentWithdrawals,
+    wrongDocumentWithVariation,
+    taxedAcceptances,
     stuck,
     disagreements,
     overCeiling,
@@ -379,15 +440,21 @@ describe("K6 and L3 · no sequence of financial writes leaves an issue stuck, ov
       );
 
       // The set examined, asserted so a generator that stops reaching the interesting states fails
-      // rather than passing on nothing (Rule 21.1). Measured 2026-09-27, seeds 1 and 2: 1,347-1,357
-      // successful writes, 279-287 issues examined, 53-58 with money billed, 29-35 full credits, 7-12
-      // withdrawals after money had moved. Floors sit at about half of the lower value, so they fail on a
-      // broken generator and not on noise — the first floors were guesses, and two failed on a correct run.
-      expect(result.succeeded).toBeGreaterThan(700);
-      expect(result.examined).toBeGreaterThan(140);
-      expect(result.invoicedIssues).toBeGreaterThan(25);
-      expect(result.fullCredits).toBeGreaterThan(12);
+      // rather than passing on nothing (Rule 21.1). Measured 2026-09-27 after the N6/N7 changes, seeds 1
+      // and 2: 1,326-1,364 successful writes, 274-297 issues examined, 23-28 still billed at the end,
+      // 13-18 single full credits, 5-8 other withdrawals after money, 26-27 wrong-document remedies run
+      // to the end (10-13 of them with a variation present), 135-145 acceptances of a taxed issue. Floors
+      // sit at about half the lower value, so they fail on a broken generator and not on noise. The
+      // wrong-document floors also fail if the remedy itself stops working (K4 or L1 reverted), because
+      // then no such withdrawal succeeds — the walk's only way to see those two decisions.
+      expect(result.succeeded).toBeGreaterThan(650);
+      expect(result.examined).toBeGreaterThan(135);
+      expect(result.invoicedIssues).toBeGreaterThan(10);
+      expect(result.fullCredits).toBeGreaterThan(6);
       expect(result.withdrawalsAfterMoney).toBeGreaterThan(2);
+      expect(result.wrongDocumentWithdrawals).toBeGreaterThan(12);
+      expect(result.wrongDocumentWithVariation).toBeGreaterThan(4);
+      expect(result.taxedAcceptances).toBeGreaterThan(60);
 
       expect(result.stuck).toEqual([]);
       expect(result.disagreements).toEqual([]);

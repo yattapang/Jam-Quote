@@ -4,8 +4,8 @@
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes · ✅ **2026-09-27** — §3a, withdrawal after full credit (K4) · ✅ **2026-09-27** — §3b, withdrawal with variations (L1) |
-| **Independent review** | Will this do what it says? | Re-reviews done 2026-09-26 (K1-K6) and 2026-09-27 (L1-L6), both appended to `PRD-REVIEW-4.md`; the L fixes await a **third** before J4 is closed |
+| **Owner approval** | Is this what you want built? | ✅ **2026-09-26** — option 1 of the three put to the owner, and the default for a voided invoice's credit notes · ✅ **2026-09-27** — §3a, withdrawal after full credit (K4) · ✅ **2026-09-27** — §3b, withdrawal with variations (L1) · ✅ **2026-09-27** — §3c, one lock per quote, and PostgreSQL in CI (N4) |
+| **Independent review** | Will this do what it says? | Re-reviews done 2026-09-26 (K1-K6), 2026-09-27 (L1-L6) and 2026-09-27 (N1-N10), all appended to `PRD-REVIEW-4.md`; the N fixes await a **fourth** before J4 or J10 is closed |
 
 Date: 2026-09-26 · Answers finding **J4** (`PRD-REVIEW-4.md`) · Delegation (Rule 16.5): **Opus** — money
 arithmetic, one of the three named exceptions: it decides how much may be billed.
@@ -39,8 +39,10 @@ title — **there is no way to reduce scope below what is invoiced**:
    version could not carry this claim** (L3): it judged results with the functions it was testing, so
    double-subtracted credits and the original J10 defect both passed it, and it never reached withdrawal
    after money had moved. It now checks against an oracle of its own and asserts that reach. Still not
-   proved, and stated: sequences the walk does not reach; real concurrency; and a stuck state entered by
-   data older than a fix (K1, L2), which each migration answers but no walk over a fresh database can see.
+   proved, and stated: sequences the walk does not reach, and a stuck state entered by data older than a
+   fix (K1, L2), which each migration answers but no walk over a fresh database can see. **Concurrency
+   is separate**: the third re-review entered K6's stuck state by racing a seal against an acceptance on
+   real PostgreSQL (N4); §3c closes it and `new-app/db/test/concurrency.pg.test.ts` races it.
 3. A credit note **cannot be abused to manufacture room**: it cannot exceed what its invoice still has
    uncredited, and it cannot be raised against a voided invoice.
 4. Voiding an invoice that carries credit notes does **not** subtract the credit twice.
@@ -115,6 +117,30 @@ racing the seal waits and is then refused. Migration `20260927100000_withdrawal_
 
 **Rejected:** a separate "close issue" record (a second concept for the same job), and keeping the
 refusal (a wrong document with variations would have no correction at all).
+
+## 3c. One lock per quote (N4 — owner's decision 2026-09-27)
+
+The L6 fix locked the latest revision's balance row, and a row lock only protects a row that exists and
+is visible. The third re-review raced real PostgreSQL: while revision 2 was being sealed, revision 1 was
+accepted and invoiced in other sessions, and both committed — revision 1 superseded with money billed
+against a ceiling of 0. A second variant: a seal chose "the latest revision" before waiting and never
+chose again.
+
+**Decision:** a transaction-scoped advisory lock keyed on the quote. A seal takes it exclusively before it
+reads anything; every financial write (acceptance, invoice, void, credit note, variation, withdrawal)
+takes it shared, before the issue's balance row lock. A seal and a financial write on the same quote
+cannot interleave; financial writes do not block each other. Advisory rather than a row lock on `quote`,
+so editing a draft quote is never blocked by invoicing and no UPDATE policy on `quote` is needed.
+Migration `20260927110000_one_lock_per_quote`, which also removes the seal's balance-lock call (N2).
+
+**Cost, stated:** a transaction that writes on two quotes, or writes on a quote and then seals it, can
+deadlock; PostgreSQL aborts one side with SQLSTATE 40P01 and the application must retry (N5).
+
+**And the proof runs in CI:** `concurrency.pg.test.ts` races six cases against a PostgreSQL 16 service
+container, proving each race by observing the second session *waiting on a lock*, and it fails rather
+than skips in CI when the database is missing (`PRYVIS_REQUIRE_PG`, passed through by `turbo.json`).
+
+**Rejected:** accepting N4 in writing as unlikely — the outcome is a job that cannot be billed.
 
 ## 4. Trade-offs, and what was rejected
 

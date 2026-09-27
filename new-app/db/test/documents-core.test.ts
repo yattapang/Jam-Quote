@@ -586,6 +586,25 @@ describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
     expect((await totals(issue)).invoiced).toBe(45_000);
   });
 
+  it("N6 · the ceiling is the total the client accepted INCLUDING tax, not the subtotal", async () => {
+    // Every other test seals with tax 0, so a ceiling built from `subtotal_minor` passed all 126 db
+    // tests — and would refuse a contractor's own 115,000 invoice on a 100,000 + 15% GCT job.
+    const issue = id();
+    await sql(
+      `INSERT INTO quote_issue
+         (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+          currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+          sealed_at, sealed_by_user_id, catalog_synced_at)
+       VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 1500, 100000, 15000,
+               115000, now(), $5, now())`,
+      [issue, TENANT, QUOTE, CLIENT, USER],
+    );
+    await accept(issue);
+
+    await insertInvoice(issue, 115_000n);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 115000/);
+  });
+
   it("K3 · a credit note nets only against its OWN issue, never against another job", async () => {
     // The re-review planted "subtract every credit in the tenant" and all 113 db tests stayed green:
     // every credit-note test used one issue. Two jobs here, one fully credited, the other at its ceiling.
@@ -1062,6 +1081,22 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     await seal(3, 100_000n);
     expect(await ceiling(rev1)).toBe(0);
     expect(await ceiling(rev2)).toBe(0);
+  });
+
+  it("N2 · seals the next revision when the accepted one has no balance row (nothing billed on it)", async () => {
+    // The L6 fix called `issue_balance_apply()` inside the seal, which raises when no balance row
+    // exists — so this seal was refused, with a message about a missing balance row. Nothing makes
+    // `issue_balance_open()` run with every acceptance, so the state is reachable.
+    const rev1 = await seal(1, 100_000n);
+    await sql(
+      `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
+                               occurred_at)
+       VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
+      [id(), TENANT, rev1],
+    );
+
+    await seal(2, 100_000n);
+    expect(await state(rev1)).toBe("superseded");
   });
 
   it("K6's twin · REFUSES a variation against a superseded revision", async () => {

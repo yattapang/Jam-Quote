@@ -91,6 +91,12 @@ Three layers (Rule 8): unit tests beside the subject; seam and flow tests agains
 database — PGlite, which is Postgres in process, because a mock cannot disagree with an RLS
 policy; and guards that hold a defect class shut.
 
+**One suite needs real PostgreSQL:** `db/test/concurrency.pg.test.ts` races two and three sessions,
+which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a superuser connection
+(it creates and drops a throwaway database) and prints a loud SKIPPED line otherwise; CI sets
+`PRYVIS_REQUIRE_PG`, which turns a missing database into a failure. Both variables are declared in
+`turbo.json`, because Turbo drops undeclared environment variables — and did, silently, the first time.
+
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work
 here before. Every guard states what it does **not** prove; keep that habit.

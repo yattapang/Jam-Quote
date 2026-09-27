@@ -213,7 +213,25 @@ proved.* **Next:** a third independent re-review before J4, J10 or J15 is marked
 16.5), declared before launch: `commit-reviewer` agent, Opus — adversarial review of withdrawal
 preconditions, the ceiling guard and a money oracle, where a defect leaves the suite green; one agent
 live, no build work, commits or full-gate runs alongside it (Rule 16.2). Findings written to a file as
-found and brought into `PRD-REVIEW-4.md` afterwards.*
+found and brought into `PRD-REVIEW-4.md` afterwards.* It reported N1-N10, raced real PostgreSQL for the
+first time on this line, and advised J15 closable, J4 and J10 not; brought in as `682fdab`.
+
+**N1-N10 answered, 2026-09-27** — the owner approved a per-quote lock and PostgreSQL in CI. Migration
+`20260927110000_one_lock_per_quote`: a transaction-scoped advisory lock per quote, exclusive for a seal,
+shared for every financial write, taken before any state is read (N4); the seal's balance-lock call
+removed (N2). `db/test/concurrency.pg.test.ts` races six cases on real PostgreSQL; CI's `verify-new-app`
+gains a `postgres:16` service; `turbo.json` passes the two variables through. The walk seals half its
+issues with tax (N6), runs the wrong-document remedy end to end with its own floors (N7), and says where
+each oracle rule comes from (N8). R1.15b rewritten whole and R1.22c corrected (N1, N9). MISTAKES M32.
+N3 stays with J13; N5 is stated in the migration and design. *Delegation (Rule 16.5): Opus, in-session —
+lock design over the money invariant, and a CI change.* *Coverage (Rule 21.3): on real PostgreSQL 16,
+all six races pass and four plants each fail their own race — no shared lock (N4a and both L6 races,
+"never waited on a lock"), seal locking after choosing (N4b), lock a no-op (four races), balance row lock
+removed (the two-invoice race); on PGlite, N2 and N6 unit tests each red under their plant; the walk red
+under the tax dropped (41 and 24 disagreements), K4 reverted and L1 reverted (reach floors) — the three
+the reviewer showed the old walk missed. Through Turbo: `PRYVIS_REQUIRE_PG` without a URL FAILS; with a
+URL the six races RUN. Each plant restored byte-identical.* **Next:** a fourth independent re-review
+before J4 or J10 is marked Closed; J15 goes Closed in the disposition rows.
 
 ## The headline, stated plainly
 

@@ -123,7 +123,8 @@ because the row *is* the record.
   So a withdrawal drops the ceiling immediately, the balance row survives and is simply inert, and the
   rule changed in **one expression** with no document needing an edit. That is the payoff this ADR was
   arguing for, collected.
-- **Withdrawal is refused while any variation exists**, not only while an invoice exists — and this is
+- *(Superseded 2026-09-27 — see the amendment below; kept as the decision of its day.)*
+  **Withdrawal is refused while any variation exists**, not only while an invoice exists — and this is
   now enforced by a trigger rather than stated, because a precondition a caller can forget is not a
   precondition (finding H4). A recorded variation is agreed extra work, and withdrawing would leave it
   immutable, pointing at a superseded issue, unbillable and unmovable.

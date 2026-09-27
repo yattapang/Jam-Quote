@@ -195,17 +195,18 @@ demonstrated, it is not a requirement, it is a hope.
   those, release 1 allows the acceptance to be **withdrawn** — recorded, audited, with a reason — which
   returns the issue to superseded-able. Without this, a typo in a client name on an accepted quote had
   no path at all.
-- **R1.15b** **Withdrawal is refused while any invoice still has money billed on it (H4, amended by K4
-  and L1).** Variations no longer block it (owner's decision 2026-09-27): since a withdrawn or superseded
-  issue can take no new variation, its recorded ones are history rather than a live second copy, and the
-  agreed work is re-priced into the next revision. The first version named only invoices, and the same release created two other
-  things that hang off an acceptance — a balance row and immutable variations — so the typo remedy had
-  become a way to detach agreed money from the issue it was agreed against. Enforced by a database
-  trigger, not by the caller. Once either exists, the path is a **credit note and a fresh quote**.
-  That path is for a *wrong document*: void or fully credit each invoice, then withdraw — allowed once
-  nothing is still billed (K4, J15 and L1, owner's decisions 2026-09-27) — then issue the next revision. For *less work*, the path is a credit note and a negative variation on the same
-  issue (R1.22a). Until J4 the credit note half of both did nothing, and until K4 a fully credited
-  issue's ceiling reopened with no way to close it.
+- **R1.15b** **Withdrawal is refused while any invoice still has money billed on it** — enforced by a
+  database trigger, `acceptance_withdrawal_guard()`, not by the caller. So for a *wrong document* once
+  money has been demanded, the path is: void or fully credit each invoice, withdraw, then issue the next
+  revision of the same quote. For *less work*, the path is a credit note and a negative variation on the
+  same issue (R1.22a). Recorded variations do not block withdrawal: a withdrawn or superseded issue takes
+  no new variation, so its recorded ones are history, and the agreed work is re-priced into the next
+  revision by the tenant.
+  *History, rewritten whole on 2026-09-27 after three amendments had left it contradicting itself
+  (N9):* H4 first refused withdrawal while any invoice or variation existed, because variations could
+  otherwise be detached from their issue as a live second copy. K4 let a voided or fully credited invoice
+  stop blocking (J15 with it); L1 let variations stop blocking once K6's twin check made them inert —
+  both owner's decisions, 2026-09-27. Until J4 a credit note moved no figure at all.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
   `accepted_total_minor` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
@@ -341,8 +342,12 @@ demonstrated, it is not a requirement, it is a hope.
   written once and never again (R1.24b). The distinction matters and getting it wrong was finding H3: the
   ceiling is `accepted_total + variations_total`, and a variation moves the second term. Variations are
   immutable once recorded; a mistake is corrected by another variation.
-- **R1.22c** Revising an **accepted** issue is refused in R1. The path is a variation, not a new issue —
-  which prevents the two-accepted-issues state the model tests as impossible.
+- **R1.22c** Revising an accepted issue **once money has moved on it** — any invoice or variation — is
+  refused; the path is a variation, or for a wrong document, withdrawal first (R1.15b). An accepted issue
+  with nothing against it may be revised, and its ceiling falls to 0 (R1.15). What is impossible is
+  **two live ceilings on one quote**, not two acceptances: only the latest revision can hold a ceiling.
+  *Corrected 2026-09-27 (N1): this said revising any accepted issue was refused, which the J10 guard and
+  its tests had contradicted since J10.*
 - **R1.22d** The audit trail records who recorded a variation and when. R1 has **no client signature on
   a variation**; that is R2, and the UI must not present a recorded variation as client-accepted.
 
