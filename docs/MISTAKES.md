@@ -676,3 +676,22 @@ J2 row now points at the amendment that exists. **No mechanism yet makes "one pl
 property" a checked obligation** — a migration header's list of claims is prose, and nothing pairs each
 claim with a plant. That is Rule 1.5 applied per property rather than per fix, and it is recorded as
 owed, not promised. Independent re-review is what found it, twice in a row.
+
+### M36 · The closing-check brief specified two greps that could not see what they checked
+`Repeat of:` **nothing yet, and recorded because it is the first data point for a rule proposed today**
+— the owner's point that apparent under-performance by a cheaper model is usually under-specification.
+
+The J4 closing check was delegated to Sonnet with a brief naming every step and its expected output. Two
+of the expected outputs were wrong: a single-line `grep` for a sentence that wraps across two lines in
+`docs/design/scope-reduction.md`, and a grep for the words "migrations assume", which the corrected
+sentence no longer contains. The checker followed the brief exactly, reported both as findings, and then
+read the files and confirmed the content was right — it did not improvise, which is what the brief asked.
+The brief also listed the files where a false sentence was allowed to remain and missed a third copy, in
+`20260927110000_one_lock_per_quote` — which was a real finding (5a), found because the check was literal.
+
+**Cost:** one re-run of the check. Cheap, and the escalation cause is recorded as **brief incomplete**,
+not "model too weak": the tier was right and the specification was not.
+
+**Prevented by:** nothing mechanical yet. The owed control is the one proposed on 2026-09-27: a brief is a
+file, checked before delegation — and a grep-shaped expectation is itself tested against the current tree
+before it is handed over, so an expected output that is already wrong never reaches the agent.

@@ -297,6 +297,18 @@ expected output is named in the brief, so the cheapest reliable tier is the one 
 exactly. If the brief proves incomplete, the escalation is recorded here with its cause (brief incomplete
 vs genuinely hard). One agent live, no build work alongside it (Rule 16.2).*
 
+**Closing check result, 2026-09-27: NOT PASSED on steps 5a-5c; plants and gate all passed.** 5a was real —
+a third committed copy of "no single-quote cycle exists", in `20260927110000_one_lock_per_quote` — and is
+answered by migration `20260927140000_quote_lock_contract`, which corrects it and puts the lock's contract
+on the function as `COMMENT ON FUNCTION`. 5b and 5c were **defects in my brief**: single-line greps for a
+wrapped sentence and a reworded one (MISTAKES M36). *Tier log: not an escalation — the tier was right; cause
+recorded as BRIEF INCOMPLETE.* Report appended to `PRD-REVIEW-4.md`.
+
+**J4 closing re-check, launched 2026-09-27.** *Delegation (Rule 16.5), declared before launch: the same
+`commit-reviewer` on **Sonnet**, re-run with a corrected brief whose every expected output was first
+executed against the current tree (M36's lesson applied before the handover). Scope: the three failed
+steps, the new migration, and the gate.*
+
 ## The headline, stated plainly
 
 **The code is in the right place. The documents are behind, and one required step was skipped.**

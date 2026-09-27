@@ -2209,3 +2209,82 @@ The application layer (none exists for these writes); PGlite suites beyond the J
 (no-stuck-state.test.ts); PostgreSQL versions other than 16.13; pg_stat_activity query-text exposure between
 tenants sharing one role; issue_number and rejected_seal semantics; the CI workflow (not re-run); J1, J5, J6-J9,
 J11-J14, J16 as findings; original-app/.
+
+---
+
+# J4 closing check (Sonnet, mechanical) on b544697
+
+**Checker:** `commit-reviewer` agent run on Sonnet, 2026-09-27, against a fully specified brief (tier and reason in `BRIEF-STATUS.md`, declared before launch). **Did not write** the commit. Appended verbatim from its report file. Verdict: NOT PASSED on steps 5a, 5b, 5c. Steps 1-4 (the four plants) and 6 (the gate) passed exactly. 5a is a real finding, answered by `20260927140000_quote_lock_contract`; 5b and 5c are defects in the BRIEF — two single-line greps for sentences that wrap or were reworded — and the checker confirmed the content by reading it (MISTAKES M36).
+
+## J4 closing check — commit b544697
+
+Rule 0: rules applying — 0, 1.5, 16.3, 21.7, 22.1, 24.6 (see reasoning in main report).
+
+## Table
+
+| Step | Expected | Actual (quoted) | Result |
+|---|---|---|---|
+| 0 baseline | pg up; RACES "Tests 15 passed (15)" | "pg: already up"; "Tests  15 passed (15)" | PASS |
+| 1 Q3 plant C (lock order) | 1 failed: "Q3 · lock ORDER..." | "Tests  1 failed \| 14 passed (15)"; failing test "Q3 · lock ORDER: a recompute waiting on a seal holds no balance row lock, so the seal's own recompute proceeds"; error "deadlock detected" | PASS |
+| 2 Q3 plant A (one key) | 1 failed: "Q3 · each quote has its own lock..." | same counts; failing test "Q3 · each quote has its own lock: a seal on one quote does not delay a write on another"; got 'blocked' vs {ok:true} | PASS |
+| 3 Q3 plant B (visibility) | 1 failed: "Q3 · another tenant's SHARED lock..." | same counts; failing test "Q3 · another tenant's SHARED lock request on a quote takes nothing, so it cannot delay that quote's seal"; got 'blocked' | PASS |
+| 4 Q5 plant (issue_balance_open) | 1 failed: "P1 · refuses a financial write..." | same counts; failing test "P1 · refuses a financial write outside READ COMMITTED, so a stale snapshot cannot judge the ceiling"; expected '' matched empty string not the message | PASS |
+| 5a grep "no single-quote cycle" | matches only 120000, 130000, PRD-REVIEW-4.md, MISTAKES.md | ALSO matched new-app/db/migrations/20260927110000_one_lock_per_quote/migration.sql:32 | FINDING |
+| 5b grep "can no longer deadlock" | one match, in docs/design/scope-reduction.md | no output (empty) | FINDING |
+| 5c grep "migrations assume" | one match, quoting "this line said \"assume\" until 2026-09-27" | no output (empty) | FINDING |
+| 5d grep "races six" | no output | no output | PASS |
+| 5e grep "writes on a quote and then seals the same quote" | one match | new-app/CLAUDE.md:106 matched | PASS |
+| 5f grep "opening a balance row" | one match | new-app/CLAUDE.md:101 matched | PASS |
+| 6 full gate | Tasks 10/10; Tests db 143, api 183, web 11, contract 2, core 9; concurrency.pg 15 tests | exact match, see output | PASS |
+| 6 check_rules.py | exit 0 | exit 0, "66 rules defined · 836 citations..." | PASS |
+| 6 check_dispositions.py | exit 0, "42 dispositions claiming Closed, checked across 4 review files" | exit 0, contains that exact line (in fuller output, not just last 2 lines) plus 10 legacy-gap lines below it | PASS |
+| 6 check_citations.py | exit 0 | exit 0, "scanned 171 tracked files / Every cited path, filename and symbol resolves." | PASS |
+| 6 check_schema_citations.py | exit 0 | exit 0, "Every cited path and every named database object resolves." plus one advisory note on quote_line.recipe_id | PASS |
+
+## Findings with exact output
+
+### FINDING 5a — a third migration still carries the false claim, uncorrected and unlisted
+`grep -rn "no single-quote cycle" /home/user/Jam-Quote/docs /home/user/Jam-Quote/new-app --include=*.md --include=*.ts --include=*.sql` returned, in addition to the expected files:
+```
+/home/user/Jam-Quote/new-app/db/migrations/20260927110000_one_lock_per_quote/migration.sql:32:--   * the order is always quote lock, then balance row lock, so no single-quote cycle exists.
+```
+This is the migration `20260927110000_one_lock_per_quote` (committed before b544697, in cfeac92). Its header still states the now-known-false claim "no single-quote cycle exists" (P3/Q2) with no correcting annotation. The commit b544697's message says the correction lands in migration `130000`'s header "because Rule 6 forbids editing" the committed P migration (`120000`) — but migration `110000` is a separate, earlier, also-committed migration containing the identical false claim, and it is neither named in the brief's expected-matches list nor referenced by any corrective note. Whether or not Rule 6 also protects this file from editing, the closing check's expected scope (which files may say this) did not account for it, and it is left silently asserting something the same commit's own review found false. This is a documentation-accuracy gap, not a runtime defect — I did not find any code path that still relies on the false claim (the runtime fix in `120000`/`130000` reorders the lock correctly, confirmed by Steps 1-4 above).
+
+### FINDING 5b — the grep for "can no longer deadlock" found nothing; the sentence exists but is split by a line wrap
+`grep -rn "can no longer deadlock" /home/user/Jam-Quote/docs/design /home/user/Jam-Quote/new-app/CLAUDE.md` returned no output.
+Manual inspection of `docs/design/scope-reduction.md` lines 165-166 shows:
+```
+165:  left wrong; run the steps as separate transactions or retry. This sentence said "can no longer
+166:  deadlock" until the fifth re-review.
+```
+The words "can no longer" and "deadlock" are on different source lines (word-wrapped prose), so a single-line grep — exactly the command specified in the brief — cannot find it. The sentence itself is present and its content matches what was expected, but the literal mechanical check specified in the brief fails to confirm it. Reporting per Rule 21 (a guard/check that cannot see past formatting proves nothing) and per this task's own instruction to verify my pattern before reporting — here the pattern is the one the brief specified, and it does not fire on content I have visually confirmed is correct.
+
+### FINDING 5c — the grep for "migrations assume" found nothing; content was reworded, not literally present
+`grep -n "migrations assume" /home/user/Jam-Quote/new-app/db/test/concurrency.pg.test.ts` returned no output.
+The actual text at lines 29-30 is:
+```
+29: * - PostgreSQL 16 only. The migrations REQUIRE READ COMMITTED and refuse financial writes outside it;
+30: *   the P1 race proves the refusal (this line said "assume" until 2026-09-27; Q5).
+```
+The word "assume" appears only inside the parenthetical self-correction note, not adjacent to "migrations" — the two words specified in the grep pattern are not contiguous anywhere in the file. The comment does document the same history the brief expected ("this line said 'assume' until 2026-09-27") but the exact grep the brief specifies cannot find it, because the sentence was reworded around it (from "migrations assume X" to "migrations REQUIRE X ... (this line said 'assume' until ...)"). Content-wise this matches intent; mechanically the specified check does not confirm it.
+
+## BRIEF INCOMPLETE
+None. Every step above could be executed as written.
+
+## Verdict
+
+**J4 closing check: NOT PASSED — steps 5a, 5b, 5c**
+
+All plant/restore mechanics (Steps 1-4) confirm the runtime claims of commit b544697 for Q3's three lock properties and Q5's issue_balance_open lock: each named defect, reintroduced by hand, was caught by exactly the one test named for it, and nothing else failed. The full gate (Step 6) is green exactly as specified, including the four check-tool exit codes and the disposition count. The three findings above are about documentation/grep-scope precision, not about the runtime fix: 5a is a real (if Rule-6-protected) surviving false statement in a third, unlisted migration; 5b and 5c are cases where the underlying sentence is present and correct in substance but the literal grep pattern specified in this brief does not find it (line-wrap in 5b, rewording in 5c) — worth flagging per this project's own Rule 21 theme (a check that can't see past formatting proves nothing), but they are not evidence the fix itself is wrong.
+
+## What this check did NOT examine (Rule 21.4)
+
+This check verified only:
+- the four named plants (Q3 lock-order, Q3 one-key, Q3 visibility, Q5 issue_balance_open) against the RACES suite,
+- the six named grep sentences,
+- the full gate's summary line and the four check-tool exit codes.
+
+It did NOT review: the design in `docs/design/scope-reduction.md` beyond the two sentences named; any other finding from PRD-REVIEW-4.md (Q1, Q4, Q6, Q7, P-series) or earlier reviews; whether `check_dispositions.py`'s 10 "legacy gaps" list is itself accurate or complete; the correctness of `check_schema_citations.py`'s advisory note on `quote_line.recipe_id`; ADR 0025's amendment (Q7) mentioned in the commit message; or any code path outside the four migrations and the CLAUDE.md/scope-reduction.md/concurrency.pg.test.ts locations named in Step 5. It did not attempt alternative bypasses beyond the exact plants specified.
+
+## Final git status
+`git -C /home/user/Jam-Quote status --porcelain` → (empty)
