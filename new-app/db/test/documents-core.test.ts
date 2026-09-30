@@ -76,16 +76,38 @@ async function seal(revision: number, total: bigint, issueId = id()): Promise<st
 async function accept(issueId: string): Promise<string> {
   const acceptanceId = id();
   await db.exec("BEGIN");
-  await sql(
-    `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                             occurred_at)
-     VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
-    [acceptanceId, TENANT, issueId],
-  );
+  await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [acceptanceId, TENANT, issueId, "accepted"]);
   await sql(`SELECT issue_balance_open($1)`, [issueId]);
   await db.exec("COMMIT");
   return acceptanceId;
 }
+
+/**
+ * Every acceptance records the render the client saw, of its own issue (R9): `document_render_id` is
+ * NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`. So a fixture acceptance renders
+ * the issue first, in the same statement. `$1` acceptance id, `$2` tenant, `$3` issue, `$4` outcome.
+ */
+const WITH_RENDER = `
+  WITH r AS (
+    INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+    VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
+            encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
+    RETURNING id)`;
+/** Records a render of `issueId` for the current tenant and returns its id. */
+async function renderOf(issueId: string, tenant = TENANT): Promise<string> {
+  const renderId = id();
+  await sql(
+    `INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+     VALUES ($1, $2, $3, 'test/render.pdf', encode(sha256(convert_to($4::text, 'UTF8')), 'hex'), 1, '{}')`,
+    [renderId, tenant, issueId, renderId],
+  );
+  return renderId;
+}
+
+const ACCEPT_FROM_RENDER = `
+  INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                          consented_to_sign, occurred_at)
+  SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`;
 
 /** Issues an invoice and applies the balance, as one transaction — the only safe order. */
 async function invoice(issueId: string, amount: bigint): Promise<void> {
@@ -1091,12 +1113,7 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     // exists — so this seal was refused, with a message about a missing balance row. Nothing makes
     // `issue_balance_open()` run with every acceptance, so the state is reachable.
     const rev1 = await seal(1, 100_000n);
-    await sql(
-      `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                               occurred_at)
-       VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
-      [id(), TENANT, rev1],
-    );
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev1, "accepted"]);
 
     await seal(2, 100_000n);
     expect(await state(rev1)).toBe("superseded");
@@ -1450,16 +1467,19 @@ describe("the tenant boundary still holds over all of it", () => {
     // The attack in full. Ids are client-generated (ADR 0019) and travel through sync payloads,
     // PDFs, share links and exports, so knowing this id is a leak rather than a guess.
     const issue = await seal(1, 100_000n);
+    // The victim's render exists and its id is as leakable as the issue's, so the attacker has both.
+    const render = await renderOf(issue);
 
     await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
     await expect(
       db.query(
-        `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                                 occurred_at)
-         VALUES ($1, $2, $3, 'declined', 'Not Their Client', true, now())`,
-        [id(), OTHER_TENANT, issue],
+        `INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                 consented_to_sign, occurred_at)
+         VALUES ($1, $2, $3, $4, 'declined', 'Not Their Client', true, now())`,
+        [id(), OTHER_TENANT, issue, render],
       ),
-    ).rejects.toThrow(/foreign key|violates/i);
+      // A named tenant key, not the NOT NULL on the render: a bare /violates/ would pass on that alone.
+    ).rejects.toThrow(/acceptance_(issue_id|document_render_id)_fkey/);
 
     // And the consequence that made this a blocker rather than a curiosity: the rightful owner's
     // acceptance still works. Before the composite key, the planted row satisfied the global
@@ -1531,5 +1551,212 @@ describe("the tenant boundary still holds over all of it", () => {
         [id(), OTHER_TENANT, QUOTE, CLIENT, USER],
       ),
     ).rejects.toThrow(/policy/i);
+  });
+});
+
+// ===========================================================================
+// Findings R1/Q4, R2, R4, R9 and R16 of the re-review of the seven (J3 and J9 re-opened), fixed by
+// migration 20260927150000_keys_cannot_rewrite_history. Each test names the constraint or trigger it
+// proves, so it cannot pass on a different refusal — a bare /violates/ would pass on a NOT NULL.
+describe("R · no key rewrites history, and every document names its own tenant's people", () => {
+  const OTHER_USER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const OTHER_CLIENT = "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd";
+
+  /** Another tenant's user and client, whose ids an attacker in TENANT is assumed to know. */
+  async function otherTenantPeople() {
+    await asSuperuser(db, async () => {
+      await db.query(
+        `INSERT INTO app_user (id, tenant_id, email, role, session_version, updated_at)
+         VALUES ($1, $2, 'someone@example.com', 'owner', 0, now())`,
+        [OTHER_USER, OTHER_TENANT],
+      );
+      await db.query(
+        `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'Their Client', now())`,
+        [OTHER_CLIENT, OTHER_TENANT],
+      );
+    });
+  }
+
+  // --- R9 -------------------------------------------------------------------
+  it("R9 · REFUSES an acceptance bound to another issue's render", async () => {
+    // The re-review's attack: accept the small issue while pointing at another issue's PDF. An
+    // acceptance cannot be updated, so a wrong binding would be permanent.
+    const rev1 = await seal(1, 9_000_000n);
+    const rev1Render = await renderOf(rev1);
+    const rev2 = await seal(2, 100_000n);
+
+    await expect(
+      sql(
+        `INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                 consented_to_sign, occurred_at)
+         VALUES ($1, $2, $3, $4, 'accepted', 'A Client', true, now())`,
+        [id(), TENANT, rev2, rev1Render],
+      ),
+    ).rejects.toThrow(/acceptance_document_render_id_fkey/);
+
+    // Its own render is accepted.
+    expect(await accept(rev2)).toBeTruthy();
+  });
+
+  it("R9 · REFUSES an acceptance that records no render at all", async () => {
+    const issue = await seal(1, 100_000n);
+    await expect(
+      sql(
+        `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
+                                 occurred_at)
+         VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
+        [id(), TENANT, issue],
+      ),
+    ).rejects.toThrow(/null value in column "document_render_id"/);
+  });
+
+  // --- R1 (Q4) and R2 -------------------------------------------------------
+  it("R1 · no foreign key in the schema is ON UPDATE CASCADE", async () => {
+    // The migration asserts this once; this holds it for every later migration.
+    const rows = await sql<{ name: string }>(
+      `SELECT c.conrelid::regclass || '.' || c.conname AS name
+         FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE c.contype = 'f' AND c.confupdtype = 'c' AND n.nspname = 'public'`,
+    );
+    expect(rows.map((r) => r.name)).toEqual([]);
+  });
+
+  it("R1 · REFUSES renaming a quote's id under a sealed issue, which cascaded into the seal", async () => {
+    const issue = await seal(1, 100_000n);
+    await expect(
+      sql(`UPDATE quote SET id = $1 WHERE id = $2`, [id(), QUOTE]),
+    ).rejects.toThrow(/quote_issue_quote_id_fkey/);
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1 AND quote_id = $2`, [issue, QUOTE]))
+      .toHaveLength(1);
+  });
+
+  it("R2 · REFUSES a user id rename that would rewrite ANOTHER tenant's audit row", async () => {
+    // audit_entry.actor_user_id is single-column on purpose (a staff actor may belong to another
+    // tenant), and referential actions bypass row security — so a cascade crossed the boundary.
+    const auditId = id();
+    await asSuperuser(db, () =>
+      db.query(
+        `INSERT INTO audit_entry (id, tenant_id, actor_kind, actor_user_id, action, subject_type, summary)
+         VALUES ($1, $2, 'staff', $3, 'impersonation.start', 'tenant', 'staff acted on this tenant')`,
+        [auditId, OTHER_TENANT, USER],
+      ),
+    );
+
+    await expect(
+      sql(`UPDATE app_user SET id = $1 WHERE id = $2`, [id(), USER]),
+    ).rejects.toThrow(/audit_entry_actor_user_id_fkey/);
+
+    const [row] = await asSuperuser(db, async () =>
+      (await db.query<{ actor: string }>(`SELECT actor_user_id AS actor FROM audit_entry WHERE id = $1`, [auditId])).rows,
+    );
+    expect(row!.actor).toBe(USER);
+  });
+
+  // --- R4 -------------------------------------------------------------------
+  it("R4 · REFUSES the application deleting its own tenant", async () => {
+    await expect(sql(`DELETE FROM tenant WHERE id = $1`, [TENANT])).rejects.toThrow(
+      /a tenant cannot be deleted by the application/,
+    );
+    expect(await sql(`SELECT 1 FROM tenant WHERE id = $1`, [TENANT])).toHaveLength(1);
+  });
+
+  it("R4 · even the platform cannot delete a tenant out from under its audit trail", async () => {
+    // OTHER_TENANT has nothing hanging off it but this audit row, so the audit key is the refusal.
+    await asSuperuser(db, () =>
+      db.query(
+        `INSERT INTO audit_entry (id, tenant_id, actor_kind, action, subject_type, summary)
+         VALUES ($1, $2, 'system', 'tenant.create', 'tenant', 'tenant created')`,
+        [id(), OTHER_TENANT],
+      ),
+    );
+    await expect(
+      asSuperuser(db, () => db.query(`DELETE FROM tenant WHERE id = $1`, [OTHER_TENANT])),
+    ).rejects.toThrow(/audit_entry_tenant_id_fkey/);
+  });
+
+  // --- R16 ------------------------------------------------------------------
+  it("R16 · REFUSES a seal naming another tenant's client", async () => {
+    await otherTenantPeople();
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'X', 'itemised', 'JMD', 'T', 0, 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, OTHER_CLIENT, USER],
+      ),
+    ).rejects.toThrow(/quote_issue_client_id_fkey/);
+  });
+
+  it("R16 · REFUSES a seal whose sealer is another tenant's user", async () => {
+    await otherTenantPeople();
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'X', 'itemised', 'JMD', 'T', 0, 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, CLIENT, OTHER_USER],
+      ),
+    ).rejects.toThrow(/quote_issue_sealed_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a rejected seal naming another tenant's client, or sealed by their user", async () => {
+    await otherTenantPeople();
+    const rejected = (client: string, user: string) =>
+      sql(
+        `INSERT INTO rejected_seal
+           (id, tenant_id, quote_id, revision_attempted, refusal_reason, client_id, client_name, title,
+            currency, subtotal_minor, tax_minor, total_minor, sealed_at, sealed_by_user_id,
+            catalog_synced_at)
+         VALUES ($1, $2, $3, 1, 'lost the race', $4, 'X', 'X', 'JMD', 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, client, user],
+      );
+    await expect(rejected(OTHER_CLIENT, USER)).rejects.toThrow(/rejected_seal_client_id_fkey/);
+    await expect(rejected(CLIENT, OTHER_USER)).rejects.toThrow(/rejected_seal_sealed_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a variation recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 1000, $4, now())`,
+        [id(), TENANT, issue, OTHER_USER],
+      ),
+    ).rejects.toThrow(/variation_recorded_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a void recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 10_000n);
+    const invoiceId = (await sql<{ id: string }>(`SELECT id FROM invoice LIMIT 1`))[0]!.id;
+    await expect(
+      sql(
+        `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+         VALUES ($1, $2, $3, 'Wrong amount', $4)`,
+        [id(), TENANT, invoiceId, OTHER_USER],
+      ),
+    ).rejects.toThrow(/invoice_void_voided_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a withdrawal recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(
+      sql(
+        `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+         VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+        [id(), TENANT, acceptance, OTHER_USER],
+      ),
+    ).rejects.toThrow(/acceptance_withdrawal_withdrawn_by_user_id_fkey/);
   });
 });

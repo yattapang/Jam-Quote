@@ -250,10 +250,16 @@ async function walk(seed: number) {
       } else if (op <= 3) {
         const acceptanceId = id();
         ok = await attempt(async () => {
+          // Every acceptance records its own issue's render (R9), so render first, in one statement.
           await sql(
-            `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                                     occurred_at)
-             VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
+            `WITH r AS (
+               INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+               VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
+                       encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
+               RETURNING id)
+             INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                     consented_to_sign, occurred_at)
+             SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r`,
             [acceptanceId, TENANT, issue],
           );
           await sql(`SELECT issue_balance_open($1)`, [issue]);

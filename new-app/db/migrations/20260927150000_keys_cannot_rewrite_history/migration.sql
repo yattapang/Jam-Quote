@@ -22,7 +22,7 @@
 -- ## R4 · A TENANT COULD DELETE ITS OWN AUDIT TRAIL
 --
 -- `tenant`'s policy is FOR ALL, so the application could delete its own tenant row, and
--- `audit_entry_tenant_id_fkey` was ON DELETE CASCADE, so every audit row went with it — through a
+-- the key from `audit_entry`.`tenant_id` to `tenant` was ON DELETE CASCADE, so every audit row went with it — through a
 -- referential action, which row security does not see. Now the audit key is ON DELETE RESTRICT, and a
 -- trigger refuses any DELETE on `tenant` from a role that is neither superuser nor BYPASSRLS — that is,
 -- from the application. Tenant erasure becomes a staff-run process, keeping audit entries for the retention
