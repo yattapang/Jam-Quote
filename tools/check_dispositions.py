@@ -30,8 +30,10 @@ For every finding in a review file:
 
 **Path-level scope (added 2026-09-27, finding P7).** A Where line naming a full path — a migration, a
 test, a tool — makes that path scope too, keyed by migration directory name or file name. Enforced on the
-reviews in `WIDE_SCOPE`; for the older reviews the same check runs and its misses are PRINTED as legacy
-gaps owed an audit, so the narrower historical check can no longer read as clean.
+reviews in `WIDE_SCOPE`, which since 2026-10-01 is every review: the ten legacy gaps reviews 2 and 3 had —
+Closed rows that never cited a file their own Where line named — were audited one by one (two were real:
+ADR 0024 still described the design H9 and H10 overturned, and was amended), and the older reviews then
+moved in. A gap now fails the build.
 
 ## What it does NOT prove (Rule 21.4)
 
@@ -39,8 +41,10 @@ gaps owed an audit, so the narrower historical check can no longer read as clean
   document the finding named, not that the edit was correct. Only a re-review does that, which is why
   Rule 1.10's re-review is not replaced by this.
 - Nothing about findings whose `**Where:**` line omits a file it should have named.
-- Not that the ten legacy gaps it prints were closed properly — only that nothing cited those paths.
-- Shape checks (Q6) run on WIDE_SCOPE reviews only. A disposition row whose id is not bolded is caught,
+- That an older review's closure was right because its row now cites a path: the 2026-10-01 audit read each
+  named document against its finding once; this checks the citation stays, not the reading.
+- Shape checks (Q6) run on SHAPE_SCOPE reviews only (review 4): reviews 1-3 word their closures in older
+  forms ("**Closed by design.**"), and rewording closed history to fit a later convention is not done. A disposition row whose id is not bolded is caught,
   but reported as a bad status: the first bold row for that id is then the reviewer's summary table.
 - Nothing about sections cited by a name that does not exist — a stricter check could verify anchors, and
   that is owed rather than promised.
@@ -68,13 +72,18 @@ ROW = re.compile(r"^\|\s*\*\*([FGHJ]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M
 # reports, which is M20 and M24 again (finding P7 of the fourth J4 re-review). So every backticked path in
 # a Where line is scope too, keyed by what a disposition naturally cites: a migration by its directory
 # name (every one is called migration.sql), anything else by its file name.
-# Enforced on review 4 onward. Reviews 1-3 were closed against the narrower name list; widening it showed
-# TEN of their Closed rows never cited a file their own Where line named (ADRs 0023 and 0024, a review
-# register, check_rules.py, rules-manifest.json, MISTAKES.md). Each needs its closure re-audited, not a
-# filename pasted into the row — so they are PRINTED as legacy gaps on every run, by name, and counted,
-# rather than failing the build or being hidden. Moving a review into WIDE_SCOPE is the act of finishing
-# that audit.
-WIDE_SCOPE = {"docs/PRD-REVIEW-4.md"}
+# History: enforced at first on review 4 only. Reviews 1-3 were closed against the narrower name list, and
+# widening it showed TEN of their Closed rows never cited a file their own Where line named (ADRs 0023 and
+# 0024, a review register, check_rules.py, rules-manifest.json, MISTAKES.md). Each needed its closure
+# re-audited, not a filename pasted into the row, so until then they were PRINTED as legacy gaps on every
+# run. The audit was done on 2026-10-01 — each named document read against its finding; eight agreed, and
+# two (H9, H10) exposed ADR 0024 still describing the overturned design, which was amended — and every
+# review is now enforced.
+# Every review, and not a separate list: a review left out of an opt-in set would have its gaps pass
+# SILENTLY — the shape M38 records, which planting a gap with review 3 left out showed on 2026-10-01.
+WIDE_SCOPE = set(REVIEWS)
+# The status-wording and heading checks (Q6), separately: review 4 onward only (see the docstring).
+SHAPE_SCOPE = {"docs/PRD-REVIEW-4.md"}
 BACKTICKED_PATH = re.compile(r"`([^`\s]+/[^`\s]+\.[a-z]+)`")
 
 
@@ -143,21 +152,9 @@ def scope_of_findings(text: str) -> dict[str, set[str]]:
     return scopes
 
 
-def scope_line_names(text: str, finding_id: str) -> str:
-    """The Where line of one finding, for telling legacy name-list scope from path scope."""
-    positions = [(m.start(), m.group(1)) for m in FINDING.finditer(text)]
-    for index, (start, fid) in enumerate(positions):
-        if fid == finding_id:
-            end = positions[index + 1][0] if index + 1 < len(positions) else len(text)
-            where = WHERE.search(text[start:end])
-            return where.group(1) if where else ""
-    return ""
-
-
 def main() -> int:
     failures = 0
     checked = 0
-    legacy: list[str] = []
 
     for review in REVIEWS:
         path = Path(review)
@@ -165,7 +162,7 @@ def main() -> int:
             continue
         text = path.read_text(encoding="utf-8")
         scopes = scope_of_findings(text)
-        if review in WIDE_SCOPE:
+        if review in SHAPE_SCOPE:
             for problem in shape_failures(review, text, scopes):
                 failures += 1
                 print(problem)
@@ -179,11 +176,6 @@ def main() -> int:
             # A disposition that cites a bare section ("§6.1a", "R1.24") without its file is not
             # enough: the whole failure was citing one document's section and calling it done.
             missing = scope - cited
-            if missing and review not in WIDE_SCOPE:
-                legacy_missing = missing - set(KNOWN.findall(scope_line_names(text, finding_id)))
-                missing = missing - legacy_missing
-                if legacy_missing:
-                    legacy.append(f"{review}: {finding_id} does not cite {', '.join(sorted(legacy_missing))}")
             if missing:
                 failures += 1
                 print(f"{review}: {finding_id} claims Closed but does not cite:")
@@ -193,19 +185,10 @@ def main() -> int:
 
     print(f"\n{checked} dispositions claiming Closed, checked across {len(REVIEWS)} review files "
           f"(path-level scope enforced on {len(WIDE_SCOPE)} of them)")
-    if legacy:
-        print(f"\nLEGACY GAPS, owed an audit ({len(legacy)}): Closed rows in older reviews that do not cite a "
-              f"path their Where line names. Not failing yet; not clean either.")
-        for line in legacy:
-            print(f"  {line}")
     if failures:
         print(f"FAILED: {failures} overstate what changed")
         return 1
-    if legacy:
-        print(f"Every Closed disposition cites every document in the scope enforced for its review; "
-              f"{len(legacy)} legacy gap(s) above are NOT covered by that statement.")
-    else:
-        print("Every Closed disposition cites every document its finding named.")
+    print("Every Closed disposition cites every document its finding named.")
     return 0
 
 

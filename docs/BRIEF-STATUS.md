@@ -573,6 +573,15 @@ output run before launch on the HEAD the brief names (M36, M37). No build work, 
 **Reported 2026-10-01: every item PASSED. H17, H19, H20 CLOSED — review 3 is now 20 of 20 Closed.** One
 stale sentence it noted (`docs/SERVICE-REGISTER.md` §4a) corrected in the closing commit.
 
+**Done 2026-10-01: the ten legacy disposition gaps.** Each Closed row's missing document was read against
+its finding, and the result recorded in the row. Eight agreed with their closure (H1, H8, H11, H12, H13,
+H15, H16, G17 — F15 stays Open on purpose, legal). **Two were real drift:** ADR 0024's attribution row still
+said the code goes to "the channel the tenant has on file", the design H9 and H10 overturned, with no
+pointer — amended. `tools/check_dispositions.py` now enforces path scope on **every** review (no opt-in
+list, so none can be left out silently — a plant showed an opt-in set would pass a gap without a word),
+with the status-wording check kept to review 4. Four plants, one per review, each failed the build;
+restored identical.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

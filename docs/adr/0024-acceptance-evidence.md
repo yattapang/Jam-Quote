@@ -124,6 +124,18 @@ to the elements such regimes generally require rather than to whatever is easies
 | **Audit trail** | Timestamp, IP, user agent, which channel the code went to, and the verification event | Mostly exists on `acceptance` |
 | **Reproducibility** — the signer can be given back exactly what they signed | The immutable issue plus the hashed render | Exists (domain model §6.1) |
 
+> **Amended 2026-10-01 (findings H9 and H10, found unrecorded here by the legacy-disposition audit).**
+> The Attribution row above is overtaken by `../design/acceptance-evidence.md` (approved 2026-09-26),
+> and this ADR said nothing about it until now:
+> - **H9:** a channel is required **at the point of use**, not on the client row. A share link may be
+>   minted only for a client with at least one channel, and it may be typed at send time — "the channel
+>   the tenant has on file" is no longer the rule (design §4.1; `PRD.md` R1.20e).
+> - **H10:** a code sent to a channel the TENANT supplied proves control of that channel and nothing
+>   against the tenant. It is graded honestly as grade 3, one rung of a ladder that measures who
+>   witnessed the acceptance; only a third party the tenant does not control raises it (design §2,
+>   §4.2; `THREAT-MODEL.md` §4c). How the grade is derived is `../design/acceptance-grade.md`.
+> The row is left as written, as the opening amendment does with §5 (Rule 1.9).
+
 **The channel is the real constraint, and it decides the cost.** The code must reach the client on
 something the tenant recorded, and:
 
