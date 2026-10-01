@@ -513,6 +513,12 @@ delete a sealed issue again; the application role still may not hide one), X6 (a
 guard hardened for X4 and X5 and proved against the reviewer's own plants; X2, X3, X7, X9, X10 in the
 documents. **J6, J7, J8, J11 now: Fixed, re-review owed.** Next: a third pass by the same reviewer.
 
+**Third re-review — scoped to `ae55f16`, adversarial — launched 2026-10-01 on the owner's instruction.**
+*Delegation (Rule 16.5), declared before launch: one `commit-reviewer` agent, **Opus**. Scoped to the X
+fixes, because the findings are converging (twelve with two majors, then ten minors and nits): confirm
+each X finding closed by re-executing it, and hunt for what this diff broke. A mechanical (Sonnet)
+closing check follows if nothing blocking is found. No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
