@@ -352,6 +352,11 @@ green; J12 and J13 need only bounded closing checks, written into the same brief
 agent, because Rule 16.2 allows one agent live and a separate Sonnet run would cost about the same. No
 build work, gate run or commit alongside it. Findings to a scratchpad file as found, copied into
 `PRD-REVIEW-4.md` and committed before anything else; expectations executed last on the HEAD it names.*
+Every expectation re-run on `df3bef4` immediately before launch and held. **Reported 2026-10-01: T1-T12,
+copied verbatim into `PRD-REVIEW-4.md`. None closable.** J1: T1 and T7 major, the rest minor; the catalogue
+replacement held for what it reads. J12: six more Rule 21.10 sentences (T10). J13: the deadlock rule does
+not cover shape D (T11). *Tier log: Opus was right for Part A; Parts B and C were bounded and found real
+gaps too, so the single-brief choice cost nothing.*
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
