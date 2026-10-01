@@ -410,6 +410,16 @@ build work, gate run or commit alongside it.* Expectations re-run on `4a81a3d` b
 misses V1-V6, overclaims V7-V9, V11, V12; candidate limits V3 (spaced call), V10, V14. **J12 Open** —
 V15-V18, V16 major.
 
+**Owner's decision, 2026-10-01:** fix J1's bugs and overclaims, accept V1, V2, V3's spaced call, V10 and
+V14 as stated limits, and close J1 on a MECHANICAL closing check rather than a fifth adversarial round.
+Built in `03e7296` with J12's V15-V18.
+
+**Closing check — J1 and J12, mechanical — launched 2026-10-01.** *Delegation (Rule 16.5), declared before
+launch: one `general-purpose` agent, **Sonnet**. The owner chose a mechanical check: every item has a
+stated command and expected output, run before launch on the HEAD the brief names (M36, M37), so the
+cheapest reliable tier is the one that can follow it exactly. A deviation is reported, not interpreted.
+No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
