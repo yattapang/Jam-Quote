@@ -542,6 +542,13 @@ proved alone against the ceiling attack; five new items Z1-Z5, none a live defec
 nits), appended verbatim to `docs/PRD-REVIEW-4.md`. *Tier log: four Opus rounds converged — 13, 10, 7, then 0
 blocking.*
 
+**Closing check — J2, J6, J7, J8, J11, mechanical — launched 2026-10-01**, following the fourth re-review as
+the owner's instruction for it said. *Delegation (Rule 16.5), declared before launch: one `general-purpose`
+agent, **Sonnet**. Every item has a stated expected output, run before launch on the HEAD the brief names
+(M36, M37): 26 plants, one per rule in its CURRENT definition (the earlier plant scripts target function
+bodies later migrations replaced, so they no longer prove anything), in four chunks; the checkers; the rows.
+No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
