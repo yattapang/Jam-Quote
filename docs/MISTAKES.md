@@ -713,3 +713,27 @@ step before launch, after the final commit, on the exact HEAD the brief names** 
 still being edited. A brief that names a HEAD and was not checked at that HEAD is not a checked brief.
 Still not mechanical: it belongs to the brief-as-a-file control proposed on 2026-09-27, which would run
 the expectations itself at launch.
+
+### M38 · The replacement guard kept the old guard's silent skip, and its banner said "0 skipped"
+`Repeat of:` **M20** (a guard's shape is the defect) and **J1** itself — inside the tool written to fix J1.
+
+`tools/check_schema_citations.py` was built under Rule 21.9 because `check_citations.py` skipped paths in
+silence. It carried over the old tool's phrase window: any line within one line of ~30 "denial" phrases
+was not checked at all, while the banner printed "0 citations skipped". "Rather than" is house style
+here, so 35 of 222 path citations were excused — and one of them was a real defect: `docs/PRD.md` named a
+column without its unit suffix, the M19 class, hidden by the sentence it sat in (R11). The same tool read
+a column's type as "UUID NOT NULL", which is not "UUID", so every required reference was skipped as a
+TEXT label, and it read only single-column keys and never forgot a dropped one (R3). Seven unkeyed
+references passed. The money test of the same commit stored its ceiling in a table it created itself,
+so it never read a money column (R12).
+
+**Cost:** two blockers' worth of guard that proved less than its banner, found only by an independent
+re-review that planted against it. The seven references became R16, a cross-tenant write path.
+
+**Prevented by:** the phrase window is gone from both tools; an absent thing cited on purpose is exempted
+by file and name with a reason, printed on every run, and an exemption that excuses nothing fails the run.
+Non-UUID `*_id` columns are printed by name. Each claim was planted on its own (M35): 7 plants on the
+schema tool, including removing each half of the R3 fix, 4 on the old tool, 6 on the money test. Rule
+21.8 and 21.9 restated. The lesson that is not mechanical: **a banner is a claim, and it must count what
+the code passes over, not what its author meant it to** — the next guard's banner is checked by a plant
+that exercises the skip, not by reading the print statement.

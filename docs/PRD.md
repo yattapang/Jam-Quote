@@ -379,7 +379,7 @@ demonstrated, it is not a requirement, it is a hope.
   invariant stated twice in prose with nowhere to live (F4), which is Rule 1.10's "invariant with no
   owner".
 - **R1.24b** `issue_balance` is a **derived cache with a lock**, and every writer re-sums from the
-  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total` is written
+  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total_minor` is written
   once, by the acceptance transaction, from the issue's own frozen lines and never again — safe only
   because the issue is immutable (G12).
 - **R1.24e** The **reconciliation job runs nightly per tenant**, rebuilds all three derived columns,

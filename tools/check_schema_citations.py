@@ -135,14 +135,19 @@ CITED_PATH = re.compile(r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/[A-Za-z0-9_.-]+\.[a-
 CITED_QUALIFIED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)`")
 CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 
-DENIALS = re.compile(
-    r"does not exist|never existed|no such file|is not there|matches no file|resolves to nothing|"
-    r"that does not exist|not a real|never been|phantom|is actually|no migration creates|"
-    r"deleted|removed in|no longer in the repository|"
-    r"would need|would be|would mean|would have|instead of|rather than|we did not|nobody|"
-    r"the alternative|alternative was|which needs an|rejected|deliberately no|there is no",
-    re.I,
-)
+# Citations that are deliberately to something absent, keyed by (citing file, citation) — not by a
+# phrase near them (finding R11) and not by line number, which moves with every edit above it. Every
+# entry is printed on every run, and an entry that stops matching a failing citation fails the run.
+CITATION_EXEMPTIONS = {
+    ("CLAUDE.md", "extracted/JamQuote.dc.html"): (
+        "Deleted on 2026-09-26 as an unrelated mockup; cited as the history of the design tokens."
+    ),
+    ("docs/ARCHITECTURE.md", "extracted/JamQuote.dc.html"): "The same deleted mockup, the same history.",
+    ("new-app/db/migrations/20260925120000_documents_core/migration.sql", "withdrawn_at"): (
+        "Names the design ADR 0025 rejected (a nullable column on acceptance), to say why it was "
+        "rejected. A committed migration, so Rule 6 forbids rewording it."
+    ),
+}
 
 
 class Schema:
@@ -161,7 +166,8 @@ class Schema:
         self.policies: set[str] = set()
         self.indexes: set[str] = set()
         self.settings: set[str] = set()
-        self.foreign_keys: set[tuple[str, str]] = set()
+        # (table, constraint name) -> its columns, as of the last migration read.
+        self.constraints: dict[tuple[str, str], list[str]] = {}
 
         for path in migration_files:
             text = Path(path).read_text(encoding="utf-8")
@@ -176,21 +182,42 @@ class Schema:
         self.triggers.update(re.findall(r"CREATE TRIGGER\s+([a-z_][a-z0-9_]*)", ddl))
         self.policies.update(re.findall(r"CREATE POLICY\s+([a-z_][a-z0-9_]*)", ddl))
         self.indexes.update(re.findall(r'CREATE (?:UNIQUE )?INDEX\s+"?([a-z_][a-z0-9_]*)"?', ddl))
-        # Foreign keys: the ALTER TABLE naming the table is usually on an earlier line than the
-        # FOREIGN KEY clause, so the table is carried forward rather than matched in one pattern.
-        # Getting this wrong is not a small error — a missed foreign key makes a sound column look
-        # like J9 — so it is done by scanning with state rather than by one clever regex.
+        # Foreign keys, tracked BY CONSTRAINT NAME and in file order, so that a key dropped and never
+        # re-added stops counting, and every column of a composite key counts. Finding R3: the first
+        # version matched `FOREIGN KEY ("col")` only — one column — and never forgot a key once seen,
+        # so a composite re-add was invisible and a DROP with no re-add still read as enforced.
+        # A missed key makes a sound column look like J9, and a phantom key hides J9 itself.
+        events = [
+            (m.start(), "add", m.group(1), m.group(2), re.findall(r'"?([a-z_][a-z0-9_]*)"?', m.group(3)))
+            for m in re.finditer(
+                r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+ADD CONSTRAINT\s+"?([a-z_][a-z0-9_]*)"?\s+'
+                r"FOREIGN KEY\s*\(([^)]*)\)",
+                ddl,
+            )
+        ]
+        events += [
+            (m.start(), "drop", m.group(1), m.group(2), [])
+            for m in re.finditer(
+                r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+DROP CONSTRAINT\s+(?:IF EXISTS\s+)?'
+                r'"?([a-z_][a-z0-9_]*)"?',
+                ddl,
+            )
+        ]
+        for _, kind, table, name, cols in sorted(events):
+            if kind == "add":
+                self.constraints[(table, name)] = cols
+            else:
+                self.constraints.pop((table, name), None)
+        # An inline column key (`"x_id" UUID REFERENCES …`) has no name to drop it by. None exists in
+        # this schema today; if one appears it counts, under a name no DROP can match.
         table = None
         for line in ddl.splitlines():
-            m = re.search(r'(?:ALTER TABLE|CREATE TABLE)\s+"?([a-z_][a-z0-9_]*)"?', line)
+            m = re.search(r'CREATE TABLE\s+"?([a-z_][a-z0-9_]*)"?', line)
             if m:
                 table = m.group(1)
-            for col in re.findall(r'FOREIGN KEY \("([a-z_]+)"\)', line):
-                if table:
-                    self.foreign_keys.add((table, col))
             for col in re.findall(r'"([a-z_]+)"\s+UUID[^,]*REFERENCES', line):
                 if table:
-                    self.foreign_keys.add((table, col))
+                    self.constraints[(table, f"<inline {col}>")] = [col]
 
         # Tables and their columns.
         current = None
@@ -204,14 +231,27 @@ class Schema:
                 if line.startswith(");") or line.startswith(")"):
                     current = None
                     continue
-                c = re.match(r'\s+"([a-z_][a-z0-9_]*)"\s+([A-Z][A-Za-z ]*)', line)
+                c = re.match(r'\s+"([a-z_][a-z0-9_]*)"\s+([A-Z][A-Za-z0-9]*)', line)
                 if c:
-                    self.tables[current][c.group(1)] = c.group(2).strip()
+                    # The type is the FIRST word. Finding R3: capturing `[A-Z][A-Za-z ]*` read a
+                    # column as "UUID NOT NULL", which is not "UUID", so every NOT NULL reference was
+                    # skipped as though it were a TEXT label — seven unkeyed references passed.
+                    self.tables[current][c.group(1)] = c.group(2)
         for table, col, kind in re.findall(
             r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+ADD COLUMN\s+"?([a-z_][a-z0-9_]*)"?\s+([A-Z]+)',
             ddl,
         ):
             self.tables.setdefault(table, {})[col] = kind
+        for table, col in re.findall(
+            r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+DROP COLUMN\s+(?:IF EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?',
+            ddl,
+        ):
+            self.tables.get(table, {}).pop(col, None)
+
+    @property
+    def foreign_keys(self) -> set[tuple[str, str]]:
+        """Every (table, column) covered by a foreign key that still exists."""
+        return {(table, col) for (table, _), cols in self.constraints.items() for col in cols}
 
     @property
     def objects(self) -> set[str]:
@@ -271,6 +311,17 @@ def main() -> int:
 
     problems: list[str] = []
     owed: list[str] = []
+    out_of_scope: list[str] = []
+    exempted: list[str] = []
+    exemptions_used: set[tuple[str, str]] = set()
+
+    def report(path: str, cited: str, problem: str) -> None:
+        """Records a problem unless an explicit, reasoned exemption names this citation here."""
+        if (path, cited) in CITATION_EXEMPTIONS:
+            exemptions_used.add((path, cited))
+            exempted.append(f"{path}: `{cited}` — {CITATION_EXEMPTIONS[(path, cited)]}")
+            return
+        problems.append(problem)
 
     # --- 2. every `*_id` column is enforced or resolvable ---
     for table, cols in sorted(schema.tables.items()):
@@ -287,7 +338,9 @@ def main() -> int:
             if cols[col].upper() != "UUID":
                 # Not a row reference at all: `mfa_totp.secret_key_id` is TEXT and names a wrapping
                 # key in the key store. Stating the scope beats an exemption list that would grow
-                # with every external identifier the product ever holds.
+                # with every external identifier the product ever holds — and it is PRINTED, by
+                # name, so the scope is visible rather than a skip (R3).
+                out_of_scope.append(f"{table}.{col} ({cols[col]})")
                 continue
             # A foreign key is REQUIRED, not merely preferred, and the first version of this check
             # got that wrong: it accepted "has a key OR names a real table", so deleting the key
@@ -321,19 +374,22 @@ def main() -> int:
         lines = text.splitlines()
         in_migration = path.startswith(MIGRATIONS) and path.endswith(".sql")
 
+        # No line is skipped for what the sentence around it says. Finding R11: a window of ~30
+        # "denial" phrases ("rather than", "deleted", "would be", ...) excused 35 of 222 path
+        # citations, while the banner said "0 citations skipped" — and "rather than" is house style
+        # here. A citation that is deliberately to something absent is listed in
+        # CITATION_EXEMPTIONS with its reason, and the list is printed on every run.
         for number, line in enumerate(lines, 1):
-            window = " ".join(lines[max(0, number - 2) : number + 1])
-            if DENIALS.search(window):
-                continue
             where = f"{path}:{number}"
 
             for cited in CITED_PATH.findall(line):
                 if not cited.endswith(PATH_EXTS):
                     continue
                 if not resolve_path(cited, path, fileset, suffixes):
-                    problems.append(
+                    report(
+                        path, cited,
                         f"{where}: `{cited}` resolves to nothing — tried it as a repository path, "
-                        f"as a path relative to a workspace root, and relative to this file"
+                        f"as a path relative to a workspace root, and relative to this file",
                     )
 
             for table, column in CITED_QUALIFIED.findall(line):
@@ -341,8 +397,9 @@ def main() -> int:
                     continue  # not a known table; a filename or a prose phrase
                 if column in schema.tables[table] or column in objects:
                     continue
-                problems.append(
-                    f"{where}: `{table}.{column}` — `{table}` is a real table and has no such column"
+                report(
+                    path, f"{table}.{column}",
+                    f"{where}: `{table}.{column}` — `{table}` is a real table and has no such column",
                 )
 
             # A NEAR MISS of a real column, anywhere — including prose documents. This is the one
@@ -357,19 +414,29 @@ def main() -> int:
                 near = [cited + "_" + suffix for suffix in NEAR_MISS_SUFFIXES]
                 actual = next((n for n in near if n in objects), None)
                 if actual is not None:
-                    problems.append(
+                    report(
+                        path, cited,
                         f"{where}: `{cited}` is a near miss — the column is `{actual}`, and a name "
-                        f"that is almost right is worse than one that is obviously wrong (M19)"
+                        f"that is almost right is worse than one that is obviously wrong (M19)",
                     )
 
             if in_migration:
                 for cited in CITED_IDENTIFIER.findall(line):
                     if cited in objects:
                         continue
-                    problems.append(
+                    report(
+                        path, cited,
                         f"{where}: `{cited}` is named here and is not a table, column, function, "
-                        f"trigger, policy, index or setting that any migration declares"
+                        f"trigger, policy, index or setting that any migration declares",
                     )
+
+    # An exemption that no longer matches a failing citation is a comment pretending to be a
+    # decision: the text was fixed, moved or deleted, and the entry would excuse the next mistake.
+    for key in sorted(set(CITATION_EXEMPTIONS) - exemptions_used):
+        problems.append(
+            f"CITATION_EXEMPTIONS: `{key[1]}` in {key[0]} no longer needs an exemption — "
+            f"remove the entry"
+        )
 
     untracked = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard"],
@@ -380,8 +447,18 @@ def main() -> int:
     print(
         f"scanned {scanned} files against {len(schema.tables)} tables, "
         f"{len(schema.functions)} functions, {len(schema.triggers)} triggers, "
-        f"{len(schema.policies)} policies; 0 citations skipped"
+        f"{len(schema.policies)} policies; {len(exempted)} citation(s) exempted by name, "
+        f"none skipped"
     )
+    if exempted:
+        print(f"\n{len(exempted)} citation(s) exempted, each with its reason:")
+        for item in exempted:
+            print(f"  {item}")
+    if out_of_scope:
+        print(
+            f"\n{len(out_of_scope)} `*_id` column(s) out of scope, not UUID so not a row reference: "
+            + ", ".join(out_of_scope)
+        )
     if unseen:
         print(f"\nNOTE: {len(unseen)} untracked file(s) not scanned (this reads git ls-files):")
         for f in unseen[:10]:

@@ -66,10 +66,27 @@ const NOT_MONEY: Record<string, string> = {
     "and no amount is derived from it.",
 };
 
-/** Suffixes that make a column an amount, and therefore subject to the convention. */
-const AMOUNT_SUFFIXES = ["_minor", "_thousandths"];
+/**
+ * Suffixes that make a column an amount, and therefore subject to the convention. `_cents` is not
+ * this schema's spelling, and that is why it is here (finding R12): it is the spelling the old
+ * application used for money ("Int cents"), so it is the one most likely to come back, as a 32-bit
+ * column, and the int32 cap is the defect ADR 0011 names.
+ */
+const AMOUNT_SUFFIXES = ["_minor", "_thousandths", "_cents"];
 
-type ColumnRow = { table_name: string; column_name: string; data_type: string };
+/**
+ * `data_type` is the column's type with any domain resolved to its base, and for an ARRAY it is the
+ * ELEMENT type, with `is_array` set. Finding R12: information_schema reports every array as just
+ * 'ARRAY', so `NUMERIC[]` and `DOUBLE PRECISION[]` matched no forbidden type and passed.
+ * `declared` is the type exactly as the column has it, which is what the ceiling is stored through.
+ */
+type ColumnRow = {
+  table_name: string;
+  column_name: string;
+  data_type: string;
+  is_array: boolean;
+  declared: string;
+};
 
 describe("money is stored as integer minor units, everywhere", () => {
   let db: PGlite;
@@ -80,10 +97,21 @@ describe("money is stored as integer minor units, everywhere", () => {
     await applyMigrations(db);
     columns = (
       await db.query<ColumnRow>(
-        `SELECT table_name, column_name, data_type
-           FROM information_schema.columns
-          WHERE table_schema = 'public'
-          ORDER BY table_name, column_name`,
+        `SELECT c.relname AS table_name, a.attname AS column_name,
+                format_type(CASE WHEN base.typtype = 'd' THEN base.typbasetype ELSE base.oid END, NULL)
+                  AS data_type,
+                (t.typcategory = 'A') AS is_array,
+                format_type(a.atttypid, a.atttypmod) AS declared
+           FROM pg_attribute a
+           JOIN pg_class c ON c.oid = a.attrelid
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           -- A domain first resolves to its base type; an array then to its element; and an
+           -- element that is itself a domain to that domain's base.
+           JOIN pg_type d ON d.oid = a.atttypid
+           JOIN pg_type t ON t.oid = CASE WHEN d.typtype = 'd' THEN d.typbasetype ELSE d.oid END
+           JOIN pg_type base ON base.oid = CASE WHEN t.typcategory = 'A' THEN t.typelem ELSE t.oid END
+          WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+          ORDER BY 1, 2`,
       )
     ).rows;
   });
@@ -102,7 +130,7 @@ describe("money is stored as integer minor units, everywhere", () => {
     const offenders = columns
       .filter((c) => FORBIDDEN_TYPES[c.data_type.toLowerCase()] !== undefined)
       .filter((c) => NOT_MONEY[`${c.table_name}.${c.column_name}`] === undefined)
-      .map((c) => `${c.table_name}.${c.column_name} is ${c.data_type}`);
+      .map((c) => `${c.table_name}.${c.column_name} is ${c.declared}`);
     expect(offenders).toEqual([]);
   });
 
@@ -122,9 +150,10 @@ describe("money is stored as integer minor units, everywhere", () => {
     // The convention is worth nothing if no column follows it, so the count is asserted with the
     // types: the Documents core alone carries more than a dozen.
     expect(amounts.length).toBeGreaterThan(12);
+    // An array of bigint is not an amount either: a list of amounts has no single total to check.
     const wrong = amounts
-      .filter((c) => c.data_type.toLowerCase() !== "bigint")
-      .map((c) => `${c.table_name}.${c.column_name} is ${c.data_type}, not bigint`);
+      .filter((c) => c.data_type !== "bigint" || c.is_array)
+      .map((c) => `${c.table_name}.${c.column_name} is ${c.declared}, not bigint`);
     expect(wrong).toEqual([]);
   });
 
@@ -137,20 +166,35 @@ describe("money is stored as integer minor units, everywhere", () => {
     expect(suspicious).toEqual([]);
   });
 
-  it("holds the owner's ceiling, which a 32-bit column could not", () => {
+  it("holds the owner's ceiling in every amount column's own type, which a 32-bit column could not", async () => {
     // ADR 0011: ~999,999,999.99 JMD is 99,999,999,999 minor units, 47x past int32's 2,147,483,647.
     // Asserted by storing it rather than by arithmetic in a comment — the old application's
     // $21,474,836.47 cap was a type, not an opinion.
-    return (async () => {
-      const ceiling = 99_999_999_999n;
-      await db.exec(`CREATE TEMP TABLE ceiling_probe ("v" BIGINT NOT NULL)`);
-      await db.query(`INSERT INTO ceiling_probe ("v") VALUES ($1)`, [ceiling.toString()]);
-      const rows = (
-        await db.query<{ v: string | number | bigint }>(`SELECT "v" FROM ceiling_probe`)
-      ).rows;
-      expect(rows).toHaveLength(1);
-      expect(BigInt(rows[0]!.v)).toBe(ceiling);
-      expect(ceiling > 2_147_483_647n).toBe(true);
-    })();
+    //
+    // Stored through each REAL column's declared type. Finding R12: the first version stored the
+    // ceiling in a temporary BIGINT table of its own, so it passed with every money column INTEGER —
+    // it never read one. A type name cannot be a bind parameter, so it comes from the catalogue
+    // (`format_type`), never from input.
+    const ceiling = 99_999_999_999n;
+    expect(ceiling > 2_147_483_647n).toBe(true);
+    const amounts = columns.filter((c) =>
+      AMOUNT_SUFFIXES.some((suffix) => c.column_name.endsWith(suffix)),
+    );
+    expect(amounts.length).toBeGreaterThan(12);
+
+    const cannotHold: string[] = [];
+    for (const c of amounts) {
+      try {
+        const rows = (
+          await db.query<{ v: string | number | bigint }>(`SELECT ($1::text)::${c.declared} AS v`, [
+            ceiling.toString(),
+          ])
+        ).rows;
+        if (BigInt(rows[0]!.v) !== ceiling) cannotHold.push(`${c.table_name}.${c.column_name}`);
+      } catch {
+        cannotHold.push(`${c.table_name}.${c.column_name} (${c.declared})`);
+      }
+    }
+    expect(cannotHold).toEqual([]);
   });
 });

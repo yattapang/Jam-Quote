@@ -719,8 +719,11 @@ a row, a file, a deployed version — **the claim quotes that state, not the exi
 > so in one line.
 
 **21.8 A cited file, path or symbol must exist (added 2026-09-26).** Naming something that is not
-there reads as evidence and is not. `tools/check_citations.py` checks every backticked path, filename
-and "`symbol` in file" reference in tracked Markdown and source, and it gates in CI.
+there reads as evidence and is not. `tools/check_schema_citations.py` checks every backticked path and
+every named database object; `tools/check_citations.py` checks every backticked bare filename and
+"`symbol` in file" reference. Both scan tracked Markdown and source, and both gate in CI. (Until
+2026-09-30 this rule credited `check_citations.py` with every path; it skipped two kinds, J1 and R11,
+and its path check was retired.)
 
 > Why, and it is the clearest case in this rulebook: `PRD.md` credited a guard called
 > `honest-claims.test.ts` as the reason an over-claim on the public site was safe. **No such file
@@ -729,11 +732,15 @@ and "`symbol` in file" reference in tracked Markdown and source, and it gates in
 > care. When the checker was finally written it found **four more** phantom citations in the site's
 > own source that three independent reviews had missed.
 
-**Exemptions are by a document's purpose, not by a turn of phrase.** A review register and the
-mistake ledger must be able to name a phantom in order to report it, so those documents are listed in
-the tool with a reason each. The first attempt exempted English idioms ("does not exist", "is
-actually") and became whack-a-mole — which is itself the lesson: an exemption belongs to why a
-document exists, not to how a sentence happens to be worded.
+**Exemptions are by a document's purpose, or by name — never by a turn of phrase.** A review
+register and the mistake ledger must be able to name a phantom in order to report it, so those
+documents are listed in the tool with a reason each. A single deliberate citation of something absent
+(a deleted file cited as history, a rejected design named to say why) is exempted by file and name,
+with its reason, printed on every run; an exemption that excuses nothing fails the run. The first
+attempt exempted English idioms ("does not exist", "is actually") and became whack-a-mole; the idiom
+window survived anyway, and in 2026-09 it was excusing 35 of 222 path citations — including a real
+misnamed column — because "rather than" is house style here (R11). An exemption belongs to why a
+document exists or to one named citation, not to how a sentence happens to be worded.
 
 **21.9 A guard patched twice for the same class is replaced, not patched a third time (added
 2026-09-26).** When the same kind of defect gets through a control twice, the control's *shape* is the
@@ -746,9 +753,11 @@ size of the set it examined, including what it skipped.
 > whose first segment was not a real top-level directory — **71 paths**, hiding five phantoms, one of
 > them a guard credited at eight sites that had never been written (J1) — and it resolved identifiers
 > by text presence, which a comment can satisfy, so a table no migration creates looked real (J9).
-> `tools/check_schema_citations.py` replaced it for that class and prints "0 citations skipped" beside
-> its result, because a guard that cannot state the set it examined will eventually examine a smaller
-> one (M20).
+> `tools/check_schema_citations.py` replaced it for that class and prints what it exempted, by name,
+> beside its result, because a guard that cannot state the set it examined will eventually examine a
+> smaller one (M20). Its first version printed "0 citations skipped" while skipping every line near a
+> "denial" phrase (R11) — the banner must count what the tool actually passes over, not what its
+> author meant it to.
 
 **A new guard is planted against before it is reported, and its own first version is suspect.**
 21.9's own tool failed its first plant: the rule "a foreign key **or** a table of that name" passed

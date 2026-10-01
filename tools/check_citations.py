@@ -15,8 +15,12 @@ Rule 24.5's test: would this have caught it mechanically? Both, yes, and in unde
 
 ## What it checks
 
-1. **Cited repository paths exist.** A backticked path containing `/` and a known extension, in any
-   tracked Markdown or source comment, must resolve to a real file.
+1. **Cited repository paths — retired here (finding R11, owner's decision 2026-09-30).** This tool
+   skipped any path whose first segment was not a top-level directory (J1) and any line near a
+   "denial" phrase (R11). Paths are checked by `tools/check_schema_citations.py`, which resolves
+   every one with no skip; one guard per class rather than two that drift apart. Its check that a
+   migration comment's identifier appears as text is retired for the same reason: that tool checks
+   the identifier against parsed DDL instead.
 2. **Cited bare filenames exist somewhere.** A backticked filename with no directory must match some
    tracked file's basename. This is the M14 case exactly: a guard credited by a name that never
    existed.
@@ -75,18 +79,9 @@ EVIDENCE_DOCS = {
 # `honest-claims.test.ts` precisely because it never existed (M14). A sentence saying so is correct
 # prose, not a broken citation, so a line that denies the thing's existence is exempt. The phrasing
 # list is narrow on purpose — a guard that cries wolf gets switched off.
-DENIALS = re.compile(
-    r"does not exist|never existed|no such file|is not there|matches no file|"
-    r"that does not exist|not a real|never been|phantom|"
-    # A review QUOTES a broken citation and corrects it in the next breath ("the file is actually
-    # …"). That is the review doing its job, so the correction idiom is exempt too.
-    r"is actually|"
-    # Counterfactuals: a comment explaining the road NOT taken names the thing it rejected.
-    # "A nullable `withdrawn_at` would need an UPDATE grant" is a reason, not a claim.
-    r"would need|would be|would mean|would have|instead of|rather than|we did not|nobody|"
-    r"the alternative|alternative was|which needs an|rejected",
-    re.I,
-)
+# No line is skipped for the phrases around it. A window of "denial" phrases ("rather than",
+# "would be", ...) used to excuse whole lines, in silence (finding R11). Its only real work, measured
+# when it was removed, was excusing the two lesson names below, which are now exempted by name.
 
 # Names used as ILLUSTRATIONS or as work owed, rather than as citations. Each carries its reason, and
 # the list is deliberately short: every entry is a place this guard is blind, so it should be hard to
@@ -96,27 +91,23 @@ EXEMPT_NAMES = {
     "helpers.ts": "The same prohibition, in the same sentences.",
     "admin.ts": "A hypothetical module in an example, not a file anybody claims exists.",
     "sign-up.md": "A design that is owed and listed as owed: a citation to planned work.",
+    "honest-claims.test.ts": (
+        "M14's phantom, cited as the lesson this tool exists for. It must never be created: "
+        "a file by that name would turn every lesson citing it into a false claim that it guards."
+    ),
+}
+
+# The H16 case, cited as the lesson: `symbol` in `file`, where the symbol is absent on purpose.
+EXEMPT_SYMBOLS = {
+    ("honestClaims", "site-guards.test.ts"): "H16's phantom symbol, quoted in this tool's own history.",
 }
 
 SCAN_EXTS = (".md", ".ts", ".tsx", ".sql", ".yml", ".yaml", ".toml", ".py", ".prisma", ".mjs")
-CODE_EXTS = (
-    ".md", ".ts", ".tsx", ".js", ".mjs", ".sql", ".yml", ".yaml", ".toml", ".json", ".py",
-    ".prisma", ".css", ".svg", ".png", ".html",
-)
 
-# `some/path/file.ts` — a path, with at least one slash.
-CITED_PATH = re.compile(r"`([A-Za-z0-9_@./-]+/[A-Za-z0-9_.-]+\.[a-z]{2,6})`")
 # A bare filename in backticks, no slash — the M14 case. Examples are described rather than
 # written, because a fake filename in a comment is itself a broken citation and this guard would
 # (correctly) flag its own documentation.
 CITED_FILE = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py|md|prisma|yml|yaml|toml))`")
-# A backticked snake_case identifier — a column, table or setting name — which must appear somewhere
-# in the SAME file outside its own backticks. This is the class the guard MISSED on the day it was
-# written: the Documents migration's comment said "`client_reference` is the idempotency key" and the
-# column did not exist, which is M14 wearing SQL. An underscore is required, because that is what
-# separates an identifier from an English word in backticks.
-CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
-
 # A backticked identifier, then "in", then a filename with or without backticks — the H16 case.
 CITED_SYMBOL_IN = re.compile(
     r"`([A-Za-z_][A-Za-z0-9_]{2,})`\s+(?:is\s+)?in\s+`?([A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:ts|tsx|js|mjs|sql|py))`?"
@@ -154,25 +145,13 @@ def scannable(files: list[str]) -> list[str]:
 
 def main() -> int:
     files = all_tracked()
-    existing = set(files)
     by_basename: dict[str, list[str]] = {}
     for f in files:
         by_basename.setdefault(Path(f).name, []).append(f)
 
-    # A path is only checkable if it is anchored at a real top-level entry: a path starting with a
-    # directory this repository actually has. One starting with a segment it does not have is
-    # relative to some other root and unjudgeable from here.
-    top_level = {f.split("/", 1)[0] for f in files}
-
-    # Every migration's text with its own backticks stripped, so a claim in a comment is checked
-    # against real SQL rather than against another comment repeating it.
-    migration_bodies = [
-        re.sub(r"`[^`]*`", "", Path(f).read_text(encoding="utf-8"))
-        for f in files
-        if "/migrations/" in f and f.endswith(".sql")
-    ]
-
     problems: list[str] = []
+    names_used: set[str] = set()
+    symbols_used: set[tuple[str, str]] = set()
     scanned = 0
 
     for path in scannable(files):
@@ -185,56 +164,16 @@ def main() -> int:
 
         for number, line in enumerate(text_lines, 1):
             where = f"{path}:{number}"
-            # A denial may sit on the neighbouring line, because prose wraps. The window is one line
-            # either side and no more: widen it further and a denial three sentences away starts
-            # excusing an unrelated citation.
-            window = " ".join(text_lines[max(0, number - 2) : number + 1])
-            if DENIALS.search(window):
-                continue
-
-            for cited in CITED_PATH.findall(line):
-                if not cited.endswith(CODE_EXTS):
-                    continue
-                if cited.split("/", 1)[0] not in top_level:
-                    continue  # relative to a different root; see `scannable`
-                if cited in existing or Path(cited).exists():
-                    continue
-                # A path relative to the citing file is legitimate too.
-                if (Path(path).parent / cited).exists():
-                    continue
-                problems.append(f"{where}: cited path `{cited}` does not exist")
 
             for cited in CITED_FILE.findall(line):
-                if "/" in cited or cited in by_basename or cited in EXEMPT_NAMES:
+                if "/" in cited or cited in by_basename:
+                    continue
+                if cited in EXEMPT_NAMES:
+                    names_used.add(cited)
                     continue
                 problems.append(
                     f"{where}: cited file `{cited}` matches no file in the repository"
                 )
-
-            # ONLY IN MIGRATIONS, and the narrowing is the lesson. The first version applied this to
-            # every source file and flagged six legitimate comments: a test header naming the tables
-            # it nearly dropped, and a core module explaining the created_at/updated_at convention.
-            # Those files DISCUSS names that live elsewhere, which is normal prose.
-            #
-            # A migration is different: it is the file that BRINGS a column into existence, so a
-            # comment there describing one in the present tense is a claim about its own contents.
-            # That is where `client_reference` was credited and absent.
-            if "/migrations/" in path and path.endswith(".sql"):
-                for cited in CITED_IDENTIFIER.findall(line):
-                    # Checked against EVERY migration, not this one. A migration's comment claims
-                    # something about the database, and the database is the sum of the migrations —
-                    # so a column introduced by a later one (a correction, Rule 6) resolves, which
-                    # is exactly the case `client_reference` turned out to be.
-                    # Word boundaries, not a substring. The first version matched `client_reference`
-                    # inside the index name `variation_issue_client_reference_key`, so a planted
-                    # defect passed — the guard was satisfied by a longer identifier that merely
-                    # contained the cited one.
-                    standalone = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(cited)}(?![A-Za-z0-9_])")
-                    if any(standalone.search(body) for body in migration_bodies):
-                        continue
-                    problems.append(
-                        f"{where}: `{cited}` is described here and appears nowhere else in this file"
-                    )
 
             for symbol, filename in CITED_SYMBOL_IN.findall(line):
                 targets = by_basename.get(Path(filename).name, [])
@@ -242,9 +181,21 @@ def main() -> int:
                     continue  # the filename itself is reported by the rule above
                 if any(symbol in Path(t).read_text(encoding="utf-8") for t in targets):
                     continue
+                if (symbol, filename) in EXEMPT_SYMBOLS:
+                    symbols_used.add((symbol, filename))
+                    continue
                 problems.append(
                     f"{where}: `{symbol}` is cited as being in {filename}, and is not there"
                 )
+
+    # An exemption that excuses nothing is a comment pretending to be a decision, and the next
+    # mistake it would excuse is silent. So an unused entry fails the run.
+    for name in sorted(set(EXEMPT_NAMES) - names_used):
+        problems.append(f"EXEMPT_NAMES: `{name}` excuses no citation any more — remove the entry")
+    for symbol, filename in sorted(set(EXEMPT_SYMBOLS) - symbols_used):
+        problems.append(
+            f"EXEMPT_SYMBOLS: `{symbol}` in {filename} excuses no citation any more — remove the entry"
+        )
 
     # UNTRACKED FILES ARE INVISIBLE, and that has now cost two rounds: a green local run followed by
     # a red CI run, both times because a new migration had not been staged yet. Saying so is cheap and
@@ -273,7 +224,10 @@ def main() -> int:
             "This has happened twice (M14, H16) — the second time inside the fix for the first."
         )
         return 1
-    print("Every cited path, filename and symbol resolves.")
+    print(
+        "Every cited filename and symbol resolves. (Paths are checked by "
+        "tools/check_schema_citations.py, not here.)"
+    )
     return 0
 
 

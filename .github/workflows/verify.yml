@@ -211,16 +211,18 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_dispositions.py
 
-      # A cited file, path or symbol must exist (Rule 21.8). Added after the same defect twice —
-      # `honest-claims.test.ts` (M14) and then a symbol inside M14's own fix (H16) — and when it was
-      # finally written it found four more phantom citations in the site's own source that three
-      # independent reviews had missed. Proved by planting; see the commit that introduced it.
+      # A cited bare filename or "`symbol` in file" must exist (Rule 21.8). Added after the same
+      # defect twice — `honest-claims.test.ts` (M14) and then a symbol inside M14's own fix (H16) —
+      # and when it was finally written it found four more phantom citations in the site's own source
+      # that three independent reviews had missed. Its path check was retired on 2026-09-30 (R11):
+      # paths are the next step's job, so one class has one guard.
       - name: Citations name things that exist
         if: ${{ !cancelled() }}
         run: python3 tools/check_citations.py
 
-      # The same class, resolved against PARSED DDL and a complete file index with no silent skip
-      # (findings J1 and J9). The step above stayed because it checks things this one does not —
+      # Every cited path and database object, resolved against PARSED DDL and a complete file index
+      # with no silent skip (findings J1 and J9; its own phrase-based skip removed after R11, and its
+      # NOT NULL and composite-key blind spots after R3). The step above stayed because it checks things this one does not —
       # bare filenames and `symbol in file` claims — and this one exists because four rounds of
       # patching that one could not reach the class: it skipped 71 paths in silence, and it checked
       # identifiers by text presence, which a comment can satisfy. Proved by three plants: the J9
