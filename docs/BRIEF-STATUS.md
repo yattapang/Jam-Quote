@@ -382,6 +382,17 @@ policy-parity ties to a committed migration), then one re-review of J1, J12 and 
    recurrence counts per mistake class. Writing the three into `docs/RULES.md` is owed.
 5. **Root `CLAUDE.md`:** replaced by a short pointer — done in `eee4709`.
 
+**Built 2026-10-01 (next session):** T7 (`4b12831`); T5, T6, T8 (`67078e9`); J1's closing standard — T1-T4,
+T9, T12 (`b723904`); J12's T10 (`9e83436`). J1, J12 and J13 are "Fixed, re-review owed".
+
+**Third re-review — J1 (against its closing standard), J12 and J13 (closing checks) — launched 2026-10-01
+on the owner's approved order.** *Delegation (Rule 16.5), declared before launch: one `commit-reviewer`
+agent, **Opus**. J1 is judged against the owner's closing standard — no overclaim and no miss WITHIN the
+scope the tool now states — which is adversarial guard work; J12 and J13 are bounded checks in the same
+brief, as last time (Rule 16.2, one agent live). No build work, gate run or commit alongside it. Findings to
+a scratchpad file as found, copied into `PRD-REVIEW-4.md` and committed before anything else; expectations
+executed last on the HEAD it names.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
