@@ -45,7 +45,7 @@ misses of one class mean the shape is the defect, so the parser is gone:
    catalogue the migrations build; and a backticked call, `name()` or `name(args)`, must be a function
    the migrations create, a PostgreSQL built-in, or one of the SQL constructs named in SQL_CONSTRUCTS.
 3. **Anywhere:** a backticked `table.column` whose table exists must name a column of THAT table; a
-   backticked `public.name` must name an object; a backticked setting-shaped name (one dot, a prefix that
+   backticked public-qualified name must name a relation, function or type (not a column); a backticked setting-shaped name (one dot, a prefix that
    a real setting uses, an underscore after the dot) must be a setting a migration reads or sets.
 4. **Anywhere:** a near miss of a real column — the unit or kind suffix dropped.
 
@@ -66,7 +66,7 @@ nothing fails the run.
   required an invoice to pass through it. Only the trigger and the plant in
   `new-app/db/test/documents-core.test.ts` prove that, and no citation checker ever will.
 - **Not that a sentence is true.** J12, S7 and T10 were true names in false sentences.
-- **Nothing about identifiers in prose documents** beyond near misses, `table.column`, `public.name` and
+- **Nothing about identifiers in prose documents** beyond near misses, `table.column`, a public-qualified name and
   settings: a design document legitimately names tables that are planned and not yet built.
 - **Bare filenames** are `tools/check_citations.py`'s job.
 """
@@ -113,20 +113,25 @@ NEAR_MISS_SUFFIXES = ("minor", "thousandths", "id", "at", "key", "hash", "kind")
 
 # A path with a slash and an extension, optionally `:line` or `:from-to` (S2: a line suffix used to
 # defeat the match entirely); and, separately, a directory, which ends in a slash.
+# U2: also `/` at the start (repository-rooted), and `( ) [ ] ~ + $`, which Next.js route folders
+# (app/(site)/, app/[id]/) and some tool paths use.
+_PATH_FIRST = r"[A-Za-z0-9_@./~$+(\[]"
+_PATH_REST = r"[A-Za-z0-9_@./~$+()\[\]-]"
 CITED_PATH = re.compile(
-    r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/[A-Za-z0-9_.-]+\.[A-Za-z]{1,8})"
+    r"`(" + _PATH_FIRST + _PATH_REST + r"*/[A-Za-z0-9_.~$+()\[\]-]+\.[A-Za-z]{1,8})"
     # T2: a `#anchor`, `:12`, `:12-20`, `:12:5` or `:L12` suffix no longer defeats the match.
     r"(?:#[^`]*|:L?\d+(?::\d+)?(?:-L?\d+)?)?`"
 )
-CITED_DIR = re.compile(r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/)`")
+CITED_DIR = re.compile(r"`(?=[^`]*[A-Za-z0-9])(" + _PATH_FIRST + _PATH_REST + r"*/)`")  # a name, not `///`
 CITED_QUALIFIED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)`")
 CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 # In a migration comment, any case: PostgreSQL folds an unquoted name to lower case, and this schema has
 # no quoted mixed-case names, so `Never_Index` is checked as never_index (T1).
-CITED_IDENTIFIER_ANY_CASE = re.compile(r"`([A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+)`")
+# U3: any token with an underscore — leading, trailing or doubled underscores included.
+CITED_IDENTIFIER_ANY_CASE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*_[A-Za-z0-9_]*)`")
 # A function cited as a call, `name()` or `name(args)` — the form every migration uses (T1).
-CITED_CALL = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*)\([^`]*\)`")
-# A dotted name: a setting such as `pryvis.balance_write`, or a schema-qualified `public.name` (T1).
+CITED_CALL = re.compile(r"`(?:public\.)?([A-Za-z_][A-Za-z0-9_]*)\([^`]*\)`")  # U4: public.fn() too
+# A dotted name: a setting such as `pryvis.balance_write`, or a public-qualified name (T1).
 CITED_DOTTED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_.]*)`")
 
 # Citations that are deliberately to something absent, keyed by (citing file, citation) — not by a
@@ -144,7 +149,9 @@ CITATION_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("new-app/db/migrations/20260926190000_balance_write_is_checked/migration.sql", "row_count"): (
         "PL/pgSQL's GET DIAGNOSTICS item, not a schema object. A committed migration (Rule 6)."
     ),
-    ("docs/ARCHITECTURE.md", "extracted/JamQuote.dc.html"): "The same deleted mockup, the same history.",
+    ("docs/ARCHITECTURE.md", "extracted/JamQuote.dc.html"): (
+        "A mockup deleted on 2026-09-26; cited as the history of the design tokens."
+    ),
     ("new-app/db/migrations/20260925120000_documents_core/migration.sql", "withdrawn_at"): (
         "Names the design ADR 0025 rejected (a nullable column on acceptance), to say why it was "
         "rejected. A committed migration, so Rule 6 forbids rewording it."
@@ -196,18 +203,24 @@ class Schema:
         self.indexes: set[str] = set(data["indexes"])
         self.constraints: set[str] = set(data["constraints"])
         self.builtin_functions: set[str] = set(data["builtin_functions"])
+        # U9: the docstring promised these resolve; they were never loaded.
+        self.sequences: set[str] = set(data["sequences"])
+        self.types: set[str] = set(data["types"])
+        self.schemas: set[str] = set(data["schemas"])
         # Settings are not catalogue objects, so they are the one thing still read from the SQL: a GUC
         # the migrations set or require is a real named thing, e.g. the balance-write flag.
         self.settings: set[str] = set()
         for path in migration_files:
-            ddl = re.sub(r"--[^\n]*", "", Path(path).read_text(encoding="utf-8"))
+            # U1: block comments are comments too — a `/* current_setting(...) */` is text, not a read.
+            ddl = re.sub(r"/\*.*?\*/", "", Path(path).read_text(encoding="utf-8"), flags=re.S)
+            ddl = re.sub(r"--[^\n]*", "", ddl)
             self.settings.update(re.findall(r"current_setting\('([a-z_.]+)'", ddl))
             self.settings.update(re.findall(r"set_config\('([a-z_.]+)'", ddl))
 
     @property
     def objects(self) -> set[str]:
         names = set(self.tables) | self.functions | self.triggers | self.policies | self.indexes
-        names |= self.constraints | self.settings
+        names |= self.constraints | self.settings | self.sequences | self.types | self.schemas
         for cols in self.tables.values():
             names |= cols
         return names
@@ -222,6 +235,8 @@ def resolve(cited: str, citing: str, known: set[str], suffixes: set[str]) -> str
     """None if `cited` resolves — exactly, as a suffix of a tracked path, or relative to the citing
     file — and otherwise why not. A path that climbs out of the repository is NOT resolved (S2): it
     used to return True here under a comment claiming the report said so, and the report did not."""
+    # A leading slash means the repository root (U2), not the filesystem's.
+    cited = cited.lstrip("/") or cited
     if cited in known or cited in suffixes:
         return None
     root = Path.cwd().resolve()
@@ -280,12 +295,20 @@ def main() -> int:
     evidence_skipped: list[str] = []
     # T3: whole trees not scanned are counted in the report too, not only the evidence documents.
     prefix_skipped = {prefix: [0, 0] for prefix in SKIP_SCAN_PREFIXES}
+    by_extension: dict[str, int] = {}
+    unreadable: list[str] = []
     for path in files:
+        # U6: a file skipped for its extension, or because it cannot be read as text, is COUNTED and
+        # printed — "states everything it does not scan" was false while these went unmentioned.
         if not path.endswith(SCAN_EXTS):
+            if not path.startswith(SKIP_SCAN_PREFIXES):
+                ext = Path(path).suffix.lower() or "(no extension)"
+                by_extension[ext] = by_extension.get(ext, 0) + 1
             continue
         try:
             text = Path(path).read_text(encoding="utf-8")
         except (UnicodeDecodeError, FileNotFoundError):
+            unreadable.append(path)
             continue
         if path.startswith(SKIP_SCAN_PREFIXES):
             counts = prefix_skipped[next(p for p in SKIP_SCAN_PREFIXES if path.startswith(p))]
@@ -339,10 +362,12 @@ def main() -> int:
                     )
 
             # A setting is checked wherever it is cited: real settings always carry a dot, so the
-            # identifier checks above could never reach one (T1). A `public.name` is checked as name.
+            # identifier checks above could never reach one (T1). A public-qualified name is checked against relations, functions and types (U5).
             for head, tail in CITED_DOTTED.findall(line):
                 dotted = f"{head}.{tail}"
-                if head == "public" and tail not in objects:
+                schema_level = set(schema.tables) | schema.functions | schema.indexes | schema.sequences | schema.types
+                # U5: `public.` qualifies a relation, function or type — a column name is not one.
+                if head == "public" and tail not in schema_level:
                     report(path, dotted, f"{where}: `{dotted}` — no object `{tail}` in the schema the migrations build")
                 elif (head in setting_prefixes and "." not in tail and "_" in tail
                       and dotted not in schema.settings):
@@ -363,7 +388,7 @@ def main() -> int:
                     report(
                         path, cited,
                         f"{where}: `{cited}` is named here and is not a table, column, function, "
-                        f"trigger, policy, index, constraint or setting in the schema the migrations build",
+                        f"trigger, policy, index, constraint, sequence, type, schema or setting in the schema the migrations build",
                     )
 
     # An exemption that no longer matches a failing citation is a comment pretending to be a
@@ -392,6 +417,10 @@ def main() -> int:
           f"path citations — frozen; indexed so citations INTO it resolve, never scanned")
     print(f"  .claude/: {prefix_skipped['.claude/'][0]} files, {prefix_skipped['.claude/'][1]} path citations — "
           f"agent briefs that cite paths relative to the earlier application's root")
+    print("  by extension, outside those trees: " + (", ".join(
+        f"{n} {ext}" for ext, n in sorted(by_extension.items())) or "none") + " — not in SCAN_EXTS")
+    if unreadable:
+        print(f"  unreadable as UTF-8 text: {', '.join(unreadable)}")
     print(f"\n{len(evidence_skipped)} evidence document(s) not scanned, by purpose (Rule 21.8):")
     for item in evidence_skipped:
         print(f"  {item}")

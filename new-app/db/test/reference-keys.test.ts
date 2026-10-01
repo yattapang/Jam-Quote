@@ -69,6 +69,10 @@ describe("every row reference has a foreign key, read from the catalogue", () =>
                 EXISTS (
                   SELECT 1 FROM pg_constraint k
                    WHERE k.conrelid = c.oid AND k.contype = 'f' AND a.attnum = ANY (k.conkey)
+                     -- U8: a key whose enforcement triggers a migration switched off
+                     -- (ALTER TABLE ... DISABLE TRIGGER ALL) accepts dangling rows, so it is no key.
+                     AND NOT EXISTS (
+                       SELECT 1 FROM pg_trigger tr WHERE tr.tgconstraint = k.oid AND tr.tgenabled = 'D')
                      AND (k.confmatchtype = 'f' OR NOT EXISTS (
                        SELECT 1 FROM unnest(k.conkey) AS other(num)
                          JOIN pg_attribute o ON o.attrelid = c.oid AND o.attnum = other.num

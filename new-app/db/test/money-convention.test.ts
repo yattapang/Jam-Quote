@@ -15,8 +15,8 @@
  *
  * HOW IT CHECKS, AND WHY NOT BY READING THE SQL
  *
- * It applies every migration to a real database and asks `information_schema` what the columns
- * ACTUALLY are. Text-searching the migrations for `DOUBLE PRECISION` would be satisfied by a comment
+ * It applies every migration to a real database and asks PostgreSQL's catalogue what the columns
+ * ACTUALLY are, resolving domains to any depth (finding U7). Text-searching the migrations for `DOUBLE PRECISION` would be satisfied by a comment
  * and defeated by a type introduced through a domain, an `ALTER COLUMN`, or a later correction — and
  * "the sum of the migrations" is exactly what a comment in one of them cannot see. What the database
  * ended up with is the only thing worth asserting.
@@ -144,20 +144,30 @@ describe("money is stored as integer minor units, everywhere", () => {
     await applyMigrations(db);
     columns = (
       await db.query<ColumnRow>(
-        `SELECT CASE WHEN n.nspname = 'public' THEN c.relname ELSE n.nspname || '.' || c.relname END
+        `WITH RECURSIVE
+           -- Every type, resolved through ANY depth of domains to the first non-domain type. Finding U7:
+           -- the first version unwrapped two levels, so a NUMERIC column behind a third domain was
+           -- reported by the middle domain's name and matched no rule — past the closed list.
+           unwrap(start, cur, depth) AS (
+             SELECT t.oid, t.oid, 0 FROM pg_type t
+             UNION ALL
+             SELECT u.start, p.typbasetype, u.depth + 1
+               FROM unwrap u JOIN pg_type p ON p.oid = u.cur
+              WHERE p.typtype = 'd' AND u.depth < 64),
+           resolved(start, base) AS (
+             SELECT u.start, u.cur FROM unwrap u JOIN pg_type p ON p.oid = u.cur WHERE p.typtype <> 'd')
+         SELECT CASE WHEN n.nspname = 'public' THEN c.relname ELSE n.nspname || '.' || c.relname END
                   AS table_name, a.attname AS column_name,
-                format_type(CASE WHEN base.typtype = 'd' THEN base.typbasetype ELSE base.oid END, NULL)
-                  AS data_type,
+                -- An array resolves to its element, and the element through its own domains in turn.
+                format_type(CASE WHEN t.typcategory = 'A' THEN elem.base ELSE t.oid END, NULL) AS data_type,
                 (t.typcategory = 'A') AS is_array,
                 format_type(a.atttypid, a.atttypmod) AS declared
            FROM pg_attribute a
            JOIN pg_class c ON c.oid = a.attrelid
            JOIN pg_namespace n ON n.oid = c.relnamespace
-           -- A domain first resolves to its base type; an array then to its element; and an
-           -- element that is itself a domain to that domain's base.
-           JOIN pg_type d ON d.oid = a.atttypid
-           JOIN pg_type t ON t.oid = CASE WHEN d.typtype = 'd' THEN d.typbasetype ELSE d.oid END
-           JOIN pg_type base ON base.oid = CASE WHEN t.typcategory = 'A' THEN t.typelem ELSE t.oid END
+           JOIN resolved col ON col.start = a.atttypid
+           JOIN pg_type t ON t.oid = col.base
+           LEFT JOIN resolved elem ON elem.start = t.typelem
           -- Every user schema, not only public (T7: a money column in another schema escaped), and
           -- partitioned parents as well as plain tables.
           WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'

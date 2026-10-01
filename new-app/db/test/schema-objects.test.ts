@@ -9,7 +9,8 @@
  * index (S3: a comment citing `acceptance_issue_key`, dropped by J13, still "resolved"), and its parsing
  * missed ordinary DDL forms (S4). So it no longer parses: it reads this file, and this test regenerates
  * the file from the real catalogue and fails if the committed copy differs. A dropped object leaves the
- * catalogue, so it leaves the file, so a citation to it fails.
+ * catalogue, so it leaves the file, so a citation to it fails — in a form the tool checks. A bare name in a prose
+ * document is not one of those forms (finding U14; the tool's docstring lists the forms).
  *
  * To refresh after a migration: `PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts`
  * in new-app/db, then commit the file. Without the variable this test only compares.
