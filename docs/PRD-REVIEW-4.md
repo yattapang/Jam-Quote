@@ -23,7 +23,7 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 
 | # | Sev | Disposition |
 |---|---|---|
-| **J1** | blocker | **Fixed, re-review owed.** The owner's closing standard (2026-10-01) is met: every form T1 and T2 showed is checked (calls `name()` against the migrations' functions and PostgreSQL's built-ins, dotted settings, `public.name`, a column checked against ITS table, any-case identifiers, `#anchor`, `:L12`, `:12:5`, upper-case extensions); T3 (`original-app/` and `.claude/` counted in the banner), T4 (two false exemption reasons, and ADR 0012's false "exists" corrected), T12 (a new-app citation no longer resolves through original-app; it found two, `mobile/`, now exempted as planned); and T9 — the tool's docstring, `.github/workflows/verify.yml` and Rule 21.8 now state exactly the forms checked and list those that are not. Plants: 13 for this round, and the previous round's 10 re-run, all caught. It closes when a review finds no overclaim and no miss within that stated scope. Before that: T7 fixed 2026-10-01 (owner's decision): `new-app/db/test/money-convention.test.ts` now holds a CLOSED list of every non-bigint numeric column with its reason, over every user schema, so a 32-bit money column fails whatever it is called; the reviewer's six T7 plants, a BIGINT[] amount and a stale entry all go red. T5, T6 and T8 fixed the same day: the object list and the reference-key test cover every user schema and every relation and type kind, a composite key counts only if no companion column is nullable (or it is MATCH FULL), and a NOT_A_REFERENCE entry must match a real column — each reviewer plant now red. T1-T4, T9, T12 remain.** The second batched re-review (2026-10-01) had found it not closable: T1 and T7 (major) — function citations written `name()`, every real setting, and a real table cited with another table's column pass silently; the money rule is a word list that `fees_jmd` and `gct_jmd` INTEGER pass; T2, T3, T4, T5, T6, T8, T9, T12 (minor).** The catalogue replacement held for what it reads. Previously: S2-S6 fixed 2026-10-01, the owner choosing replacement over a third patch (Rule 21.9): `tools/check_schema_citations.py` no longer parses SQL — it resolves against `new-app/db/schema-objects.json`, generated from the catalogue and held fresh by `new-app/db/test/schema-objects.test.ts` (S3, S4); "every row reference has a key" moved to `new-app/db/test/reference-keys.test.ts`, which reads the catalogue (S4); bare `.sh` paths, `:line` suffixes, directories and paths leaving the repository are checked (S2), with 16 named exemptions printed; the banner lists the 8 evidence documents not scanned and their citation counts (S5); `new-app/db/test/money-convention.test.ts` counts `_minor_units` and requires a money suffix on any numeric column naming an amount (S6). Plants, each restored with diff -q: the reviewer's six DDL forms plus a non-uuid `*_id` (all red in reference-keys), ten on the tool and the two catalogue tests, three on the money test. Rule 21.9 restated and `new-app/CLAUDE.md` tells a migration author to regenerate the list. The batched re-review had found the fix incomplete: S4 and S6 (major) — the key/column tracker misses ordinary DDL forms, and the money test misses `…_minor_units`; S2, S3, S5 (minor) — phantom paths outside the repo, `.sh`, `:line` or a directory pass silently, a dropped index still resolves, and the banner omits the evidence documents it skips.** What did hold, by its plants: the phrase window is gone, arrays, domains, `_cents` and the declared-type ceiling. Previously: R11, R3 and R12 fixed with the owner's decisions of 2026-09-30. R11: the phrase window is removed from `tools/check_schema_citations.py` and `tools/check_citations.py`; deliberate citations of absent things are exempted by file and name, printed every run, and an unused exemption fails; removing the window exposed a real near miss in `docs/PRD.md` R1.24b, corrected. The old tool's path check and migration text check are retired (one guard per class); `docs/RULES.md` 21.8 and 21.9 restated and `.github/workflows/verify.yml` comments corrected. R3: column type read as its first word, foreign keys tracked by constraint name in file order with every column of a composite key, non-UUID `*_id` columns printed by name. R12: `new-app/db/test/money-convention.test.ts` reads array element types and domain bases, counts `_cents` as an amount, and stores the ceiling through every real amount column's declared type. Plants, each restored with diff -q: 7 on the schema tool (the finding's two, a stale exemption, a dropped composite key, each half of the R3 fix removed on its own), 4 on the old tool, 6 on the money test (the finding's three, an amount narrowed to INTEGER, a BIGINT[] amount, a scalar control). Lesson in `docs/MISTAKES.md` M38. Not changed, by Rule 6: the documents-core migration's sentence "no floating-point type appears in this file" is wider than the test, which reads the final schema's columns, not that file's function bodies. Re-review found the fix incomplete: R11 (the new tool silently skips citations near phrases such as "rather than" while printing "0 citations skipped") and R3 (every NOT NULL `*_id` column is skipped); R12 minor. Previously: `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
+| **J1** | blocker | **Open — the third re-review (2026-10-01) found the closing standard not yet met: U7 (major — a money column behind a three-level domain escapes the closed list); misses within the stated scope U1-U5 and overclaims U6, U9, U14 (minor); U8 (minor). Each planted; none hides a defect in the repository today.** Before that, the author claimed the owner's closing standard (2026-10-01) met: every form T1 and T2 showed is checked (calls `name()` against the migrations' functions and PostgreSQL's built-ins, dotted settings, `public.name`, a column checked against ITS table, any-case identifiers, `#anchor`, `:L12`, `:12:5`, upper-case extensions); T3 (`original-app/` and `.claude/` counted in the banner), T4 (two false exemption reasons, and ADR 0012's false "exists" corrected), T12 (a new-app citation no longer resolves through original-app; it found two, `mobile/`, now exempted as planned); and T9 — the tool's docstring, `.github/workflows/verify.yml` and Rule 21.8 now state exactly the forms checked and list those that are not. Plants: 13 for this round, and the previous round's 10 re-run, all caught. It closes when a review finds no overclaim and no miss within that stated scope. Before that: T7 fixed 2026-10-01 (owner's decision): `new-app/db/test/money-convention.test.ts` now holds a CLOSED list of every non-bigint numeric column with its reason, over every user schema, so a 32-bit money column fails whatever it is called; the reviewer's six T7 plants, a BIGINT[] amount and a stale entry all go red. T5, T6 and T8 fixed the same day: the object list and the reference-key test cover every user schema and every relation and type kind, a composite key counts only if no companion column is nullable (or it is MATCH FULL), and a NOT_A_REFERENCE entry must match a real column — each reviewer plant now red. T1-T4, T9, T12 remain.** The second batched re-review (2026-10-01) had found it not closable: T1 and T7 (major) — function citations written `name()`, every real setting, and a real table cited with another table's column pass silently; the money rule is a word list that `fees_jmd` and `gct_jmd` INTEGER pass; T2, T3, T4, T5, T6, T8, T9, T12 (minor).** The catalogue replacement held for what it reads. Previously: S2-S6 fixed 2026-10-01, the owner choosing replacement over a third patch (Rule 21.9): `tools/check_schema_citations.py` no longer parses SQL — it resolves against `new-app/db/schema-objects.json`, generated from the catalogue and held fresh by `new-app/db/test/schema-objects.test.ts` (S3, S4); "every row reference has a key" moved to `new-app/db/test/reference-keys.test.ts`, which reads the catalogue (S4); bare `.sh` paths, `:line` suffixes, directories and paths leaving the repository are checked (S2), with 16 named exemptions printed; the banner lists the 8 evidence documents not scanned and their citation counts (S5); `new-app/db/test/money-convention.test.ts` counts `_minor_units` and requires a money suffix on any numeric column naming an amount (S6). Plants, each restored with diff -q: the reviewer's six DDL forms plus a non-uuid `*_id` (all red in reference-keys), ten on the tool and the two catalogue tests, three on the money test. Rule 21.9 restated and `new-app/CLAUDE.md` tells a migration author to regenerate the list. The batched re-review had found the fix incomplete: S4 and S6 (major) — the key/column tracker misses ordinary DDL forms, and the money test misses `…_minor_units`; S2, S3, S5 (minor) — phantom paths outside the repo, `.sh`, `:line` or a directory pass silently, a dropped index still resolves, and the banner omits the evidence documents it skips.** What did hold, by its plants: the phrase window is gone, arrays, domains, `_cents` and the declared-type ceiling. Previously: R11, R3 and R12 fixed with the owner's decisions of 2026-09-30. R11: the phrase window is removed from `tools/check_schema_citations.py` and `tools/check_citations.py`; deliberate citations of absent things are exempted by file and name, printed every run, and an unused exemption fails; removing the window exposed a real near miss in `docs/PRD.md` R1.24b, corrected. The old tool's path check and migration text check are retired (one guard per class); `docs/RULES.md` 21.8 and 21.9 restated and `.github/workflows/verify.yml` comments corrected. R3: column type read as its first word, foreign keys tracked by constraint name in file order with every column of a composite key, non-UUID `*_id` columns printed by name. R12: `new-app/db/test/money-convention.test.ts` reads array element types and domain bases, counts `_cents` as an amount, and stores the ceiling through every real amount column's declared type. Plants, each restored with diff -q: 7 on the schema tool (the finding's two, a stale exemption, a dropped composite key, each half of the R3 fix removed on its own), 4 on the old tool, 6 on the money test (the finding's three, an amount narrowed to INTEGER, a BIGINT[] amount, a scalar control). Lesson in `docs/MISTAKES.md` M38. Not changed, by Rule 6: the documents-core migration's sentence "no floating-point type appears in this file" is wider than the test, which reads the final schema's columns, not that file's function bodies. Re-review found the fix incomplete: R11 (the new tool silently skips citations near phrases such as "rather than" while printing "0 citations skipped") and R3 (every NOT NULL `*_id` column is skipped); R12 minor. Previously: `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
 | **J2** | blocker | **Closed.** `683a638`, migration `20260926130000_ceiling_enforced_by_trigger`: every insert on `invoice`, `invoice_void`, `credit_note` and `variation` fires `issue_balance_apply()`, so the ceiling in `20260925120000_documents_core` is enforced for any caller that does not set the balance-write flag itself; the flag is not a secret, so a caller that sets it can write `issue_balance` directly (R5, stated in the ADR); the write policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; executed in `new-app/db/test/documents-core.test.ts` (J2 block); ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 amended 2026-09-27 to the real mechanism and corrected for R5 and R7 the same day. **Independently checked:** the re-review of the seven (2026-09-27) removed each of the four triggers and watched its tests go red (18, 2, 2 and 1), and judged it closable on the mechanism |
 | **J3** | blocker | **Open — R17 still not started.** R1/Q4, R2, R16 and R4 independently checked and holding in the database (batched re-review, 2026-10-01). S1 fixed 2026-10-01: the five relations now say `onDelete: Restrict`, and `prisma migrate diff` from a freshly migrated PostgreSQL 16 database to `new-app/db/schema.prisma` now reports no foreign-key change at all (with the old schema it regenerated exactly the five cascades). Not closed until then on S1: five `new-app/db/schema.prisma` relations still say `onDelete: Cascade` against RESTRICT keys, so the claim that Prisma cannot regenerate a cascade holds for ON UPDATE only; R17 (no red test for the ROW_COUNT check) still open.** Migration `20260927150000_keys_cannot_rewrite_history` turns all 49 ON UPDATE CASCADE keys into ON UPDATE RESTRICT and asserts none remains (R1, R2), and gives the seven unkeyed references composite tenant keys (R16); `new-app/db/schema.prisma` states `onUpdate: Restrict` on every relation so Prisma cannot regenerate the cascade. Tested in the R block of `new-app/db/test/documents-core.test.ts`; each of the eight rules was planted out and its own test went red. The re-review of the seven had found Q4 confirmed (R1: ON UPDATE CASCADE rewrites sealed rows) and a cross-tenant write through a key J3 kept single-column (R2); the composite keys themselves held on every probe. Previously: `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
 | **J4** | blocker | **Closed.** Agreed scope can be reduced after it is invoiced: credit notes net into the invoiced figure, so the remedy is credit-then-reduce in one transaction, and a wrong document is withdrawn once nothing is billed (owner's decisions 2026-09-26/27, `docs/design/scope-reduction.md`). This corrects what `20260925120000_documents_core` ("may be negative" with no path) and `20260926110000_withdrawal_preconditions` (a credit note that moved nothing) got wrong, through migrations `20260926200000` to `20260927140000`; tested in `new-app/db/test/documents-core.test.ts` (J4, K4, H4 blocks), `no-stuck-state.test.ts` (a seeded walk with its own oracle) and `concurrency.pg.test.ts` (15 races on real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `422d9e8`. **Independently checked:** five Opus re-reviews (K, L, N, P, Q — their findings all answered), then two Sonnet closing checks: every plant failed exactly its named race and the gate matched; the one item not passed was the brief's own list omitting a register, as the checker read and stated. Closed on that evidence with the owner's acceptance, 2026-09-27 |
@@ -34,8 +34,8 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 | **J9** | blocker | **Open — R9 fixed and independently checked (batched re-review, 2026-10-01); R10 and R18 (minor, documentation and tooling) still open.** Migration `20260927150000_keys_cannot_rewrite_history`: `acceptance.document_render_id` is NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`, so an acceptance records the render of its own issue (owner's decision, 2026-09-30); both halves planted out and seen red in the R block of `new-app/db/test/documents-core.test.ts`. The same migration fixes R4 (the application cannot delete a tenant; the audit trail's tenant key is ON DELETE RESTRICT). The re-review of the seven had found an acceptance could bind the render of a different issue, or none (R9, blocker; reproduced by the author). Previously: `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
 | **J10** | blocker | **Closed.** Reopened by K6 after `683a638` (migration `20260926140000_one_live_ceiling_per_quote`): its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and by isolation level (P1). Fixed by `20260927100000_withdrawal_with_variations` (judge the live revision), `20260927110000_one_lock_per_quote` (a per-quote lock) and `20260927120000_lock_isolation_and_tenancy` (READ COMMITTED enforced), over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` (J10 block), `no-stuck-state.test.ts` (one live ceiling per quote, on the database's own ceilings) and `concurrency.pg.test.ts` (N4 a, b, c on real PostgreSQL, in CI); `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. **Independently checked:** the fifth re-review (2026-09-27) judged it closable — N4's three races pass and their plants are caught, P1 is refused on every path, and unscheduled stress found no quote with two live ceilings |
 | **J11** | major | **Open.** `quote_issue.subtotal_minor` is not tied to its frozen lines. Not started |
-| **J12** | major | **Fixed, re-review owed.** T10 fixed 2026-10-01: all six sentences now say what is true or point at ADR 0025 decision 2 — `docs/PRD.md` R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, the `new-app/db/schema.prisma` totals comment, `new-app/db/test/policy-parity.test.ts` (which now states it does NOT check who sets the flag), ADR 0025's three un-built bullets marked as the decision of their day, and its misquote's tense — and a seventh found by the same sweep (ADR 0025 decision 1, "the function every writer calls"). Recorded and not edited, by Rule 6: `new-app/db/policies/002-documents-isolation.sql`, which policy-parity ties to a committed migration. Before that: the second batched re-review (2026-10-01) found six more sentences of Rule 21.10's kind (T10), four false by execution: PRD R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, a `new-app/db/schema.prisma` comment, `new-app/db/test/policy-parity.test.ts`, and ADR 0025's un-retracted bullets and its misquote. The eight sentences changed were clean.** Previously: S7 fixed 2026-10-01: the four sentences replaced by pointers to ADR 0025 decision 2 and the J12 test block, and four more of the same kind found by a sweep and fixed (`docs/PRD.md` R1.22b, ADR 0025's own "only", a `new-app/db/schema.prisma` field comment, and a test title). The batched re-review had found four sentences of the kind Rule 21.10 forbids still outside committed migrations (S7): `new-app/db/schema.prisma` on `issue_balance`, `docs/adr/README.md`'s ADR 0025 line, `docs/PRD.md` R1.24b, and the §6.3 "impossible transitions" list in `docs/design/domain-model.md`. The §6.2a deletion held.** Previously: R13 fixed with the owner's decisions of 2026-10-01: in `docs/design/domain-model.md` §6.2a the prose writer set is deleted (both paragraphs, "nothing else ever writes it", and the false "created unconditionally" opening), and the section points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 for the mechanism and its limits (R5, R7) and at the J12 block of `new-app/db/test/documents-core.test.ts` for what each insert moves; `docs/PRD-REVIEW-3.md` H2 row corrected for J4. `docs/RULES.md` Rule 21.10 added (a writer-set sentence cites its test or does not exist; no phrase guard, by the owner's decision). The R5 defect itself is recorded as owed in `docs/THREAT-MODEL.md` §4e, not fixed here. Lesson in `docs/MISTAKES.md` M39. Not changed, by Rule 6: the documents-core migration's comment that the writer set "cannot go stale" is false for the same reason. No code changed. The re-review of the seven had found J12's own fix put the writer set back into prose, false by execution (R13); the J12 test block itself is sound. Previously: `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
-| **J13** | major | **Fixed, re-review owed.** T11 fixed 2026-10-01: `new-app/CLAUDE.md` now says a client response is alone in its transaction, with no other money write on the same quote beside it, and to retry on 40P01 otherwise. Owes a mechanical closing check only. The second batched re-review (2026-10-01) had confirmed §6.2 and §8 by execution, but found the rule "one client response per transaction" did not prevent S9's shape D, which deadlocked 2 of 2 (T11). The first batched re-review (2026-10-01) found the fix holds for every part claimed, by race and plant. Its two documentation findings were fixed the same day — S8 in `docs/design/domain-model.md` §6.2 and §8, S9 as a third deadlock shape in `new-app/CLAUDE.md` (the J13 migration's comment saying "the two lists" is committed and stays, by Rule 6) — and owe only a mechanical closing check. The findings were: S8 (`docs/design/domain-model.md` §8 says a second response is refused) and S9 (the deadlock list in `new-app/CLAUDE.md` misses two pre-existing response shapes). Built to `docs/design/acceptance-responses.md` (option C plus A, owner 2026-09-27; per-issue lock, owner 2026-10-01). Migration `20260927160000_acceptance_responses`: the one-row-per-issue key becomes a partial unique index on accepted rows (declines unlimited, one acceptance ever); a trigger refuses a decline after an acceptance under a per-issue lock taken after the quote lock; only an accepted row can be withdrawn; `quote_issue_state()` gains `withdrawn` and an acceptance outranks an earlier decline. `new-app/db/schema.prisma` models responses as a list and says why the partial key is migration-only. Tests: the J13 block of `new-app/db/test/documents-core.test.ts` (7), the reversed "issued again" test now expects `withdrawn`, two races in `new-app/db/test/concurrency.pg.test.ts`, and `new-app/db/test/no-stuck-state.test.ts` now numbers every issue, adds declines, and judges every response and every state with its own oracle. Seven plants, each restored with diff -q. `docs/PRD.md` R1.20 and `docs/design/domain-model.md` §6.3 updated. Found and NOT fixed: a response is taken on a superseded or unnumbered issue (true before J13; recorded in the design §3a for the owner). Previously: a withdrawn issue read "issued" and could never be re-accepted; since K4 and L1 made withdrawal the wrong-document remedy, this was the common path (N3) |
+| **J12** | major | **Open — the third re-review (2026-10-01) found more sentences of Rule 21.10's kind, false by execution: three in `new-app/db/test/documents-core.test.ts` (U10, major), PRD R1.24a and R1.15c (U11, major), ADR 0025's "the decision stands" (U12) and R1.24b's "rather than trusting the cached figure" (U13).** Before that: T10 fixed 2026-10-01: all six sentences now say what is true or point at ADR 0025 decision 2 — `docs/PRD.md` R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, the `new-app/db/schema.prisma` totals comment, `new-app/db/test/policy-parity.test.ts` (which now states it does NOT check who sets the flag), ADR 0025's three un-built bullets marked as the decision of their day, and its misquote's tense — and a seventh found by the same sweep (ADR 0025 decision 1, "the function every writer calls"). Recorded and not edited, by Rule 6: `new-app/db/policies/002-documents-isolation.sql`, which policy-parity ties to a committed migration. Before that: the second batched re-review (2026-10-01) found six more sentences of Rule 21.10's kind (T10), four false by execution: PRD R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, a `new-app/db/schema.prisma` comment, `new-app/db/test/policy-parity.test.ts`, and ADR 0025's un-retracted bullets and its misquote. The eight sentences changed were clean.** Previously: S7 fixed 2026-10-01: the four sentences replaced by pointers to ADR 0025 decision 2 and the J12 test block, and four more of the same kind found by a sweep and fixed (`docs/PRD.md` R1.22b, ADR 0025's own "only", a `new-app/db/schema.prisma` field comment, and a test title). The batched re-review had found four sentences of the kind Rule 21.10 forbids still outside committed migrations (S7): `new-app/db/schema.prisma` on `issue_balance`, `docs/adr/README.md`'s ADR 0025 line, `docs/PRD.md` R1.24b, and the §6.3 "impossible transitions" list in `docs/design/domain-model.md`. The §6.2a deletion held.** Previously: R13 fixed with the owner's decisions of 2026-10-01: in `docs/design/domain-model.md` §6.2a the prose writer set is deleted (both paragraphs, "nothing else ever writes it", and the false "created unconditionally" opening), and the section points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 for the mechanism and its limits (R5, R7) and at the J12 block of `new-app/db/test/documents-core.test.ts` for what each insert moves; `docs/PRD-REVIEW-3.md` H2 row corrected for J4. `docs/RULES.md` Rule 21.10 added (a writer-set sentence cites its test or does not exist; no phrase guard, by the owner's decision). The R5 defect itself is recorded as owed in `docs/THREAT-MODEL.md` §4e, not fixed here. Lesson in `docs/MISTAKES.md` M39. Not changed, by Rule 6: the documents-core migration's comment that the writer set "cannot go stale" is false for the same reason. No code changed. The re-review of the seven had found J12's own fix put the writer set back into prose, false by execution (R13); the J12 test block itself is sound. Previously: `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
+| **J13** | major | **Closed.** Independently checked by the third re-review (2026-10-01): following `new-app/CLAUDE.md`'s rule, S9's deadlock shapes A and D ran 6 of 6 clean on PostgreSQL 16 against 4 of 4 deadlocks for the controls, and the function bodies admit no cycle through a response-alone transaction; the earlier rounds had verified the migration `20260927160000_acceptance_responses`, its tests in `new-app/db/test/documents-core.test.ts`, `new-app/db/test/concurrency.pg.test.ts` and `new-app/db/test/no-stuck-state.test.ts`, and `docs/design/domain-model.md` §6.2 and §8, by race and plant. Design `docs/design/acceptance-responses.md`; `docs/PRD.md` R1.20. The one-row-per-issue key it replaced was created in `20260925120000_documents_core`. Changed AFTER the review, and so not independently checked: `docs/design/acceptance-evidence.md` §4.2's "One `acceptance` per issue" now reads one ACCEPTED row per issue, declines kept — the ambiguity S8 found in the domain model, found again when this row was closed. Before that: T11 fixed 2026-10-01: `new-app/CLAUDE.md` now says a client response is alone in its transaction, with no other money write on the same quote beside it, and to retry on 40P01 otherwise. Owes a mechanical closing check only. The second batched re-review (2026-10-01) had confirmed §6.2 and §8 by execution, but found the rule "one client response per transaction" did not prevent S9's shape D, which deadlocked 2 of 2 (T11). The first batched re-review (2026-10-01) found the fix holds for every part claimed, by race and plant. Its two documentation findings were fixed the same day — S8 in `docs/design/domain-model.md` §6.2 and §8, S9 as a third deadlock shape in `new-app/CLAUDE.md` (the J13 migration's comment saying "the two lists" is committed and stays, by Rule 6) — and owe only a mechanical closing check. The findings were: S8 (`docs/design/domain-model.md` §8 says a second response is refused) and S9 (the deadlock list in `new-app/CLAUDE.md` misses two pre-existing response shapes). Built to `docs/design/acceptance-responses.md` (option C plus A, owner 2026-09-27; per-issue lock, owner 2026-10-01). Migration `20260927160000_acceptance_responses`: the one-row-per-issue key becomes a partial unique index on accepted rows (declines unlimited, one acceptance ever); a trigger refuses a decline after an acceptance under a per-issue lock taken after the quote lock; only an accepted row can be withdrawn; `quote_issue_state()` gains `withdrawn` and an acceptance outranks an earlier decline. `new-app/db/schema.prisma` models responses as a list and says why the partial key is migration-only. Tests: the J13 block of `new-app/db/test/documents-core.test.ts` (7), the reversed "issued again" test now expects `withdrawn`, two races in `new-app/db/test/concurrency.pg.test.ts`, and `new-app/db/test/no-stuck-state.test.ts` now numbers every issue, adds declines, and judges every response and every state with its own oracle. Seven plants, each restored with diff -q. `docs/PRD.md` R1.20 and `docs/design/domain-model.md` §6.3 updated. Found and NOT fixed: a response is taken on a superseded or unnumbered issue (true before J13; recorded in the design §3a for the owner). Previously: a withdrawn issue read "issued" and could never be re-accepted; since K4 and L1 made withdrawal the wrong-document remedy, this was the common path (N3) |
 | **J14** | major | **Open.** The RLS exemption list still covers the credential tables. Not started |
 | **J15** | minor | **Closed.** Migration `20260926220000_withdrawal_after_full_credit` (`8e8236a`) replaced the guard in `20260926110000_withdrawal_preconditions`: a voided or fully credited invoice no longer blocks withdrawal; `20260927100000_withdrawal_with_variations` kept it. Tested in `new-app/db/test/documents-core.test.ts` ("J15 · allows withdrawal once the invoice is voided"), which goes red when the guard is reverted. Independently checked: the third re-review (N) and the fourth (P) both found nothing against it, the fourth re-running the revert |
 | **J16** | minor | **Closed.** `9115d8f`, migration `20260926170000_rejected_seal_no_delete`: `rejected_seal` from `20260926120000_rejected_seals` loses its DELETE path and its facts are frozen; executed in `new-app/db/test/documents-core.test.ts`. **Independently checked:** the re-review of the seven turned the policy to FOR ALL (DELETE test and policy-parity red) and dropped the trigger (both rewrite tests red). Its migration's comment that a later column "fails closed" is false — it fails open (R8); the comment cannot be edited (Rule 6) and is corrected here |
@@ -3162,3 +3162,370 @@ internals; the 24a8b56 J3 change (not in scope).
   deadlock paragraph names both S9 shapes; but its prescription "one client response per transaction" does not
   prevent shape D, which deadlocked 2/2 with one response per transaction (T11). A one-sentence fix to the
   rule closes it.
+
+
+---
+
+<!-- Copied verbatim from the reviewer's findings file on 2026-10-01, headings shifted one level; the reviewer's text is unchanged. -->
+
+## Review 7 — third re-review of J1, J12, J13 (HEAD af956fe)
+
+Findings are numbered U1, U2, ... and written as found.
+
+### U1 — minor — J1: a block comment in a migration makes a phantom setting "real" (miss within stated scope, form 3)
+
+Where: tools/check_schema_citations.py:201-205 (`Schema.__init__` strips only `--` comments before
+reading `current_setting('...')` / `set_config('...')`).
+
+Stated scope (docstring form 3): "a backticked setting-shaped name ... must be a setting a migration reads
+or sets". The docstring's own section on settings: "a name in a `current_setting(...)` or `set_config(...)`
+call". A `/* ... */` comment is neither a read nor a set, and is text presence — J9's class.
+
+Executed: appended to new-app/db/migrations/20260927160000_acceptance_responses/migration.sql
+    /* current_setting('pryvis.ghost_flag') */
+and to new-app/README.md
+    PLANT-I `pryvis.ghost_flag`
+Control (README plant alone, migration untouched): reported —
+    new-app/README.md:43: `pryvis.ghost_flag` is not a setting any migration reads or sets
+With the block comment added: that line disappears from the output; the citation passes silently.
+No migration today contains `/*` (grep -l '/\*' migrations/*/migration.sql: empty), so nothing currently
+hides behind it. Both files restored from backup, diff -q clean. CONFIRMED.
+
+### U2 — minor — J1: path citations whose characters fall outside the regex pass silently (miss within stated scope, form 1)
+
+Where: tools/check_schema_citations.py:116-120 (CITED_PATH), :121 (CITED_DIR). The first character must
+be `[A-Za-z0-9_@.]` and every later one `[A-Za-z0-9_@./-]`.
+
+Stated scope (form 1): "A backticked token containing a slash and ending in a listed extension (any case)
+... or a backticked token ending in `/`". None of the following is excluded by that wording, and every
+one passed silently, with the control on the next line reported:
+    PLANT-A `/new-app/never-written-a.ts`                  (leading slash)       -> silent
+    PLANT-B `new-app/web/app/(site)/never-b.tsx`           (Next.js route group) -> silent
+    PLANT-C `new-app/web/app/[id]/never-c.tsx`             (Next.js dynamic seg) -> silent
+    PLANT-J `new-app/web/app/(site)/`                      (directory)           -> silent
+    PLANT-K `new-app/web/app/~never/k.ts` `.../never+k.ts` `.../$never/k.ts`      -> silent
+    PLANT-F control `new-app/never-written-f.ts`           -> "resolves to nothing" (reported)
+(A space in a path, PLANT-D, also passed; I do not count it — "token" can fairly be read as excluding
+whitespace.) The bracket and parenthesis shapes are the App Router's own directory syntax and
+new-app/web is a Next.js app, so the first dynamic route makes this a live gap. No current citation in a
+scanned file has any of these shapes (searched; empty), so nothing is hiding today. Plants in
+new-app/README.md, restored from backup, diff -q clean. CONFIRMED.
+
+### U3 — minor — J1: underscore identifiers of other shapes pass silently in a migration comment (miss within stated scope, form 2)
+
+Where: tools/check_schema_citations.py:126 (CITED_IDENTIFIER_ANY_CASE requires every `_` to be followed
+by at least one alphanumeric and the name to start with a letter).
+
+Stated scope (form 2): "In a migration comment: a backticked identifier containing an underscore, in
+any case, must be a table, column, ...".
+Executed, appended to the 20260927160000 migration as `--` comments:
+    `never__table_m1`   -> silent
+    `_never_table_m2`   -> silent
+    `never_table_m3_`   -> silent
+    control `never_table_m6` -> "is named here and is not a table, column, ..." (reported)
+All three are legal unquoted PostgreSQL identifiers containing an underscore. Restored, diff -q clean.
+CONFIRMED.
+
+### U4 — minor — J1: a schema-qualified call in a migration comment is not checked (miss within stated scope, form 2/3)
+
+Where: tools/check_schema_citations.py:128 (CITED_CALL cannot start after a dot) and :130 (CITED_DOTTED
+requires the closing backtick straight after the name, so `()` defeats it).
+Stated: form 2 "a backticked call, `name()` or `name(args)`, must be a function the migrations create";
+form 3 "a backticked `public.name` must name an object".
+Executed: `public.never_fn_m4()` in a migration comment -> silent; control `never_fn_m6()` ->
+"is cited as a function and no migration creates it". Restored, diff -q clean. CONFIRMED.
+(Not counted as findings, recorded for the owner: `issue_balance_apply(never_fn_m5())` — the inner call
+is unchecked; `never_table_m7.amount_minor` and `Quote.Never_Col_M8` pass, and form 3 restricts itself
+to a table that exists and to lower case, so these are stated limits.)
+
+### U5 — minor — J1: `public.<column>` passes as "an object"
+
+Where: tools/check_schema_citations.py:345 (`tail not in objects`, and `objects` includes every column
+of every table, :208-213).
+Stated (form 3): "a backticked `public.name` must name an object". Executed in new-app/README.md:
+`public.accepted_total_minor` -> silent. No relation, function or other schema-level object of that name
+exists in public; `accepted_total_minor` is a column of `issue_balance`. The control
+`public.never_object_h` is reported. Restored. CONFIRMED. (Severity minor: a column name is a real name,
+just not one that `public.` can qualify.)
+
+### U6 — minor — J1: overclaim — "What it does not scan is listed on every run" / "states everything it does not scan"
+
+Where: tools/check_schema_citations.py docstring ("What it does not scan is listed on every run:
+original-app/ and .claude/ ... and the eight evidence documents"), its failure banner (:411-413
+"states everything it does not scan"), SCAN_EXTS at :86, and the silent `except (UnicodeDecodeError,
+FileNotFoundError): continue` at :288. Rule 21.8 (docs/RULES.md:724-725): "Both scan tracked Markdown
+and source, both state what they do not scan".
+Observed: outside original-app/ and .claude/, tracked files with extensions not in SCAN_EXTS are skipped
+and never counted or listed: 16 .json, 3 .svg, 1 .png, .gitignore, 1 .example, 1 .css
+(new-app/web/app/globals.css, which carries backticks in a comment at line 116).
+Executed: appended to the backticked span in new-app/web/app/globals.css:116
+    see `new-app/never-written-css.ts` and `quote.never_col_css`
+Tool output: still "4 unresolved" from the other plant then active, neither css plant reported, and
+`grep -i css` over the full output prints nothing — the banner does not mention the skip. Restored,
+diff -q clean. CONFIRMED. (Guard-description weakness; nothing is hiding in those files today.)
+
+### U7 — major — J1 (T7): a numeric money column behind three domains escapes the "closed list" and every other money assertion
+
+Where: new-app/db/test/money-convention.test.ts, the catalogue query (`JOIN pg_type t ON t.oid = CASE WHEN
+d.typtype = 'd' THEN d.typbasetype ...`, `JOIN pg_type base ...`, `format_type(CASE WHEN base.typtype = 'd'
+THEN base.typbasetype ...)`). It unwraps a domain at most twice. `pg_type.typbasetype` of a domain over a
+domain is the inner DOMAIN, not the ultimate base type, so a third level reports the middle domain's
+name as `data_type`, which is in no type set.
+Claim (the T7 docstring above NUMERIC_NOT_MONEY): "every numeric column that is NOT bigint is named here
+with why it is not money, and anything else fails, whatever it is called ... a list of the columns
+themselves cannot [be named around]". Query comment: "A domain first resolves to its base type; an array
+then to its element; and an element that is itself a domain to that domain's base."
+Executed (throwaway migration new-app/db/migrations/29990101000000_review7_plant, deleted after):
+    CREATE DOMAIN r7_amount1 AS numeric(12,2);
+    CREATE DOMAIN r7_amount2 AS r7_amount1;
+    CREATE DOMAIN r7_amount3 AS r7_amount2;
+    CREATE TABLE r7_plant (id uuid PRIMARY KEY, fee_jmd r7_amount3, price_list r7_amount2[], client_id uuid REFERENCES client(id));
+`npx vitest run test/money-convention.test.ts` -> "✓ test/money-convention.test.ts (10 tests)" — all ten
+pass, including the closed list, the forbidden-types test and S6's amount-word test, with a NUMERIC(12,2)
+column named `fee_jmd` and a NUMERIC array named `price_list`.
+Control (detector fires on the shape it handles): the same plant with `fee_jmd r7_amount2` and
+`price_list r7_amount1[]` -> 3 failed: "r7_plant.fee_jmd is r7_amount2: money must be bigint, or name it
+as not money", "...price_list is r7_amount1[]...", plus the forbidden-type and S6 failures.
+So two levels are caught, a third level (or an array of a two-level domain) is not. CONFIRMED.
+Severity: major because the T7 docstring's whole claim is that this list "cannot be named around", and it
+is named around by DDL PostgreSQL accepts. Not a live defect: the schema has 0 types (schema-objects.json).
+
+### U8 — minor — J1 (T6): reference-keys counts a foreign key whose enforcement a migration has switched off
+
+Where: new-app/db/test/reference-keys.test.ts, the `keyed` expression (comment: "Keyed only by a key that
+ENFORCES").
+Executed: the U7 plant migration with `ALTER TABLE r7_plant DISABLE TRIGGER ALL;` after creating
+`client_id uuid REFERENCES client(id)` -> `✓ test/reference-keys.test.ts (4 tests)`.
+That the key then does not enforce, on real PostgreSQL 16 (throwaway database r7_fk, dropped):
+    CREATE TABLE client (id uuid PRIMARY KEY);
+    CREATE TABLE r7_plant (id uuid PRIMARY KEY, client_id uuid REFERENCES client(id));
+    ALTER TABLE r7_plant DISABLE TRIGGER ALL;
+    INSERT INTO r7_plant VALUES (gen_random_uuid(), gen_random_uuid());   -> INSERT 0 1
+    dangling = 1; pg_constraint shows r7_plant_client_id_fkey, convalidated = t
+CONFIRMED. Guard weakness (no migration does this today); the docstring's "every `*_id` row reference in
+the schema has a foreign key" stays literally true, the inline comment's "ENFORCES" does not.
+
+### U9 — minor — J1: overclaim — form 2 says sequences, types and schemas resolve; the tool rejects them
+
+Where: tools/check_schema_citations.py docstring form 2 ("must be a table, column, function, trigger,
+policy, index, constraint, sequence, type, schema or setting in the catalogue the migrations build");
+`Schema.__init__` (:184-205) never loads `sequences`, `types` or `schemas` from schema-objects.json, and
+`objects` (:207-213) omits them.
+Executed: with the U7 plant migration and schema-objects.json regenerated from it
+(`PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts` -> 2 passed), a comment in the
+tracked migration 20260927160000 citing `r7_plant_seq`, `r7_plant_kind`, `r7_amount3` and table
+`r7_plant`: the table resolved; the sequence, the enum and the domain were each reported "is named here
+and is not a table, column, function, trigger, policy, index, constraint or setting" — the tool's own
+message omits the three kinds its docstring claims. Wrong in the safe direction (false alarm, not silent
+pass); the schema has 0 sequences and 0 types today. schema-objects.json and the migration restored from
+backup, diff -q clean; plant directory deleted. CONFIRMED.
+
+---------------------------------------------------------------------------------------------------
+## Part B — J12
+
+Setup for everything below: throwaway database r7_j12 on PostgreSQL 16 (127.0.0.1:55440), every migration
+applied in order with psql, `pryvis_app` granted exactly what test-support grants; synthetic tenant
+11111111-..., quote, issue f0000000-...-0001 (total_minor 100000) accepted through
+`issue_balance_open()` as the documents-core `accept()` helper does. Dropped afterwards.
+
+R5 re-executed (as pryvis_app, app.tenant_id set):
+    UPDATE issue_balance SET invoiced_total_minor = 999;                    -> UPDATE 0   (no flag)
+    BEGIN; SELECT set_config('pryvis.balance_write','on',true);
+    UPDATE issue_balance SET accepted_total_minor = 99999999999 WHERE ...;  -> UPDATE 1
+    COMMIT;
+Control before it: INSERT INTO invoice ... amount_minor 150000 -> "ERROR: invoiced total 150000 exceeds
+the ceiling 100000". After it, the same INSERT -> INSERT 0 1; issue_balance then reads
+accepted_total_minor 99999999999, invoiced_total_minor 150000, against quote_issue.total_minor 100000.
+No function is SECURITY DEFINER (pg_proc.prosecdef false for all 13). R5 holds as THREAT-MODEL §4e states.
+
+The seven sentences 9e83436 changed: checked one by one, see "checked and found nothing". The sweep found
+the following, none citing a test that executes it.
+
+### U10 — major — J12: three writer-set sentences in the J12 test file itself, false by execution and never reported
+
+Where: new-app/db/test/documents-core.test.ts
+- :812 `describe("2 · issue_balance has exactly one writer", ...)` — two functions set the flag (and four
+  later migrations redefine them, R6) and the application can set it (R5, executed above). The block
+  executes only the no-flag case.
+- :814-816 "The write policies require a transaction-local flag that only the function sets." — "only the
+  function sets" is R5's false sentence verbatim. Executed above: pryvis_app set it and wrote the row.
+- :860 `it("opens the balance row as part of accepting, not as a separate step somebody may forget")` —
+  it IS a separate step: the test's own `accept()` helper (:76-83) calls `issue_balance_open()`
+  explicitly, and the same file's N2 test (:1113-1116) says "Nothing makes `issue_balance_open()` run with
+  every acceptance, so the state is reachable". Executed on r7_j12, as pryvis_app: an `accepted`
+  acceptance inserted (render first, autocommit) for a second synthetic issue without calling the
+  function -> committed; `SELECT count(*) FROM issue_balance WHERE issue_id = <it>` = 0.
+Rule 21.10's case exactly: a sentence saying who writes `issue_balance`, in the one file a reader is told
+to trust, false by execution. R6 (PRD-REVIEW-4.md:2440) reported only the :868 "exactly one place" guard;
+grep of PRD-REVIEW-4, BRIEF-STATUS and MISTAKES finds none of these three. CONFIRMED.
+
+### U11 — major — J12: PRD R1.24a and R1.15c still state the writer set, false by execution
+
+Where:
+- docs/PRD.md:377-378, R1.24a: "The `issue_balance` row is created **in the same transaction as the
+  acceptance, unconditionally**". False — R7/R13: the same word was removed from domain-model §6.2a for
+  being false ("This section said, until 2026-10-01, that the row was created 'unconditionally' and
+  'cannot be forgotten'; neither was true (R13)", docs/design/domain-model.md:302-304), and the PRD copy
+  survived. Executed: acceptance committed with 0 balance rows (U10).
+- docs/PRD.md:211, R1.15c: "`accepted_total_minor` stays written-once". False by R5 — executed above:
+  pryvis_app rewrote it to 99999999999 in a committed transaction. ADR 0025 itself now retracts "written
+  once, never again" (decision 2's misquote note, corrected in 9e83436), so the PRD says what the ADR no
+  longer does.
+Neither cites a test; the J12 block executes only that the four money inserts leave it alone. CONFIRMED.
+
+### U12 — minor — J12: ADR 0025 decision 2 says the writer set "is enforced by the schema" in the sentence before saying it is not closed
+
+Where: docs/adr/0025-five-invariants-move-from-prose-to-code.md:77-80: "The decision stands — the writer
+set is enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and all
+three bullets above are kept as the decision of its day, none built as written: ... the writer list is not
+closed (R5)". Mirrored in docs/adr/README.md:40: "`issue_balance`'s writers are enforced by the schema,
+not a paragraph (... with its limit R5)".
+The schema enforces that a write carries the flag; it does not enforce a set of writers, because any
+session can raise the flag (R5, executed above). The README line is qualified ("with its limit R5"); the
+ADR's "The decision stands" is not, and contradicts its own clause two lines later. Severity minor: the
+limit is stated beside it. CONFIRMED (the false half executed above).
+
+### U13 — minor — J12 (one of the 9e83436 sentences): R1.24b's "rather than trusting the cached figure" is false of the figure the ceiling uses
+
+Where: docs/PRD.md:385-386, R1.24b as rewritten by 9e83436: "the balance functions re-sum from the
+underlying rows **inside** the lock rather than trusting the cached figure."
+`issue_balance_apply()` re-sums `variations_total_minor` and `invoiced_total_minor` only;
+`issue_ceiling_minor()` reads `b."accepted_total_minor" + b."variations_total_minor"` FROM issue_balance —
+the cached copy (pg_get_functiondef on r7_j12). `issue_balance_open()` re-sums nothing and inserts ON
+CONFLICT DO NOTHING. Executed above: after the cached accepted_total_minor was raised, an invoice of
+150000 against an issue whose total is 100000 was accepted — the functions trusted the cache. The next
+sentence's R5 caveat says a caller can write the row; it does not say the ceiling then believes it.
+THREAT-MODEL §4e:219-220 does say this, so the defect is recorded; the R1.24b sentence is not true as
+written. CONFIRMED.
+
+### U14 — minor — J1: overclaim in schema-objects.test.ts — "so a citation to it fails"
+
+Where: new-app/db/test/schema-objects.test.ts:11-12: "A dropped object leaves the catalogue, so it leaves
+the file, so a citation to it fails."
+True only for the forms the tool checks (a migration comment; `table.column`; `public.name`). In a
+prose document a bare identifier is not checked (the tool's docstring says so).
+Executed: appended to new-app/README.md "The index `acceptance_issue_key` keeps one response per
+issue." — the very index the docstring names as dropped (S3) -> "Every cited path and every named
+database object resolves." Restored, diff -q clean. CONFIRMED. The tool's own docstring states the limit
+correctly; this docstring does not.
+
+(Also an overclaim, recorded under U7: money-convention.test.ts says it "asks `information_schema`"
+— it queries pg_attribute/pg_type — and that text-search "would be ... defeated by a type introduced
+through a domain", implying the catalogue query is not; U7 defeats it with a domain chain.)
+(Also under U1: schema-objects.test.ts says settings come from "`current_setting(...)` and
+`set_config(...)` calls"; a block comment counts.)
+
+---------------------------------------------------------------------------------------------------
+## Part C — J13
+
+Scripts: scratchpad/review7/race/ (setup.sql, fn.sql, seedrun.sh, run.sh). Throwaway database r7_race on
+PostgreSQL 16, every migration applied, pryvis_app with test-support's grants, a fresh synthetic quote per
+run (X = revision 1, Y = revision 2; for D, Y accepted and its balance opened). Two pryvis_app psql
+sessions, `SHOW transaction_isolation` = read committed in both. T2 starts 1 s after T1; T1 sleeps 2 s
+holding its first write. Dropped afterwards.
+
+Controls (the shapes as S9/T11 wrote them, breaking the rule):
+    A_bad run 02: T1 ERROR: deadlock detected; committed: 2 declines
+    A_bad run 03: T1 ERROR: deadlock detected; committed: 2 declines
+    D_bad run 04: T2 ERROR: deadlock detected; committed: 1 decline, 1 invoice
+    D_bad run 05: T2 ERROR: deadlock detected; committed: 1 decline, 1 invoice
+Following new-app/CLAUDE.md:116-119 ("a client response is alone in its transaction"), same steps, same
+timing, each response committed in its own transaction, the other write in a separate one:
+    A_ok runs 06, 07, 08: no error in either session; 4 declines committed each run
+    D_ok runs 09, 10, 11: no error in either session; 2 declines and 2 invoices committed each run
+(In each ok run the second session's write to the issue the first still held did wait, then proceed.)
+Extra, three sessions: T1 accepts Y, sleeps 2 s, then calls `issue_balance_open(Y)` in the same
+transaction (the companion the acceptance path requires); T2 declines X alone; T3 seals revision 3 at
+t=1 s (exclusive quote lock, queued). All three completed, no error; balance row opened; 3 issues.
+
+Why it is sufficient, from the functions (pg_get_functiondef on r7_race): the per-issue advisory lock is
+taken only by `acceptance_response_rules()`, after the quote lock (`acceptance_quote_lock` fires first);
+withdrawal, invoice, void, credit note and variation take the quote lock and balance row locks, never a
+per-issue lock. A transaction holding one response holds at most one per-issue lock and acquires nothing
+after it except, for an acceptance, the same quote lock again and its own balance row. So no cycle can
+include a response-alone transaction. Remaining shapes (two quotes; write then seal) are the ones the
+paragraph already tells the application to retry. CONFIRMED (execution) for A and D; the general argument
+is reasoning over the function bodies.
+
+No finding for J13.
+
+---------------------------------------------------------------------------------------------------
+## Checked and found nothing
+
+Part A (J1):
+- Controls: every detector I relied on fired on a known-bad plant: a missing path (`new-app/never-written-f.ts`),
+  `quote.never_col_minor`, `public.never_object_h`, `pryvis.ghost_flag` (without U1's comment),
+  `never_table_m6` and `never_fn_m6()` in a migration comment, `../../outside/never.md` (reported as
+  climbing out), `apps/mobile/` and `apps/api/src/main.ts` from a new-app file (T12 holds: reported),
+  `accepted_total` (near miss reported), `NEW-APP/README.MD` (reported), `new-app/never.MD#x` (reported);
+  `new-app/README.md:L12-L20` resolved correctly.
+- schema-objects.json freshness: adding a migration without regenerating -> "1 failed" in
+  schema-objects.test.ts listing every new name; `toEqual` over the whole object, so an extra key or a
+  missing name in the committed file fails either way; the test is in `npm test` (vitest run, no excludes)
+  and CI runs npm test. CLAUDE.md's regeneration command works as written (executed, 2 passed).
+- reference-keys: beyond U8, the catalogue query covers every user schema, relkind r and p, MATCH FULL vs
+  nullable companion as its comment says; a domain over uuid is not "uuid" and therefore falls into the
+  "name every non-uuid *_id column" test, so it cannot escape silently. Inheritance children (not
+  partitions) do not inherit FKs and would be reported.
+- money-convention: beyond U7, arrays of numeric, one- and two-level domains, and arrays of a one-level
+  domain are caught (control run, 3 failed); every user schema is read.
+- CITATION_EXEMPTIONS, every reason checked against the text: `row_count` (GET DIAGNOSTICS ... = ROW_COUNT,
+  migration line 86) true; `withdrawn_at` (documents_core:269, the rejected design) true;
+  `acceptance_issue_key` (dropped by 20260927160000:42, never recreated) true; `.vercel/project.json`
+  (`git check-ignore` exit 1: not ignored; DEPLOYMENT.md:120 says not checked in) true;
+  `infra/docker-compose.yml` (ADR 0012:166 "planned ... not built yet") true; DEVELOPMENT-BRIEF
+  `catalog/`, `messaging/`, `support/`, `infra/` (x2) planned and absent, true; PRICING
+  `apps/api/src/pricing/scrapers/` (no pricing dir in original-app/apps/api/src) true; SERVICE-REGISTER,
+  new-app/CLAUDE.md and README `infra/`, `mobile/` absent and listed as not built, true.
+  Nit only: the ARCHITECTURE entry's reason "The same deleted mockup, the same history." has no antecedent
+  in this dict (it reads as copied from a list where it followed another entry); the substance — a
+  mockup that existed in history (7c8ef83) and is deleted — is true.
+- SQL_CONSTRUCTS: greatest, least, nullif, coalesce — `pg_proc` on PostgreSQL 16 has none of the four, and
+  none is in schema-objects.json's builtin_functions; each is a SQL conditional expression. True.
+- Stated limits NOT reported, per the owner's decision: path with a space (PLANT-D); a call nested in an
+  argument (`issue_balance_apply(never_fn())`); an unknown table's `table.column`; mixed-case
+  `Quote.Never_Col`; `never$table`; paths inside multi-word backticked commands (e.g. `node
+  apps/api/dist/main.js` — build outputs); docs/DEVELOPMENT-BRIEF.md:76 `mobile/` "inside new-app/"
+  resolving through original-app/apps/mobile (a docs/ file; the docstring says citations elsewhere may
+  mean the earlier application).
+- Rule 21.9 and the verify.yml comment: true apart from "what it does not scan, it prints" (U6).
+- Gates at the end, tree clean: the three db tests 16 passed; the four checkers' last lines exactly as in
+  the setup facts.
+
+Part B (J12), the seven sentences 9e83436 changed:
+- PRD R1.24b: second sentence true (R5 executed); first sentence U13.
+- row-convention.test.ts issue_balance reason: true ("meant to", R5 caveat; "Never deleted": no DELETE
+  policy, forced RLS, documents-core "has no DELETE policy" executes it).
+- schema.prisma totals comment: true (apply re-sums both; R5 executed).
+- policy-parity.test.ts: true; no test checks who sets the flag (only the R6-narrow migration count),
+  and the application can (executed).
+- ADR 0025 decision 2 "none built as written": true — prosecdef false for all 13 functions; R5 executed;
+  no file in new-app/api, packages, web mentions issue_balance, so no parser guard exists.
+- ADR 0025 misquote tense: true.
+- ADR 0025 decision 1 "one function, `issue_ceiling_minor()`, that every ceiling check reads": true —
+  the only amount-ceiling comparison is in `issue_balance_apply()`, via it; quote_issue_one_live_ceiling
+  counts rows and computes no ceiling.
+Sweep, also clean: THREAT-MODEL §4e (true, and executed above); domain-model §6.2a lines 300-311 and
+:396-397; PRD N3 (:505); scope-reduction.md lock-order lines; new-app/CLAUDE.md:107; RULES 21.10 text;
+BRIEF-STATUS lines (history, and R5 recorded as owed). Already known and not re-reported: the :868
+"exactly one place" guard (R6, owed in BRIEF-STATUS:321).
+
+Part C (J13): no finding (above).
+
+---------------------------------------------------------------------------------------------------
+## Verdicts
+
+- J1, against the owner's closing standard ("no overclaim and no miss within the scope the tool now
+  states"): NOT CLOSABLE, because there are misses within the stated scope (U1 setting via block comment;
+  U2 path characters — leading slash, App Router brackets/parentheses, ~ + $; U3 underscore shapes;
+  U4 schema-qualified call; U5 `public.<column>`) and overclaims (U6 "states everything it does not
+  scan", echoed by verify.yml and Rule 21.8; U9 sequences/types/schemas; U14 "a citation to it fails").
+  The catalogue tests carry one major escape (U7: a three-level domain puts a NUMERIC money column past
+  the "closed list" whose docstring says it cannot be named around) and one minor (U8). None hides a
+  phantom or a wrong-typed column in the repository today — each was planted.
+- J12: NOT CLOSABLE, because sentences of Rule 21.10's kind remain, false by execution and citing no
+  test that executes them: documents-core.test.ts:812, :814-816, :860 (U10); PRD R1.24a and R1.15c (U11);
+  ADR 0025 decision 2 "The decision stands — the writer set is enforced" (U12); and one sentence 9e83436
+  itself wrote, R1.24b's "rather than trusting the cached figure" (U13).
+- J13: CLOSABLE. Following the paragraph avoids shapes A and D on real PostgreSQL 16 (6 of 6 runs clean,
+  controls 4 of 4 deadlocked), and the function bodies admit no cycle through a response-alone transaction.

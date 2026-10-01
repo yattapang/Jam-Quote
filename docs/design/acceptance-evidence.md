@@ -67,7 +67,8 @@ fact that matters later.
 
 ### 4.2 The ladder (H10)
 
-One `acceptance` per issue, and an **append-only `acceptance_evidence`** table, because the owner's flows
+One **accepted** `acceptance` row per issue — declines may precede it and are all kept (J13) — and an
+**append-only `acceptance_evidence`** table, because the owner's flows
 produce *several* pieces for one acceptance — a WhatsApp reply *and* a deposit. The **grade is derived**
 from the evidence rows, exactly as issue state and invoice status already are (ADR 0025 decision 3), so
 there is no stored grade to drift.

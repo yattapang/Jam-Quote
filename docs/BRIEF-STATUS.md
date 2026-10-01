@@ -391,7 +391,12 @@ agent, **Opus**. J1 is judged against the owner's closing standard — no overcl
 scope the tool now states — which is adversarial guard work; J12 and J13 are bounded checks in the same
 brief, as last time (Rule 16.2, one agent live). No build work, gate run or commit alongside it. Findings to
 a scratchpad file as found, copied into `PRD-REVIEW-4.md` and committed before anything else; expectations
-executed last on the HEAD it names.*
+executed last on the HEAD it names.* Every expectation re-run on `af956fe` before launch and held.
+**Reported 2026-10-01: U1-U14, copied verbatim into `PRD-REVIEW-4.md`. J13 CLOSED** (deadlock guidance
+verified 6 of 6 on PostgreSQL 16). **J1 Open** — U7 major (a money column behind a three-level domain
+escapes the closed list), U1-U6, U8, U9, U14 minor; none hides a defect today. **J12 Open** — U10, U11
+major (writer-set sentences in documents-core.test.ts and PRD R1.24a/R1.15c), U12, U13 minor. *Tier log:
+Opus right again; every J1 finding was a planted edge case, which no mechanical check would have tried.*
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
