@@ -23,7 +23,7 @@
  * WHAT IT DOES NOT PROVE (Rule 21.4)
  *
  * - Not that a key is tenant-scoped; `tenant-isolation.test.ts` checks the keys that exist. This test
- *   makes sure they exist.
+ *   makes sure they exist, and that a composite key cannot be skipped by a NULL in a companion column.
  * - Not that a uuid column NOT named `*_id` is a reference; a reference named otherwise is invisible.
  * - Not that the key points at the right table — only that one exists.
  */
@@ -59,16 +59,27 @@ describe("every row reference has a foreign key, read from the catalogue", () =>
     await applyMigrations(db);
     ids = (
       await db.query<IdColumn>(
-        `SELECT c.relname || '.' || a.attname AS name,
+        `SELECT CASE WHEN n.nspname = 'public' THEN c.relname ELSE n.nspname || '.' || c.relname END
+                  || '.' || a.attname AS name,
                 format_type(a.atttypid, NULL) AS data_type,
+                -- Keyed only by a key that ENFORCES: with the default MATCH SIMPLE, a NULL in any other
+                -- column of a composite key skips the whole check, so a nullable companion makes the
+                -- key optional (finding T6, executed: a dangling reference was accepted). So every
+                -- other column of the key must be NOT NULL, or the key must be MATCH FULL.
                 EXISTS (
                   SELECT 1 FROM pg_constraint k
                    WHERE k.conrelid = c.oid AND k.contype = 'f' AND a.attnum = ANY (k.conkey)
+                     AND (k.confmatchtype = 'f' OR NOT EXISTS (
+                       SELECT 1 FROM unnest(k.conkey) AS other(num)
+                         JOIN pg_attribute o ON o.attrelid = c.oid AND o.attnum = other.num
+                        WHERE other.num <> a.attnum AND NOT o.attnotnull))
                 ) AS keyed
            FROM pg_attribute a
            JOIN pg_class c ON c.oid = a.attrelid
            JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+          -- Every user schema and partitioned parents too, not only public tables (T6).
+          WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
+            AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
             AND a.attname LIKE '%\\_id' ESCAPE '\\'
           ORDER BY 1`,
       )
@@ -102,8 +113,12 @@ describe("every row reference has a foreign key, read from the catalogue", () =>
     for (const name of Object.keys(UNKEYED)) {
       expect(ids.find((c) => c.name === name), name).toMatchObject({ data_type: "uuid", keyed: false });
     }
+    // The column must EXIST and not be uuid. Finding T5: checking only "not uuid" passed for a name
+    // matching no column at all, because undefined is not "uuid".
     for (const name of Object.keys(NOT_A_REFERENCE)) {
-      expect(ids.find((c) => c.name === name)?.data_type, name).not.toBe("uuid");
+      const found = ids.find((c) => c.name === name);
+      expect(found, `${name} matches no column`).toBeDefined();
+      expect(found?.data_type, name).not.toBe("uuid");
     }
   });
 });
