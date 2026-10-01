@@ -1549,6 +1549,29 @@ describe("the tenant boundary still holds over all of it", () => {
     );
   });
 
+  it("R17 · refuses a balance write that stored nothing, even when the figures would read back the same", async () => {
+    // The second line, exercised. Something that silently suppresses the UPDATE — here a BEFORE UPDATE
+    // trigger returning NULL, standing in for a mistaken trigger or policy — leaves the row unwritten.
+    // When the new figures differ from the stored ones, the read-back check also catches it; when they
+    // are the same (a recompute with nothing changed), only the ROW_COUNT check does. Finding R17: no
+    // test went red when that check was removed. This one does.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 10_000n);
+
+    await asSuperuser(db, () =>
+      db.exec(`
+        CREATE FUNCTION test_suppress_balance_write() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+        BEGIN RETURN NULL; END; $$;
+        CREATE TRIGGER test_suppress_balance_write BEFORE UPDATE ON issue_balance
+          FOR EACH ROW EXECUTE FUNCTION test_suppress_balance_write();`),
+    );
+
+    await expect(sql(`SELECT issue_balance_apply($1)`, [issue])).rejects.toThrow(
+      /affected 0 row\(s\), not 1/,
+    );
+  });
+
   it("refuses a seal planted into another tenant", async () => {
     await expect(
       db.query(

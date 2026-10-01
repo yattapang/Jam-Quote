@@ -422,7 +422,7 @@ new revision is judged against (`quote_issue_one_live_ceiling()`, L2).
 |---|---|---|
 | `outbound_message` | One queued send: channel (email / WhatsApp / link), recipient, template, status, attempts, provider id. | **Every send goes through this table.** A reminder, a digest and a quote email are one entity with three templates, so "was it sent" has one answer and retries have one place to live. Idempotent per (document, template, recipient). |
 | `share_link` | A capability URL for a client with no account. | High-entropy token, hashed at rest, scoped to one issue, expiring, revocable. It is a credential and is treated as one. |
-| `document_render` | A produced PDF: storage key, hash, the settings used. | Immutable, and the hash is what `acceptance` and `quote_issue` point at. |
+| `document_render` | A produced PDF: storage key, hash, the settings used. | Immutable. The render points at its issue, not the reverse, and an `acceptance` points at the render of its OWN issue (R9; the J9 migration said this document was amended to say so, and it was not until 2026-10-01 — finding R10). |
 
 ### Work — deliberately shallow
 

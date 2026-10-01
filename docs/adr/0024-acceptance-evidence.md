@@ -120,7 +120,7 @@ to the elements such regimes generally require rather than to whatever is easies
 | **Attribution** — the signature is tied to a person, not to whoever holds a link | A one-time code sent to the channel **the tenant has on file for that client**, entered to sign. Possession of the link stops being sufficient | `share_link` exists; the code and the verification record are new |
 | **Intent** — an explicit act of signing, clearly labelled | A signing step that says it is a signature, separate from reading the quote. Not a generic "continue" | New, and it is a UI requirement as much as a data one |
 | **Consent to sign electronically** | Captured and recorded at the moment of signing | New, one field |
-| **Integrity** — exactly what was signed, provably | The `document_render` hash is bound into the `acceptance` row (R1.16a already requires one hash, referenced rather than copied) | Exists |
+| **Integrity** — exactly what was signed, provably | The `acceptance` row references the `document_render` of its own issue, whose hash is the document (R1.16a requires one hash, referenced rather than copied) | Exists — required and keyed to the same issue since 2026-09-30 (R9; corrected 2026-10-01, R10) |
 | **Audit trail** | Timestamp, IP, user agent, which channel the code went to, and the verification event | Mostly exists on `acceptance` |
 | **Reproducibility** — the signer can be given back exactly what they signed | The immutable issue plus the hashed render | Exists (domain model §6.1) |
 
