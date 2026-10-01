@@ -630,6 +630,12 @@ mechanical closing check (Sonnet), each from a committed brief run through `tool
 names CREATE on schema public and ownership of anything in it, which D4's list missed (found by the builder
 while writing the review brief). Two more plants, both caught; two more tests.
 
+**Ready to launch: adversarial review of the privilege model.** *Delegation (Rule 16.5), declared before launch:
+commit-reviewer at **Opus** — the credential path and row-security policy text are two of 16.5's named
+exceptions, and the work is adversarial (bypasses executed, not reasoned about).* Brief
+`docs/briefs/2026-10-01-privilege-model-review.md`; `tools/run_brief.py` ran it at `6324860`: 8 of 8 expectations
+hold. Scope: `4f385fa`, `6ac5cd2`. Findings will be numbered AA1 onward. Then the closing check (Sonnet).
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
