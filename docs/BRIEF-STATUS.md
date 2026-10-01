@@ -345,6 +345,14 @@ copied verbatim into `PRD-REVIEW-4.md`.** None of the five closed. J1 and J12 re
 J9 hold in the database (S1 for J3's Prisma claim). J13 holds for every part claimed (S8, S9 documentation).
 *Tier log: Opus was right — S4 and S6 are guard weaknesses no mechanical check would have looked for.*
 
+**Second batched re-review — J1 (adversarial), J12 and J13 (closing checks) — launched 2026-10-01 on the
+owner's instruction.** *Delegation (Rule 16.5), declared before launch: one `commit-reviewer` agent,
+**Opus**. J1's checker was rebuilt on the catalogue, which is guard work where a defect leaves the suite
+green; J12 and J13 need only bounded closing checks, written into the same brief rather than a second
+agent, because Rule 16.2 allows one agent live and a separate Sonnet run would cost about the same. No
+build work, gate run or commit alongside it. Findings to a scratchpad file as found, copied into
+`PRD-REVIEW-4.md` and committed before anything else; expectations executed last on the HEAD it names.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
