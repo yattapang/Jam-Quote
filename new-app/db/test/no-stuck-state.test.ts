@@ -286,7 +286,7 @@ async function walk(seed: number) {
     let revision = 0;
 
     for (let write = 0; write < WRITES_PER_RUN; write++) {
-      const issue = issues.length
+      let issue = issues.length
         ? issues[issues.length - 1 - (next(3) === 0 ? next(issues.length) : 0)]!
         : "";
       const op = issues.length ? next(13) : 0;
@@ -326,12 +326,23 @@ async function walk(seed: number) {
         // on (withdrawals after money fell to 1). The oracle predicts, from the rows alone, whether the
         // database must take the response or refuse it, and a disagreement either way is a finding.
         const outcome = op === 12 ? "declined" : "accepted";
+        // W4: a response to a replaced revision is now refused, so aiming responses as widely as other
+        // writes starved the money paths behind them (withdrawals after money fell to 2, a floor). Three in
+        // four go to the current revision; the rest stay random, so the refusal is still exercised.
+        if (next(4) !== 0) issue = issues[issues.length - 1]!;
         const acceptanceId = id();
         const prior = await sql<{ outcome: string }>(
           `SELECT outcome FROM acceptance WHERE issue_id = $1`,
           [issue],
         );
-        const mayRespond = !prior.some((p) => p.outcome === "accepted");
+        // W4: a response needs a numbered issue that no later revision has replaced — read from the rows.
+        const [where] = await sql<{ replaced: boolean; numbered: boolean }>(
+          `SELECT EXISTS (SELECT 1 FROM quote_issue later JOIN quote_issue self ON self.id = $1
+                           WHERE later.quote_id = self.quote_id AND later.revision > self.revision) AS replaced,
+                  EXISTS (SELECT 1 FROM issue_number n WHERE n.issue_id = $1) AS numbered`,
+          [issue],
+        );
+        const mayRespond = !where?.replaced && Boolean(where?.numbered) && !prior.some((p) => p.outcome === "accepted");
         ok = await attempt(async () => {
           await sql(
             `WITH r AS (
@@ -578,6 +589,9 @@ describe("K6 and L3 · no sequence of financial writes leaves an issue stuck, ov
       // 301-315 responses refused, each as the oracle predicted: the refusal path is exercised, not
       // only the acceptances.
       expect(result.refusedAsPredicted).toBeGreaterThan(150);
+      // Re-measured 2026-10-01 after W4 (responses aimed at the current revision three times in four):
+      // seeds 1 and 2 give 1,361-1,365 writes, 4-6 withdrawals after money, 19-24 wrong-document remedies
+      // (5-8 with a variation), 344-348 refusals as predicted. Every floor above still holds; none lowered.
 
       expect(result.wrongResponses).toEqual([]);
       expect(result.wrongStates).toEqual([]);

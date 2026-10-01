@@ -1,6 +1,8 @@
 # Design: the acceptance grade, its evidence, and the bar (J6, J7, J8)
 
-**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D7).** Built
+**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D7); D4 then
+reversed to a per-tenant key after the re-review (W7), and superseded issues settled (W4: no grade, no
+evidence, no response).** Built
 by `new-app/db/migrations/20260927180000_acceptance_grade/migration.sql`.
 
 Date: 2026-10-01 · Answers findings **J6**, **J7** and **J8** of `../PRD-REVIEW-4.md` · Amends
@@ -74,6 +76,14 @@ Each has a recommendation, marked **(rec)**, and the reason.
 
 ### D4 · The idempotency key for third-party evidence (J7)
 
+**Reversed by the owner, 2026-10-01, after the re-review (W7): the key is per tenant — option B as
+amended below — not A.** A was approved on the reason "provider ids are unguessable", which is false for
+bank references and for email Message-IDs, which the sender chooses: the global key let one tenant probe
+whether another holds a bank reference. A retried webhook comes back to the tenant it was first
+attributed to, so `(tenant, source, external_id)` still stops every replay. Built by
+`new-app/db/migrations/20260927190000_rereview_fixes/migration.sql`. The table below is kept as decided
+at the time.
+
 | Option | For | Against |
 |---|---|---|
 | **A. Unique `(source, external_id)` across all tenants, where an external id is present (rec)** | Same shape and lesson as `variation_issue_client_reference_key`; a provider's message or transaction id names one event in the world, so one row, ever. Covers deposit webhooks too (fact 4), not just replies | A collision across tenants would be refused; provider ids are unguessable, so it reveals nothing practical |
@@ -95,7 +105,7 @@ J7 asked derived or stored. **The finding misses something: the preparation's pr
 
 | Option | For | Against |
 |---|---|---|
-| **A. No — the ceiling unlocks on any accepted, unwithdrawn acceptance, as built; the bar decides whether the product calls it "accepted to your standard" or "accepted, deposit not yet paid" (rec)** | Matches §4.4 and the built SQL; keeps the ordinary undisputed job flowing; the frozen bar makes the J8 trick visible forever instead of silent | A tenant can still invoice a job whose bar isn't met — by design, the bar is a record and a prompt, not a lock |
+| **A. No — the ceiling unlocks on any accepted, unwithdrawn acceptance, as built; the bar decides whether the product calls it "accepted to your standard" or "accepted, deposit not yet paid" (rec)** | Matches the built SQL (§4.4 said "grade 2 or above" until W3 corrected it to this); keeps the ordinary undisputed job flowing; the frozen bar makes the J8 trick visible forever instead of silent | A tenant can still invoice a job whose bar isn't met — by design, the bar is a record and a prompt, not a lock |
 | B. Yes — no invoice until the grade meets the bar | Strongest | **Unbuildable for a grade-6 bar:** the deposit is itself an invoice (fact 2), so it could never be issued |
 | C. Yes, except deposit invoices | Enforces the deposit before other billing | A second ceiling rule keyed on invoice kind, and more surface for the race shapes `new-app/CLAUDE.md` already lists |
 

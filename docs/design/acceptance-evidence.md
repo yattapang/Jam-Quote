@@ -119,15 +119,21 @@ deposit)**. That is the owner's "if the tenant so chooses" made into a setting r
 
 **The bar is frozen at seal (J8).** The database resolves it when the issue is sealed — the quote's own
 bar, else the tenant's `document_settings` default, else 3 — and stores it on the issue, like the terms
-and the tax rate. Changing a quote's bar or a default never affects an issue already sealed. **The bar does
+and the tax rate. **The application states the bar it showed** when it seals, and a bar that no longer
+matches the quote is refused, so the bar and the terms the application read cannot come from two
+versions of the quote (suspicion S2 of the re-review; omitting the bar, for tools and tests, resolves it). Changing a quote's bar or a default never affects an issue already sealed. **The bar does
 not gate invoicing** (§4.4): it decides whether the product may say the acceptance meets the tenant's own
 standard (`acceptance_meets_bar()`). A bar that gated invoicing could never be met at grade 6, because a
 deposit is itself an invoice.
 
 ### 4.4 What stays strictly separate
 
-**The invoicing ceiling unlocks on operational acceptance (grade 2 or above). The evidence grade is a
-separate recorded fact.** Conflating them would stop the product working for the overwhelming majority of
+**The invoicing ceiling unlocks on any accepted acceptance that is not withdrawn and whose issue is
+current, whatever its grade — even grade 1, the tenant's own record. The evidence grade is a separate
+recorded fact.** (Corrected 2026-10-01, finding W3: this said "grade 2 or above", which nothing ever
+enforced; the owner's D6 in `acceptance-grade.md` settles it as written here, and
+the D6 test in `new-app/db/test/documents-core.test.ts` executes an invoice against a grade-2 acceptance
+below a bar of 6; the re-review executed one at grade 1.) Conflating them would stop the product working for the overwhelming majority of
 jobs nobody ever disputes — and ADR 0024 already made the opposite mistake once, by treating a typed name
 as proof.
 
@@ -173,7 +179,10 @@ Each by planting the defect it exists to catch:
 
 - a share link minted for a client with no channel → refused;
 - an acceptance whose recorded destination differs from the one the code went to → refused;
-- a quote requiring grade 6 marked accepted with no payment → refused;
+- a quote requiring grade 6, accepted with no payment → **accepted and invoiceable, and recorded as not
+  meeting its bar** (`acceptance_meets_bar()` false). Corrected 2026-10-01 (W3): this line said
+  "refused", which D6 decided against — a deposit is itself an invoice, so a bar that refused billing could
+  never be met;
 - an `acceptance_evidence` row updated or deleted → refused by the absence of a policy;
 - the derived grade: a stronger row raises it and a weaker later row does not lower it, proving it is
   derived — without defeating the immutability the line above asserts (J6 corrected the earlier
@@ -216,7 +225,9 @@ deliberately, so "prepare" has to mean something specific rather than a good int
   database column makes an email already sent attributable. Worse, a reply address we host with nothing
   receiving mail there would lose the client's replies, which today reach the contractor. So the reply
   address is **derived from the issue id when inbound mail exists, and nothing is stored**; release 1
-  keeps the tenant's own reply address, and **a quote sent in release 1 never earns grade 4.**
+  keeps the tenant's own reply address, so **no client reply to a release-1 quote reaches us, and none can
+  be recorded as grade 4.** That is a consequence of where the reply goes, not a rule the database
+  enforces (finding W9): the inbound writer, when built, records only replies to the derived address.
 - **A provider's event is recorded once, ever:** a unique key on the evidence's source and external id,
   across all tenants — the same lesson and shape as `variation_issue_client_reference_key` (M18), because a
   provider retries a webhook it thinks was missed and an append-only duplicate could never be removed. It

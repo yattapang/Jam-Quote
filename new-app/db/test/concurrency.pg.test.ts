@@ -47,6 +47,7 @@ const CLIENT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const OTHER_TENANT = "22222222-2222-4222-8222-222222222222";
 const OTHER_USER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const OTHER_CLIENT = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const SERIES = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 
 let admin: pg.Client;
 let owner: pg.Client;
@@ -191,6 +192,13 @@ function sealSql(issueId: string, quote: string, revision: number, total: number
 async function seal(client: pg.Client, quote: string, revision: number, total = 100_000) {
   const issueId = id();
   await client.query(sealSql(issueId, quote, revision, total));
+  // Numbered with the seal: since W4 a client responds only to a numbered issue.
+  const number = 1000 + ids;
+  await client.query(
+    `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id(), TENANT, issueId, SERIES, number, `Q-${number}`],
+  );
   return issueId;
 }
 
@@ -309,6 +317,12 @@ suite("concurrency against real PostgreSQL", () => {
     await owner.query(
       `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'A Client', now())`,
       [CLIENT, TENANT],
+    );
+    // Since W4 a client responds only to a numbered issue, so every fixture seal is numbered.
+    await owner.query(
+      `INSERT INTO number_series (id, tenant_id, document_kind, prefix, updated_at)
+       VALUES ($1, $2, 'quote', 'Q-', now())`,
+      [SERIES, TENANT],
     );
     await owner.query(
       `INSERT INTO tenant (id, name, country_code, currency, updated_at)
@@ -901,6 +915,52 @@ suite("concurrency against real PostgreSQL", () => {
       expect(await withdrawing).toEqual({ ok: true });
       const [row] = (await owner.query(`SELECT acceptance_grade($1) AS g`, [issue])).rows;
       expect(row).toEqual({ g: null });
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("W2 · a variation then evidence, against a lone withdrawal on the same issue, deadlocks — detected, one side rolled back, nothing left wrong", async () => {
+    // The fourth shape in new-app/CLAUDE.md. The withdrawal takes the issue lock, then the balance row; a
+    // transaction that already holds the balance row (a variation, applied) and then records evidence takes
+    // them the other way. No single lock order serves both, so it is retried, and a withdrawal runs alone.
+    const quote = await newQuote();
+    const setup = await session();
+    const issue = await seal(setup.client, quote, 1);
+    const acceptanceId = await accept(setup.client, issue);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(variationSql(issue, 1_000));
+
+      const withdrawing = outcome(
+        b.client.query(
+          `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+           VALUES ($1, $2, $3, 'race', $4)`,
+          [id(), TENANT, acceptanceId, USER],
+        ),
+      );
+      await waitsOnLock(b.pid, "row");
+
+      const recording = await outcome(
+        a.client.query(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'W2-1', now())`,
+          [id(), TENANT, acceptanceId],
+        ),
+      );
+      // The victim must end its transaction before the other can finish.
+      await a.client.query(recording.ok ? "COMMIT" : "ROLLBACK");
+      const withdrawal = await withdrawing;
+
+      const results = [recording, withdrawal];
+      const deadlocked = results.filter((r) => !r.ok && /deadlock detected/.test(r.error));
+      expect(deadlocked).toHaveLength(1);
+      expect(results.filter((r) => r.ok)).toHaveLength(1);
+      await notStuck(issue);
     } finally {
       for (const s of [a, b]) await s.client.end();
     }

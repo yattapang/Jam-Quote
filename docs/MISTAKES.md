@@ -758,3 +758,23 @@ saying who may write a table cites the test that executes it, or does not exist.
 owner's decision — a phrase guard was rejected as one more deny-list of wordings (R11). The defect itself
 (R5) is now owed as `docs/THREAT-MODEL.md` §4e. The lesson: **"we removed the list" is itself a claim, and
 the reviewer of a fix that removes prose re-reads the whole section, not only the deleted lines.**
+
+### M40 · A check that could not see its row skipped it, and row security lets the writer choose what is seen
+`Repeat of:` none by name; the same family as **M38** (a guard's silent skip).
+
+J11's subtotal check and J6's evidence rules both ran AFTER their row was written, and both skipped a row
+they could not see ("the composite key refuses an orphan anyway"). That reasoning holds for another
+tenant's row and fails for the writer's own: `RETURNING set_config('app.tenant_id', '', false)`, or a
+`set_config` before COMMIT, clears the tenant after the row has passed its policy and before the check
+runs. Executed on PostgreSQL 16: evidence on a decline committed (W1, found by the J6-J8 re-review), and
+an issue with a 9,999.99 subtotal and no lines was sealed (W13, found by the builder reading W1 — in
+J11, which a closing check had already Closed the same day).
+
+**Cost:** two blockers' guards bypassable by the application role, one of them on a finding already
+Closed; J11 reopened.
+
+**Prevented by:** both now refuse what they cannot see
+(`new-app/db/migrations/20260927190000_rereview_fixes/migration.sql`), each with an executed test of the
+bypass; `new-app/db/test/trigger-rules.test.ts` fails if any AFTER trigger function skips on NOT FOUND in
+either spelling that occurred, and says what spelling it would miss. The lesson: **under row security,
+"not visible" is an input the caller controls — a check never treats it as "nothing to check".**

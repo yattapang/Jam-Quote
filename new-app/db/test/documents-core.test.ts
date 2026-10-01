@@ -85,8 +85,23 @@ async function seal(revision: number, total: bigint, issueId = id()): Promise<st
   return issueId;
 }
 
+/**
+ * Numbers an issue unless it already has a number. Since W4 a client may respond only to a numbered,
+ * current issue, so every fixture response numbers first. Numbers start at 1000, clear of the small
+ * numbers tests assign by hand.
+ */
+async function numberIfNeeded(issueId: string): Promise<void> {
+  await sql(
+    `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+     SELECT $1, $2, $3, $4, $5::integer, 'Q-' || $5::integer::text
+      WHERE NOT EXISTS (SELECT 1 FROM issue_number n WHERE n.issue_id = $3)`,
+    [id(), TENANT, issueId, SERIES, 1000 + ids],
+  );
+}
+
 /** Accepts an issue, which is also what opens its balance row — the two are one transaction. */
 async function accept(issueId: string): Promise<string> {
+  await numberIfNeeded(issueId);
   const acceptanceId = id();
   await db.exec("BEGIN");
   await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [acceptanceId, TENANT, issueId, "accepted"]);
@@ -1138,6 +1153,7 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     // exists — so this seal was refused, with a message about a missing balance row. Nothing makes
     // `issue_balance_open()` run with every acceptance, so the state is reachable.
     const rev1 = await seal(1, 100_000n);
+    await numberIfNeeded(rev1);
     await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev1, "accepted"]);
 
     await seal(2, 100_000n);
@@ -1181,7 +1197,9 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     const acceptance = await accept(issue);
 
     await withdraw(acceptance);
-    expect(await state(issue)).toBe("sealed_awaiting_number");
+    // Read "sealed_awaiting_number" until W4: the fixture accepted an issue it never numbered, which a
+    // client can no longer do, so the withdrawn acceptance now reads as what it is.
+    expect(await state(issue)).toBe("withdrawn");
   });
 
   it("REFUSES a withdrawal once an invoice with money billed on it exists", async () => {
@@ -1634,6 +1652,8 @@ describe("R · no key rewrites history, and every document names its own tenant'
     const rev1 = await seal(1, 9_000_000n);
     const rev1Render = await renderOf(rev1);
     const rev2 = await seal(2, 100_000n);
+    // Numbered, so the response rules (W4) let it through to the key this test is about.
+    await numberIfNeeded(rev2);
 
     await expect(
       sql(
@@ -1650,6 +1670,7 @@ describe("R · no key rewrites history, and every document names its own tenant'
 
   it("R9 · REFUSES an acceptance that records no render at all", async () => {
     const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
     await expect(
       sql(
         `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
@@ -2019,6 +2040,19 @@ describe("J11 · an issue's lines add up to its subtotal, in the database", () =
     await expect(sql(LINE, [id(), TENANT, issue, 3, "0", "500", "0"])).resolves.toBeTruthy();
   });
 
+  it("W13 · REFUSES an issue the transaction hid from its own check by clearing the tenant before COMMIT", async () => {
+    // Executed as a bypass before the fix: the check skipped what it could not see, and an issue of
+    // subtotal 100.00 with no lines committed.
+    const issue = id();
+    await db.exec("BEGIN");
+    await sql(HEADER, [issue, TENANT, QUOTE, 1, CLIENT, "10000", USER]);
+    await sql(`SELECT set_config('app.tenant_id', '', false)`);
+    await expect(db.exec("COMMIT")).rejects.toThrow(/cannot be seen by this transaction at COMMIT/);
+    await db.exec("ROLLBACK").catch(() => undefined);
+    // The failed transaction took its set_config with it; the tenant is back, and nothing was sealed.
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1`, [issue])).toEqual([]);
+  });
+
   it("REFUSES, even to the table owner, a line changed or removed so the sum no longer matches", async () => {
     // The application role has no UPDATE or DELETE policy on lines; the owner, which bypasses row
     // security, still meets the trigger.
@@ -2090,6 +2124,7 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
 
   it("D1 · grades a tenant-uploaded signed copy 1, the same as the tenant's own note (J5)", async () => {
     const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
     // An acceptance the tenant records: its first evidence is the tenant's record, in one transaction.
     const acceptance = id();
     await db.exec("BEGIN");
@@ -2105,6 +2140,7 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
   // --- J6: what evidence may attach to -----------------------------------------
   it("D2 · has no grade before an acceptance or for a decline, and REFUSES evidence on a decline", async () => {
     const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
     expect(await grade(issue)).toBeNull();
     const decline = id();
     await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
@@ -2129,6 +2165,7 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
 
   it("REFUSES an accepted acceptance with no evidence, at COMMIT — and allows it written separately in one transaction", async () => {
     const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
     const insertAcceptance = (acceptanceId: string) =>
       sql(`${WITH_RENDER} INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome,
              signer_name, consented_to_sign, occurred_at)
@@ -2177,28 +2214,100 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await evidence(acceptance, deposit("TX-5"));
-    await expect(evidence(acceptance, deposit("TX-5"))).rejects.toThrow(/acceptance_evidence_source_external_id_key/);
+    await expect(evidence(acceptance, deposit("TX-5"))).rejects.toThrow(/acceptance_evidence_tenant_source_external_id_key/);
     await expect(
       evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
     ).resolves.toBeTruthy();
     await expect(
       evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
-    ).rejects.toThrow(/acceptance_evidence_source_external_id_key/);
+    ).rejects.toThrow(/acceptance_evidence_tenant_source_external_id_key/);
     // The same id from a DIFFERENT source is a different event.
     await expect(evidence(acceptance, { kind: "deposit_paid", source: "bank", externalId: "TX-5" })).resolves.toBeTruthy();
     expect(await sql(`SELECT 1 FROM acceptance_evidence WHERE acceptance_id = $1`, [acceptance])).toHaveLength(4);
   });
 
-  it("J7 · keys a provider event across ALL tenants (D4), so one webhook cannot be graded under two", async () => {
-    // Read from the catalogue: a key scoped per tenant would pass every single-tenant test above.
-    const [index] = await sql<{ def: string }>(
-      `SELECT pg_get_indexdef(i.indexrelid) AS def FROM pg_index i
-         JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = 'acceptance_evidence_source_external_id_key'`,
+  it("J7 · keys a provider event PER TENANT (D4 as reversed for W7), and on nothing narrower", async () => {
+    // Read from the catalogue. Every test above runs in one tenant, so a key scoped more narrowly — per
+    // acceptance, say — or more widely would pass them all; this pins the exact shape the owner chose.
+    const indexes = await sql<{ name: string; def: string }>(
+      `SELECT c.relname AS name, pg_get_indexdef(i.indexrelid) AS def FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         JOIN pg_class t ON t.oid = i.indrelid
+        WHERE t.relname = 'acceptance_evidence' AND i.indisunique AND NOT i.indisprimary`,
     );
-    expect(index?.def).toBe(
-      "CREATE UNIQUE INDEX acceptance_evidence_source_external_id_key ON public.acceptance_evidence " +
-        "USING btree (source, external_id) WHERE (external_id IS NOT NULL)",
+    expect(indexes).toEqual([
+      {
+        name: "acceptance_evidence_tenant_source_external_id_key",
+        def:
+          "CREATE UNIQUE INDEX acceptance_evidence_tenant_source_external_id_key ON public.acceptance_evidence " +
+          "USING btree (tenant_id, source, external_id) WHERE (external_id IS NOT NULL)",
+      },
+    ]);
+  });
+
+  // --- The re-review's fixes ----------------------------------------------------
+  it("W1 · REFUSES evidence whose writer hides the acceptance from the rules by clearing the tenant", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    // Before the fix this committed: RETURNING runs before the AFTER trigger, which then saw nothing.
+    await expect(
+      sql(
+        `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+         VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'BYPASS-1', now())
+         RETURNING set_config('app.tenant_id', '', false)`,
+        [id(), TENANT, decline],
+      ),
+    ).rejects.toThrow(/cannot be seen by this statement/);
+    expect(await sql(`SELECT 1 FROM acceptance_evidence WHERE acceptance_id = $1`, [decline])).toEqual([]);
+  });
+
+  it("W4 · a superseded issue has no grade and takes no evidence or response; an unnumbered one takes no response", async () => {
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
+    expect(await grade(rev1)).toBe(2);
+    await seal(2, 100_000n);
+    expect(await grade(rev1)).toBeNull();
+    await expect(evidence(acceptance, deposit("TX-W4"))).rejects.toThrow(/is superseded; it takes no evidence/);
+    await expect(
+      sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev1, "declined"]),
+    ).rejects.toThrow(/is superseded; a client can respond only to a numbered, current issue/);
+
+    const rev3 = await seal(3, 100_000n);
+    await expect(
+      sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev3, "accepted"]),
+    ).rejects.toThrow(/is sealed_awaiting_number; a client can respond only to a numbered, current issue/);
+    await numberIfNeeded(rev3);
+    await expect(accept(rev3)).resolves.toBeTruthy();
+  });
+
+  it("W5 · REFUSES a provider id on any kind a provider does not witness", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(
+      evidence(acceptance, { kind: "tenant_recorded", recordedBy: USER, source: "wipay", externalId: "TX-9" }),
+    ).rejects.toThrow(/acceptance_evidence_only_witnessed_carry_id_check/);
+    await expect(evidence(acceptance, { kind: "link_tap", source: "email", externalId: "<m@x>" })).rejects.toThrow(
+      /acceptance_evidence_only_witnessed_carry_id_check/,
     );
+    // So the real event still has its slot.
+    await expect(evidence(acceptance, deposit("TX-9"))).resolves.toBeTruthy();
+  });
+
+  it("W6 · REFUSES a source off the list and an id that is empty or padded", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const source of ["WiPay", "wipay ", ""]) {
+      await expect(evidence(acceptance, { kind: "deposit_paid", source, externalId: "TX-1" })).rejects.toThrow(
+        /acceptance_evidence_source_check/,
+      );
+    }
+    for (const externalId of ["", " TX-1", "TX-1 "]) {
+      await expect(evidence(acceptance, { kind: "deposit_paid", source: "wipay", externalId })).rejects.toThrow(
+        /acceptance_evidence_external_id_shape_check/,
+      );
+    }
   });
 
   // --- J8: the bar, frozen at seal ---------------------------------------------

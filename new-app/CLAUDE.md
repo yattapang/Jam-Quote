@@ -118,7 +118,12 @@ transaction** — no second response, and no invoice, void, credit note or varia
 it (finding T11: one response plus an invoice on another issue of the quote, in opposite order, deadlocked
 2 of 2). If a flow must combine them, retry on 40P01. **Acceptance evidence and a withdrawal count as writes on
 their issue** (they take the same per-issue lock as a response, finding J6): record a deposit's evidence
-alone in its transaction too.
+alone in its transaction too. **A fourth shape (finding W2): a withdrawal against a transaction that holds
+the issue's balance row — a variation, invoice, void or credit note, applied — and then records evidence or
+withdraws on the same issue.** The withdrawal takes the issue lock before the balance row; that
+transaction takes them the other way, and no single order serves both. Executed in
+`db/test/concurrency.pg.test.ts` (W2): detected, one side rolled back, nothing left wrong. **A withdrawal runs
+alone in its transaction**, and so does evidence; if a flow must combine them, retry on 40P01.
 
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work

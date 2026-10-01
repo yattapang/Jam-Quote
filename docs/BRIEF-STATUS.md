@@ -486,6 +486,19 @@ the same skip-if-invisible pattern lets J11's subtotal check be bypassed by clea
 COMMIT. **J6, J7, J8 and J11 reopened.** *Tier log: Opus was right — every finding was executed, and W1's
 mechanism exposed a hole in a finding already Closed.*
 
+**Owner's decisions, 2026-10-01 (on the re-review):** the evidence key per tenant (D4 reversed, W7); the
+withdrawal deadlock documented as the fourth shape, a withdrawal alone in its transaction (W2); superseded
+and unnumbered issues refuse responses and evidence, and a superseded issue has no grade (W4 — this also
+closes the earlier "refuse responses on superseded or unnumbered issues" item); and **no deployed or shared
+database holds a sealed quote** (W8).
+
+**Built 2026-10-01: the W fixes** (migration `20260927190000_rereview_fixes`): W1 and W13 refuse instead of
+skipping (ledger M40, guard `db/test/trigger-rules.test.ts`); W4, W5, W6, W7; W2's race; W10 and W11 held
+by tests; W3, W9, W12, S1, S2 in the documents. Eleven plants red, restored by backup. Fixtures number an
+issue before a client responds; the no-stuck walk aims responses at the current revision three times in
+four, re-measured with no floor lowered. **J6, J7, J8 and J11 now: Fixed, re-review owed.** Next: the same
+adversarial reviewer, then a mechanical closing check.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

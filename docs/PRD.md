@@ -285,8 +285,9 @@ demonstrated, it is not a requirement, it is a hope.
   with neither address — a walk-up at a gate is a real client — but a share link may only be minted for a
   client with at least one channel, and it may be typed at send time.
 - **R1.20f** **The grade is derived, never stored**, so it rises when evidence arrives and cannot drift:
-  the highest grade among the evidence on the issue's accepted acceptance, none once it is withdrawn, and
-  evidence attaches to nothing else — one SQL function, `acceptance_grade()` (J6, owner 2026-10-01,
+  the highest grade among the evidence on the issue's accepted acceptance, none once it is withdrawn or
+  its issue superseded, and evidence attaches to nothing else; a client responds only to a numbered,
+  current issue (W4) — one SQL function, `acceptance_grade()` (J6, owner 2026-10-01,
   `design/acceptance-grade.md`). **The bar is frozen at seal** and records whether the acceptance meets
   the tenant's standard; it does not gate invoicing (J8).
   A tenant-uploaded screenshot of a reply is **grade 1**, not grade 4: it is evidence the tenant holds
@@ -300,8 +301,9 @@ demonstrated, it is not a requirement, it is a hope.
   no inbound mail handling. So release 1 adds the four nullable columns an inbound message needs, teaches
   the grade function grade 4, keys every provider event so a retried webhook is recorded once (J7), and
   records the two costs in the register. The reply address is derived from the issue id once inbound mail
-  exists and nothing is stored; release-1 quotes keep the tenant's own reply address and **never earn
-  grade 4** (J7, owner 2026-10-01). **Nothing else** — no endpoint, no parsing, no provider.
+  exists and nothing is stored; release-1 quotes keep the tenant's own reply address, so no client reply
+  to one reaches us to be recorded as grade 4 — a consequence of where the reply goes, not a database rule
+  (W9) (J7, owner 2026-10-01). **Nothing else** — no endpoint, no parsing, no provider.
 - **R1.20a** **The product never states what the record proves.** The owner's position is that a typed
   name alone is not legal in a dispute; a properly constructed e-signature can be. So the UI says what was
   recorded and never that it is binding, and the terms do not call the tap a signature. Whether our

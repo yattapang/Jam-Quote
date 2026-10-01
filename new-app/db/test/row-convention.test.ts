@@ -364,3 +364,16 @@ describe("what the convention actually buys", () => {
     ).rejects.toThrow(/duplicate key|unique/i);
   });
 });
+
+// Finding W11: two exemptions above say they cover only the missing `deleted_at`, and that each table
+// keeps `version`. The exemption list is whole-table, so that sentence was held by nothing — dropping
+// `version` left this file green. This holds it.
+describe("the exemptions that claim to keep `version` do keep it", () => {
+  const KEEPS_VERSION = ["rejected_seal", "document_settings"];
+
+  it("finds a version column on each", async () => {
+    const all = await tables();
+    const missing = KEEPS_VERSION.filter((table) => !all.get(table)?.has("version"));
+    expect(missing).toEqual([]);
+  });
+});
