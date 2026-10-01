@@ -548,6 +548,13 @@ agent, **Sonnet**. Every item has a stated expected output, run before launch on
 (M36, M37): 26 plants, one per rule in its CURRENT definition (the earlier plant scripts target function
 bodies later migrations replaced, so they no longer prove anything), in four chunks; the checkers; the rows.
 No build work, gate run or commit alongside it.*
+**Reported 2026-10-01: all seven items PASSED, no deviation; 26 of 26 plants caught. J2, J6, J7, J8 and J11
+CLOSED.**
+
+**Review 4 now:** Closed — J1-J13, J15, J16 (15) · Deferred — J14, with R5's privilege model, a launch blocker.
+**Next, proposed:** review 3's H17, H19, H20 (size first, options); the ten legacy disposition gaps; the three
+adopted governance rules into `docs/RULES.md`; then the API layer, where R5, J14 and the §4g deployment check
+are built together.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
