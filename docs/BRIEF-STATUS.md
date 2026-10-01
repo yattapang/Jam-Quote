@@ -465,6 +465,16 @@ note (the J11 row deferred "header total" to §6.2a) answered by stating it in t
 **Review 4 now:** Closed — J1, J2, J3, J4, J5, J9, J10, J11, J12, J13, J15, J16 (12) · Open, not started —
 J6, J7, J8 (one batch, design pass with options next) · J14 deferred to R5 (launch blocker).
 
+**Owner's decisions, 2026-10-01 (J6, J7, J8):** every recommendation in `docs/design/acceptance-grade.md`
+accepted — D1 the highest grade; D2 evidence only on the accepted acceptance; D3 no grade once withdrawn;
+D4 one row per provider event across all tenants; D5 the reply address derived, nothing stored, release-1
+quotes never earn grade 4; D6 the bar frozen at seal and not gating invoicing; D7 `document_settings`
+built minimal.
+
+**Built 2026-10-01: J6, J7, J8** (migration `20260927180000_acceptance_grade`). Fourteen plants red,
+restored by backup; two new races on PostgreSQL 16. Every acceptance fixture now records its first
+evidence row. **J6, J7, J8 now: Fixed, re-review owed.** Next: the independent check of the three.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

@@ -19,6 +19,19 @@
       "verified_channel",
       "verified_destination"
     ],
+    "acceptance_evidence": [
+      "acceptance_id",
+      "created_at",
+      "external_id",
+      "id",
+      "kind",
+      "occurred_at",
+      "provider_sender",
+      "received_at",
+      "recorded_by_user_id",
+      "source",
+      "tenant_id"
+    ],
     "acceptance_withdrawal": [
       "acceptance_id",
       "id",
@@ -103,6 +116,13 @@
       "storage_key",
       "tenant_id"
     ],
+    "document_settings": [
+      "default_acceptance_bar_grade",
+      "deposit_suggested_above_minor",
+      "tenant_id",
+      "updated_at",
+      "version"
+    ],
     "invoice": [
       "amount_minor",
       "created_at",
@@ -178,6 +198,7 @@
       "user_id"
     ],
     "quote": [
+      "acceptance_bar_grade",
       "client_detail_level",
       "client_id",
       "created_at",
@@ -190,6 +211,7 @@
       "version"
     ],
     "quote_issue": [
+      "acceptance_bar_grade",
       "catalog_synced_at",
       "client_detail_level",
       "client_id",
@@ -322,6 +344,11 @@
   "sequences": [],
   "types": [],
   "functions": [
+    "acceptance_evidence_rules",
+    "acceptance_grade",
+    "acceptance_has_evidence",
+    "acceptance_issue_lock",
+    "acceptance_meets_bar",
     "acceptance_response_rules",
     "acceptance_takes_quote_lock",
     "acceptance_withdrawal_guard",
@@ -330,6 +357,7 @@
     "issue_balance_open",
     "issue_ceiling_minor",
     "quote_issue_one_live_ceiling",
+    "quote_issue_resolve_bar",
     "quote_issue_state",
     "quote_issue_subtotal_matches_lines",
     "quote_money_lock",
@@ -338,6 +366,8 @@
     "tenant_delete_guard"
   ],
   "triggers": [
+    "acceptance_evidence_rules",
+    "acceptance_has_evidence",
     "acceptance_quote_lock",
     "acceptance_response_rules",
     "acceptance_withdrawal_preconditions",
@@ -346,6 +376,7 @@
     "invoice_void_enforces_ceiling",
     "quote_issue_line_sum_matches_subtotal",
     "quote_issue_one_live_ceiling_per_quote",
+    "quote_issue_resolve_bar",
     "quote_issue_subtotal_matches_lines",
     "rejected_seal_is_frozen",
     "tenant_no_application_delete",
@@ -353,6 +384,8 @@
   ],
   "policies": [
     "acceptance_append",
+    "acceptance_evidence_append",
+    "acceptance_evidence_read",
     "acceptance_read",
     "acceptance_withdrawal_append",
     "acceptance_withdrawal_read",
@@ -364,6 +397,7 @@
     "credit_note_read",
     "document_render_append",
     "document_render_read",
+    "document_settings_tenant_isolation",
     "invoice_append",
     "invoice_read",
     "invoice_void_append",
@@ -392,6 +426,9 @@
   ],
   "indexes": [
     "acceptance_accepted_issue_key",
+    "acceptance_evidence_acceptance_idx",
+    "acceptance_evidence_pkey",
+    "acceptance_evidence_source_external_id_key",
     "acceptance_id_tenant_key",
     "acceptance_issue_idx",
     "acceptance_pkey",
@@ -420,6 +457,7 @@
     "document_render_issue_idx",
     "document_render_issue_sha256_key",
     "document_render_pkey",
+    "document_settings_pkey",
     "invoice_id_tenant_key",
     "invoice_issue_id_idx",
     "invoice_pkey",
@@ -472,6 +510,15 @@
   ],
   "constraints": [
     "acceptance_document_render_id_fkey",
+    "acceptance_evidence_acceptance_id_fkey",
+    "acceptance_evidence_kind_check",
+    "acceptance_evidence_pkey",
+    "acceptance_evidence_recorded_by_check",
+    "acceptance_evidence_recorded_by_user_id_fkey",
+    "acceptance_evidence_source_pair_check",
+    "acceptance_evidence_tenant_id_fkey",
+    "acceptance_evidence_witnessed_check",
+    "acceptance_has_evidence",
     "acceptance_id_tenant_key",
     "acceptance_issue_id_fkey",
     "acceptance_outcome_check",
@@ -509,6 +556,10 @@
     "document_render_rendered_by_user_id_fkey",
     "document_render_sha256_check",
     "document_render_tenant_id_fkey",
+    "document_settings_bar_check",
+    "document_settings_deposit_threshold_check",
+    "document_settings_pkey",
+    "document_settings_tenant_id_fkey",
     "invoice_amount_positive_check",
     "invoice_id_tenant_key",
     "invoice_issue_id_fkey",
@@ -537,9 +588,11 @@
     "platform_capability_granted_by_user_id_fkey",
     "platform_capability_pkey",
     "platform_capability_user_id_fkey",
+    "quote_acceptance_bar_check",
     "quote_client_detail_level_check",
     "quote_client_id_fkey",
     "quote_id_tenant_key",
+    "quote_issue_acceptance_bar_check",
     "quote_issue_client_id_fkey",
     "quote_issue_detail_level_check",
     "quote_issue_id_tenant_key",

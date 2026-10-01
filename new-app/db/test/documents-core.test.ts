@@ -98,7 +98,8 @@ async function accept(issueId: string): Promise<string> {
 /**
  * Every acceptance records the render the client saw, of its own issue (R9): `document_render_id` is
  * NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`. So a fixture acceptance renders
- * the issue first, in the same statement. `$1` acceptance id, `$2` tenant, `$3` issue, `$4` outcome.
+ * the issue first, in the same statement — and, since J6, an accepted one records its first evidence
+ * row (a link tap) in that statement too. `$1` acceptance id, `$2` tenant, `$3` issue, `$4` outcome.
  */
 const WITH_RENDER = `
   WITH r AS (
@@ -118,9 +119,13 @@ async function renderOf(issueId: string, tenant = TENANT): Promise<string> {
 }
 
 const ACCEPT_FROM_RENDER = `
-  INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
-                          consented_to_sign, occurred_at)
-  SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`;
+  , a AS (
+    INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                            consented_to_sign, occurred_at)
+    SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r
+    RETURNING id, tenant_id, outcome, occurred_at)
+  INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, occurred_at)
+  SELECT gen_random_uuid(), tenant_id, id, 'link_tap', occurred_at FROM a WHERE outcome = 'accepted'`;
 
 /** Issues an invoice and applies the balance, as one transaction — the only safe order. */
 async function invoice(issueId: string, amount: bigint): Promise<void> {
@@ -2033,5 +2038,212 @@ describe("J11 · an issue's lines add up to its subtotal, in the database", () =
         sql(`UPDATE quote_issue SET subtotal_minor = 9000, total_minor = 9000 WHERE id = $1`, [issue]),
       ).rejects.toThrow(/subtotal_minor 9000, but its lines sum to 10000/);
     });
+  });
+});
+
+// ===========================================================================
+// Findings J6, J7 and J8, fixed by migration 20260927180000_acceptance_grade (design
+// `docs/design/acceptance-grade.md`, the owner's decisions D1-D7 of 2026-10-01). Each refusal names the
+// constraint or the trigger's message, so it cannot pass on a different refusal.
+describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at seal", () => {
+  type Evidence = { kind: string; source?: string; externalId?: string; recordedBy?: string };
+
+  async function evidence(acceptanceId: string, e: Evidence) {
+    return sql(
+      `INSERT INTO acceptance_evidence
+         (id, tenant_id, acceptance_id, kind, source, external_id, recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+      [id(), TENANT, acceptanceId, e.kind, e.source ?? null, e.externalId ?? null, e.recordedBy ?? null],
+    );
+  }
+  const grade = async (issue: string) =>
+    (await sql<{ g: number | null }>(`SELECT acceptance_grade($1) AS g`, [issue]))[0]?.g;
+  const meetsBar = async (issue: string) =>
+    (await sql<{ m: boolean | null }>(`SELECT acceptance_meets_bar($1) AS m`, [issue]))[0]?.m;
+  const barOf = async (issue: string) =>
+    (await sql<{ b: number }>(`SELECT acceptance_bar_grade AS b FROM quote_issue WHERE id = $1`, [issue]))[0]?.b;
+  const deposit = (externalId: string): Evidence => ({ kind: "deposit_paid", source: "wipay", externalId });
+  const noted: Evidence = { kind: "tenant_recorded", recordedBy: USER };
+
+  async function withdraw(acceptanceId: string) {
+    await sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+
+  // --- J6: the combining rule ------------------------------------------------
+  it("D1 · grades a link tap 2, rises with stronger evidence, and a weaker later row never lowers it", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    expect(await grade(issue)).toBe(2);
+    await evidence(acceptance, { kind: "code_verified" });
+    expect(await grade(issue)).toBe(3);
+    await evidence(acceptance, noted);
+    expect(await grade(issue)).toBe(3);
+    await evidence(acceptance, deposit("TX-1"));
+    expect(await grade(issue)).toBe(6);
+    await evidence(acceptance, noted);
+    expect(await grade(issue)).toBe(6);
+  });
+
+  it("D1 · grades a tenant-uploaded signed copy 1, the same as the tenant's own note (J5)", async () => {
+    const issue = await seal(1, 100_000n);
+    // An acceptance the tenant records: its first evidence is the tenant's record, in one transaction.
+    const acceptance = id();
+    await db.exec("BEGIN");
+    await sql(`${WITH_RENDER} INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome,
+                 signer_name, consented_to_sign, occurred_at)
+               SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+      [acceptance, TENANT, issue, "accepted"]);
+    await evidence(acceptance, { kind: "signed_copy_uploaded", recordedBy: USER });
+    await db.exec("COMMIT");
+    expect(await grade(issue)).toBe(1);
+  });
+
+  // --- J6: what evidence may attach to -----------------------------------------
+  it("D2 · has no grade before an acceptance or for a decline, and REFUSES evidence on a decline", async () => {
+    const issue = await seal(1, 100_000n);
+    expect(await grade(issue)).toBeNull();
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    expect(await grade(issue)).toBeNull();
+    // The case J6 found: a deposit against a decline is not graded — it cannot be recorded at all.
+    await expect(evidence(decline, deposit("TX-2"))).rejects.toThrow(/is a decline, which carries no evidence/);
+    expect(await grade(issue)).toBeNull();
+  });
+
+  it("D3 · a withdrawn acceptance has no grade, keeps its evidence as history, and takes no more", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await evidence(acceptance, deposit("TX-3"));
+    expect(await grade(issue)).toBe(6);
+    await withdraw(acceptance);
+    expect(await grade(issue)).toBeNull();
+    expect(await meetsBar(issue)).toBeNull();
+    const kept = await sql(`SELECT kind FROM acceptance_evidence WHERE acceptance_id = $1 ORDER BY kind`, [acceptance]);
+    expect(kept.map((r) => r.kind)).toEqual(["deposit_paid", "link_tap"]);
+    await expect(evidence(acceptance, deposit("TX-4"))).rejects.toThrow(/has been withdrawn; it takes no further evidence/);
+  });
+
+  it("REFUSES an accepted acceptance with no evidence, at COMMIT — and allows it written separately in one transaction", async () => {
+    const issue = await seal(1, 100_000n);
+    const insertAcceptance = (acceptanceId: string) =>
+      sql(`${WITH_RENDER} INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome,
+             signer_name, consented_to_sign, occurred_at)
+           SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r`, [acceptanceId, TENANT, issue]);
+    await expect(insertAcceptance(id())).rejects.toThrow(/has no evidence/);
+
+    // The check is deferred, so the evidence may follow in a later statement of the same transaction.
+    const acceptance = id();
+    await db.exec("BEGIN");
+    await insertAcceptance(acceptance);
+    await evidence(acceptance, { kind: "link_tap" });
+    await db.exec("COMMIT");
+    expect(await grade(issue)).toBe(2);
+  });
+
+  it("CANNOT update or delete evidence, so the grade cannot be moved after the fact", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    // No UPDATE or DELETE policy: row security hides every row from both, so nothing changes.
+    expect(await sql(`UPDATE acceptance_evidence SET kind = 'deposit_paid', source = 'wipay',
+                        external_id = 'FORGED' WHERE acceptance_id = $1 RETURNING id`, [acceptance])).toEqual([]);
+    expect(await sql(`DELETE FROM acceptance_evidence WHERE acceptance_id = $1 RETURNING id`, [acceptance])).toEqual([]);
+    expect(await grade(issue)).toBe(2);
+  });
+
+  it("REFUSES a kind outside the ladder, and the retired grade 5 by any name", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const kind of ["signed_document", "grade_5", "client_hand"]) {
+      await expect(evidence(acceptance, { kind })).rejects.toThrow(/acceptance_evidence_kind_check/);
+    }
+  });
+
+  it("REFUSES third-party kinds without the party's id, and a person's kinds without the person", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(evidence(acceptance, { kind: "deposit_paid" })).rejects.toThrow(/acceptance_evidence_witnessed_check/);
+    await expect(evidence(acceptance, { kind: "inbound_reply" })).rejects.toThrow(/acceptance_evidence_witnessed_check/);
+    await expect(evidence(acceptance, { kind: "tenant_recorded" })).rejects.toThrow(/acceptance_evidence_recorded_by_check/);
+    await expect(evidence(acceptance, { kind: "signed_copy_uploaded" })).rejects.toThrow(/acceptance_evidence_recorded_by_check/);
+    await expect(evidence(acceptance, { kind: "link_tap", source: "wipay" })).rejects.toThrow(/acceptance_evidence_source_pair_check/);
+  });
+
+  // --- J7: one row per provider event ------------------------------------------
+  it("J7 · REFUSES a replayed provider event, so a retried webhook cannot record a second piece of evidence", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await evidence(acceptance, deposit("TX-5"));
+    await expect(evidence(acceptance, deposit("TX-5"))).rejects.toThrow(/acceptance_evidence_source_external_id_key/);
+    await expect(
+      evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
+    ).resolves.toBeTruthy();
+    await expect(
+      evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
+    ).rejects.toThrow(/acceptance_evidence_source_external_id_key/);
+    // The same id from a DIFFERENT source is a different event.
+    await expect(evidence(acceptance, { kind: "deposit_paid", source: "bank", externalId: "TX-5" })).resolves.toBeTruthy();
+    expect(await sql(`SELECT 1 FROM acceptance_evidence WHERE acceptance_id = $1`, [acceptance])).toHaveLength(4);
+  });
+
+  it("J7 · keys a provider event across ALL tenants (D4), so one webhook cannot be graded under two", async () => {
+    // Read from the catalogue: a key scoped per tenant would pass every single-tenant test above.
+    const [index] = await sql<{ def: string }>(
+      `SELECT pg_get_indexdef(i.indexrelid) AS def FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid WHERE c.relname = 'acceptance_evidence_source_external_id_key'`,
+    );
+    expect(index?.def).toBe(
+      "CREATE UNIQUE INDEX acceptance_evidence_source_external_id_key ON public.acceptance_evidence " +
+        "USING btree (source, external_id) WHERE (external_id IS NOT NULL)",
+    );
+  });
+
+  // --- J8: the bar, frozen at seal ---------------------------------------------
+  it("J8 · resolves the bar at seal — quote, else the tenant default, else 3 — and never moves it after", async () => {
+    const rev1 = await seal(1, 100_000n);
+    expect(await barOf(rev1)).toBe(3);
+
+    await sql(`INSERT INTO document_settings (tenant_id, default_acceptance_bar_grade) VALUES ($1, 6)`, [TENANT]);
+    const rev2 = await seal(2, 100_000n);
+    expect(await barOf(rev2)).toBe(6);
+
+    await sql(`UPDATE quote SET acceptance_bar_grade = 2 WHERE id = $1`, [QUOTE]);
+    const rev3 = await seal(3, 100_000n);
+    expect(await barOf(rev3)).toBe(2);
+
+    // The manoeuvre J8 describes: lower the bar after sending. The sealed issues do not move.
+    await sql(`UPDATE quote SET acceptance_bar_grade = 6 WHERE id = $1`, [QUOTE]);
+    await sql(`UPDATE document_settings SET default_acceptance_bar_grade = 2 WHERE tenant_id = $1`, [TENANT]);
+    expect([await barOf(rev1), await barOf(rev2), await barOf(rev3)]).toEqual([3, 6, 2]);
+  });
+
+  it("J8 · REFUSES a seal that states a bar other than the one the quote resolves to", async () => {
+    const sealStating = (revision: number, bar: number) =>
+      sql(
+        withOneLine(`INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at, acceptance_bar_grade)
+         VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, 1000, 0, 1000,
+                 now(), $6, now(), $7)`),
+        [id(), TENANT, QUOTE, revision, CLIENT, USER, bar],
+      );
+    await expect(sealStating(1, 2)).rejects.toThrow(/states acceptance bar 2, but the quote and the tenant's settings resolve to 3/);
+    await expect(sealStating(1, 3)).resolves.toBeTruthy();
+  });
+
+  it("D6 · meeting the bar is recorded, and does not gate invoicing", async () => {
+    await sql(`UPDATE quote SET acceptance_bar_grade = 6 WHERE id = $1`, [QUOTE]);
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    expect(await meetsBar(issue)).toBe(false);
+    // The ceiling unlocks on the acceptance, as built: a deposit is itself an invoice, so a bar of 6
+    // that gated invoicing could never be met.
+    await invoice(issue, 40_000n);
+    await evidence(acceptance, deposit("TX-6"));
+    expect(await meetsBar(issue)).toBe(true);
   });
 });

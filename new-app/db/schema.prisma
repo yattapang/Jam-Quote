@@ -99,6 +99,8 @@ model Tenant {
   issueNumbers          IssueNumber[]
   acceptances           Acceptance[]
   acceptanceWithdrawals AcceptanceWithdrawal[]
+  acceptanceEvidence    AcceptanceEvidence[]
+  documentSettings      DocumentSettings?
   variations            Variation[]
   invoices              Invoice[]
   invoiceVoids          InvoiceVoid[]
@@ -178,6 +180,7 @@ model AppUser {
   variationsRecorded    Variation[]
   invoiceVoids          InvoiceVoid[]
   acceptanceWithdrawals AcceptanceWithdrawal[]
+  evidenceRecorded      AcceptanceEvidence[]
 
   /// The real index is PARTIAL - `WHERE deleted_at IS NULL` - so a deleted user's address is not
   /// held hostage forever and the business can re-invite the same person. Prisma cannot express a
@@ -555,6 +558,9 @@ model Quote {
   /// (finding F14).
   clientDetailLevel String @default("itemised") @map("client_detail_level")
   currency          String
+  /// What counts as acceptance for this quote: grade 2, 3 or 6. NULL means the tenant's default.
+  /// Frozen into the issue at seal (finding J8), so changing it later never touches a sealed issue.
+  acceptanceBarGrade Int? @map("acceptance_bar_grade")
 
   sections      QuoteSection[]
   lines         QuoteLine[]
@@ -647,6 +653,9 @@ model QuoteIssue {
   currency            String
   termsText           String @map("terms_text")
   taxRateBasisPoints  Int    @map("tax_rate_basis_points")
+  /// The bar in force when this was sent, resolved by the database at seal from the quote, else the
+  /// tenant's default, else 3 (finding J8). A seal that states a different one is refused.
+  acceptanceBarGrade  Int    @map("acceptance_bar_grade")
   subtotalMinor       BigInt @map("subtotal_minor")
   taxMinor            BigInt @map("tax_minor")
   totalMinor          BigInt @map("total_minor")
@@ -755,6 +764,7 @@ model Acceptance {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   withdrawal AcceptanceWithdrawal?
+  evidence   AcceptanceEvidence[]
 
   /// J3: exists so a child's foreign key can reference the PAIR, making a cross-tenant
   /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
@@ -827,6 +837,48 @@ model AcceptanceWithdrawal {
   /// uniqueness, different column order, and the migration owns the index.
   @@unique([acceptanceId, tenantId])
   @@map("acceptance_withdrawal")
+}
+
+/// What an acceptance is worth (findings J6, J7; `docs/design/acceptance-grade.md`). Append-only.
+/// Each row carries a KIND, never a grade: the grade is `acceptance_grade()` in the migration, the
+/// highest kind's worth on the accepted, unwithdrawn acceptance. Evidence attaches only to an accepted
+/// acceptance, and a provider's event is recorded once: the real key is PARTIAL — unique (source,
+/// external_id) WHERE external_id IS NOT NULL — which Prisma cannot express, so the migration owns it.
+model AcceptanceEvidence {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @map("tenant_id") @db.Uuid
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  acceptanceId String     @map("acceptance_id") @db.Uuid
+  acceptance   Acceptance @relation(fields: [acceptanceId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+
+  kind           String
+  source         String?
+  externalId     String?   @map("external_id")
+  providerSender String?   @map("provider_sender")
+  receivedAt     DateTime? @map("received_at") @db.Timestamptz(6)
+
+  recordedByUserId String?  @map("recorded_by_user_id") @db.Uuid
+  recordedBy       AppUser? @relation(fields: [recordedByUserId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId, acceptanceId])
+  @@map("acceptance_evidence")
+}
+
+/// A tenant's document preferences (finding J8). Minimal for now: the default acceptance bar and the
+/// deposit-suggestion threshold. Logo, header, colours and default terms (domain model) are owed.
+model DocumentSettings {
+  tenantId String @id @map("tenant_id") @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  defaultAcceptanceBarGrade  Int      @default(3) @map("default_acceptance_bar_grade")
+  depositSuggestedAboveMinor BigInt?  @map("deposit_suggested_above_minor")
+  version                    Int      @default(1)
+  updatedAt                  DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("document_settings")
 }
 
 model Variation {

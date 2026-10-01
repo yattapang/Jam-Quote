@@ -52,6 +52,9 @@ const EXEMPT: Record<string, string> = {
     "Append-only: what a client signed. Withdrawal is its own row precisely so this one never " +
     "changes (ADR 0025 decision 4).",
   acceptance_withdrawal: "Append-only: the row IS the audit record of the withdrawal.",
+  acceptance_evidence:
+    "Append-only: the grade is derived from these rows (finding J6), so a row that could be edited or " +
+    "tombstoned would let the grade move after the fact.",
   document_render:
     "Append-only: a render is a set of bytes that existed, and `version` would imply an UPDATE the " +
     "policies refuse while `deleted_at` would imply a DELETE they also refuse. A superseded render " +
@@ -71,6 +74,11 @@ const EXEMPT: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // Two more, each for its own reason.
   // ---------------------------------------------------------------------------
+  document_settings:
+    "No tombstone: one row per tenant, keyed on the tenant, and an absent row MEANS the defaults, so a " +
+    "deleted row and a never-written one are the same thing and a resurrected one is harmless. It " +
+    "does carry `version`, for two devices editing settings at once; this exemption covers only the " +
+    "missing `deleted_at` (finding J8's table).",
   number_series:
     "A counter, not a document. Its one mutable field (`next_number`) is allocated under a row " +
     "lock, so optimistic versioning is not its concurrency control and would suggest a second one " +

@@ -71,7 +71,11 @@ One **accepted** `acceptance` row per issue — declines may precede it and are 
 **append-only `acceptance_evidence`** table, because the owner's flows
 produce *several* pieces for one acceptance — a WhatsApp reply *and* a deposit. The **grade is derived**
 from the evidence rows, exactly as issue state and invoice status already are (ADR 0025 decision 3), so
-there is no stored grade to drift.
+there is no stored grade to drift. **How, since J6:** one SQL function, `acceptance_grade()`, takes the
+highest grade among the kinds of evidence on the issue's accepted acceptance, and gives no grade once it is
+withdrawn; evidence attaches only to an accepted, unwithdrawn acceptance. The decisions and their
+alternatives are `acceptance-grade.md` (owner, 2026-10-01); the body is
+`new-app/db/migrations/20260927180000_acceptance_grade/migration.sql`.
 
 **The doctrine, which comes before the table because getting it wrong is what produced finding J5: the
 grade measures WHO WITNESSED the acceptance, never how convincing the artefact looks.** A signed page looks
@@ -112,6 +116,13 @@ and grade 5 stays retired.
 
 Per quote, with a tenant default: *this quote is accepted when …* grade 2, grade 3, or **grade 6 (a
 deposit)**. That is the owner's "if the tenant so chooses" made into a setting rather than a convention.
+
+**The bar is frozen at seal (J8).** The database resolves it when the issue is sealed — the quote's own
+bar, else the tenant's `document_settings` default, else 3 — and stores it on the issue, like the terms
+and the tax rate. Changing a quote's bar or a default never affects an issue already sealed. **The bar does
+not gate invoicing** (§4.4): it decides whether the product may say the acceptance meets the tenant's own
+standard (`acceptance_meets_bar()`). A bar that gated invoicing could never be met at grade 6, because a
+deposit is itself an invoice.
 
 ### 4.4 What stays strictly separate
 
@@ -164,8 +175,13 @@ Each by planting the defect it exists to catch:
 - an acceptance whose recorded destination differs from the one the code went to → refused;
 - a quote requiring grade 6 marked accepted with no payment → refused;
 - an `acceptance_evidence` row updated or deleted → refused by the absence of a policy;
-- the derived grade computed with an evidence row removed → the grade falls, proving it is derived rather
-  than stored;
+- the derived grade: a stronger row raises it and a weaker later row does not lower it, proving it is
+  derived — without defeating the immutability the line above asserts (J6 corrected the earlier
+  "remove a row and it falls", which needed a superuser and passed or failed on which row was removed);
+- evidence on a decline, or on a withdrawn acceptance → refused; a withdrawn acceptance has no grade;
+- a provider's message or payment recorded twice → refused (J7);
+- a seal stating a bar other than the quote's → refused, and a bar changed after sealing → the issue keeps
+  its own (J8);
 - a tenant-uploaded screenshot → recorded at grade 1, never higher;
 - a tenant-uploaded **signed document** → also grade 1, and the "a signed document is on file" fact
   recorded beside it, proving the artefact is kept without being graded (J5);
@@ -187,7 +203,7 @@ and the tenant remains free to require a deposit on any quote.
 
 **2. Grade 4 (the client's own reply) is bought after growth, and release 1 prepares for it.** Deferred
 deliberately, so "prepare" has to mean something specific rather than a good intention. It means exactly
-four things and no more:
+**five** things and no more (J7 added the fifth and corrected the third, 2026-10-01):
 
 - **`acceptance_evidence` carries what an inbound message needs from the start**: the channel, the
   external message id, the sender as the provider reported it, and the received-at timestamp. Nullable
@@ -195,17 +211,24 @@ four things and no more:
   adding it later means migrating rows that are append-only financial evidence.
 - **The grade function already knows grade 4**, so switching it on is a row appearing, not a code change
   to the derivation.
-- **The reply-to address convention is reserved now** — quotes are sent with a per-issue reply address so
-  a future inbound handler can attribute a reply without guessing. Reserving the shape costs a line;
-  retrofitting it means every quote already sent is unattributable.
+- ~~**The reply-to address convention is reserved now**~~ — **corrected (J7, owner's decision D5,
+  2026-10-01).** Its premise was wrong: an email's reply address is in the email that was sent, and no
+  database column makes an email already sent attributable. Worse, a reply address we host with nothing
+  receiving mail there would lose the client's replies, which today reach the contractor. So the reply
+  address is **derived from the issue id when inbound mail exists, and nothing is stored**; release 1
+  keeps the tenant's own reply address, and **a quote sent in release 1 never earns grade 4.**
+- **A provider's event is recorded once, ever:** a unique key on the evidence's source and external id,
+  across all tenants — the same lesson and shape as `variation_issue_client_reference_key` (M18), because a
+  provider retries a webhook it thinks was missed and an append-only duplicate could never be removed. It
+  covers a deposit's payment notice too.
 - **The register records it as an owed decision** with its two costs named — an inbound endpoint and a new
   sub-processor holding client replies (Rule 18).
 
 **Nothing else is built.** No parsing, no endpoint, no provider. If growth never comes, release 1 carries
-four nullable columns and a reply address nobody reads, which is the cheapest failed bet available.
+four nullable columns and a key nobody exercises, which is the cheapest failed bet available.
 
 **3. A deposit is suggested automatically above a value the tenant sets.** Not a hard rule and not our
-number: `document_settings` gains a `deposit_suggested_above_minor` threshold, the tenant sets it (unset
+number: `document_settings` (built 2026-10-01, J8) carries a `deposit_suggested_above_minor` threshold, the tenant sets it (unset
 means never), and above it the product **suggests** grade 6 when a quote is sent. The tenant can decline
 per quote.
 

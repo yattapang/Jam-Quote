@@ -338,10 +338,13 @@ async function walk(seed: number) {
                INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
                VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
                        encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
-               RETURNING id)
-             INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+               RETURNING id),
+             a AS (INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
                                      consented_to_sign, occurred_at)
-             SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+             SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r
+             RETURNING id, tenant_id, outcome, occurred_at)
+             INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, occurred_at)
+             SELECT gen_random_uuid(), tenant_id, id, 'link_tap', occurred_at FROM a WHERE outcome = 'accepted'`,
             [acceptanceId, TENANT, issue, outcome],
           );
           if (outcome === "accepted") await sql(`SELECT issue_balance_open($1)`, [issue]);

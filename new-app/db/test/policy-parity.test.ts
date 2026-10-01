@@ -174,6 +174,9 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
         acceptance:
           "What a client signed. A nullable `withdrawn_at` here would need an UPDATE grant on it, " +
           "which is why withdrawal is its own row (ADR 0025 decision 4).",
+        acceptance_evidence:
+          "What an acceptance is worth: the grade is derived from these rows (finding J6), so a row " +
+          "that could be updated or deleted would let the grade be raised or lowered after the fact.",
         acceptance_withdrawal:
           "The withdrawal itself. The row IS the audit record, so rewriting it would rewrite the " +
           "history it exists to provide.",

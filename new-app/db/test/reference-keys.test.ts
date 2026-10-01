@@ -44,6 +44,9 @@ const UNKEYED: Record<string, string> = {
 
 /** `*_id` columns that are not row references at all, each with what they are. */
 const NOT_A_REFERENCE: Record<string, string> = {
+  "acceptance_evidence.external_id":
+    "TEXT: a provider's own id for a message or payment (Meta, Google, WiPay, a bank), not a row in " +
+    "this database. Keyed for uniqueness with its source instead (finding J7).",
   "mfa_totp.secret_key_id":
     "TEXT naming a wrapping key in the key store, not a row in this database.",
 };

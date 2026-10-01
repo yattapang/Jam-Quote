@@ -284,18 +284,24 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.20e** **A channel is required at the point of use, not on the client (H9).** A client may exist
   with neither address — a walk-up at a gate is a real client — but a share link may only be minted for a
   client with at least one channel, and it may be typed at send time.
-- **R1.20f** **The grade is derived, never stored**, so it rises when evidence arrives and cannot drift.
+- **R1.20f** **The grade is derived, never stored**, so it rises when evidence arrives and cannot drift:
+  the highest grade among the evidence on the issue's accepted acceptance, none once it is withdrawn, and
+  evidence attaches to nothing else — one SQL function, `acceptance_grade()` (J6, owner 2026-10-01,
+  `design/acceptance-grade.md`). **The bar is frozen at seal** and records whether the acceptance meets
+  the tenant's standard; it does not gate invoicing (J8).
   A tenant-uploaded screenshot of a reply is **grade 1**, not grade 4: it is evidence the tenant holds
   and can fabricate, and grading it higher would be the comfortable lie (H10).
 - **R1.20g** **A deposit is suggested above a threshold the tenant sets** —
-  `document_settings.deposit_suggested_above_minor`, unset meaning never. Suggested, not enforced: the
+  `document_settings.deposit_suggested_above_minor` (built with J8), unset meaning never. Suggested, not enforced: the
   contractor knows which clients are good for it and we do not, and a product that refuses to send a
   quote until they demand money gets worked around.
 - **R1.20h** **Grade 4 — the client's own reply — is deferred and prepared for, precisely.** Release 1
   cannot witness one: WhatsApp click-to-chat sends the reply to the contractor's own phone, and we have
   no inbound mail handling. So release 1 adds the four nullable columns an inbound message needs, teaches
-  the grade function grade 4, reserves a per-issue reply address so a future reply is attributable, and
-  records the two costs in the register. **Nothing else** — no endpoint, no parsing, no provider.
+  the grade function grade 4, keys every provider event so a retried webhook is recorded once (J7), and
+  records the two costs in the register. The reply address is derived from the issue id once inbound mail
+  exists and nothing is stored; release-1 quotes keep the tenant's own reply address and **never earn
+  grade 4** (J7, owner 2026-10-01). **Nothing else** — no endpoint, no parsing, no provider.
 - **R1.20a** **The product never states what the record proves.** The owner's position is that a typed
   name alone is not legal in a dispute; a properly constructed e-signature can be. So the UI says what was
   recorded and never that it is binding, and the terms do not call the tap a signature. Whether our

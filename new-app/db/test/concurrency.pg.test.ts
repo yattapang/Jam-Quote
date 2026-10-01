@@ -126,10 +126,13 @@ function respondSql(issueId: string, outcome: "accepted" | "declined") {
              INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
              VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
                      encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
-             RETURNING id)
-           INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+             RETURNING id),
+           a AS (INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
                                    consented_to_sign, occurred_at)
-           SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+           SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r
+           RETURNING id, tenant_id, outcome, occurred_at)
+           INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, occurred_at)
+           SELECT gen_random_uuid(), tenant_id, id, 'link_tap', occurred_at FROM a WHERE outcome = 'accepted'`,
     values: [id(), TENANT, issueId, outcome],
   };
 }
@@ -199,10 +202,13 @@ async function accept(client: pg.Client, issueId: string) {
        INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
        VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
                encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
-       RETURNING id)
-     INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+       RETURNING id),
+     a AS (INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
                              consented_to_sign, occurred_at)
-     SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r`,
+     SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r
+     RETURNING id, tenant_id, outcome, occurred_at)
+     INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, occurred_at)
+     SELECT gen_random_uuid(), tenant_id, id, 'link_tap', occurred_at FROM a WHERE outcome = 'accepted'`,
     [acceptanceId, TENANT, issueId],
   );
   await client.query(`SELECT issue_balance_open($1)`, [issueId]);
@@ -821,6 +827,80 @@ suite("concurrency against real PostgreSQL", () => {
       await a.client.query("COMMIT");
 
       expect(await accepting).toEqual({ ok: true });
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("J6 · evidence arriving while a withdrawal is in flight waits on the issue lock, then is refused", async () => {
+    // Without the issue lock in both, evidence and withdrawal take the quote lock SHARED, run together,
+    // and the evidence never sees the uncommitted withdrawal: evidence on a withdrawn acceptance.
+    const quote = await newQuote();
+    const setup = await session();
+    const issue = await seal(setup.client, quote, 1);
+    const acceptanceId = await accept(setup.client, issue);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(
+        `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+         VALUES ($1, $2, $3, 'race', $4)`,
+        [id(), TENANT, acceptanceId, USER],
+      );
+
+      const recording = outcome(
+        b.client.query(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'RACE-1', now())`,
+          [id(), TENANT, acceptanceId],
+        ),
+      );
+      await waitsOnIssueLock(b.pid);
+      await a.client.query("COMMIT");
+
+      const result = await recording;
+      expect(result.ok).toBe(false);
+      expect(result.ok ? "" : result.error).toMatch(/has been withdrawn; it takes no further evidence/);
+      const rows = await owner.query(`SELECT kind FROM acceptance_evidence WHERE acceptance_id = $1`, [acceptanceId]);
+      expect(rows.rows).toEqual([{ kind: "link_tap" }]);
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("J6 · a withdrawal arriving while evidence is in flight waits, then proceeds, and the grade is gone", async () => {
+    const quote = await newQuote();
+    const setup = await session();
+    const issue = await seal(setup.client, quote, 1);
+    const acceptanceId = await accept(setup.client, issue);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(
+        `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+         VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'RACE-2', now())`,
+        [id(), TENANT, acceptanceId],
+      );
+
+      const withdrawing = outcome(
+        b.client.query(
+          `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+           VALUES ($1, $2, $3, 'race', $4)`,
+          [id(), TENANT, acceptanceId, USER],
+        ),
+      );
+      await waitsOnIssueLock(b.pid);
+      await a.client.query("COMMIT");
+
+      expect(await withdrawing).toEqual({ ok: true });
+      const [row] = (await owner.query(`SELECT acceptance_grade($1) AS g`, [issue])).rows;
+      expect(row).toEqual({ g: null });
     } finally {
       for (const s of [a, b]) await s.client.end();
     }

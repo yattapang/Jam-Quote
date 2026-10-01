@@ -103,7 +103,7 @@ which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a s
 `PRYVIS_REQUIRE_PG`, which turns a missing database into a failure. Both variables are declared in
 `turbo.json`, because Turbo drops undeclared environment variables — and did, silently, the first time.
 
-**Financial writes must run under READ COMMITTED** (the PostgreSQL default). Acceptance, invoice, void,
+**Financial writes must run under READ COMMITTED** (the PostgreSQL default). Acceptance, acceptance evidence, invoice, void,
 credit note, variation, withdrawal, sealing, opening a balance row and a balance recompute all take a per-quote lock that is
 only correct when each statement sees what the transaction it waited for committed; under REPEATABLE
 READ or SERIALIZABLE they are refused with SQLSTATE 25000 (finding P1). Do not pass an `isolationLevel`
@@ -116,7 +116,9 @@ same in the other order (finding S9, executed on real PostgreSQL 16; it deadlock
 old unique index). Run those steps as separate transactions: **a client response is alone in its
 transaction** — no second response, and no invoice, void, credit note or variation on the same quote beside
 it (finding T11: one response plus an invoice on another issue of the quote, in opposite order, deadlocked
-2 of 2). If a flow must combine them, retry on 40P01.
+2 of 2). If a flow must combine them, retry on 40P01. **Acceptance evidence and a withdrawal count as writes on
+their issue** (they take the same per-issue lock as a response, finding J6): record a deposit's evidence
+alone in its transaction too.
 
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work

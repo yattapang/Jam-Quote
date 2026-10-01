@@ -398,6 +398,12 @@ describe("J3 · a tenant-owned child carries its tenant into its foreign key", (
         "A login address identifies one credential across the whole product; per-tenant would let " +
         "two tenants hold the same sign-in.",
       app_credential_user_id_key: "One credential per user, and a user belongs to one tenant already.",
+      acceptance_evidence_source_external_id_key:
+        "A provider's message or transaction id names ONE event in the world, so it is recorded once, " +
+        "ever (finding J7; owner's decision D4, 2026-10-01). Per tenant would let one webhook be graded " +
+        "under two tenants. A tenant could only consume another's slot by inserting that provider's id " +
+        "first, which needs the id before it is delivered — unguessable — and the privilege model owed " +
+        "with R5 will confine who may write these kinds at all.",
     };
 
     const indexes = await db.query<{ indexname: string; tablename: string; columns: string }>(`

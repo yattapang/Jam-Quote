@@ -1,6 +1,7 @@
 # Design: the acceptance grade, its evidence, and the bar (J6, J7, J8)
 
-**Status: DRAFT — six decisions await the owner (§3). No code until they are answered.**
+**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D7).** Built
+by `new-app/db/migrations/20260927180000_acceptance_grade/migration.sql`.
 
 Date: 2026-10-01 · Answers findings **J6**, **J7** and **J8** of `../PRD-REVIEW-4.md` · Amends
 `acceptance-evidence.md` §4.2, §4.3, §4.4, §7 and §9 once approved · Delegation (Rule 16.5): Opus — it

@@ -73,6 +73,7 @@ const NOT_MONEY: Record<string, string> = {
 const VERSION = "An optimistic-concurrency counter: a count of edits, not an amount.";
 const POSITION = "An ordering index within its parent: a position, not an amount.";
 const REVISION = "A quote revision number: a count, not an amount.";
+const BAR = "An acceptance bar: an evidence GRADE (2, 3 or 6) the client must reach, not an amount (finding J8).";
 
 /**
  * T7 — a CLOSED list. Money must be `bigint` (ADR 0011), so every numeric column that is NOT bigint is
@@ -90,6 +91,10 @@ const NUMERIC_NOT_MONEY: Record<string, string> = {
   "client.version": VERSION,
   "mfa_totp.failed_attempts": "A count of failed second-factor attempts, for lockout.",
   "quote.version": VERSION,
+  "document_settings.default_acceptance_bar_grade": BAR,
+  "document_settings.version": VERSION,
+  "quote.acceptance_bar_grade": BAR,
+  "quote_issue.acceptance_bar_grade": BAR,
   "quote_issue.revision": REVISION,
   "quote_issue.tax_rate_basis_points": "A tax RATE in hundredths of a percent; the tax AMOUNT is tax_minor, bigint.",
   "quote_issue_line.position": POSITION,
