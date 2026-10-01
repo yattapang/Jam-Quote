@@ -88,7 +88,8 @@ regenerates it and fails on a diff.
 **A new or replaced function must pin its search path** — `SET search_path = pg_catalog, public, pg_temp`
 (or an `ALTER FUNCTION` after it). `CREATE OR REPLACE` drops the setting, and without it a temporary table
 can stand in for a real one: that let an invoice past the ceiling (finding Y7). `db/test/function-search-path.test.ts`
-fails on any unpinned function.
+fails on any unpinned plain function in `public` — not on a procedure, an aggregate, or a function in
+another schema (finding Z3); keep functions in `public`, or extend the guard first.
 
 **A new migration is not finished until `db/schema-objects.json` is regenerated and committed:** in
 `db/`, run `PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts`. That file is the

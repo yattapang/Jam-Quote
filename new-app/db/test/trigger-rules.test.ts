@@ -18,9 +18,15 @@
  *   `IF [(]NOT FOUND[)] THEN` followed by RETURN, CONTINUE or EXIT, after any number of `RAISE NOTICE`-level
  *   messages (findings X4 and Y4 each found spellings the previous version missed). Strings and comments
  *   are removed first by a scanner, not a pattern (Y4, Y5).
- *   It does NOT catch a skip on another test (`IF v_x IS NULL THEN RETURN NULL`), nor a conditional one —
- *   which is how J11's check deliberately skips for a role that bypasses row security (X1). The executed
- *   tests in `documents-core.test.ts` (W1, W13, X1) are what prove those triggers behave.
+ *   It does NOT catch (the fourth re-review executed the second and third lists, Z1 and Z2):
+ *   - a skip on another test (`IF v_x IS NULL THEN RETURN NULL`), or a conditional one — which is how
+ *     J11's check deliberately skips for a role that bypasses row security (X1);
+ *   - `CASE WHEN NOT FOUND THEN RETURN`, `ELSIF NOT FOUND THEN RETURN`, or `IF NOT FOUND THEN` with any
+ *     statement other than a RAISE before the RETURN (`v := 0; RETURN`);
+ *   - code after a double-quoted identifier holding a `'` or a `$tag$` (`AS "it's"`): the scanner reads
+ *     it as the start of a string and hides what follows, from both halves.
+ *   It is a tripwire for the plain spellings, not a parser. The executed tests in `documents-core.test.ts`
+ *   (W1, W13, X1, Y) are what prove those triggers behave, and they caught every plant that passed here.
  * - Half 2 reads the order of the CALLS in a function's source with comments stripped (finding X5: a
  *   comment naming the quote lock above a reversed pair once satisfied it), not the order PostgreSQL
  *   acquires the locks at run time; a call inside a branch counts where it is written. The response trigger takes its
@@ -36,8 +42,8 @@ import { applyMigrations } from "./harness.js";
 type Fn = { trigger: string; table: string; timing: "BEFORE" | "AFTER"; fn: string; src: string };
 
 /**
- * A PL/pgSQL body with its string literals emptied and its comments removed, so neither can trip nor
- * satisfy a check. Scanned left to right, because the two interact: `'--'` is a string, not a comment
+ * A PL/pgSQL body with its string literals emptied and its comments removed, so that neither trips nor
+ * satisfies a check in the cases it handles — not double-quoted identifiers holding `'` or `$` (Z1). Scanned left to right, because the two interact: `'--'` is a string, not a comment
  * (finding Y4), and `'/*'` is a string, not the start of one (Y5). Handles '...' with '' escapes, E'...'
  * with backslash escapes, $tag$...$tag$, -- comments and /* *\/ comments (not nested ones).
  */

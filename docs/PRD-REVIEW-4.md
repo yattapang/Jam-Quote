@@ -28,7 +28,7 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 | **J3** | blocker | **Closed.** Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `3ceef3f`): R17's plant matched the finding and the test went red without the ROW_COUNT check and green with it; R1/Q4, R2, R16 and R4 had been independently checked by the batched re-review; the five relations of S1 confirmed by `prisma migrate diff`. Covered by migrations `20260926180000_tenant_composite_keys` and `20260927150000_keys_cannot_rewrite_history`, `new-app/db/schema.prisma`, `new-app/db/policies/002-documents-isolation.sql` (unchanged), `new-app/db/test/documents-core.test.ts`, `db/test/tenant-isolation.test.ts`, `new-app/db/test/reference-keys.test.ts`, and `docs/RULES.md` Rule 4.1. R17 fixed 2026-10-01: a test in `new-app/db/test/documents-core.test.ts` suppresses the balance UPDATE with a trigger on a recompute whose figures would read back unchanged, so only the ROW_COUNT check in `issue_balance_apply()` (migration `20260927120000_lock_isolation_and_tenancy`) can refuse it; with that check removed — the reviewer's own plant — the test goes red. R1/Q4, R2, R16 and R4 independently checked and holding in the database (batched re-review, 2026-10-01). S1 fixed 2026-10-01: the five relations now say `onDelete: Restrict`, and `prisma migrate diff` from a freshly migrated PostgreSQL 16 database to `new-app/db/schema.prisma` now reports no foreign-key change at all (with the old schema it regenerated exactly the five cascades). Not closed until then on S1: five `new-app/db/schema.prisma` relations still say `onDelete: Cascade` against RESTRICT keys, so the claim that Prisma cannot regenerate a cascade holds for ON UPDATE only; R17 (no red test for the ROW_COUNT check) still open.** Migration `20260927150000_keys_cannot_rewrite_history` turns all 49 ON UPDATE CASCADE keys into ON UPDATE RESTRICT and asserts none remains (R1, R2), and gives the seven unkeyed references composite tenant keys (R16); `new-app/db/schema.prisma` states `onUpdate: Restrict` on every relation so Prisma cannot regenerate the cascade. Tested in the R block of `new-app/db/test/documents-core.test.ts`; each of the eight rules was planted out and its own test went red. The re-review of the seven had found Q4 confirmed (R1: ON UPDATE CASCADE rewrites sealed rows) and a cross-tenant write through a key J3 kept single-column (R2); the composite keys themselves held on every probe. Previously: `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
 | **J4** | blocker | **Closed.** Agreed scope can be reduced after it is invoiced: credit notes net into the invoiced figure, so the remedy is credit-then-reduce in one transaction, and a wrong document is withdrawn once nothing is billed (owner's decisions 2026-09-26/27, `docs/design/scope-reduction.md`). This corrects what `20260925120000_documents_core` ("may be negative" with no path) and `20260926110000_withdrawal_preconditions` (a credit note that moved nothing) got wrong, through migrations `20260926200000` to `20260927140000`; tested in `new-app/db/test/documents-core.test.ts` (J4, K4, H4 blocks), `no-stuck-state.test.ts` (a seeded walk with its own oracle) and `concurrency.pg.test.ts` (15 races on real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `422d9e8`. **Independently checked:** five Opus re-reviews (K, L, N, P, Q — their findings all answered), then two Sonnet closing checks: every plant failed exactly its named race and the gate matched; the one item not passed was the brief's own list omitting a register, as the checker read and stated. Closed on that evidence with the owner's acceptance, 2026-09-27 |
 | **J5** | blocker | **Closed.** `683a638`: grade 5 retired in `docs/design/acceptance-evidence.md` (number tombstoned) so the ladder's third-party principle holds; `docs/PRD.md` R1.20c, `docs/adr/0024-acceptance-evidence.md` and `docs/design/domain-model.md` agree. **Independently checked:** the re-review of the seven found the four documents consistent and judged it closable once "six grades" was corrected (R14) — corrected 2026-09-27 in `docs/PRD.md` R1.20, `docs/design/README.md`, `docs/TIERS.md` and `docs/THREAT-MODEL.md`. R15 (grades 2 and 3 have no third party either) is PLAUSIBLE only and goes to the owner with J6 |
-| **J6** | blocker | **Fixed, re-review owed.** Third re-review answered by `new-app/db/migrations/20260927210000_pin_search_path/migration.sql` (owner's decision 2026-10-01: both layers — every function's search path pinned to `pg_catalog, public, pg_temp`, held by `new-app/db/test/function-search-path.test.ts`, and TEMPORARY revoked from PUBLIC, executed on PostgreSQL 16; nine plants caught, restored with `diff -q` identical; `docs/MISTAKES.md` M41, `docs/THREAT-MODEL.md` §4g): Y2: a temp `acceptance` no longer lets a deposit attach to a decline (executed, as a role that may make temp tables, so the pin is proved alone). Y4, Y5: the guard scans strings and comments properly and matches the reviewer's spellings. Y6: the evidence rules refuse an unnumbered issue again. Built before: Second re-review answered by `new-app/db/migrations/20260927200000_rereview2_fixes/migration.sql` and the documents (each fix planted, the reviewer's own plants for X4 and X5 included, restored with `diff -q` identical): X5: the lock-order guard strips comments before comparing. X7: `new-app/CLAUDE.md` says four shapes. X8: the evidence rules' unreachable unnumbered case removed. Built before: Re-review findings answered by `new-app/db/migrations/20260927190000_rereview_fixes/migration.sql` (owner's decisions 2026-10-01; each fix planted and caught, restored with `diff -q` identical). W1: the evidence rules refuse an acceptance they cannot see (a tenant cleared by `RETURNING set_config` no longer skips them; executed test). W2: the withdrawal deadlock is documented as the fourth shape in `new-app/CLAUDE.md` — a withdrawal runs alone in its transaction — and executed in `new-app/db/test/concurrency.pg.test.ts`. W4: a superseded issue has no grade and takes no evidence, and a client responds only to a numbered, current issue. W10: lock order held by `new-app/db/test/trigger-rules.test.ts`. Built before: `acceptance_grade()` is the highest grade among the kinds of evidence on the accepted acceptance; evidence attaches to nothing else; every acceptance has its first evidence row at COMMIT (migration `20260927180000_acceptance_grade`; `docs/design/acceptance-evidence.md`, `docs/PRD.md` R1.20f and `docs/design/domain-model.md` point at it). **Not done:** who may write the third-party kinds — R5's privilege model (J14) |
+| **J6** | blocker | **Fixed, re-review owed.** Third re-review answered by `new-app/db/migrations/20260927210000_pin_search_path/migration.sql` (owner's decision 2026-10-01: both layers — every function's search path pinned to `pg_catalog, public, pg_temp`, held by `new-app/db/test/function-search-path.test.ts`, and TEMPORARY revoked from PUBLIC, executed on PostgreSQL 16; nine plants caught, restored with `diff -q` identical; `docs/MISTAKES.md` M41, `docs/THREAT-MODEL.md` §4g): Y2: a temp `acceptance` no longer lets a deposit attach to a decline (executed, as a role that may make temp tables, so the pin is proved alone). Y4, Y5: the guard empties strings and strips comments with a scanner and matches the reviewer's spellings — a tripwire, not a parser; what it misses is listed in its header (Z1, Z2). Y6: the evidence rules refuse an unnumbered issue again. Built before: Second re-review answered by `new-app/db/migrations/20260927200000_rereview2_fixes/migration.sql` and the documents (each fix planted, the reviewer's own plants for X4 and X5 included, restored with `diff -q` identical): X5: the lock-order guard strips comments before comparing. X7: `new-app/CLAUDE.md` says four shapes. X8: the evidence rules' unreachable unnumbered case removed. Built before: Re-review findings answered by `new-app/db/migrations/20260927190000_rereview_fixes/migration.sql` (owner's decisions 2026-10-01; each fix planted and caught, restored with `diff -q` identical). W1: the evidence rules refuse an acceptance they cannot see (a tenant cleared by `RETURNING set_config` no longer skips them; executed test). W2: the withdrawal deadlock is documented as the fourth shape in `new-app/CLAUDE.md` — a withdrawal runs alone in its transaction — and executed in `new-app/db/test/concurrency.pg.test.ts`. W4: a superseded issue has no grade and takes no evidence, and a client responds only to a numbered, current issue. W10: lock order held by `new-app/db/test/trigger-rules.test.ts`. Built before: `acceptance_grade()` is the highest grade among the kinds of evidence on the accepted acceptance; evidence attaches to nothing else; every acceptance has its first evidence row at COMMIT (migration `20260927180000_acceptance_grade`; `docs/design/acceptance-evidence.md`, `docs/PRD.md` R1.20f and `docs/design/domain-model.md` point at it). **Not done:** who may write the third-party kinds — R5's privilege model (J14) |
 | **J7** | blocker | **Fixed, re-review owed.** Third re-review answered by `new-app/db/migrations/20260927210000_pin_search_path/migration.sql` (owner's decision 2026-10-01: both layers — every function's search path pinned to `pg_catalog, public, pg_temp`, held by `new-app/db/test/function-search-path.test.ts`, and TEMPORARY revoked from PUBLIC, executed on PostgreSQL 16; nine plants caught, restored with `diff -q` identical; `docs/MISTAKES.md` M41, `docs/THREAT-MODEL.md` §4g): Y3: a provider id is printable ASCII with no space at either end; Unicode spaces (NBSP, U+3000, zero-width, BOM) are refused. Built before: Second re-review answered by `new-app/db/migrations/20260927200000_rereview2_fixes/migration.sql` and the documents (each fix planted, the reviewer's own plants for X4 and X5 included, restored with `diff -q` identical): X2: `docs/design/acceptance-evidence.md` §9 says once per tenant. X3: it now says the database would take a release-1 'inbound_reply' and grade it 4; only the writer prevents it. X6: an id may not begin or end with any whitespace. Built before: Re-review findings answered by `new-app/db/migrations/20260927190000_rereview_fixes/migration.sql` (owner's decisions 2026-10-01; each fix planted and caught, restored with `diff -q` identical). W7: the key is per tenant, `acceptance_evidence_tenant_source_external_id_key` (D4 reversed), pinned by a catalogue test; the J3 global-index exemption removed. W5: only the third-party kinds may carry a provider id. W6: the source is a fixed list, the id non-empty and unpadded. W9: "release-1 quotes never earn grade 4" restated as a consequence, not a rule, in `docs/PRD.md` R1.20h and `docs/design/acceptance-evidence.md` §9. Built before: one row per provider event (the M18 lesson of `new-app/db/migrations/20260926100000_variation_idempotency/migration.sql`, `docs/MISTAKES.md`); the reply-address preparation corrected, not built (D5) |
 | **J8** | blocker | **Fixed, re-review owed.** Second re-review answered by `new-app/db/migrations/20260927200000_rereview2_fixes/migration.sql` and the documents (each fix planted, the reviewer's own plants for X4 and X5 included, restored with `diff -q` identical): X9: "the application states the bar it showed" is now marked owed, not built — no application seal exists. Built before: Re-review findings answered by `new-app/db/migrations/20260927190000_rereview_fixes/migration.sql` (owner's decisions 2026-10-01; each fix planted and caught, restored with `diff -q` identical). W3: `docs/design/acceptance-evidence.md` §4.4 and §7 now say what D6 decided and the build does (the ceiling ignores the grade; below-bar acceptance is recorded, not refused). W8: the bar column needs an empty database, and the owner confirmed no deployed or shared database holds a sealed quote. W11: the two exemptions that keep `version` are held by a test. W12: `docs/design/domain-model.md` §6.1 names the frozen bar; the policy comment corrected. S1, S2: a seal stating a stale bar is refused; that the application's seal states it is owed (X9). Built before: the bar is resolved by the database at seal from the quote, `document_settings` or 3, and never moves (migration `20260925120000_documents_core` untouched; Rule 6 in `docs/RULES.md`); `acceptance_meets_bar()`. **Not done:** the rest of `document_settings` |
 | **J9** | blocker | **Closed.** Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `3ceef3f`): the two corrected rows and this row's scope statement read as required; R9 had been independently checked by the batched re-review. R10 and R18 answered 2026-10-01: `docs/design/domain-model.md`'s `document_render` row and ADR `0024-acceptance-evidence.md`'s integrity row now say the render points at its issue and an acceptance at its own issue's render, which makes the J9 migration's "amended to say so" true (R10). R18: this row's "guarded by `tools/check_schema_citations.py`" below covers the COLUMN half — every uuid `*_id` reference has a key, now asserted from the catalogue by `new-app/db/test/reference-keys.test.ts` — and NOT the prose half: a table named in a document that no migration creates is a stated limit of the tool (design documents name planned tables), accepted with J1's closing on 2026-10-01. R9 fixed and independently checked (batched re-review, 2026-10-01). Migration `20260927150000_keys_cannot_rewrite_history`: `acceptance.document_render_id` is NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`, so an acceptance records the render of its own issue (owner's decision, 2026-09-30); both halves planted out and seen red in the R block of `new-app/db/test/documents-core.test.ts`. The same migration fixes R4 (the application cannot delete a tenant; the audit trail's tenant key is ON DELETE RESTRICT). The re-review of the seven had found an acceptance could bind the render of a different issue, or none (R9, blocker; reproduced by the author). Previously: `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
@@ -4458,3 +4458,210 @@ Executed on PostgreSQL 16 as `pryvis_app` (`SET ROLE`, tenant set), on an accept
 
 This is J2's invariant — "the single most important arithmetic invariant in the product" — and J2 was
 Closed. J2 reopened.
+
+
+---
+
+<!-- The fourth, scoped re-review of J2, J6, J7, J8, J11 (Opus, at 81f9d94), copied verbatim on 2026-10-01, headings shifted one level. -->
+
+## Fourth (scoped) re-review of J2, J6, J7, J8, J11: fix ccca8a1, HEAD 81f9d94
+
+### Setup
+
+Everything marked EXECUTED ran on PostgreSQL 16.13 at 127.0.0.1:55440, against a throwaway database called `rr4`. It was built from all 34 migrations by `rereview4/mkdb.sh`, followed by the round-3 seed (`rereview3/seed.sql`).
+
+Three throwaway LOGIN roles were used:
+- `rr4_app` (shaped like production): no superuser, no BYPASSRLS, the same table grants as `pryvis_app`. `session_user = current_user`.
+- `rr4_staff`: BYPASSRLS, not superuser.
+- `rr4_migrator`: a non-owner migrating role, used for Z4 only.
+
+All plants went into `new-app/db/migrations/20260927210000_pin_search_path/migration.sql`. Each was written by `rereview4/plant.py` from the backup `rereview4/m210.backup`, and every restore printed "restored identical" (`diff -q`). One probe migration directory, `20991231000000_rr4_probe`, was created and then removed. HEAD stayed at 81f9d94 throughout, and I saw no change to the tree from any other session. `git status --short` is empty at the end.
+
+**Gates:**
+- `npx turbo typecheck --force`: 5/5. `npm run typecheck` exit 0.
+- `npm test`: 221 db (with the 21 PG16 races), 183 api, 9 core, 11 web, 2 contract, exit 0. The first run was all turbo cache hits, so I re-ran it uncached with `turbo test --force` (see the next line).
+- Uncached `npx turbo test --force` with PRYVIS_PG_URL: 0 cached of 5; db 221, api 183, core 9, web 11, contract 2; exit 0.
+- `npx vitest run test/concurrency.pg.test.ts`: 21/21.
+- The four checkers: clean. There are 10 legacy disposition gaps, unchanged.
+
+### Y findings
+
+#### Y1: CLOSED
+Probe: `rereview4/y1.sql` (the reviewer's probe), run as `rr4_app` (rolsuper f, rolbypassrls f). TEMPORARY was granted back explicitly, so layer one was tested alone.
+```
+== control (no temp view) ...           ERROR: quote_issue e…04b1 cannot be seen by this transaction at COMMIT … (finding W13)
+== attack: temp view pg_roles + RETURNING flips search_path and tenant
+CREATE VIEW
+ERROR:  quote_issue e…04b1 cannot be seen by this transaction at COMMIT … (finding W13)
+ subtotal_minor | lines  → (0 rows)
+```
+The test is sound:
+- With `pg_catalog.pg_roles` un-qualified AND the pin loop removed (plant `y1_both`), the "Y1 ·" test goes red.
+- With the pin loop removed and the qualification kept (plant `nopin`), it stays green, so the qualification alone suffices. I did not execute the converse (qualification removed, pin kept).
+
+#### Y2: CLOSED
+Probes: `y2.sql` and `y2b.sql`, run as `rr4_app` with TEMP granted back.
+```
+J11: CREATE TABLE (temp quote_issue); INSERT … 555555 → ERROR: … has subtotal_minor 555555, but its lines sum to 0
+J6:  control → ERROR … is a decline, which carries no evidence (finding J6)
+     attack (temp acceptance 'accepted') → ERROR … is a decline, which carries no evidence (finding J6)
+     kind | external_id | outcome → (0 rows)
+```
+
+#### Y3: CLOSED
+- `y3.sql` as `rr4_app`: `E'\t'`, `chr(160)`, `chr(133)` and `'TX-7'||chr(160)` all give `violates check constraint "acceptance_evidence_external_id_shape_check"`. The grade stays 1.
+- Exhaustive check (`rereview4/y3full.sql`) over every code point from U+0001 to U+10FFFF, surrogates excluded. Three tests: the character alone matches iff it is in 0x21–0x7E; `'a'||c||'b'` matches iff c is in 0x20–0x7E; and the case-insensitive operator.
+  - Result `0|0|0` (no mismatches) in `rr4` (C.UTF-8, libc), in an ICU database (`und`), and in an `LC_CTYPE 'C'` database.
+  - So the locale dependence the third round found is gone.
+- Plant `y3_revert` (the old `[:space:]` regex): the "Y3 ·" test goes red.
+
+#### Y4: CLOSED for the reviewer's spellings (see Z2 for others)
+Plants re-aimed at the live definitions, then `vitest run test/trigger-rules.test.ts`:
+
+| plant | trigger-rules |
+|---|---|
+| skip_plain | red |
+| skip_exit | red |
+| skip_notice | red |
+| skip_dashstr | red |
+
+#### Y5: CLOSED for '…' and $q$ strings (see Z1 for identifiers)
+
+| plant | trigger-rules (W10) |
+|---|---|
+| swap_plain | red |
+| swap_blockstr | red |
+| swap_dollar | red |
+
+#### Y6: CLOSED
+- `y6.sql`: `rr4_staff` runs `DELETE FROM issue_number …` → `DELETE 1`.
+- Then, as `rr4_app`: `quote_issue_state` gives `sealed_awaiting_number`, and inserting `deposit_paid ('bank','X8-1')` gives `ERROR: issue … is sealed_awaiting_number; it takes no evidence (finding W4)`.
+- Plant `y6_revert`: the "Y6 ·" test goes red.
+
+#### Y7: CLOSED
+Probe `rereview4/y7.sql`, run as the login `rr4_app` with a ceiling of 1,000.
+
+**Layer two alone** (no TEMP; the role's real state):
+```
+may_temp f
+control:  ERROR: invoiced total 9000000 exceeds the ceiling 1000 …
+attack:   ERROR: permission denied to create temporary tables in database "rr4"
+attack 2 (temp VIEW + SET LOCAL search_path = pg_temp, public): permission denied …
+invoiced 0 | ceiling 1000
+```
+**Layer one alone** (`GRANT TEMPORARY … TO rr4_app`; `y7b.sql`):
+```
+attack:   CREATE TABLE → ERROR: invoiced total 9000000 exceeds the ceiling 1000 …
+attack 2: CREATE VIEW; SET → ERROR: invoiced total 9000000 exceeds the ceiling 1000 …
+invoiced 0 | ceiling 1000
+```
+- Plant `nopin` (the pin loop removed): `function-search-path.test.ts` goes red and lists 20 functions. The documents-core "Y ·" tests go red too (Y7 ×2, Y2 ×2).
+- Plant `norevoke`: the race "Y7 layer two" goes red (1 failed, 20 passed).
+- Ceiling races on PG16, all green: R1.24a, N4 (a), N4 (c), K4, P1, P3, Q3, Y7 layer two.
+
+### New findings
+
+#### Z1 · minor (guard weakness, no defect today) — J6, J11: `code()` misreads quoted identifiers and `$` inside identifiers, so a skip or a reversed lock order hides from trigger-rules
+**Where:** `new-app/db/test/trigger-rules.test.ts:44-78` (`code()`).
+
+**Claims broken:**
+- The docblock at :39: "so neither can trip nor satisfy a check".
+- Header :19-20: "Strings and comments are removed first by a scanner".
+- The J6 row: "the guard scans strings and comments properly".
+
+**The defect:** a `'` inside a double-quoted identifier opens a "string" that runs to the next `'`. An identifier containing `$q$` (legal: `$` may follow the first character) opens a "dollar quote". Neither case is in the scanner's list of what it does not handle ("not nested ones" is the only stated exclusion).
+
+**EXECUTED:**
+
+| plant | code planted | trigger-rules | executed test |
+|---|---|---|---|
+| `skip_qident2` | in the subtotal check: `v_lines := (SELECT 0 AS "it's"); EXIT WHEN NOT FOUND; v_lines := (SELECT 0 AS "it's");` | 6/6 green | W13 red |
+| `skip_dollarident` | declare `v$q$ INT;`, then `v$q$ := 0; v$q$ := 1; EXIT WHEN NOT FOUND; v$q$ := 2;` | 6/6 green | W13 red |
+| `swap_qident` | in the evidence rules: `SELECT 'x' AS "a'" INTO v_state; PERFORM acceptance_issue_lock(…); SELECT 'x' AS "b'" INTO v_state; PERFORM quote_money_lock_for_issue(…); PERFORM acceptance_issue_lock(…);` | 6/6 green (W10 green) | — |
+
+`swap_qident` takes the issue lock first at run time. Like Y5, it needs a second, redundant issue-lock call.
+
+#### Z2 · minor (guard weakness, no defect today) — J6, J11: plain unconditional NOT FOUND skips the SKIP pattern still misses
+**Where:** `new-app/db/test/trigger-rules.test.ts:105-111`.
+
+**Claim broken:** header :20-21 lists what is NOT caught as "a skip on another test" and "a conditional one". These three are neither. This is the same basis as Y4.
+
+**EXECUTED:** each plant went into the evidence rules before the W1 RAISE.
+
+| plant | code planted | trigger-rules | W1 |
+|---|---|---|---|
+| `skip_case` | `CASE WHEN NOT FOUND THEN RETURN NULL; ELSE NULL; END CASE;` | 6/6 green | red |
+| `skip_assign` | `IF NOT FOUND THEN v_state := NULL; RETURN NULL; END IF;` | 6/6 green | red |
+| `skip_elsif` | `IF v_issue_id IS NOT NULL AND false THEN NULL; ELSIF NOT FOUND THEN RETURN NULL; END IF;` | 6/6 green | red |
+
+`skip_elsif` fails because `\bIF` does not match inside `ELSIF`. You may count ELSIF as "conditional"; CASE and the assignment are not.
+
+#### Z3 · nit (guard and claim scope) — "fails on any unpinned function" holds only for plain functions in `public`
+**Where:**
+- `new-app/CLAUDE.md:88-91`: "`db/test/function-search-path.test.ts` fails on any unpinned function".
+- Migration :22-24: "so no function is missed … fails on any function without it".
+- The pin loop and the guard both filter on `nspname = 'public' AND prokind = 'f'`.
+
+**EXECUTED:** a probe migration `20991231000000_rr4_probe` (later removed) contained:
+- `CREATE PROCEDURE probe_proc() … FROM invoice`;
+- `CREATE SCHEMA probe; CREATE FUNCTION probe.trig() RETURNS trigger … FROM invoice`;
+- `CREATE TRIGGER zz_probe AFTER INSERT ON invoice … probe.trig()`.
+
+Result: `function-search-path.test.ts` stays green, 1 passed. None exists today, and layer two would still stop the temp table, so this is a guard-scope overclaim, not a live defect.
+
+**Control:** a probe migration with an unpinned `CREATE OR REPLACE FUNCTION issue_ceiling_minor_probe()` in `public` makes the guard red, naming it. The CREATE OR REPLACE claim itself is true: re-running `pg_get_functiondef(issue_ceiling_minor)` without its SET line leaves `proconfig` NULL.
+
+#### Z4 · nit — layer two is silently a no-op when the migrating role is neither superuser nor the database owner
+**Where:** migration :178-182.
+
+**Claim broken:** migration :25, "the TEMPORARY privilege on this database is revoked from PUBLIC". The "does not do" list names only explicit grants.
+
+**EXECUTED:** in a throwaway database `rr4_mig` (owner postgres), I ran the migration's DO block as `rr4_migrator` (LOGIN, CREATE on schema public, not owner):
+```
+WARNING:  no privileges could be revoked for "rr4_mig"
+DO      exit=0
+has_database_privilege('pryvis_app','rr4_mig','TEMP') = t
+```
+The migration "succeeds", and layer two is absent. The owed deployment check in THREAT-MODEL §4g, `has_database_privilege(<role>,…,'TEMP')` must be false, would catch it. It is not built.
+
+Under superuser (the race suite) and under `prisma migrate deploy` as postgres, the revoke applies (see "sound" below).
+
+#### Z5 · nit, PARTLY PLAUSIBLE — the Y3 comment says "Provider ids and email Message-IDs are ASCII"
+**Where:** migration :32.
+
+**EXECUTED:** as `rr4_app`, `inbound_reply('email','<ä1@例え.jp>')` is refused by the shape check, and `<a1@x.example>` is taken.
+
+**NOT executed (reasoning):** RFC 6532 §3.2 lets internationalized messages carry UTF-8 in msg-id. So the sentence is false for internationalized email, and such a reply would be refused. That fails closed, and no inbound writer exists today.
+
+### Suspicions (NOT executed)
+- On a database whose `public` schema still grants CREATE to PUBLIC (one created before PG15 and upgraded), the application role could add overloads in `public`. The pin puts `public` second, so a better-typed overload of a built-in called with an implicit cast could be chosen. On PG16 defaults the precondition is absent: `has_schema_privilege(app,'public','CREATE') = f` for `pryvis_app` and `rr4_app`. I did not build that database.
+
+### Attacked and found sound
+- **Every public function is pinned:** 20/20 have `{"search_path=pg_catalog, public, pg_temp"}` in `rr4`, and also in a database built by `prisma migrate deploy`.
+- **Every relation name in the function bodies resolves to `public`** (catalogue scan), apart from `pg_roles`:
+  - `pg_roles` appears unqualified in `tenant_delete_guard`, but resolves to pg_catalog under the pin.
+  - So `pg_temp` being last is never reached for a relation.
+  - PostgreSQL never searches `pg_temp` for functions or operators.
+- **Policy expressions:** every policy reads only `current_setting` and `NULLIF` and casts, stored by OID. Nothing is resolved by name at run time.
+- **TEMP regained through a pre-initialised temp schema (harness shape):** the superuser creates a temp table in the session, then `SET ROLE pryvis_app; CREATE TEMP TABLE invoice …` → `permission denied for schema pg_temp_3`. Sound on PG16.
+- **Regaining TEMP otherwise:** `rr4_app` has no memberships and no grant option. `has_database_privilege` is false for `pryvis_app`, `rr4_app` and `rr4_staff`.
+- **The revoke lands on the right database in every path:**
+  - Race suite: the plant `norevoke` goes red.
+  - `prisma migrate deploy` (with DATABASE_URL and DIRECT_URL set): all 34 applied, TEMP false, 20/20 pinned.
+  - PGlite: `template1`'s `datacl` is `{=c/postgres,…}`. Without the migration, `has_database_privilege` is false and CREATE TEMP is refused, so the commit's reason for moving the test is true.
+- **The pin guard is not vacuous:** the `nopin` plant gives red, listing 20. A later unpinned function in `public` also gives red.
+- **Test-only functions:**
+  - `test_suppress_balance_write()` (documents-core:1600) is created per test in a fresh PGlite and reads nothing.
+  - The reviewer seed's `t_*` helpers are not in the repo.
+- **The Y1 test's TEMP grant** is scoped to one test: `beforeEach` builds a fresh PGlite.
+- **Each fix has a test that fails without it:** Y1 (`y1_both`), Y2 and Y7 (`nopin`), Y3 (`y3_revert`), Y6 (`y6_revert`), layer two (`norevoke`).
+- **New sentences checked against execution or reading:**
+  - THREAT-MODEL §4g, M41, BRIEF-STATUS, the J2/J6/J7/J11 rows, and the migration's CORRECTIONS match what I observed, except Z3, Z4 and Z5.
+  - Rule 21.10: the only new "who can write" sentence is Y6's "a role that bypasses row security can [remove a number]". It is backed by the executing test "Y6 ·" and by my `rr4_staff` DELETE.
+
+### Verdicts
+- J2: closable.
+- J6: closable. Z1 and Z2 are guard weaknesses (minor); the executed W1 and W13 tests catch every plant.
+- J7: closable. Z5 is a nit.
+- J8: closable. Nothing in this diff touches it beyond the shared pin.
+- J11: closable. Z1 and Z2 are guard weaknesses (minor).

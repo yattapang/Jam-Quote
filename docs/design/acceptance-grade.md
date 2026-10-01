@@ -138,5 +138,7 @@ Documents in the same change (Rule 24.6): `acceptance-evidence.md` §4.2–4.4, 
 
 - No inbound endpoint, parser or provider. Grade 4 has a kind and a key, and no writer.
 - No payments. `deposit_paid` has a kind and a key; nothing writes it until R1.23's payment path exists.
+- Provider ids are printable ASCII (finding Y3). An internationalised email Message-ID (RFC 6532 allows
+  UTF-8) would be refused: it fails closed, and is to be revisited when the inbound writer is built (Z5).
 - Nothing about the share page or how a below-bar acceptance reads on screen.
 - Nothing about legal sufficiency. That remains the attorney's answer (ADR 0024).

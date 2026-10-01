@@ -264,6 +264,12 @@ migrations, so **it must not be granted TEMPORARY**, and the deployment check mu
 first layer and does not depend on this; the revoke is defence in depth for a function a later migration
 forgets to pin.
 
+**Two limits the fourth re-review executed.** If the role that runs the migrations is neither a superuser
+nor the database's owner, the revoke does nothing and PostgreSQL only WARNS ("no privileges could be
+revoked"); the migration still succeeds (Z4). The deployment check above is what catches that — so it is
+owed before launch, not after. And the pin covers plain functions in `public` only: a procedure, or a
+function in another schema, would need its own (Z3).
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

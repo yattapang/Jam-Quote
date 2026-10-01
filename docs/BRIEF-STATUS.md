@@ -537,6 +537,10 @@ re-review owed; J8 judged closable by the third pass.**
 fixes: confirm each Y finding closed by re-executing it, attack both layers, and re-run the ceiling races.
 A single mechanical (Sonnet) closing check for J2, J6, J7, J8 and J11 follows if nothing blocking is
 found. No build work, gate run or commit alongside it.*
+**Reported 2026-10-01: J2, J6, J7, J8 and J11 all judged closable** — Y1-Y7 closed by execution, each layer
+proved alone against the ceiling attack; five new items Z1-Z5, none a live defect (two guard weaknesses, three
+nits), appended verbatim to `docs/PRD-REVIEW-4.md`. *Tier log: four Opus rounds converged — 13, 10, 7, then 0
+blocking.*
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

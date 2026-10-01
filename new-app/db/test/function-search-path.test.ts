@@ -17,6 +17,9 @@
  *
  * WHAT IT DOES NOT PROVE
  *
+ * - Anything about procedures, aggregates, or functions outside `public`: the pin loop in the migration and
+ *   this guard both cover plain functions in `public` only. The fourth re-review attached an unpinned
+ *   trigger function from another schema to `invoice` and this stayed green (Z3). None exists today.
  * - That the pin is the right one for a function that needs another schema: none does today.
  * - That production's role lacks TEMPORARY: that role is provisioned outside the migrations
  *   (`docs/THREAT-MODEL.md` §4g). This checks the test role, created like it is meant to be.
