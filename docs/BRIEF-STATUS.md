@@ -425,6 +425,14 @@ noted two harmless differences between plants and findings rather than passing o
 **Review 4 now:** Closed — J1, J2, J4, J5, J10, J12, J13, J15, J16 · Open, fix incomplete — J3 (R17), J9
 (R10, R18) · Open, not started — J6, J7, J8, J11, J14.
 
+**Built 2026-10-01:** J3's R17 and J9's R10, R18 (`763e2ca`).
+
+**Closing check — J3 and J9, mechanical — launched 2026-10-01 on the owner's instruction.** *Delegation
+(Rule 16.5), declared before launch: one `general-purpose` agent, **Sonnet**. Both remaining items are
+bounded — one plant with a stated expected result, and three rows of text to read — so the cheapest
+reliable tier is the one that follows stated expectations exactly; every expectation run before launch on
+the HEAD the brief names (M36, M37). No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
