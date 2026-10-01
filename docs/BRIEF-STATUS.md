@@ -504,6 +504,9 @@ adversarial reviewer, then a mechanical closing check.
 W1-W12. It must confirm each W finding closed by executing the original bypass, and hunt for what the fix
 broke — above all whether "refuse what you cannot see" refuses anything legitimate. It reviews `e22b010`;
 no build work, gate run or commit alongside it.*
+**Reported 2026-10-01: W1, W4, W5, W7, W11, W13 confirmed closed by re-execution; none of the four findings
+closable yet** — ten new findings X1-X10 (all minor or nit), appended verbatim to `docs/PRD-REVIEW-4.md`.
+The one regression: X1, a staff deletion of a sealed issue is now refused. No owner decision needed.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
