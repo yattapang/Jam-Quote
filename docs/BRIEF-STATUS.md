@@ -418,7 +418,12 @@ Built in `03e7296` with J12's V15-V18.
 launch: one `general-purpose` agent, **Sonnet**. The owner chose a mechanical check: every item has a
 stated command and expected output, run before launch on the HEAD the brief names (M36, M37), so the
 cheapest reliable tier is the one that can follow it exactly. A deviation is reported, not interpreted.
-No build work, gate run or commit alongside it.*
+No build work, gate run or commit alongside it.* **Reported 2026-10-01: all nine items PASSED, no
+deviation. J1 and J12 CLOSED.** *Tier log: Sonnet was right — every item was followed exactly, and it also
+noted two harmless differences between plants and findings rather than passing over them.*
+
+**Review 4 now:** Closed — J1, J2, J4, J5, J10, J12, J13, J15, J16 · Open, fix incomplete — J3 (R17), J9
+(R10, R18) · Open, not started — J6, J7, J8, J11, J14.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
