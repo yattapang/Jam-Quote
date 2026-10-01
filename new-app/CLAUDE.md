@@ -85,6 +85,12 @@ then a real failure gets re-run too. If you want the parallel run while iteratin
 A change to a `@wire` type is not finished until the contract is regenerated and committed. CI
 regenerates it and fails on a diff.
 
+**A new migration is not finished until `db/schema-objects.json` is regenerated and committed:** in
+`db/`, run `PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts`. That file is the
+list of every table, column, function, trigger, policy, index and constraint the migrations build, read
+from PostgreSQL's catalogue; `tools/check_schema_citations.py` resolves citations against it, and
+`npm test` fails if it is stale (findings S3, S4 — the tool used to parse the SQL, and got it wrong).
+
 ## Testing, and what "done" means
 
 Three layers (Rule 8): unit tests beside the subject; seam and flow tests against a **real**
@@ -101,11 +107,13 @@ which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a s
 credit note, variation, withdrawal, sealing, opening a balance row and a balance recompute all take a per-quote lock that is
 only correct when each statement sees what the transaction it waited for committed; under REPEATABLE
 READ or SERIALIZABLE they are refused with SQLSTATE 25000 (finding P1). Do not pass an `isolationLevel`
-to a transaction that writes any of them. Two shapes can deadlock (SQLSTATE 40P01, detected by
-PostgreSQL, nothing left wrong) and must be retried: a transaction that writes on two quotes, and one that
+to a transaction that writes any of them. Three shapes can deadlock (SQLSTATE 40P01, detected by
+PostgreSQL, nothing left wrong) and must be retried: a transaction that writes on two quotes; one that
 writes on a quote and then seals the same quote — which includes the wrong-document remedy (void or credit,
-withdraw, seal the next revision) if it is run as ONE transaction. Run those steps as separate
-transactions.
+withdraw, seal the next revision) if it is run as ONE transaction; and one that writes on **two issues of
+the same quote** — two client responses, or a response and an invoice — while another transaction does the
+same in the other order (finding S9, executed on real PostgreSQL 16; it deadlocked before J13 too, on the
+old unique index). Run those steps as separate transactions: one client response per transaction, always.
 
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work

@@ -415,7 +415,7 @@ describe("J12 · which insert moves which balance column, executed rather than l
     expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 0 });
   });
 
-  it("accepted_total_minor survives all four untouched, because it is written once", async () => {
+  it("accepted_total_minor survives all four untouched, because none of them writes it", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
     const invoiceId = await insertInvoice(issue, 40_000n);

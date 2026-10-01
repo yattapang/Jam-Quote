@@ -72,7 +72,21 @@ const NOT_MONEY: Record<string, string> = {
  * application used for money ("Int cents"), so it is the one most likely to come back, as a 32-bit
  * column, and the int32 cap is the defect ADR 0011 names.
  */
-const AMOUNT_SUFFIXES = ["_minor", "_thousandths", "_cents"];
+const AMOUNT_SUFFIXES = ["_minor", "_minor_units", "_thousandths", "_cents"];
+
+/**
+ * Numeric columns that carry an amount WORD but are not money, by suffix, each with its reason.
+ * Finding S6: a money column named outside the suffix list (`retention_amount_jmd INTEGER`) escaped
+ * every test, so any numeric column naming an amount must now end in a money suffix or one of these.
+ */
+const NOT_MONEY_SUFFIXES: Record<string, string> = {
+  _basis_points: "A rate, in hundredths of a percent (`tax_rate_basis_points`); no amount is stored in it.",
+  _pct: "A percentage, 0-100, by the convention in new-app/CLAUDE.md.",
+};
+
+/** A whole-word amount term in a column name. */
+const AMOUNT_WORD =
+  /(^|_)(amount|total|subtotal|price|cost|tax|deposit|balance|retention|fee|credit|paid|due|charge|discount|markup)(_|$)/;
 
 /**
  * `data_type` is the column's type with any domain resolved to its base, and for an ARRAY it is the
@@ -164,6 +178,23 @@ describe("money is stored as integer minor units, everywhere", () => {
       .filter((c) => /(^|_)(amount|total|price|cost|subtotal|tax|deposit|balance)$/.test(c.column_name))
       .map((c) => `${c.table_name}.${c.column_name} names an amount without its unit`);
     expect(suspicious).toEqual([]);
+  });
+
+  it("gives every NUMERIC column that names an amount a money suffix, or a named non-money one (S6)", () => {
+    const numeric = new Set(["smallint", "integer", "bigint", "numeric", "real", "double precision", "money"]);
+    const unlabelled = columns
+      .filter((c) => numeric.has(c.data_type) && AMOUNT_WORD.test(c.column_name))
+      .filter((c) => !AMOUNT_SUFFIXES.some((s) => c.column_name.endsWith(s)))
+      .filter((c) => !Object.keys(NOT_MONEY_SUFFIXES).some((s) => c.column_name.endsWith(s)))
+      .map((c) => `${c.table_name}.${c.column_name} (${c.declared}) names an amount without a money unit`);
+    expect(unlabelled).toEqual([]);
+  });
+
+  it("still has a column for each non-money suffix, so no exemption is stale", () => {
+    for (const suffix of Object.keys(NOT_MONEY_SUFFIXES)) {
+      if (suffix === "_pct") continue; // the convention's own spelling; no column uses it yet, stated here
+      expect(columns.some((c) => c.column_name.endsWith(suffix))).toBe(true);
+    }
   });
 
   it("holds the owner's ceiling in every amount column's own type, which a 32-bit column could not", async () => {

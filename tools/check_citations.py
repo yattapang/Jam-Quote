@@ -20,7 +20,7 @@ Rule 24.5's test: would this have caught it mechanically? Both, yes, and in unde
    "denial" phrase (R11). Paths are checked by `tools/check_schema_citations.py`, which resolves
    every one with no skip; one guard per class rather than two that drift apart. Its check that a
    migration comment's identifier appears as text is retired for the same reason: that tool checks
-   the identifier against parsed DDL instead.
+   the identifier against the catalogue the migrations build instead.
 2. **Cited bare filenames exist somewhere.** A backticked filename with no directory must match some
    tracked file's basename. This is the M14 case exactly: a guard credited by a name that never
    existed.

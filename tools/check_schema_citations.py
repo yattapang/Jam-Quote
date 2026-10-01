@@ -16,25 +16,37 @@ after M19, and review 4 then found three defects it could not see **by construct
   migration creates. The old guard checked that a backticked identifier appeared *as text somewhere
   in the migrations* — and `document_render` does appear, in the column name and in comments. Text
   presence is not existence.
-- **The M18 class properly.** A comment crediting a column is a claim about the schema, so it should
-  be checked against **parsed DDL**, not against a text search that another comment can satisfy.
 
-So the difference between this tool and the old one is not strictness, it is **what it resolves
-against**: a parsed schema and a full filesystem index, with **no silent skip anywhere**. Every
-citation is resolved, exempted with a stated reason, or reported.
+## What it resolves against — and why that changed on 2026-10-01 (findings S3, S4; Rule 21.9)
+
+This tool used to learn the schema by **parsing the migrations' SQL** with regular expressions. Two
+reviews in a row found that parse wrong in the same way: first it skipped every NOT NULL column (R3),
+then its fix missed ordinary DDL that PostgreSQL accepts — `ALTER TABLE IF EXISTS`, a lower-case
+type, `ADD` without COLUMN, a multi-clause DROP — and it never forgot a dropped index (S3, S4). Two
+misses of one class mean the shape is the defect, so the parser is gone:
+
+- **What exists** comes from `new-app/db/schema-objects.json`, generated from PostgreSQL's catalogue
+  after every migration by `new-app/db/test/schema-objects.test.ts`, which fails if the committed file
+  differs from what the migrations build. A dropped object leaves the catalogue, so it leaves the file.
+- **"Every row reference has a key"** moved out of this tool entirely, into
+  `new-app/db/test/reference-keys.test.ts`, which asks the catalogue directly.
+- Only **settings** (GUCs such as the balance-write flag) are still read from the SQL text, because they
+  are not catalogue objects: a name in a `current_setting(...)` or `set_config(...)` call.
 
 ## What it checks
 
-1. **Paths, with no bail-out.** A backticked path is resolved as an exact tracked path, as a suffix
-   of one (cited relative to `new-app/`, `docs/`, `original-app/` — legitimate and common), or
-   relative to the citing file, `..` included. Anything left is reported together with the fact that
-   all three were tried, so a reader can tell a phantom from a mis-rooted path.
-2. **A `*_id` column either has a foreign key or names a table that exists.** This is J9's class:
-   a reference that the schema does not enforce and the schema does not satisfy.
-3. **An identifier backticked in a migration comment is a DECLARED object** — a table, column,
-   function, trigger, policy, index, or a setting the file itself sets — not merely text appearing
-   somewhere.
-4. **A qualified `table.column` citation, anywhere, resolves** when that table is declared.
+1. **Paths, with no bail-out.** A backticked path — with or without a `:line` suffix, or a directory
+   ending in `/` — is resolved as an exact tracked path, as a suffix of one (cited relative to
+   `new-app/`, `docs/`, `original-app/` — legitimate and common), or relative to the citing file.
+   Anything left is reported, including a path that climbs out of the repository (S2).
+2. **An identifier backticked in a migration comment is a real object** — a table, column, function,
+   trigger, policy, index, constraint, or a setting — in the catalogue the migrations build.
+3. **A qualified `table.column` citation, anywhere, resolves** when that table exists.
+4. **A near miss of a real column, anywhere** — the unit suffix dropped from a money column's name.
+
+Every citation is resolved, exempted by name with a printed reason, or reported. Whole documents whose
+subject is a broken citation (review registers, the ledger) are not scanned, and the report says how
+many citations that leaves unchecked (S5).
 
 ## What it does NOT prove (Rule 21.4)
 
@@ -42,36 +54,36 @@ citation is resolved, exempted with a stated reason, or reported.
   `issue_balance_apply()` existed, was declared, was correctly named everywhere — and nothing
   required an invoice to pass through it. Only the trigger and the plant in
   `new-app/db/test/documents-core.test.ts` prove that, and no citation checker ever will.
-- **Not J12, and I am not claiming it.** J12 is the same fact written twice in prose, one copy
-  stale. That is a duplication problem, not a resolution problem; this tool would resolve both
-  copies happily. The fix for that class is ADR 0025's — one home per fact — and the guard for it,
-  if one is built, is a different tool.
-- **Nothing about identifiers in prose documents.** A design document legitimately names tables that
-  are planned and not yet built, so a document citing `acceptance_evidence` is correct prose and not
-  a broken citation. Distinguishing "planned" from "phantom" needs the document to mark it, which is
-  a decision about how documents are written rather than something to infer.
+- **Not that a sentence is true.** J12 and S7 were true names in false sentences.
+- **Nothing about identifiers in prose documents** beyond near misses and `table.column`: a design
+  document legitimately names tables that are planned and not yet built.
+- **Not paths written without backticks**, and not a backticked path with no slash (a bare filename is
+  `tools/check_citations.py`'s job).
 - Nothing about `original-app/`, which is indexed so citations into it resolve, and not scanned.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
 MIGRATIONS = "new-app/db/migrations/"
+OBJECTS_FILE = "new-app/db/schema-objects.json"
 
 SKIP_SCAN_PREFIXES = ("original-app/", ".claude/")
 SCAN_EXTS = (".md", ".ts", ".tsx", ".sql", ".yml", ".yaml", ".toml", ".py", ".prisma", ".mjs")
 PATH_EXTS = (
-    ".md", ".ts", ".tsx", ".js", ".mjs", ".sql", ".yml", ".yaml", ".toml", ".json", ".py",
-    ".prisma", ".css", ".svg", ".png", ".html", ".zip",
+    ".md", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".sql", ".yml", ".yaml", ".toml", ".json",
+    ".py", ".sh", ".txt", ".prisma", ".css", ".svg", ".png", ".html", ".zip", ".example", ".lock",
 )
 
 # Documents whose SUBJECT is a broken citation, so a name that does not resolve is the point. Same
 # set and same reasoning as `tools/check_citations.py`, plus review 4 — which reports the phantom
-# this tool exists to catch and therefore has to be able to write its name.
+# this tool exists to catch and therefore has to be able to write its name. Not scanned, and COUNTED
+# in the report (S5): a skip the banner does not mention is R11's defect.
 EVIDENCE_DOCS = {
     "REVIEW-FINDINGS.md": "Closed register about original-app; its paths are history.",
     "docs/COMPLIANCE-REVIEW.md": "The same, for the compliance pass.",
@@ -83,47 +95,6 @@ EVIDENCE_DOCS = {
     "docs/RULES-ENFORCEMENT-AUDIT.md": "Cites the phantom as the evidence for this very guard.",
 }
 
-# Paths a document names deliberately although they do not exist. Each entry carries its reason,
-# because every entry is a place this tool is blind and that should be visible.
-EXEMPT_PATHS = {
-    "some/path/file.ts": "An illustration inside a guard's own documentation, not a claim.",
-    "app/admin.ts": "A hypothetical module in an example about naming.",
-    ".vercel/project.json": "Generated by Vercel locally and gitignored; a real file, never tracked.",
-    "infra/docker-compose.yml": "Work owed, cited as owed (the local Postgres the tests will use).",
-}
-
-# --- resolving `<something>_id` --------------------------------------------------------------------
-#
-# A column may name its target through a ROLE: `sealed_by_user_id` points at `app_user`, and the role
-# is the interesting part of the name rather than noise to be stripped by accident. So roles are
-# listed explicitly instead of being guessed by a rule like "drop everything before the last word",
-# which would quietly accept `banana_user_id`.
-ROLE_PREFIXES = (
-    "sealed_by_", "withdrawn_by_", "recorded_by_", "voided_by_", "granted_by_", "actor_",
-    "issued_by_", "created_by_", "resolved_by_", "activated_by_", "approved_by_",
-)
-# A table whose name differs from the entity word used in column names. `user` is reserved-ish in SQL
-# and the table is `app_user`, so every `user_id` in the schema resolves through this one alias.
-TABLE_ALIASES = {"user": "app_user"}
-# Columns that deliberately have no foreign key and deliberately name no single table.
-UNCONSTRAINED_IDS = {
-    ("audit_entry", "subject_id"): (
-        "Polymorphic by design: an audit row's subject may be any table, and a foreign key would "
-        "make the audit trail depend on the row surviving — the opposite of what an audit is for."
-    ),
-}
-
-# A reference whose target is genuinely not built yet. Listed rather than exempted, because the
-# difference between "owed" and "phantom" is whether anybody wrote down what is owed — and an owed
-# entry is PRINTED on every run, so it cannot go quiet the way a silent skip did (J1).
-OWED_IDS = {
-    ("quote_line", "recipe_id"): (
-        "The catalogue is not built yet. Nullable, and the foreign key lands with the catalogue "
-        "migration; until then a recipe id in a draft line points at nothing and the column is "
-        "advisory. Owed: a `recipe` table and this foreign key, in the catalogue migration."
-    ),
-}
-
 # Suffixes that distinguish a real column from a plausible shortening of it. Deliberately the
 # suffixes this schema uses to carry MEANING — the unit, the kind, the relation — because dropping one
 # of those in prose is how a bare "accepted total" came to stand for the `accepted_total_minor` column
@@ -131,14 +102,19 @@ OWED_IDS = {
 # near miss inside the guard that reports near misses.
 NEAR_MISS_SUFFIXES = ("minor", "thousandths", "id", "at", "key", "hash", "kind")
 
-CITED_PATH = re.compile(r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/[A-Za-z0-9_.-]+\.[a-z]{2,6})`")
+# A path with a slash and an extension, optionally `:line` or `:from-to` (S2: a line suffix used to
+# defeat the match entirely); and, separately, a directory, which ends in a slash.
+CITED_PATH = re.compile(
+    r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/[A-Za-z0-9_.-]+\.[A-Za-z]{1,8})(?::\d+(?:-\d+)?)?`"
+)
+CITED_DIR = re.compile(r"`([A-Za-z0-9_@.][A-Za-z0-9_@./-]*/)`")
 CITED_QUALIFIED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_]*)`")
 CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 
 # Citations that are deliberately to something absent, keyed by (citing file, citation) — not by a
 # phrase near them (finding R11) and not by line number, which moves with every edit above it. Every
 # entry is printed on every run, and an entry that stops matching a failing citation fails the run.
-CITATION_EXEMPTIONS = {
+CITATION_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("CLAUDE.md", "extracted/JamQuote.dc.html"): (
         "Deleted on 2026-09-26 as an unrelated mockup; cited as the history of the design tokens."
     ),
@@ -147,129 +123,62 @@ CITATION_EXEMPTIONS = {
         "Names the design ADR 0025 rejected (a nullable column on acceptance), to say why it was "
         "rejected. A committed migration, so Rule 6 forbids rewording it."
     ),
+    ("new-app/db/migrations/20260926180000_tenant_composite_keys/migration.sql", "acceptance_issue_key"): (
+        "True when committed; J13's migration 20260927160000 dropped the index. S3's class exactly — "
+        "the old parser still counted it — and Rule 6 forbids rewording a committed migration."
+    ),
+    ("DEPLOYMENT.md", ".vercel/project.json"): (
+        "Written by the Vercel CLI locally and gitignored: a real file that is never tracked."
+    ),
+    ("docs/adr/0012-new-app-structure.md", "infra/docker-compose.yml"): (
+        "Owed, cited as owed: the local Postgres the tests will use."
+    ),
+    ("CLAUDE.md", "dist/"): "Build output (the compiled package), gitignored, never tracked.",
+    ("docs/DEVELOPMENT-BRIEF.md", "catalog/"): "A planned module directory in the brief's target layout.",
+    ("docs/DEVELOPMENT-BRIEF.md", "messaging/"): "A planned module directory in the brief's target layout.",
+    ("docs/DEVELOPMENT-BRIEF.md", "support/"): "A planned module directory in the brief's target layout.",
+    ("docs/DEVELOPMENT-BRIEF.md", "infra/"): "Planned: infrastructure as code is not built.",
+    ("docs/PRICING.md", "apps/api/src/pricing/scrapers/"): (
+        "The supplier-scraper spec's planned location, in the earlier application's layout; not built."
+    ),
+    ("docs/SERVICE-REGISTER.md", "new-app/infra/"): "Planned: infrastructure as code is not built.",
+    ("new-app/CLAUDE.md", "infra/"): "Listed there as not built yet.",
+    ("new-app/README.md", "infra/"): "Planned layout; not built.",
 }
 
 
 class Schema:
-    """What the migrations actually declare, parsed from DDL with comments removed.
-
-    Comments are stripped FIRST and that is the whole point of the class: the defect this replaces a
-    text search with a parser for is a comment being satisfied by another comment.
-    """
+    """What exists, read from the generated catalogue list — never parsed out of SQL (S3, S4)."""
 
     def __init__(self, migration_files: list[str]) -> None:
-        # column name -> declared type, because the type decides whether `*_id` is a row
-        # reference at all: `mfa_totp.secret_key_id` is TEXT and labels a wrapping key, not a row.
-        self.tables: dict[str, dict[str, str]] = {}
-        self.functions: set[str] = set()
-        self.triggers: set[str] = set()
-        self.policies: set[str] = set()
-        self.indexes: set[str] = set()
+        try:
+            data = json.loads(Path(OBJECTS_FILE).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            sys.exit(
+                f"{OBJECTS_FILE} is missing. Generate it: in new-app/db, "
+                f"PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts"
+            )
+        self.tables: dict[str, set[str]] = {t: set(cols) for t, cols in data["tables"].items()}
+        self.functions: set[str] = set(data["functions"])
+        self.triggers: set[str] = set(data["triggers"])
+        self.policies: set[str] = set(data["policies"])
+        self.indexes: set[str] = set(data["indexes"])
+        self.constraints: set[str] = set(data["constraints"])
+        # Settings are not catalogue objects, so they are the one thing still read from the SQL: a GUC
+        # the migrations set or require is a real named thing, e.g. the balance-write flag.
         self.settings: set[str] = set()
-        # (table, constraint name) -> its columns, as of the last migration read.
-        self.constraints: dict[tuple[str, str], list[str]] = {}
-
         for path in migration_files:
-            text = Path(path).read_text(encoding="utf-8")
-            ddl = re.sub(r"--[^\n]*", "", text)
-            self._read(ddl)
-            # A GUC the file sets or requires is a real named thing, e.g. the balance write flag.
+            ddl = re.sub(r"--[^\n]*", "", Path(path).read_text(encoding="utf-8"))
             self.settings.update(re.findall(r"current_setting\('([a-z_.]+)'", ddl))
             self.settings.update(re.findall(r"set_config\('([a-z_.]+)'", ddl))
-
-    def _read(self, ddl: str) -> None:
-        self.functions.update(re.findall(r"CREATE (?:OR REPLACE )?FUNCTION\s+([a-z_][a-z0-9_]*)", ddl))
-        self.triggers.update(re.findall(r"CREATE TRIGGER\s+([a-z_][a-z0-9_]*)", ddl))
-        self.policies.update(re.findall(r"CREATE POLICY\s+([a-z_][a-z0-9_]*)", ddl))
-        self.indexes.update(re.findall(r'CREATE (?:UNIQUE )?INDEX\s+"?([a-z_][a-z0-9_]*)"?', ddl))
-        # Foreign keys, tracked BY CONSTRAINT NAME and in file order, so that a key dropped and never
-        # re-added stops counting, and every column of a composite key counts. Finding R3: the first
-        # version matched `FOREIGN KEY ("col")` only — one column — and never forgot a key once seen,
-        # so a composite re-add was invisible and a DROP with no re-add still read as enforced.
-        # A missed key makes a sound column look like J9, and a phantom key hides J9 itself.
-        events = [
-            (m.start(), "add", m.group(1), m.group(2), re.findall(r'"?([a-z_][a-z0-9_]*)"?', m.group(3)))
-            for m in re.finditer(
-                r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+ADD CONSTRAINT\s+"?([a-z_][a-z0-9_]*)"?\s+'
-                r"FOREIGN KEY\s*\(([^)]*)\)",
-                ddl,
-            )
-        ]
-        events += [
-            (m.start(), "drop", m.group(1), m.group(2), [])
-            for m in re.finditer(
-                r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+DROP CONSTRAINT\s+(?:IF EXISTS\s+)?'
-                r'"?([a-z_][a-z0-9_]*)"?',
-                ddl,
-            )
-        ]
-        for _, kind, table, name, cols in sorted(events):
-            if kind == "add":
-                self.constraints[(table, name)] = cols
-            else:
-                self.constraints.pop((table, name), None)
-        # An inline column key (`"x_id" UUID REFERENCES …`) has no name to drop it by. None exists in
-        # this schema today; if one appears it counts, under a name no DROP can match.
-        table = None
-        for line in ddl.splitlines():
-            m = re.search(r'CREATE TABLE\s+"?([a-z_][a-z0-9_]*)"?', line)
-            if m:
-                table = m.group(1)
-            for col in re.findall(r'"([a-z_]+)"\s+UUID[^,]*REFERENCES', line):
-                if table:
-                    self.constraints[(table, f"<inline {col}>")] = [col]
-
-        # Tables and their columns.
-        current = None
-        for line in ddl.splitlines():
-            m = re.match(r'CREATE TABLE (?:IF NOT EXISTS )?"?([a-z_][a-z0-9_]*)"?', line)
-            if m:
-                current = m.group(1)
-                self.tables.setdefault(current, {})
-                continue
-            if current is not None:
-                if line.startswith(");") or line.startswith(")"):
-                    current = None
-                    continue
-                c = re.match(r'\s+"([a-z_][a-z0-9_]*)"\s+([A-Z][A-Za-z0-9]*)', line)
-                if c:
-                    # The type is the FIRST word. Finding R3: capturing `[A-Z][A-Za-z ]*` read a
-                    # column as "UUID NOT NULL", which is not "UUID", so every NOT NULL reference was
-                    # skipped as though it were a TEXT label — seven unkeyed references passed.
-                    self.tables[current][c.group(1)] = c.group(2)
-        for table, col, kind in re.findall(
-            r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+ADD COLUMN\s+"?([a-z_][a-z0-9_]*)"?\s+([A-Z]+)',
-            ddl,
-        ):
-            self.tables.setdefault(table, {})[col] = kind
-        for table, col in re.findall(
-            r'ALTER TABLE\s+"?([a-z_][a-z0-9_]*)"?\s+DROP COLUMN\s+(?:IF EXISTS\s+)?"?([a-z_][a-z0-9_]*)"?',
-            ddl,
-        ):
-            self.tables.get(table, {}).pop(col, None)
-
-    @property
-    def foreign_keys(self) -> set[tuple[str, str]]:
-        """Every (table, column) covered by a foreign key that still exists."""
-        return {(table, col) for (table, _), cols in self.constraints.items() for col in cols}
 
     @property
     def objects(self) -> set[str]:
         names = set(self.tables) | self.functions | self.triggers | self.policies | self.indexes
-        names |= self.settings
+        names |= self.constraints | self.settings
         for cols in self.tables.values():
-            names |= set(cols)
+            names |= cols
         return names
-
-    def target_of(self, column: str) -> str | None:
-        """The table a `<something>_id` column names, following a role prefix and the alias."""
-        stem = column[:-3]
-        for prefix in ROLE_PREFIXES:
-            if stem.startswith(prefix):
-                stem = stem[len(prefix) :]
-                break
-        stem = TABLE_ALIASES.get(stem, stem)
-        return stem if stem in self.tables else None
 
 
 def tracked() -> list[str]:
@@ -277,41 +186,46 @@ def tracked() -> list[str]:
     return out.split()
 
 
-def resolve_path(cited: str, citing: str, files: set[str], suffixes: dict[str, str]) -> bool:
-    """Exact, then suffix-of-a-tracked-path, then relative to the citing file. No fourth option,
-    and no silent skip: a path that fails all three is reported."""
-    if cited in files or cited in EXEMPT_PATHS:
-        return True
-    if cited in suffixes:
-        return True
-    candidate = (Path(citing).parent / cited).as_posix()
-    normalised = Path(candidate).resolve()
+def resolve(cited: str, citing: str, known: set[str], suffixes: set[str]) -> str | None:
+    """None if `cited` resolves — exactly, as a suffix of a tracked path, or relative to the citing
+    file — and otherwise why not. A path that climbs out of the repository is NOT resolved (S2): it
+    used to return True here under a comment claiming the report said so, and the report did not."""
+    if cited in known or cited in suffixes:
+        return None
+    root = Path.cwd().resolve()
+    normalised = (root / Path(citing).parent / cited).resolve()
     try:
-        rel = normalised.relative_to(Path.cwd().resolve()).as_posix()
+        rel = normalised.relative_to(root).as_posix()
     except ValueError:
-        return True  # outside the repository; unjudgeable from here, and said so in the report
-    return rel in files or normalised.exists()
+        return "climbs out of the repository, where nothing can vouch for it"
+    if rel in known or (rel + "/") in known:
+        return None
+    return "tried it as a repository path, as a path relative to a workspace root, and relative to this file"
 
 
 def main() -> int:
     files = tracked()
-    fileset = set(files)
-    # Every proper suffix of every tracked path, so `db/test/harness.ts` resolves to
-    # `new-app/db/test/harness.ts` — a citation relative to a workspace root, which is how people
-    # actually write them, and which the old tool silently skipped.
-    suffixes: dict[str, str] = {}
+    # Tracked files, and every tracked directory written with a trailing slash.
+    known: set[str] = set(files)
     for f in files:
         parts = f.split("/")
         for i in range(1, len(parts)):
-            suffixes.setdefault("/".join(parts[i:]), f)
+            known.add("/".join(parts[:i]) + "/")
+    # Every proper suffix of everything known, so `db/test/harness.ts` resolves to
+    # `new-app/db/test/harness.ts` — a citation relative to a workspace root, which is how people
+    # actually write them, and which the old tool silently skipped.
+    suffixes: set[str] = set()
+    for k in known:
+        parts = k.rstrip("/").split("/")
+        tail = "/" if k.endswith("/") else ""
+        for i in range(1, len(parts)):
+            suffixes.add("/".join(parts[i:]) + tail)
 
     migration_files = sorted(f for f in files if f.startswith(MIGRATIONS) and f.endswith(".sql"))
     schema = Schema(migration_files)
     objects = schema.objects
 
     problems: list[str] = []
-    owed: list[str] = []
-    out_of_scope: list[str] = []
     exempted: list[str] = []
     exemptions_used: set[tuple[str, str]] = set()
 
@@ -323,74 +237,32 @@ def main() -> int:
             return
         problems.append(problem)
 
-    # --- 2. every `*_id` column is enforced or resolvable ---
-    for table, cols in sorted(schema.tables.items()):
-        for col in sorted(cols):
-            if not col.endswith("_id"):
-                continue
-            if (table, col) in schema.foreign_keys:
-                continue
-            if (table, col) in UNCONSTRAINED_IDS:
-                continue
-            if (table, col) in OWED_IDS:
-                owed.append(f"{table}.{col}: {OWED_IDS[(table, col)]}")
-                continue
-            if cols[col].upper() != "UUID":
-                # Not a row reference at all: `mfa_totp.secret_key_id` is TEXT and names a wrapping
-                # key in the key store. Stating the scope beats an exemption list that would grow
-                # with every external identifier the product ever holds — and it is PRINTED, by
-                # name, so the scope is visible rather than a skip (R3).
-                out_of_scope.append(f"{table}.{col} ({cols[col]})")
-                continue
-            # A foreign key is REQUIRED, not merely preferred, and the first version of this check
-            # got that wrong: it accepted "has a key OR names a real table", so deleting the key
-            # from a column whose table existed passed silently — the plant that was supposed to
-            # reproduce J9 did not go red. An unenforced reference is the defect whether or not the
-            # target happens to exist, so the two conditions are reported separately.
-            target = schema.target_of(col)
-            if target is None:
-                problems.append(
-                    f"{MIGRATIONS}: `{table}.{col}` has no foreign key and names no table that "
-                    f"exists — a reference the schema neither enforces nor satisfies (J9's class)"
-                )
-            else:
-                problems.append(
-                    f"{MIGRATIONS}: `{table}.{col}` names `{target}`, which exists, and has NO "
-                    f"foreign key — nothing stops it pointing at a row that was never there"
-                )
-
-    # --- 1, 3, 4. citations ---
     scanned = 0
+    evidence_skipped: list[str] = []
     for path in files:
         if not path.endswith(SCAN_EXTS) or path.startswith(SKIP_SCAN_PREFIXES):
-            continue
-        if path in EVIDENCE_DOCS:
             continue
         try:
             text = Path(path).read_text(encoding="utf-8")
         except (UnicodeDecodeError, FileNotFoundError):
             continue
+        if path in EVIDENCE_DOCS:
+            n = len(CITED_PATH.findall(text)) + len(CITED_DIR.findall(text))
+            evidence_skipped.append(f"{path} ({n} path citations): {EVIDENCE_DOCS[path]}")
+            continue
         scanned += 1
-        lines = text.splitlines()
         in_migration = path.startswith(MIGRATIONS) and path.endswith(".sql")
 
-        # No line is skipped for what the sentence around it says. Finding R11: a window of ~30
-        # "denial" phrases ("rather than", "deleted", "would be", ...) excused 35 of 222 path
-        # citations, while the banner said "0 citations skipped" — and "rather than" is house style
-        # here. A citation that is deliberately to something absent is listed in
-        # CITATION_EXEMPTIONS with its reason, and the list is printed on every run.
-        for number, line in enumerate(lines, 1):
+        # No line is skipped for what the sentence around it says (finding R11). A citation that is
+        # deliberately to something absent is in CITATION_EXEMPTIONS with its reason, printed below.
+        for number, line in enumerate(text.splitlines(), 1):
             where = f"{path}:{number}"
 
-            for cited in CITED_PATH.findall(line):
-                if not cited.endswith(PATH_EXTS):
-                    continue
-                if not resolve_path(cited, path, fileset, suffixes):
-                    report(
-                        path, cited,
-                        f"{where}: `{cited}` resolves to nothing — tried it as a repository path, "
-                        f"as a path relative to a workspace root, and relative to this file",
-                    )
+            cited_paths = [c for c in CITED_PATH.findall(line) if c.endswith(PATH_EXTS)]
+            for cited in cited_paths + CITED_DIR.findall(line):
+                why = resolve(cited, path, known, suffixes)
+                if why is not None:
+                    report(path, cited, f"{where}: `{cited}` resolves to nothing — {why}")
 
             for table, column in CITED_QUALIFIED.findall(line):
                 if table not in schema.tables:
@@ -402,12 +274,10 @@ def main() -> int:
                     f"{where}: `{table}.{column}` — `{table}` is a real table and has no such column",
                 )
 
-            # A NEAR MISS of a real column, anywhere — including prose documents. This is the one
-            # identifier check that runs outside the migrations, and it is safe there precisely
-            # because it is a near miss: a document legitimately names tables that are planned and
-            # not yet built, but it does not accidentally drop the unit suffix from a money column's
-            # name. That was M19's defect surviving in a document after being
-            # fixed in the migrations, and it is what finding J12 found in the writer table.
+            # A NEAR MISS of a real column, anywhere — including prose documents. Safe outside the
+            # migrations precisely because it is a near miss: a document legitimately names planned
+            # tables, but it does not accidentally drop the unit suffix from a money column's name
+            # (M19; J12's writer table; R11's hidden R1.24b).
             for cited in CITED_IDENTIFIER.findall(line):
                 if cited in objects:
                     continue
@@ -427,7 +297,7 @@ def main() -> int:
                     report(
                         path, cited,
                         f"{where}: `{cited}` is named here and is not a table, column, function, "
-                        f"trigger, policy, index or setting that any migration declares",
+                        f"trigger, policy, index, constraint or setting in the schema the migrations build",
                     )
 
     # An exemption that no longer matches a failing citation is a comment pretending to be a
@@ -445,39 +315,34 @@ def main() -> int:
     unseen = [f for f in untracked if f.endswith(SCAN_EXTS) and not f.startswith(SKIP_SCAN_PREFIXES)]
 
     print(
-        f"scanned {scanned} files against {len(schema.tables)} tables, "
-        f"{len(schema.functions)} functions, {len(schema.triggers)} triggers, "
-        f"{len(schema.policies)} policies; {len(exempted)} citation(s) exempted by name, "
-        f"none skipped"
+        f"scanned {scanned} files against the catalogue list ({len(schema.tables)} tables, "
+        f"{len(schema.functions)} functions, {len(schema.triggers)} triggers, {len(schema.policies)} "
+        f"policies, {len(schema.indexes)} indexes, {len(schema.constraints)} constraints); "
+        f"{len(exempted)} citation(s) exempted by name; {len(evidence_skipped)} evidence document(s) "
+        f"not scanned, listed below"
     )
+    print(f"\n{len(evidence_skipped)} evidence document(s) not scanned, by purpose (Rule 21.8):")
+    for item in evidence_skipped:
+        print(f"  {item}")
     if exempted:
         print(f"\n{len(exempted)} citation(s) exempted, each with its reason:")
         for item in exempted:
             print(f"  {item}")
-    if out_of_scope:
-        print(
-            f"\n{len(out_of_scope)} `*_id` column(s) out of scope, not UUID so not a row reference: "
-            + ", ".join(out_of_scope)
-        )
     if unseen:
         print(f"\nNOTE: {len(unseen)} untracked file(s) not scanned (this reads git ls-files):")
         for f in unseen[:10]:
             print(f"  {f}")
-    if owed:
-        print(f"\n{len(owed)} reference(s) recorded as OWED rather than enforced:")
-        for item in owed:
-            print(f"  {item}")
     if problems:
         print(f"\n{len(problems)} unresolved citation(s):")
         for problem in problems:
             print(f"  {problem}")
         print(
             "\nA name that resolves to nothing reads as evidence and is not. This tool resolves "
-            "against parsed DDL and a full file index, and skips nothing silently — which is how "
-            "J1 and J9 survived four rounds of patching the previous guard."
+            "against the catalogue the migrations build and a full file index, and states everything "
+            "it does not scan."
         )
         return 1
-    print("Every cited path and every named database object resolves.")
+    print("\nEvery cited path and every named database object resolves.")
     return 0
 
 

@@ -247,7 +247,7 @@ including which of three versions they accepted.
 | `quote_section` | A named, ordered group of lines, so a quote reads the way a contractor talks about the job. | Belongs to one quote. Named by review (F14): the requirement existed with no entity to live in. |
 | `quote_line` | A line on the working quote, in a section, ordered. | Belongs to one quote and one section. Recipe-expanded lines remember the recipe, so a recipe change can offer to refresh a draft — never an issue. |
 | `variation` | A change to accepted work: added, removed or altered scope, with its own price. Immutable once recorded; a mistake is corrected by another variation. Carries `client_reference`, a device-supplied idempotency key unique per issue, because it may be recorded offline and replayed — and a duplicate of an append-only row that feeds the ceiling raises it permanently (H11). | First-class, not a new quote — the client has already accepted the original. **Release 1 records it; release 2 makes it signable** (PRD W6a). Until then it carries `recorded_by_user_id` and is what the ceiling in §6.2a measures against, so "who agreed to the extra $40,000" has an answer of *known strength* rather than a signature it does not have. |
-| `acceptance` | The client accepting or declining an issue. | Records the signer's name, timestamp, IP, user agent, the destination actually used and the consent-to-sign (ADR 0024), and **references the `document_render` row whose hash is the document signed** — it does not carry a hash of its own (F17). Immutable. One acceptance per issue. |
+| `acceptance` | The client accepting or declining an issue. | Records the signer's name, timestamp, IP, user agent, the destination actually used and the consent-to-sign (ADR 0024), and **references the `document_render` row whose hash is the document signed** — it does not carry a hash of its own (F17). Immutable. **Many responses per issue, at most one accepted** — declines are unlimited and may be followed by an acceptance; a decline cannot follow an acceptance (J13). |
 | `acceptance_evidence` | The pieces of evidence behind one acceptance: a code confirmed, a signed document, a deposit paid, later an inbound reply. Append-only. | **The grade is derived from these rows, never stored** (`../design/acceptance-evidence.md`, approved 2026-09-26) — so it rises when evidence arrives and cannot drift, and a tenant-uploaded screenshot **or signed document** is graded 1 rather than higher because it is
 evidence the tenant can fabricate — the grade measures who witnessed the acceptance, never how convincing
 the artefact looks (finding J5). Grade 5 is retired and its number is not reused. |
@@ -392,8 +392,9 @@ Read the function for the precedence between them (its latest definition is in
 **Transitions that must be impossible, and are therefore tested** (`db/test/documents-core.test.ts`):
 editing or deleting an issue · editing an acceptance · accepting twice, or after a withdrawal · a decline
 after an acceptance · withdrawing a decline · invoicing past the ceiling ·
-sealing a second issue for the same (quote, revision) (G4) · writing `issue_balance` outside its function
-· withdrawing an acceptance twice · deleting a balance row.
+sealing a second issue for the same (quote, revision) (G4) · withdrawing an acceptance twice · deleting a
+balance row. (This list named "writing `issue_balance` outside its function" until 2026-10-01; it is not
+impossible — the write flag is not a secret, R5, owed as `docs/THREAT-MODEL.md` §4e — finding S7.)
 
 **Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
 recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to
@@ -475,7 +476,7 @@ somewhere expensive.
 | `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series |
 | `variation` | create | Append-only; the ceiling is re-summed under the lock at sync (§6.2a), never computed on the device. A replay is refused by `client_reference`, not merged |
 | `issue_balance` | **no** — server-side only, and never synced | It is a derived cache behind a lock. A device that could write it could defeat the lock |
-| `acceptance` | **no** — the client signs online (ADR 0024) | First write wins; a second is refused, not merged |
+| `acceptance` | **no** — the client signs online (ADR 0024) | Never merged. Declines are all kept; the first ACCEPTANCE wins and a second is refused; a decline after an acceptance is refused (J13, finding S8) |
 | `invoice`, `client_payment` | read only in v1 | — |
 | `project`, `purchase`, `labour_entry` | create and edit | Last-write-wins per row, with the audit trail carrying the loser. |
 | Entitlements | cached with a **grace period** | Server wins on sync; the grace period is what stops a signal outage from stopping work. |

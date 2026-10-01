@@ -66,7 +66,8 @@ by a comment asking politely.
 There is no `SECURITY DEFINER` function, and the application role does hold table grants — the test
 harness grants write on every table. What enforces the writer set is **row security**:
 `new-app/db/policies/002-documents-isolation.sql` gives `issue_balance` write policies that require a
-transaction-local flag only `issue_balance_open()` and `issue_balance_apply()` set. Since J2,
+transaction-local flag that `issue_balance_open()` and `issue_balance_apply()` set (*"only" removed
+2026-10-01, finding S7: the next sentences say why it is not only them*). Since J2,
 `issue_balance_apply()` is reached through triggers on every table that moves a total; `issue_balance_open()`
 is NOT — the acceptance path must call it, and an acceptance inserted without that call has no balance row
 (so it can be invoiced against nothing: the recompute raises). *Corrected the same day, finding R7.* And

@@ -208,7 +208,7 @@ model AppSession {
   id String @id @default(uuid()) @db.Uuid
 
   userId String  @map("user_id") @db.Uuid
-  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: Restrict)
+  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
 
   /// Denormalised from app_user deliberately: reading it from there would require a
   /// tenant to already be set, which is the problem this table exists to solve.
@@ -264,7 +264,7 @@ model AppCredential {
   /// One password per user. A passkey or an OAuth identity will be its own table, not
   /// another row here, so this model stays "the password".
   userId String  @unique @map("user_id") @db.Uuid
-  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: Restrict)
+  user   AppUser @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
 
   /// Denormalised for the same reason AppSession does it: the tenant must be known
   /// before row-level security can be satisfied, and this is where it comes from.
@@ -579,7 +579,7 @@ model QuoteSection {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   quoteId  String @map("quote_id") @db.Uuid
-  quote    Quote  @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: Restrict)
+  quote    Quote  @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
 
   title    String
   position Int
@@ -604,9 +604,9 @@ model QuoteLine {
   tenantId  String       @map("tenant_id") @db.Uuid
   tenant    Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   quoteId   String       @map("quote_id") @db.Uuid
-  quote     Quote        @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: Restrict)
+  quote     Quote        @relation(fields: [quoteId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
   sectionId String       @map("section_id") @db.Uuid
-  section   QuoteSection @relation(fields: [sectionId, tenantId], references: [id, tenantId], onDelete: Cascade, onUpdate: Restrict)
+  section   QuoteSection @relation(fields: [sectionId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
 
   description String
   position    Int
@@ -921,17 +921,19 @@ model CreditNote {
 
 /// The derived cache that carries the lock (ADR 0025 decision 2).
 ///
-/// The application cannot write this table at all: its write policies require a transaction-local
-/// flag that only `issue_balance_apply()` sets. Prisma cannot express that, which is exactly why
-/// the rule lives in the migration.
+/// Who can write this table, and the two limits of that, are stated once, in ADR 0025 decision 2 (as
+/// amended 2026-09-27): write policies that require a transaction-local flag, which the application
+/// can also set itself (R5, owed as THREAT-MODEL §4e). Prisma cannot express a row-security policy,
+/// which is why the rule lives in the migration. Rule 21.10: no writer list here (finding S7).
 model IssueBalance {
   issueId  String     @id @map("issue_id") @db.Uuid
   issue    QuoteIssue @relation(fields: [issueId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
   tenantId String     @map("tenant_id") @db.Uuid
   tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
-  /// Written once from the accepted issue's own frozen lines, never again. Safe as a copy ONLY
-  /// because the issue is immutable (finding G12).
+  /// A copy of the accepted issue's frozen total. Safe as a copy ONLY because the issue is immutable
+  /// (finding G12). No variation, invoice, void or credit note moves it — the J12 block of
+  /// documents-core.test.ts asserts that, rather than this comment (Rule 21.10).
   acceptedTotalMinor BigInt @map("accepted_total_minor")
 
   /// Re-summed from the rows inside the lock on every change, so these are a cache and never a

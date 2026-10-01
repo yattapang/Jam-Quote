@@ -757,7 +757,11 @@ size of the set it examined, including what it skipped.
 > beside its result, because a guard that cannot state the set it examined will eventually examine a
 > smaller one (M20). Its first version printed "0 citations skipped" while skipping every line near a
 > "denial" phrase (R11) — the banner must count what the tool actually passes over, not what its
-> author meant it to.
+> author meant it to. And the rule then applied to its own replacement: that tool's SQL parser missed
+> NOT NULL columns (R3), and its fix missed ordinary DDL forms and never forgot a dropped index (S3,
+> S4). So on 2026-10-01 the parser was replaced by the database's own catalogue — a list generated from
+> it after every migration, and a test that fails if the list is stale — rather than patched a third
+> time. "Parsed structure" in this rule means the real thing's own account of itself where one exists.
 
 **A new guard is planted against before it is reported, and its own first version is suspect.**
 21.9's own tool failed its first plant: the rule "a foreign key **or** a table of that name" passed

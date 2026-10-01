@@ -196,7 +196,7 @@
     },
     "21.9": {
       "title": "A guard patched twice for the same class is replaced, not patched a third time (added\n2026-09-26)",
-      "hash": "473bc4347ade1b83"
+      "hash": "cfe4c953f8f412a5"
     },
     "21.10": {
       "title": "A sentence that says who may write a table cites the test that executes it, or does not exist\n(added 2026-10-01)",

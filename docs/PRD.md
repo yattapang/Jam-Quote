@@ -342,8 +342,8 @@ demonstrated, it is not a requirement, it is a hope.
   one transaction: credit the excess against an invoice, then record the variation. The refusal names
   the amount to credit. Until 2026-09-26 this sentence promised a negative total that the ordinary
   case — scope removed after progress billing — could not record (`docs/design/scope-reduction.md`).
-- **R1.22b** Recording one **re-derives the ceiling** for that issue — not the accepted total, which is
-  written once and never again (R1.24b). The distinction matters and getting it wrong was finding H3: the
+- **R1.22b** Recording one **re-derives the ceiling** for that issue — not the accepted total, which no
+  variation moves (R1.24b). The distinction matters and getting it wrong was finding H3: the
   ceiling is `accepted_total + variations_total`, and a variation moves the second term. Variations are
   immutable once recorded; a mistake is corrected by another variation.
 - **R1.22c** Revising an accepted issue **once money has moved on it** — any invoice or variation — is
@@ -383,9 +383,11 @@ demonstrated, it is not a requirement, it is a hope.
   invariant stated twice in prose with nowhere to live (F4), which is Rule 1.10's "invariant with no
   owner".
 - **R1.24b** `issue_balance` is a **derived cache with a lock**, and every writer re-sums from the
-  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total_minor` is written
-  once, by the acceptance transaction, from the issue's own frozen lines and never again — safe only
-  because the issue is immutable (G12).
+  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total_minor` is a
+  copy of the accepted issue's frozen total — safe only because the issue is immutable (G12). That no
+  variation, invoice, void or credit note moves it is asserted by the J12 block of
+  `db/test/documents-core.test.ts`; who can write the row at all, and the limit of that (R5), is stated
+  once, in ADR 0025 decision 2 (Rule 21.10).
 - **R1.24e** The **reconciliation job runs nightly per tenant**, rebuilds all three derived columns,
   and on a mismatch writes an audit entry, alerts us and **refuses further invoicing against that issue**
   until a person has looked. It does not self-heal: self-healing erases the evidence of the defect that
