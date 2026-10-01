@@ -1,0 +1,89 @@
+-- The database privilege model (findings R5 and J14, and `docs/THREAT-MODEL.md` §4g's deployment check;
+-- design `docs/design/privilege-model.md`, approved by the owner 2026-10-01, option A throughout).
+--
+-- ## WHAT CHANGES
+--
+-- 1. THREE ROLES, MADE HERE (D3). The privilege model is code, reviewed and tested, instead of grants the
+--    test harness invented — which is how R5 hid. All three are NOLOGIN group roles:
+--    - `pryvis_app`: the application. A deployment's login role is made a member of it and of nothing else.
+--    - `pryvis_balance`: owns `issue_balance_open()` and `issue_balance_apply()`, and is the only role that
+--      may write `issue_balance`.
+--    - `pryvis_auth`: owns the credential door functions, and is the only role that may touch the
+--      credential tables.
+--    Roles belong to the cluster, not the database, so they are created only if absent; the grants are per
+--    database and are made every time.
+-- 2. R5 FIXED: the application has SELECT on `issue_balance` and nothing else. The balance functions are
+--    SECURITY DEFINER, owned by `pryvis_balance`, and the write policies require that role
+--    (`db/policies/006-privilege-model.sql`) instead of the setting `pryvis.balance_write`, which the
+--    application could set itself. The flag is gone.
+-- 3. J14 FIXED, WITH `app_session` ADDED (D1): the application has NO privilege on `app_credential`,
+--    `app_session`, `mfa_totp`, `mfa_recovery_code` or `registration_claim`. It reaches them only through
+--    SECURITY DEFINER door functions, each reading or writing ONE row by its key — a defect in our server
+--    can no longer dump a table. `registration_claim` has no door yet: sign-up is not built.
+-- 4. SESSION SECRETS ARE STORED AS HASHES (D2). `app_session.token_hash` holds the SHA-256 of the secret
+--    the client holds; sessions are found by it. A copy of the table is no longer a list of live logins.
+-- 5. STAFF CAPABILITIES ARE READ-ONLY to the application (D5); the rate limiter's table stays writable.
+-- 6. `least_privilege_violations()` lists what is wrong with the CURRENT role, for the API's start-up
+--    check and for CI (D4): superuser, BYPASSRLS, CREATEROLE, CREATEDB, TEMPORARY, membership of the two
+--    owning roles, or any direct reach into the credential tables, `issue_balance` writes or capability
+--    writes. Empty means least privilege.
+-- 7. Future tables the migrating role creates get the application's ordinary grants by default, so a new
+--    business table needs no grant line; a new SECRET table must be revoked explicitly, and
+--    `db/test/privilege-model.test.ts` fails on any table outside row security the application can reach
+--    and nobody listed.
+--
+-- ## WHAT THIS DOES NOT DO (Rule 21.4)
+--
+-- - It does not make a defect in our server harmless. A door that WRITES — creating a session, rehashing a
+--   password, recording a factor — can be called by an injection with a user id it knows, because the
+--   application must be able to do exactly that. What the doors remove is the bulk read: no query the
+--   application can run returns more than one credential row. The ordinary path still reads and writes the
+--   tenant's business rows under row security, and a hostile `set_config` of `app.tenant_id` still chooses
+--   the tenant (row security stops forgetting, not hostility — R5's own lesson).
+-- - It does not bind the deployed LOGIN role: that role is created outside the migrations. The API's
+--   start-up check and `least_privilege_violations()` are what refuse an over-privileged one.
+-- - `ALTER FUNCTION … OWNER TO` needs the migrating role to be able to SET ROLE to the new owner. A
+--   superuser can; on a managed database the migrating role must be granted the two owning roles WITH SET
+--   (PostgreSQL 16) — stated in the design's deployment section, and the migration fails loudly otherwise.
+-- - `app_session.token_hash` is added NOT NULL with no default: the migration needs an empty `app_session`.
+--   The owner confirmed on 2026-10-01 that no deployed or shared database holds real data.
+-- - It does not cover the staff console's own privileges, or staff MFA, which stay owed.
+
+-- ---------------------------------------------------------------------------
+-- 1. The roles, if absent.
+-- ---------------------------------------------------------------------------
+DO $roles$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'pryvis_app') THEN
+    CREATE ROLE pryvis_app NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'pryvis_balance') THEN
+    CREATE ROLE pryvis_balance NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'pryvis_auth') THEN
+    CREATE ROLE pryvis_auth NOLOGIN;
+  END IF;
+END;
+$roles$;
+
+-- ---------------------------------------------------------------------------
+-- 2. Grants. The application: ordinary access to every table, then the exceptions taken away.
+-- ---------------------------------------------------------------------------
+GRANT USAGE ON SCHEMA public TO pryvis_app, pryvis_balance, pryvis_auth;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO pryvis_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO pryvis_app;
+
+REVOKE ALL ON "app_credential", "app_session", "mfa_totp", "mfa_recovery_code", "registration_claim"
+  FROM pryvis_app;
+REVOKE INSERT, UPDATE, DELETE ON "issue_balance" FROM pryvis_app;
+REVOKE INSERT, UPDATE, DELETE ON "platform_capability" FROM pryvis_app;
+
+-- The balance role reads what the ceiling reads, and writes only the balance.
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO pryvis_balance;
+REVOKE ALL ON "app_credential", "app_session", "mfa_totp", "mfa_recovery_code", "registration_claim"
+  FROM pryvis_balance;
+GRANT INSERT, UPDATE ON "issue_balance" TO pryvis_balance;
+
+-- The auth role touches the credential tables and nothing else.
+GRANT SELECT, INSERT, UPDATE ON "app_credential", "app_session", "mfa_totp", "mfa_recovery_code",
+  "registration_claim" TO pryvis_auth;

@@ -1,0 +1,63 @@
+-- ---------------------------------------------------------------------------
+-- 7. What is wrong with the CURRENT role (D4). Empty means least privilege. Not SECURITY DEFINER: it must
+--    describe the caller.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION least_privilege_violations() RETURNS TEXT[]
+LANGUAGE plpgsql STABLE SET search_path = pg_catalog, public, pg_temp AS $$
+DECLARE
+  v_role pg_catalog.pg_roles%ROWTYPE;
+  v_out  TEXT[] := ARRAY[]::TEXT[];
+  v_table TEXT;
+BEGIN
+  SELECT * INTO v_role FROM pg_catalog.pg_roles WHERE rolname = current_user;
+  IF v_role.rolsuper THEN v_out := v_out || 'is a superuser'::TEXT; END IF;
+  IF v_role.rolbypassrls THEN v_out := v_out || 'bypasses row security'::TEXT; END IF;
+  IF v_role.rolcreaterole THEN v_out := v_out || 'may create roles'::TEXT; END IF;
+  IF v_role.rolcreatedb THEN v_out := v_out || 'may create databases'::TEXT; END IF;
+  IF has_database_privilege(current_user, current_database(), 'TEMPORARY') THEN
+    v_out := v_out || 'may create temporary tables'::TEXT;
+  END IF;
+  IF NOT pg_has_role(current_user, 'pryvis_app', 'MEMBER') THEN
+    v_out := v_out || 'is not a member of pryvis_app'::TEXT;
+  END IF;
+  IF pg_has_role(current_user, 'pryvis_balance', 'MEMBER') THEN
+    v_out := v_out || 'is a member of pryvis_balance'::TEXT;
+  END IF;
+  IF pg_has_role(current_user, 'pryvis_auth', 'MEMBER') THEN
+    v_out := v_out || 'is a member of pryvis_auth'::TEXT;
+  END IF;
+  FOREACH v_table IN ARRAY ARRAY['app_credential', 'app_session', 'mfa_totp', 'mfa_recovery_code',
+                                 'registration_claim'] LOOP
+    IF has_table_privilege(current_user, 'public.' || v_table, 'SELECT, INSERT, UPDATE, DELETE') THEN
+      v_out := v_out || format('can reach %s directly', v_table);
+    END IF;
+  END LOOP;
+  IF has_table_privilege(current_user, 'public.issue_balance', 'INSERT, UPDATE, DELETE') THEN
+    v_out := v_out || 'can write issue_balance directly'::TEXT;
+  END IF;
+  IF has_table_privilege(current_user, 'public.platform_capability', 'INSERT, UPDATE, DELETE') THEN
+    v_out := v_out || 'can write platform_capability directly'::TEXT;
+  END IF;
+  RETURN v_out;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 8. Re-pin every function's search path (`20260927210000_pin_search_path`): CREATE OR REPLACE above
+--    dropped the pin on the two balance functions' previous definitions, and the new functions must carry
+--    it too. Their own SET clauses already pin; this keeps the rule in one loop, as that migration does.
+-- ---------------------------------------------------------------------------
+DO $pin$
+DECLARE
+  f RECORD;
+BEGIN
+  FOR f IN
+    SELECT p.oid::regprocedure AS signature
+      FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public' AND p.prokind = 'f'
+  LOOP
+    EXECUTE format('ALTER FUNCTION %s SET search_path = pg_catalog, public, pg_temp', f.signature);
+  END LOOP;
+END;
+$pin$;

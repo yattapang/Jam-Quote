@@ -606,6 +606,10 @@ stays writable, staff capabilities become read-only to the application.
 in-session at **Opus** — the credential path and row-security policy text are two of 16.5's three named
 exceptions, and the work is one ordered protocol (roles, then grants, then functions, then the code that calls
 them) that Rule 16.6 says is not delegated in pieces.*
+**Paused 2026-10-01 at the session limit, work saved in `docs/wip/privilege-model/`** (its README says how to
+resume): the migration is written but NOT applied or tested, so it is kept out of `migrations/` (Rule 6). Not
+yet done: the harness and race-suite role changes, the API auth code on the door functions, the tests, plants,
+gate and review.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

@@ -1,0 +1,155 @@
+-- ---------------------------------------------------------------------------
+-- 5. Session secrets stored as hashes (D2).
+-- ---------------------------------------------------------------------------
+-- The hex SHA-256 of the secret the client holds. The secret itself never reaches the database.
+ALTER TABLE "app_session" ADD COLUMN "token_hash" TEXT NOT NULL;
+ALTER TABLE "app_session" ADD CONSTRAINT "app_session_token_hash_shape_check"
+    CHECK ("token_hash" ~ '^[0-9a-f]{64}$');
+CREATE UNIQUE INDEX "app_session_token_hash_key" ON "app_session" ("token_hash");
+
+-- ---------------------------------------------------------------------------
+-- 6. The door functions (D1): the only way the application reaches a credential table. Each runs as
+--    `pryvis_auth`, reads or writes ONE row by its key, and returns at most one row.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION credential_for_email(p_email TEXT)
+RETURNS TABLE (user_id UUID, tenant_id UUID, password_hash TEXT)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT c."user_id", c."tenant_id", c."password_hash" FROM "app_credential" c WHERE c."email" = p_email;
+$$;
+
+CREATE FUNCTION credential_rehash(p_user_id UUID, p_password_hash TEXT) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "app_credential" SET "password_hash" = p_password_hash, "updated_at" = now()
+   WHERE "user_id" = p_user_id;
+$$;
+
+CREATE FUNCTION session_create(p_id UUID, p_token_hash TEXT, p_user_id UUID, p_tenant_id UUID,
+                               p_version INTEGER, p_expires_at TIMESTAMPTZ, p_mfa_pending BOOLEAN)
+RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  INSERT INTO "app_session" ("id", "token_hash", "user_id", "tenant_id", "version", "expires_at", "mfa_pending")
+  VALUES (p_id, p_token_hash, p_user_id, p_tenant_id, p_version, p_expires_at, p_mfa_pending);
+$$;
+
+CREATE FUNCTION session_resolve(p_token_hash TEXT, p_at TIMESTAMPTZ)
+RETURNS TABLE (user_id UUID, tenant_id UUID, version INTEGER, expired BOOLEAN, revoked BOOLEAN,
+               mfa_pending BOOLEAN)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT s."user_id", s."tenant_id", s."version", (s."expires_at" <= p_at), (s."revoked_at" IS NOT NULL),
+         s."mfa_pending"
+    FROM "app_session" s WHERE s."token_hash" = p_token_hash;
+$$;
+
+CREATE FUNCTION session_mark_verified(p_token_hash TEXT, p_at TIMESTAMPTZ) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "app_session" SET "mfa_pending" = false, "mfa_verified_at" = p_at WHERE "token_hash" = p_token_hash;
+$$;
+
+CREATE FUNCTION session_recently_verified(p_token_hash TEXT, p_at TIMESTAMPTZ, p_within INTERVAL)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT COALESCE((SELECT s."mfa_verified_at" IS NOT NULL AND s."mfa_verified_at" > (p_at - p_within)
+                     FROM "app_session" s WHERE s."token_hash" = p_token_hash), false);
+$$;
+
+CREATE FUNCTION mfa_has_confirmed_factor(p_user_id UUID) RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT EXISTS (SELECT 1 FROM "mfa_totp" m WHERE m."user_id" = p_user_id AND m."confirmed_at" IS NOT NULL);
+$$;
+
+-- The secret is AES-256-GCM ciphertext whose key is never in the database (ADR 0021); this returns one
+-- user's, for the server to open.
+CREATE FUNCTION mfa_factor(p_user_id UUID)
+RETURNS TABLE (secret_ciphertext BYTEA, secret_iv BYTEA, secret_tag BYTEA, secret_key_id TEXT,
+               confirmed_at TIMESTAMPTZ, last_used_step BIGINT, failed_attempts INTEGER,
+               locked_until TIMESTAMPTZ)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  SELECT m."secret_ciphertext", m."secret_iv", m."secret_tag", m."secret_key_id", m."confirmed_at",
+         m."last_used_step", m."failed_attempts", m."locked_until"
+    FROM "mfa_totp" m WHERE m."user_id" = p_user_id;
+$$;
+
+-- Replaces an UNCONFIRMED secret, never a confirmed one (resetting a confirmed factor is a staff action).
+CREATE FUNCTION mfa_begin_enrolment(p_user_id UUID, p_ciphertext BYTEA, p_iv BYTEA, p_tag BYTEA,
+                                    p_key_id TEXT) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  INSERT INTO "mfa_totp" ("user_id", "secret_ciphertext", "secret_iv", "secret_tag", "secret_key_id", "updated_at")
+  VALUES (p_user_id, p_ciphertext, p_iv, p_tag, p_key_id, now())
+  ON CONFLICT ("user_id") DO UPDATE
+    SET "secret_ciphertext" = EXCLUDED."secret_ciphertext", "secret_iv" = EXCLUDED."secret_iv",
+        "secret_tag" = EXCLUDED."secret_tag", "secret_key_id" = EXCLUDED."secret_key_id",
+        "failed_attempts" = 0, "locked_until" = NULL, "last_used_step" = NULL, "updated_at" = now()
+    WHERE "mfa_totp"."confirmed_at" IS NULL;
+$$;
+
+CREATE FUNCTION mfa_confirm(p_user_id UUID, p_step BIGINT) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "mfa_totp" SET "confirmed_at" = now(), "last_used_step" = p_step, "failed_attempts" = 0,
+                        "locked_until" = NULL, "updated_at" = now()
+   WHERE "user_id" = p_user_id;
+$$;
+
+CREATE FUNCTION mfa_record_success(p_user_id UUID, p_step BIGINT) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "mfa_totp" SET "last_used_step" = p_step, "failed_attempts" = 0, "locked_until" = NULL,
+                        "updated_at" = now()
+   WHERE "user_id" = p_user_id;
+$$;
+
+CREATE FUNCTION mfa_reseal(p_user_id UUID, p_ciphertext BYTEA, p_iv BYTEA, p_tag BYTEA, p_key_id TEXT)
+RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "mfa_totp" SET "secret_ciphertext" = p_ciphertext, "secret_iv" = p_iv, "secret_tag" = p_tag,
+                        "secret_key_id" = p_key_id, "updated_at" = now()
+   WHERE "user_id" = p_user_id;
+$$;
+
+-- Returns the attempt count after this failure; locks the factor once it reaches p_max.
+CREATE FUNCTION mfa_register_failure(p_user_id UUID, p_max INTEGER, p_at TIMESTAMPTZ, p_lock INTERVAL)
+RETURNS INTEGER
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  UPDATE "mfa_totp"
+     SET "failed_attempts" = "failed_attempts" + 1,
+         "locked_until" = CASE WHEN "failed_attempts" + 1 >= p_max THEN p_at + p_lock ELSE "locked_until" END,
+         "updated_at" = now()
+   WHERE "user_id" = p_user_id
+  RETURNING "failed_attempts";
+$$;
+
+CREATE FUNCTION mfa_add_recovery_code(p_id UUID, p_user_id UUID, p_code_hash TEXT) RETURNS VOID
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  INSERT INTO "mfa_recovery_code" ("id", "user_id", "code_hash") VALUES (p_id, p_user_id, p_code_hash);
+$$;
+
+-- True when an unused code matched and is now spent; single use.
+CREATE FUNCTION mfa_consume_recovery_code(p_user_id UUID, p_code_hash TEXT) RETURNS BOOLEAN
+LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+  WITH spent AS (
+    UPDATE "mfa_recovery_code" SET "used_at" = now()
+     WHERE "user_id" = p_user_id AND "code_hash" = p_code_hash AND "used_at" IS NULL
+    RETURNING 1)
+  SELECT EXISTS (SELECT 1 FROM spent);
+$$;
+
+DO $doors$
+DECLARE
+  f TEXT;
+BEGIN
+  FOREACH f IN ARRAY ARRAY[
+    'credential_for_email(text)', 'credential_rehash(uuid, text)',
+    'session_create(uuid, text, uuid, uuid, integer, timestamptz, boolean)',
+    'session_resolve(text, timestamptz)', 'session_mark_verified(text, timestamptz)',
+    'session_recently_verified(text, timestamptz, interval)',
+    'mfa_has_confirmed_factor(uuid)', 'mfa_factor(uuid)',
+    'mfa_begin_enrolment(uuid, bytea, bytea, bytea, text)', 'mfa_confirm(uuid, bigint)',
+    'mfa_record_success(uuid, bigint)', 'mfa_reseal(uuid, bytea, bytea, bytea, text)',
+    'mfa_register_failure(uuid, integer, timestamptz, interval)',
+    'mfa_add_recovery_code(uuid, uuid, text)', 'mfa_consume_recovery_code(uuid, text)'
+  ] LOOP
+    EXECUTE format('ALTER FUNCTION %s OWNER TO pryvis_auth', f);
+    EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC', f);
+    EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO pryvis_app', f);
+  END LOOP;
+END;
+$doors$;
+
