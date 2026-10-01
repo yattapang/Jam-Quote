@@ -499,6 +499,12 @@ issue before a client responds; the no-stuck walk aims responses at the current 
 four, re-measured with no floor lowered. **J6, J7, J8 and J11 now: Fixed, re-review owed.** Next: the same
 adversarial reviewer, then a mechanical closing check.
 
+**Second re-review — J6, J7, J8, J11, adversarial — launched 2026-10-01 on the owner's instruction.**
+*Delegation (Rule 16.5), declared before launch: one `commit-reviewer` agent, **Opus**, the tier that found
+W1-W12. It must confirm each W finding closed by executing the original bypass, and hunt for what the fix
+broke — above all whether "refuse what you cannot see" refuses anything legitimate. It reviews `e22b010`;
+no build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
