@@ -570,6 +570,8 @@ mechanical closing check for the three.
 *Delegation (Rule 16.5), declared before launch: one `general-purpose` agent, **Sonnet**. Documents only: each
 item is a phrase that must appear, or a stale phrase that must be gone, in a named file, with the expected
 output run before launch on the HEAD the brief names (M36, M37). No build work, gate run or commit alongside it.*
+**Reported 2026-10-01: every item PASSED. H17, H19, H20 CLOSED — review 3 is now 20 of 20 Closed.** One
+stale sentence it noted (`docs/SERVICE-REGISTER.md` §4a) corrected in the closing commit.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

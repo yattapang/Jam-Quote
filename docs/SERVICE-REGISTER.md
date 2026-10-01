@@ -154,8 +154,8 @@ options as they stood:
 | Paid Render instance | A monthly fee | No spin-down. The eventual answer once anybody is paying us (Rule 10's trigger for leaving a free tier) |
 | External uptime pinger (e.g. UptimeRobot) | Free tier, 5-minute interval | Would work, unlike ours. It is a **new third-party service** that must be recorded here, and it can reach a production endpoint — so it gets its own decision, not a quiet addition |
 
-Until one is chosen, the honest statement is: **the prototype API sleeps, and the first visitor
-after an idle period waits about a minute.** That is acceptable for a prototype and unacceptable at
+Until launch, the honest statement is still: **the prototype API sleeps, and the first visitor after an
+idle period waits about a minute** — softened for the share page by waking the API when it opens. That is acceptable for a prototype and unacceptable at
 launch, and it is written here so it is a decision rather than a surprise.
 
 ## 5. Where the secrets live
