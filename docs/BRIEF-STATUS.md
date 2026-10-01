@@ -431,7 +431,13 @@ noted two harmless differences between plants and findings rather than passing o
 (Rule 16.5), declared before launch: one `general-purpose` agent, **Sonnet**. Both remaining items are
 bounded — one plant with a stated expected result, and three rows of text to read — so the cheapest
 reliable tier is the one that follows stated expectations exactly; every expectation run before launch on
-the HEAD the brief names (M36, M37). No build work, gate run or commit alongside it.*
+the HEAD the brief names (M36, M37). No build work, gate run or commit alongside it.* **Reported 2026-10-01:
+every item PASSED, no deviation. J3 and J9 CLOSED.**
+
+**Review 4 now:** Closed — J1, J2, J3, J4, J5, J9, J10, J12, J13, J15, J16 (11) · Open, not started — J6,
+J7, J8, J11, J14. **Next, in the owner's order:** size J6, J7, J8, J11 and J14 (J6 first); the small
+refusal of responses on superseded or unnumbered issues; then review 3's H17, H19, H20 and the ten legacy
+gaps; then writing the three adopted governance rules into `docs/RULES.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
