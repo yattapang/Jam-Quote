@@ -566,6 +566,11 @@ R1.20b, R1.21a, R1.32, N10, §8a; `docs/THREAT-MODEL.md` §4a; `docs/SERVICE-REG
 `docs/design/domain-model.md` §8; the site guard's coverage statement. **Fixed, re-review owed.** Next: one
 mechanical closing check for the three.
 
+**Closing check — H17, H19, H20, mechanical — launched 2026-10-01**, as the owner approved with the sizing.
+*Delegation (Rule 16.5), declared before launch: one `general-purpose` agent, **Sonnet**. Documents only: each
+item is a phrase that must appear, or a stale phrase that must be gone, in a named file, with the expected
+output run before launch on the HEAD the brief names (M36, M37). No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
