@@ -405,7 +405,10 @@ Opus right again; every J1 finding was a planted edge case, which no mechanical 
 third. The owner's change to the brief (2026-10-01): a NEW minor J1 finding is reported as a **candidate
 stated limit** for the owner to accept or reject, not as an automatic reopen; a major finding, a miss on a
 form the tool already claims to check, or an overclaim still reopens it — otherwise J1 cannot converge. No
-build work, gate run or commit alongside it.*
+build work, gate run or commit alongside it.* Expectations re-run on `4a81a3d` before launch and held.
+**Reported 2026-10-01: V1-V18, copied verbatim into `PRD-REVIEW-4.md` (`a056d05`). J1 Open** — all minor:
+misses V1-V6, overclaims V7-V9, V11, V12; candidate limits V3 (spaced call), V10, V14. **J12 Open** —
+V15-V18, V16 major.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
