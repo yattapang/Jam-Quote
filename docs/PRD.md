@@ -382,8 +382,9 @@ demonstrated, it is not a requirement, it is a hope.
   here — two invoices each individually under the total are together over it. Review found this
   invariant stated twice in prose with nowhere to live (F4), which is Rule 1.10's "invariant with no
   owner".
-- **R1.24b** `issue_balance` is a **derived cache with a lock**, and every writer re-sums from the
-  underlying rows **inside** the lock rather than trusting the cached figure. `accepted_total_minor` is a
+- **R1.24b** `issue_balance` is a **derived cache with a lock**: the balance functions re-sum from the
+  underlying rows **inside** the lock rather than trusting the cached figure. They cannot stop a caller
+  that sets the write flag itself (R5, owed as `docs/THREAT-MODEL.md` §4e; Rule 21.10, finding T10). `accepted_total_minor` is a
   copy of the accepted issue's frozen total — safe only because the issue is immutable (G12). That no
   variation, invoice, void or credit note moves it is asserted by the J12 block of
   `db/test/documents-core.test.ts`; who can write the row at all, and the limit of that (R5), is stated

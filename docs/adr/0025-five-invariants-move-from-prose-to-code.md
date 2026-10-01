@@ -38,7 +38,9 @@ live in code, and the documents point at them.
 thing that does not exist — an invariant reading stronger than it is, which is worse than a weak one
 honestly labelled.
 
-**Where it now lives:** one expression, in the migration, as the function every writer calls. Neither
+**Where it now lives:** one expression, in the migration, as one function, `issue_ceiling_minor()`, that
+every ceiling check reads (*"every writer calls" corrected 2026-10-01, finding T10 — a caller that sets the
+write flag calls nothing, R5*). Neither
 document restates the arithmetic; both link to it. When release 2 makes variations signable, **one
 expression changes** and the documents do not need to.
 
@@ -73,8 +75,10 @@ is NOT — the acceptance path must call it, and an acceptance inserted without 
 (so it can be invoiced against nothing: the recompute raises). *Corrected the same day, finding R7.* And
 the flag is not a secret: a caller that sets it itself can write `issue_balance` directly — the policies
 stop the application forgetting, not a hostile caller (finding R5). The decision stands — the writer set is
-enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and the bullet above
-naming a `SECURITY DEFINER` function is kept as the decision of its day. J2's disposition credited this
+enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and all three bullets
+above are kept as the decision of its day, none built as written: there is no `SECURITY DEFINER` function,
+the writer list is not closed (R5), and no parser-based guard exists (*the last two added 2026-10-01,
+finding T10*). J2's disposition credited this
 amendment before it existed; that is what Q7 found.
 
 ---
@@ -128,7 +132,8 @@ because the row *is* the record.
 - **The `issue_balance` row is not deleted.** Deleting it would reintroduce Decision 2's empty-lock
   hole.
 - ~~`accepted_total_minor` returns to zero while the issue is not accepted.~~ **CORRECTED 2026-09-26: this
-  contradicted Decision 2**, which says `accepted_total_minor` is written once, "never again". Both cannot
+  contradicted Decision 2**, which then said `accepted_total_minor` is written once, "never again" (*it no
+  longer does; tense corrected 2026-10-01, finding T10*). Both cannot
   hold, and the contradiction sat inside one ADR — the same failure the ADR was written to stop, one
   level up. Resolved in favour of Decision 2, because an immutable column is what makes the copy safe
   at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change.

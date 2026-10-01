@@ -201,7 +201,7 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
       };
 
       /**
-       * Tables the application may read but may only WRITE through a function.
+       * Tables whose writes must carry the balance-write flag — meant for the balance functions only.
        *
        * A third shape, and it exists because the other two could not express `issue_balance`
        * (ADR 0025 decision 2). It is legitimately mutable — it is a derived cache — so append-only
@@ -209,8 +209,9 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
        * ALL commands" rule is wrong too.
        *
        * The value is the predicate that must appear in every write policy. Asserting it is the
-       * point: it turns "only a function writes this" from a sentence in a design document into a
-       * property this guard checks. Without it, someone could drop the flag condition and leave a
+       * point: it turns "every write policy demands the flag" from a sentence into a property this
+       * guard checks. It does NOT check that only a function sets the flag — nothing does, and the
+       * application can set it itself (R5; finding T10 corrected the claim that it did). Without it, someone could drop the flag condition and leave a
        * table that reads as function-guarded and is not.
        */
       /**

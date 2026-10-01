@@ -936,8 +936,8 @@ model IssueBalance {
   /// documents-core.test.ts asserts that, rather than this comment (Rule 21.10).
   acceptedTotalMinor BigInt @map("accepted_total_minor")
 
-  /// Re-summed from the rows inside the lock on every change, so these are a cache and never a
-  /// second source of truth.
+  /// Re-summed from the rows inside the lock by the balance functions, so they are a cache. A caller
+  /// that sets the write flag can still write them directly (R5, THREAT-MODEL §4e; finding T10).
   variationsTotalMinor BigInt @default(0) @map("variations_total_minor")
   invoicedTotalMinor   BigInt @default(0) @map("invoiced_total_minor")
 
