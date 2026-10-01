@@ -454,6 +454,13 @@ NUMERIC `/` rounds its quotient, so the check uses `div()`. Every seal fixture n
 **J11 now: Fixed, re-review owed.** Next: the independent closing check for J11, then the J6/J7/J8 design
 pass with options.
 
+**Closing check — J11, mechanical — launched 2026-10-01 on the owner's instruction.** *Delegation
+(Rule 16.5), declared before launch: one `general-purpose` agent, **Sonnet**. Every item is bounded: eight
+plants with a stated expected result each, a fixture sweep with a stated expected list, and two rows of text
+to read. So the cheapest reliable tier is the one that follows stated expectations exactly; every
+expectation was run before launch on the HEAD the brief names (M36, M37). No build work, gate run or commit
+alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
