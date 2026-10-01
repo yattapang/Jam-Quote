@@ -1,180 +1,40 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Orientation for Claude Code (and people) at the repository root. Deliberately short: each fact below has
+one home elsewhere, and this file points to it rather than restating it (ADR 0025, Rule 21.10).
 
-## What this is
+## What this repository is
 
-JamQuote — estimating & invoicing for **Jamaican contractors**. Build itemized
-construction quotes, price against real Jamaican suppliers, send branded PDFs
-over WhatsApp/email. Android + Web, JMD-native, GCT-aware.
+**Pryvis** — quoting and invoicing for contractors, Jamaica first. It holds two applications:
 
-Turborepo + npm workspaces, all TypeScript, Node ≥ 20. `docs/ARCHITECTURE.md`
-is the build contract — when code and that doc disagree, fix the code or raise
-it, don't silently diverge. `docs/PRICING.md` is the supplier-scraper spec.
+- **`new-app/`** — the selective rebuild, where all work happens. **Read `new-app/CLAUDE.md` before
+  changing anything**: layout, tenant isolation, commands, the test gate, and what is not built yet.
+- **`original-app/`** — the earlier application (JamQuote), **read-only and frozen**. Never edit it,
+  never import from it, and do not delete it without the owner's explicit confirmation.
 
-## Commands
+Until 2026-10-01 this file described the old JamQuote app as if it were current; that text is in git
+history.
 
-Run from the repo root. Turbo fans tasks out across workspaces; target one with
-`-w <name>` (workspace names are `@jamquote/{api,web,mobile,core,ui}`).
+## Read before any task
 
-```bash
-npm install                         # install all workspaces
+1. `docs/RULES.md` — the rules; cite the ones that apply before starting (Rule 0).
+2. `docs/MISTAKES.md` — the ledger of what went wrong and what now prevents it.
+3. `new-app/CLAUDE.md` — the codebase.
+4. `docs/BRIEF-STATUS.md` — where the work stands and the owner's latest decisions.
+5. `docs/PRD-REVIEW-4.md` — the disposition table at the top: the open review findings.
 
-npm run build                       # turbo build (respects ^build deps)
-npm run typecheck                   # tsc --noEmit across all
-npm run lint
-npm run test
+## The gate, before every commit
 
-# packages/core — the money/tax logic; verify this first, it's load-bearing
-npm run -w @jamquote/core test
-npx -w @jamquote/core vitest run src/quote/totals.test.ts   # single test file
-npx -w @jamquote/core vitest run -t "discount"              # single test by name
+From `new-app/`: `npm run typecheck && npm test` (workspace root, never one package). Then from the
+repository root, the four checkers in `tools/` — `check_rules.py`, `check_dispositions.py`,
+`check_citations.py`, `check_schema_citations.py`. Read the counts, not the exit codes. The race suite needs
+real PostgreSQL via `PRYVIS_PG_URL` (see `new-app/CLAUDE.md`).
 
-# apps/api (NestJS + Prisma)
-cp apps/api/.env.example apps/api/.env      # then set DATABASE_URL etc.
-npm run -w @jamquote/api prisma:generate    # REQUIRED before typecheck/build
-npm run -w @jamquote/api prisma:migrate     # apply/create migrations (dev)
-npm run -w @jamquote/api db:seed
-npm run -w @jamquote/api dev                # http://localhost:3001/api/health
-npm run -w @jamquote/api test               # vitest
+## Non-negotiables (details in `docs/RULES.md`)
 
-# apps/web (Next.js, port 3000)
-npm run -w @jamquote/web dev
-
-# apps/mobile (Expo) — preview on a phone via Expo Go (scan the QR)
-npm run -w @jamquote/mobile dev
-```
-
-Requires PostgreSQL 14+. `prisma generate` must run before anything typechecks
-`apps/api`, because `@prisma/client` types don't exist until then.
-
-## Architecture
-
-Three surfaces (`apps/api`, `apps/web`, `apps/mobile`) over two shared packages.
-
-**The golden rule:** all money math — quote/invoice totals, GCT, discounts,
-markups — lives in `packages/core` and is imported by api, web, and mobile. It
-is **never** re-implemented per surface. `computeTotals` in
-[totals.ts](packages/core/src/quote/totals.ts) is the single source of truth;
-every CRUD path and every UI preview must route through it.
-
-- **`packages/core`** — framework-free TS: domain enums, Zod validators, and
-  the tax/money/totals logic. Enums in [enums.ts](packages/core/src/types/enums.ts)
-  mirror the Prisma schema **exactly** — change one, change both.
-- **`packages/ui`** — design tokens (palette, type) derived from
-  `extracted/JamQuote.dc.html`, deleted from the repository on 2026-09-26 as an unrelated July
-  mockup — the tokens it carried live on in the design system, not in that file.
-- **`apps/api`** — NestJS owns all business logic. Per-feature modules
-  (`business`, `clients`, `jobs`, `quotes`, `catalogs`, `payments`, …), Prisma
-  for persistence, Zod for request validation.
-- **`apps/web`** — Next.js App Router; also hosts the internal `/admin` portal.
-- **`apps/mobile`** — Expo Router (file-based routing under `app/`).
-
-### Money is always integer JMD cents
-
-Never do money math with plain floats in app code. Store and compute in integer
-cents; format for display only via `formatJmd` in
-[money.ts](packages/core/src/tax/money.ts). Rounding is half-up at the cent, done
-inside core. Prisma money fields are `Int` cents (e.g. `unitPriceCents`,
-`totalCents`); rates/percentages are `Decimal`. USD is display-only reference,
-never used for billing.
-
-### GCT (General Consumption Tax)
-
-Rate is per-business (`Business.defaultGctRate`, default 15%) and centrally
-overridable — never hardcode it in a component; read it from business settings.
-Each line carries a `gctTreatment` of `STANDARD | ZERO_RATED | EXEMPT`. GCT
-applies **only** to the post-discount share of `STANDARD` lines. TRN (9-digit
-taxpayer number) prints on every quote & invoice. Clients/jobs use the 14
-Jamaican parishes (`PARISHES` in core).
-
-### Jurisdiction rule-pack seam (multi-country readiness)
-
-Everything that varies by country — currency, the consumption-tax label/rate,
-the taxpayer-ID format, administrative regions, payment rails, and payroll
-statutory contributions — resolves through `getJurisdiction(countryCode)` in
-[jurisdiction.ts](packages/core/src/jurisdiction/jurisdiction.ts), **not**
-hardcoded. Today it's a static table with **Jamaica only** (`JM`); the future
-versioned, human-verified rule-pack engine slots in behind the same interface.
-`Business` carries `countryCode`/`currency`/`entityType` (JM/JMD/SOLE_TRADER
-defaults). **Rule:** never hardcode a jurisdiction value (a tax rate, `"$"`,
-`"Parish"`, `"GCT"`, `"TRN"`, a wallet like Lynk/GK One) below this seam — read
-it from the profile. Money display goes through `formatMoney(cents, currency)`
-(`formatJmd` is a thin JMD wrapper). Sync-relevant tables carry `deletedAt`
-(soft-delete) for the future offline-first sync layer.
-
-### QuoteLineItem is the load-bearing entity
-
-Every line — material, labour, equipment, rental, subcontractor — shares one
-shape (`category`, `rateUnit`, `quantity`, `unitPriceCents`, `priceSource`,
-`gctTreatment`, optional `markupPct`, `overrideNote`). Manual entry/override is
-**always** available and never blocked by a failed price lookup; an override of
-a `LOOKUP`/`SCAN` price requires an `overrideNote`. Quotes have a status
-lifecycle with enforced forward-only transitions (see `ALLOWED_TRANSITIONS` in
-[quotes.service.ts](apps/api/src/quotes/quotes.service.ts)); revisions keep the
-same `number`, bump `version`, and link via `parentQuoteId`.
-
-### Multi-tenancy (temporary auth stand-in)
-
-Every request is scoped to a `businessId`. Today that comes from an
-`x-business-id` request header via the `@BusinessId()` param decorator
-([business-id.decorator.ts](apps/api/src/common/business-id.decorator.ts)) —
-this is an explicit placeholder until JWT auth lands. Every service query
-filters by `businessId`; keep that pattern when adding endpoints.
-
-### Running the API needs `@jamquote/core` built
-
-`@jamquote/core`'s runtime entry is compiled `dist/` (its `.js` import
-specifiers only resolve under a bundler; the API runs on plain Node). So before
-`npm run -w @jamquote/api dev` (or the deploy build, or running api/mobile tests
-directly) run `npm run -w @jamquote/core build` once — `turbo run build`/`test`
-do this automatically via `^build`. Typecheck and `next dev` use the TS source
-(via `types`/tsconfig paths) and don't need the build. `apps/api/.env` holds
-`DATABASE_URL` (a free Neon Postgres works); `db:seed` runs `prisma db seed`.
-
-### Payments — WiPay, not Stripe
-
-Card payments use **WiPay hosted checkout** so raw card data never touches our
-servers ([wipay.service.ts](apps/api/src/payments/wipay.service.ts)). Callbacks
-must be hash-verified before an invoice is marked paid. Manual payments (cash,
-bank transfer, Lynk) are recorded directly. Confirm exact WiPay field names /
-hash recipe against current WiPay JM docs before going live.
-
-## Conventions & gotchas
-
-- **ESM `.js` import specifiers.** `apps/api` and `packages/core` are ESM;
-  relative imports use explicit `.js` extensions even for `.ts` source
-  (`import { computeTotals } from "@jamquote/core"`, `"./money.js"`). Vitest and
-  Metro resolve these to `.ts` automatically; webpack does not, so the web
-  build's [next.config.mjs](apps/web/next.config.mjs) sets `extensionAlias`.
-  Match the `.js` convention or module resolution breaks.
-- **`AppModule` is the wiring source of truth.** The
-  business/clients/jobs/quotes/catalogs/payments modules are registered in
-  [app.module.ts](apps/api/src/app.module.ts); still TODO there: auth, pricing,
-  invoicing, documents, messaging, reports. A controller in a module that isn't
-  imported here is not routable — check before assuming a route is live.
-- **Web/mobile render mock data.** `apps/web/lib/mock-data.ts` and
-  `apps/mobile/src/state/mockData.ts` back the screens; the web
-  [api-client.ts](apps/web/lib/api-client.ts) is the single chokepoint for
-  swapping mock → real API. Wire screens through it, not raw `fetch`.
-- **Mixed React versions.** The web app is React 18 (Next 14); Expo/mobile needs
-  React 19. Root `package.json` **pins `react`/`react-dom` 18.3.1** so Node
-  resolves React 18 for the web build (styled-jsx included, which fixes
-  `next build`); mobile's React 19.2.3 is nested in `apps/mobile/node_modules`
-  and Metro resolves the app-local copy first. Don't "simplify" by removing the
-  root React pin or bumping it to 19 — that re-breaks `next build`. The
-  `react-native` peer warning (wants React 19 at root) is expected and inert.
-  Web lint uses a self-contained eslint config (not `next lint`) because
-  `eslint-config-next` can't resolve the nested `next`.
-- **Expo v57 changed things.** Before writing mobile code, read the versioned
-  docs at https://docs.expo.dev/versions/v57.0.0/ (per `apps/mobile/AGENTS.md`).
-- **Enums live in two places on purpose.** `packages/core` enums and the Prisma
-  schema enums must stay identical.
-
-## Build phasing
-
-- **Phase 1:** quote builder, clients/jobs, branded PDF, email + WhatsApp
-  click-to-chat send.
-- **Phase 2:** WhatsApp Business Cloud API, supplier price index,
-  invoicing/payments, reporting.
-- **Phase 3:** camera scan-to-price, regulatory feed, teams, subscriptions.
+- Never `git checkout --` or `git restore`. Plant a defect from a backup copy, restore from it, prove it
+  with `diff -q`.
+- Never edit a committed migration (Rule 6); correct it in a new one.
+- A guard or control is not closed until a planted defect proves it fails.
+- A finding is Closed only after an independent check (Rule 24.6).
+- Never send tenant or client personal data, or secrets, to any model.

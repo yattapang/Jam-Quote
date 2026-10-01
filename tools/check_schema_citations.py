@@ -115,9 +115,6 @@ CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 # phrase near them (finding R11) and not by line number, which moves with every edit above it. Every
 # entry is printed on every run, and an entry that stops matching a failing citation fails the run.
 CITATION_EXEMPTIONS: dict[tuple[str, str], str] = {
-    ("CLAUDE.md", "extracted/JamQuote.dc.html"): (
-        "Deleted on 2026-09-26 as an unrelated mockup; cited as the history of the design tokens."
-    ),
     ("docs/ARCHITECTURE.md", "extracted/JamQuote.dc.html"): "The same deleted mockup, the same history.",
     ("new-app/db/migrations/20260925120000_documents_core/migration.sql", "withdrawn_at"): (
         "Names the design ADR 0025 rejected (a nullable column on acceptance), to say why it was "
@@ -133,7 +130,6 @@ CITATION_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("docs/adr/0012-new-app-structure.md", "infra/docker-compose.yml"): (
         "Owed, cited as owed: the local Postgres the tests will use."
     ),
-    ("CLAUDE.md", "dist/"): "Build output (the compiled package), gitignored, never tracked.",
     ("docs/DEVELOPMENT-BRIEF.md", "catalog/"): "A planned module directory in the brief's target layout.",
     ("docs/DEVELOPMENT-BRIEF.md", "messaging/"): "A planned module directory in the brief's target layout.",
     ("docs/DEVELOPMENT-BRIEF.md", "support/"): "A planned module directory in the brief's target layout.",
