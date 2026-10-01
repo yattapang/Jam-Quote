@@ -775,6 +775,8 @@ Closed; J11 reopened.
 
 **Prevented by:** both now refuse what they cannot see
 (`new-app/db/migrations/20260927190000_rereview_fixes/migration.sql`), each with an executed test of the
-bypass; `new-app/db/test/trigger-rules.test.ts` fails if any AFTER trigger function skips on NOT FOUND in
-either spelling that occurred, and says what spelling it would miss. The lesson: **under row security,
+bypass; `new-app/db/test/trigger-rules.test.ts` fails if any AFTER trigger function skips UNCONDITIONALLY
+on NOT FOUND, in any of the spellings the second re-review used to get past its first version (X4), with
+comments stripped (X5), and says what it would miss. The first fix over-reached the other way (X1): it
+refused a staff erasure, because for a role that bypasses row security "not found" means "deleted". The lesson: **under row security,
 "not visible" is an input the caller controls — a check never treats it as "nothing to check".**

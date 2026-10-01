@@ -107,7 +107,8 @@ which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a s
 credit note, variation, withdrawal, sealing, opening a balance row and a balance recompute all take a per-quote lock that is
 only correct when each statement sees what the transaction it waited for committed; under REPEATABLE
 READ or SERIALIZABLE they are refused with SQLSTATE 25000 (finding P1). Do not pass an `isolationLevel`
-to a transaction that writes any of them. Three shapes can deadlock (SQLSTATE 40P01, detected by
+to a transaction that writes any of them. Four shapes can deadlock (the fourth is at the end of this
+paragraph; SQLSTATE 40P01, detected by
 PostgreSQL, nothing left wrong) and must be retried: a transaction that writes on two quotes; one that
 writes on a quote and then seals the same quote — which includes the wrong-document remedy (void or credit,
 withdraw, seal the next revision) if it is run as ONE transaction; and one that writes on **two issues of

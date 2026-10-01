@@ -119,9 +119,10 @@ deposit)**. That is the owner's "if the tenant so chooses" made into a setting r
 
 **The bar is frozen at seal (J8).** The database resolves it when the issue is sealed — the quote's own
 bar, else the tenant's `document_settings` default, else 3 — and stores it on the issue, like the terms
-and the tax rate. **The application states the bar it showed** when it seals, and a bar that no longer
-matches the quote is refused, so the bar and the terms the application read cannot come from two
-versions of the quote (suspicion S2 of the re-review; omitting the bar, for tools and tests, resolves it). Changing a quote's bar or a default never affects an issue already sealed. **The bar does
+and the tax rate. A seal that STATES a bar other than the one the quote resolves to is refused
+(`new-app/db/test/documents-core.test.ts`, J8). **Owed, not built (X9):** the application's seal must state
+the bar it showed, so that the bar and the terms it read cannot come from two versions of the quote
+(suspicion S2). No application seal exists yet, and a seal that omits the bar is still resolved and taken. Changing a quote's bar or a default never affects an issue already sealed. **The bar does
 not gate invoicing** (§4.4): it decides whether the product may say the acceptance meets the tenant's own
 standard (`acceptance_meets_bar()`). A bar that gated invoicing could never be met at grade 6, because a
 deposit is itself an invoice.
@@ -225,11 +226,13 @@ deliberately, so "prepare" has to mean something specific rather than a good int
   database column makes an email already sent attributable. Worse, a reply address we host with nothing
   receiving mail there would lose the client's replies, which today reach the contractor. So the reply
   address is **derived from the issue id when inbound mail exists, and nothing is stored**; release 1
-  keeps the tenant's own reply address, so **no client reply to a release-1 quote reaches us, and none can
-  be recorded as grade 4.** That is a consequence of where the reply goes, not a rule the database
-  enforces (finding W9): the inbound writer, when built, records only replies to the derived address.
-- **A provider's event is recorded once, ever:** a unique key on the evidence's source and external id,
-  across all tenants — the same lesson and shape as `variation_issue_client_reference_key` (M18), because a
+  keeps the tenant's own reply address, so **no client reply to a release-1 quote reaches us to be
+  recorded.** That is a consequence of where the reply goes, not a rule (findings W9, X3): the database
+  WOULD take an 'inbound_reply' row on a release-1 issue and grade it 4, and nothing refuses it. What keeps
+  it from happening is that the inbound writer, when built, records only replies to the derived address.
+- **A provider's event is recorded once per tenant:** a unique key on the tenant, the evidence's source and
+  its external id (per tenant since the owner reversed D4 on 2026-10-01, finding W7; "once, ever, across all
+  tenants" was corrected by X2) — the same lesson and shape as `variation_issue_client_reference_key` (M18), because a
   provider retries a webhook it thinks was missed and an append-only duplicate could never be removed. It
   covers a deposit's payment notice too.
 - **The register records it as an owed decision** with its two costs named — an inbound endpoint and a new

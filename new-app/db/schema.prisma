@@ -655,8 +655,8 @@ model QuoteIssue {
   taxRateBasisPoints  Int    @map("tax_rate_basis_points")
   /// The bar in force when this was sent, resolved by the database at seal from the quote, else the
   /// tenant's default, else 3 (finding J8). A seal that states a different one is refused. Required here
-  /// on purpose (suspicion S1): the application states the bar it showed, so a stale one is refused
-  /// rather than silently re-read — omitting it is for tools and tests.
+  /// on purpose (suspicion S1): the application's seal, when built, must state the bar it showed, so a
+  /// stale one is refused rather than silently re-read (owed — X9). SQL that omits it is still taken.
   acceptanceBarGrade  Int    @map("acceptance_bar_grade")
   subtotalMinor       BigInt @map("subtotal_minor")
   taxMinor            BigInt @map("tax_minor")

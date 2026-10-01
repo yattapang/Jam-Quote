@@ -508,6 +508,11 @@ no build work, gate run or commit alongside it.*
 closable yet** — ten new findings X1-X10 (all minor or nit), appended verbatim to `docs/PRD-REVIEW-4.md`.
 The one regression: X1, a staff deletion of a sealed issue is now refused. No owner decision needed.
 
+**Built 2026-10-01: the X fixes** (migration `20260927200000_rereview2_fixes`): X1 (a bypass role may
+delete a sealed issue again; the application role still may not hide one), X6 (any whitespace), X8; the
+guard hardened for X4 and X5 and proved against the reviewer's own plants; X2, X3, X7, X9, X10 in the
+documents. **J6, J7, J8, J11 now: Fixed, re-review owed.** Next: a third pass by the same reviewer.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

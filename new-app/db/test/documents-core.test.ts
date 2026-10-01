@@ -2053,6 +2053,19 @@ describe("J11 · an issue's lines add up to its subtotal, in the database", () =
     expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1`, [issue])).toEqual([]);
   });
 
+  it("X1 · lets a role that bypasses row security delete a sealed issue and its lines in one transaction", async () => {
+    // The W13 fix made the COMMIT check refuse any issue it could not see, which also refused a staff
+    // erasure: for a superuser "not found" means "deleted". The application role still gets W13's refusal.
+    const issue = await sealWith(1, 10_000n, [{ qty: 1000n, price: 10_000n, total: 10_000n }]);
+    await asSuperuser(db, async () => {
+      await db.exec("BEGIN");
+      await sql(`DELETE FROM quote_issue_line WHERE issue_id = $1`, [issue]);
+      await sql(`DELETE FROM quote_issue WHERE id = $1`, [issue]);
+      await expect(db.exec("COMMIT")).resolves.toBeDefined();
+    });
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1`, [issue])).toEqual([]);
+  });
+
   it("REFUSES, even to the table owner, a line changed or removed so the sum no longer matches", async () => {
     // The application role has no UPDATE or DELETE policy on lines; the owner, which bypasses row
     // security, still meets the trigger.
@@ -2303,7 +2316,8 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
         /acceptance_evidence_source_check/,
       );
     }
-    for (const externalId of ["", " TX-1", "TX-1 "]) {
+    // X6: any whitespace, not only spaces — a tab-only id once counted as witnessed and graded 6.
+    for (const externalId of ["", " TX-1", "TX-1 ", "TX-1\t", "TX-1\n", "\tTX-1", "\t", "\r\n"]) {
       await expect(evidence(acceptance, { kind: "deposit_paid", source: "wipay", externalId })).rejects.toThrow(
         /acceptance_evidence_external_id_shape_check/,
       );

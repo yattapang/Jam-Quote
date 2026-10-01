@@ -592,6 +592,9 @@ describe("K6 and L3 · no sequence of financial writes leaves an issue stuck, ov
       // Re-measured 2026-10-01 after W4 (responses aimed at the current revision three times in four):
       // seeds 1 and 2 give 1,361-1,365 writes, 4-6 withdrawals after money, 19-24 wrong-document remedies
       // (5-8 with a variation), 344-348 refusals as predicted. Every floor above still holds; none lowered.
+      // NOT "about half" any longer for one floor (X10): wrong-document remedies with a variation measure 5
+      // against a floor of > 4. The walk is seeded, so this is deterministic rather than noisy, but it is
+      // the floor a generator change will trip first; raise the paths, never lower the floor.
 
       expect(result.wrongResponses).toEqual([]);
       expect(result.wrongStates).toEqual([]);
