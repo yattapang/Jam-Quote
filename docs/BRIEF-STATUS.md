@@ -356,7 +356,17 @@ Every expectation re-run on `df3bef4` immediately before launch and held. **Repo
 copied verbatim into `PRD-REVIEW-4.md`. None closable.** J1: T1 and T7 major, the rest minor; the catalogue
 replacement held for what it reads. J12: six more Rule 21.10 sentences (T10). J13: the deadlock rule does
 not cover shape D (T11). *Tier log: Opus was right for Part A; Parts B and C were bounded and found real
-gaps too, so the single-brief choice cost nothing.*
+gaps too, so the single-brief choice cost nothing.* T11 fixed in `c6506ce` (J13 owes a mechanical closing
+check only).
+
+**Owner's decisions, 2026-10-01 — not yet built, next in order:** (1) **T7:** the money rule becomes a
+closed list — every numeric column that is not `bigint` is named in an allow-list with its reason, in
+`new-app/db/test/money-convention.test.ts`. (2) **J1's closing standard:** fix the forms T1 and T2 showed
+(`name()` functions, dotted settings, wrong-table `table.column`, `#anchor`, `:L12`, `:12:5`, upper-case
+extensions) and T3, T4, T5, T6, T8, T12; narrow every claim (the tool's docstring, the verify.yml comment,
+Rule 21.8) to exactly the forms checked, listing what is not; J1 closes when a review finds no overclaim and
+no miss within that stated scope. Then J12's six T10 sentences (recording, not editing, the policies file
+policy-parity ties to a committed migration), then one re-review of J1, J12 and J13.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
