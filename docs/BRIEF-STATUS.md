@@ -518,6 +518,10 @@ documents. **J6, J7, J8, J11 now: Fixed, re-review owed.** Next: a third pass by
 fixes, because the findings are converging (twelve with two majors, then ten minors and nits): confirm
 each X finding closed by re-executing it, and hunt for what this diff broke. A mechanical (Sonnet)
 closing check follows if nothing blocking is found. No build work, gate run or commit alongside it.*
+**Reported 2026-10-01: J8 closable; J6, J7, J11 not** — Y1 (X1's bypass-role check fooled by a temp
+`pg_roles` view) and Y2 (a temp table shadowing what a check reads), both major, and four minor or nit.
+From Y2's mechanism the builder executed **Y7, a blocker: a temp table named `invoice` let a 90,000.00
+invoice past a 10.00 ceiling.** No function in the schema pins `search_path`. **J2 reopened.**
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
