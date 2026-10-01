@@ -192,7 +192,7 @@
     },
     "21.8": {
       "title": "A cited file, path or symbol must exist (added 2026-09-26)",
-      "hash": "e8e7b736dabf48fd"
+      "hash": "18e5c69e7661ac25"
     },
     "21.9": {
       "title": "A guard patched twice for the same class is replaced, not patched a third time (added\n2026-09-26)",

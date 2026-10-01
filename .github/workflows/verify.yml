@@ -220,9 +220,10 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_citations.py
 
-      # Every cited path and database object, resolved against the CATALOGUE the migrations build
-      # (new-app/db/schema-objects.json, kept honest by db/test/schema-objects.test.ts in npm test) and
-      # a complete file index, with no silent skip (findings J1 and J9). It parsed the SQL until
+      # Cited paths and database objects IN THE FORMS ITS DOCSTRING LISTS, resolved against the CATALOGUE
+      # the migrations build (new-app/db/schema-objects.json, kept honest by db/test/schema-objects.test.ts
+      # in npm test) and a complete file index (findings J1 and J9). Forms outside that list pass silently
+      # and are listed there as its limits (T9); what it does not scan, it prints. It parsed the SQL until
       # 2026-10-01; two reviews found that parse wrong (R3, S4) and Rule 21.9 replaced it rather than
       # patching it a third time. "Every row reference has a key" moved to db/test/reference-keys.test.ts,
       # which reads the catalogue. The step above stayed because it checks bare filenames and

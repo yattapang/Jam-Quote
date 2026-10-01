@@ -719,11 +719,13 @@ a row, a file, a deployed version — **the claim quotes that state, not the exi
 > so in one line.
 
 **21.8 A cited file, path or symbol must exist (added 2026-09-26).** Naming something that is not
-there reads as evidence and is not. `tools/check_schema_citations.py` checks every backticked path and
-every named database object; `tools/check_citations.py` checks every backticked bare filename and
-"`symbol` in file" reference. Both scan tracked Markdown and source, and both gate in CI. (Until
-2026-09-30 this rule credited `check_citations.py` with every path; it skipped two kinds, J1 and R11,
-and its path check was retired.)
+there reads as evidence and is not. `tools/check_schema_citations.py` checks backticked paths and named
+database objects in the forms its docstring lists, and lists the forms it does not check;
+`tools/check_citations.py` checks backticked bare filenames and "`symbol` in file" references. Both scan
+tracked Markdown and source, both state what they do not scan, and both gate in CI. Neither is complete,
+and neither may be described as checking "every" citation: a regular expression over free text cannot
+recognise every way a claim is written (finding T9). (Until 2026-09-30 this rule credited
+`check_citations.py` with every path; it skipped two kinds, J1 and R11, and its path check was retired.)
 
 > Why, and it is the clearest case in this rulebook: `PRD.md` credited a guard called
 > `honest-claims.test.ts` as the reason an over-claim on the public site was safe. **No such file

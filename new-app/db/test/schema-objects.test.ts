@@ -41,6 +41,8 @@ type Objects = {
   policies: string[];
   indexes: string[];
   constraints: string[];
+  /** PostgreSQL's own function names, so a migration comment citing `md5()` resolves (T1). */
+  builtin_functions: string[];
 };
 
 async function names(db: PGlite, sql: string): Promise<string[]> {
@@ -112,6 +114,10 @@ describe("the object list the citation tool reads is what the migrations build",
         db,
         `SELECT DISTINCT k.conname AS n FROM pg_constraint k JOIN pg_namespace n ON n.oid = k.connamespace
           WHERE ${USER_NS} ORDER BY 1`,
+      ),
+      builtin_functions: await names(
+        db,
+        `SELECT DISTINCT proname AS n FROM pg_proc WHERE pronamespace = 'pg_catalog'::regnamespace ORDER BY 1`,
       ),
     };
     if (process.env.PRYVIS_WRITE_SCHEMA_OBJECTS === "1") {
