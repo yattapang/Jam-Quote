@@ -339,7 +339,11 @@ a guard fix (a defect in a guard leaves the suite green), J3 and J9 are tenant-i
 keys, and J13 changes the lock contract; that is adversarial work, not a mechanical check, so Sonnet is
 not the cheapest reliable tier here. One agent live, no build work, gate run or commit alongside it (Rule
 16.2). Findings to a scratchpad file as found, copied into `PRD-REVIEW-4.md` and committed before anything
-else. The brief's expectations are executed last, on the exact HEAD it names (M36, M37).*
+else. The brief's expectations are executed last, on the exact HEAD it names (M36, M37).* Every
+expectation was re-run on `8257173` immediately before launch and held. **Reported 2026-10-01: S1-S9,
+copied verbatim into `PRD-REVIEW-4.md`.** None of the five closed. J1 and J12 re-opened (S2-S6; S7). J3 and
+J9 hold in the database (S1 for J3's Prisma claim). J13 holds for every part claimed (S8, S9 documentation).
+*Tier log: Opus was right — S4 and S6 are guard weaknesses no mechanical check would have looked for.*
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

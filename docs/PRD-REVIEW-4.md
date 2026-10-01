@@ -23,19 +23,19 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 
 | # | Sev | Disposition |
 |---|---|---|
-| **J1** | blocker | **Fixed, re-review owed.** R11, R3 and R12 fixed with the owner's decisions of 2026-09-30. R11: the phrase window is removed from `tools/check_schema_citations.py` and `tools/check_citations.py`; deliberate citations of absent things are exempted by file and name, printed every run, and an unused exemption fails; removing the window exposed a real near miss in `docs/PRD.md` R1.24b, corrected. The old tool's path check and migration text check are retired (one guard per class); `docs/RULES.md` 21.8 and 21.9 restated and `.github/workflows/verify.yml` comments corrected. R3: column type read as its first word, foreign keys tracked by constraint name in file order with every column of a composite key, non-UUID `*_id` columns printed by name. R12: `new-app/db/test/money-convention.test.ts` reads array element types and domain bases, counts `_cents` as an amount, and stores the ceiling through every real amount column's declared type. Plants, each restored with diff -q: 7 on the schema tool (the finding's two, a stale exemption, a dropped composite key, each half of the R3 fix removed on its own), 4 on the old tool, 6 on the money test (the finding's three, an amount narrowed to INTEGER, a BIGINT[] amount, a scalar control). Lesson in `docs/MISTAKES.md` M38. Not changed, by Rule 6: the documents-core migration's sentence "no floating-point type appears in this file" is wider than the test, which reads the final schema's columns, not that file's function bodies. Re-review found the fix incomplete: R11 (the new tool silently skips citations near phrases such as "rather than" while printing "0 citations skipped") and R3 (every NOT NULL `*_id` column is skipped); R12 minor. Previously: `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
+| **J1** | blocker | **Open — the batched re-review (2026-10-01) found the fix incomplete: S4 and S6 (major) — the key/column tracker misses ordinary DDL forms, and the money test misses `…_minor_units`; S2, S3, S5 (minor) — phantom paths outside the repo, `.sh`, `:line` or a directory pass silently, a dropped index still resolves, and the banner omits the evidence documents it skips.** What did hold, by its plants: the phrase window is gone, arrays, domains, `_cents` and the declared-type ceiling. Previously: R11, R3 and R12 fixed with the owner's decisions of 2026-09-30. R11: the phrase window is removed from `tools/check_schema_citations.py` and `tools/check_citations.py`; deliberate citations of absent things are exempted by file and name, printed every run, and an unused exemption fails; removing the window exposed a real near miss in `docs/PRD.md` R1.24b, corrected. The old tool's path check and migration text check are retired (one guard per class); `docs/RULES.md` 21.8 and 21.9 restated and `.github/workflows/verify.yml` comments corrected. R3: column type read as its first word, foreign keys tracked by constraint name in file order with every column of a composite key, non-UUID `*_id` columns printed by name. R12: `new-app/db/test/money-convention.test.ts` reads array element types and domain bases, counts `_cents` as an amount, and stores the ceiling through every real amount column's declared type. Plants, each restored with diff -q: 7 on the schema tool (the finding's two, a stale exemption, a dropped composite key, each half of the R3 fix removed on its own), 4 on the old tool, 6 on the money test (the finding's three, an amount narrowed to INTEGER, a BIGINT[] amount, a scalar control). Lesson in `docs/MISTAKES.md` M38. Not changed, by Rule 6: the documents-core migration's sentence "no floating-point type appears in this file" is wider than the test, which reads the final schema's columns, not that file's function bodies. Re-review found the fix incomplete: R11 (the new tool silently skips citations near phrases such as "rather than" while printing "0 citations skipped") and R3 (every NOT NULL `*_id` column is skipped); R12 minor. Previously: `becd1dd`: `tools/check_schema_citations.py` replaced the blind spot in `tools/check_citations.py` (no silent skip; identifiers against parsed DDL), and `new-app/db/test/money-convention.test.ts` now exists, asserting the money types across `20260925120000_documents_core` and every later migration. Plants recorded in MISTAKES M20 and M21 |
 | **J2** | blocker | **Closed.** `683a638`, migration `20260926130000_ceiling_enforced_by_trigger`: every insert on `invoice`, `invoice_void`, `credit_note` and `variation` fires `issue_balance_apply()`, so the ceiling in `20260925120000_documents_core` is enforced for any caller that does not set the balance-write flag itself; the flag is not a secret, so a caller that sets it can write `issue_balance` directly (R5, stated in the ADR); the write policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; executed in `new-app/db/test/documents-core.test.ts` (J2 block); ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 amended 2026-09-27 to the real mechanism and corrected for R5 and R7 the same day. **Independently checked:** the re-review of the seven (2026-09-27) removed each of the four triggers and watched its tests go red (18, 2, 2 and 1), and judged it closable on the mechanism |
-| **J3** | blocker | **Open — R1/Q4, R2 and R16 fixed, re-review owed; R17 (no red test for the ROW_COUNT check) still open.** Migration `20260927150000_keys_cannot_rewrite_history` turns all 49 ON UPDATE CASCADE keys into ON UPDATE RESTRICT and asserts none remains (R1, R2), and gives the seven unkeyed references composite tenant keys (R16); `new-app/db/schema.prisma` states `onUpdate: Restrict` on every relation so Prisma cannot regenerate the cascade. Tested in the R block of `new-app/db/test/documents-core.test.ts`; each of the eight rules was planted out and its own test went red. The re-review of the seven had found Q4 confirmed (R1: ON UPDATE CASCADE rewrites sealed rows) and a cross-tenant write through a key J3 kept single-column (R2); the composite keys themselves held on every probe. Previously: `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
+| **J3** | blocker | **Open — R1/Q4, R2, R16 and R4 independently checked and holding in the database (batched re-review, 2026-10-01); not closed on S1: five `new-app/db/schema.prisma` relations still say `onDelete: Cascade` against RESTRICT keys, so the claim that Prisma cannot regenerate a cascade holds for ON UPDATE only; R17 (no red test for the ROW_COUNT check) still open.** Migration `20260927150000_keys_cannot_rewrite_history` turns all 49 ON UPDATE CASCADE keys into ON UPDATE RESTRICT and asserts none remains (R1, R2), and gives the seven unkeyed references composite tenant keys (R16); `new-app/db/schema.prisma` states `onUpdate: Restrict` on every relation so Prisma cannot regenerate the cascade. Tested in the R block of `new-app/db/test/documents-core.test.ts`; each of the eight rules was planted out and its own test went red. The re-review of the seven had found Q4 confirmed (R1: ON UPDATE CASCADE rewrites sealed rows) and a cross-tenant write through a key J3 kept single-column (R2); the composite keys themselves held on every probe. Previously: `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
 | **J4** | blocker | **Closed.** Agreed scope can be reduced after it is invoiced: credit notes net into the invoiced figure, so the remedy is credit-then-reduce in one transaction, and a wrong document is withdrawn once nothing is billed (owner's decisions 2026-09-26/27, `docs/design/scope-reduction.md`). This corrects what `20260925120000_documents_core` ("may be negative" with no path) and `20260926110000_withdrawal_preconditions` (a credit note that moved nothing) got wrong, through migrations `20260926200000` to `20260927140000`; tested in `new-app/db/test/documents-core.test.ts` (J4, K4, H4 blocks), `no-stuck-state.test.ts` (a seeded walk with its own oracle) and `concurrency.pg.test.ts` (15 races on real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `422d9e8`. **Independently checked:** five Opus re-reviews (K, L, N, P, Q — their findings all answered), then two Sonnet closing checks: every plant failed exactly its named race and the gate matched; the one item not passed was the brief's own list omitting a register, as the checker read and stated. Closed on that evidence with the owner's acceptance, 2026-09-27 |
 | **J5** | blocker | **Closed.** `683a638`: grade 5 retired in `docs/design/acceptance-evidence.md` (number tombstoned) so the ladder's third-party principle holds; `docs/PRD.md` R1.20c, `docs/adr/0024-acceptance-evidence.md` and `docs/design/domain-model.md` agree. **Independently checked:** the re-review of the seven found the four documents consistent and judged it closable once "six grades" was corrected (R14) — corrected 2026-09-27 in `docs/PRD.md` R1.20, `docs/design/README.md`, `docs/TIERS.md` and `docs/THREAT-MODEL.md`. R15 (grades 2 and 3 have no third party either) is PLAUSIBLE only and goes to the owner with J6 |
 | **J6** | blocker | **Open.** The grade derivation is still undefined for conflicting evidence. Not started |
 | **J7** | blocker | **Open.** The uniqueness key on the inbound message id is not specified. Not started |
 | **J8** | blocker | **Open.** The acceptance bar is not frozen into the issue; `document_settings` does not exist. Not started |
-| **J9** | blocker | **Open — R9 fixed, re-review owed; R10 and R18 (minor, documentation and tooling) still open.** Migration `20260927150000_keys_cannot_rewrite_history`: `acceptance.document_render_id` is NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`, so an acceptance records the render of its own issue (owner's decision, 2026-09-30); both halves planted out and seen red in the R block of `new-app/db/test/documents-core.test.ts`. The same migration fixes R4 (the application cannot delete a tenant; the audit trail's tenant key is ON DELETE RESTRICT). The re-review of the seven had found an acceptance could bind the render of a different issue, or none (R9, blocker; reproduced by the author). Previously: `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
+| **J9** | blocker | **Open — R9 fixed and independently checked (batched re-review, 2026-10-01); R10 and R18 (minor, documentation and tooling) still open.** Migration `20260927150000_keys_cannot_rewrite_history`: `acceptance.document_render_id` is NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`, so an acceptance records the render of its own issue (owner's decision, 2026-09-30); both halves planted out and seen red in the R block of `new-app/db/test/documents-core.test.ts`. The same migration fixes R4 (the application cannot delete a tenant; the audit trail's tenant key is ON DELETE RESTRICT). The re-review of the seven had found an acceptance could bind the render of a different issue, or none (R9, blocker; reproduced by the author). Previously: `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
 | **J10** | blocker | **Closed.** Reopened by K6 after `683a638` (migration `20260926140000_one_live_ceiling_per_quote`): its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and by isolation level (P1). Fixed by `20260927100000_withdrawal_with_variations` (judge the live revision), `20260927110000_one_lock_per_quote` (a per-quote lock) and `20260927120000_lock_isolation_and_tenancy` (READ COMMITTED enforced), over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` (J10 block), `no-stuck-state.test.ts` (one live ceiling per quote, on the database's own ceilings) and `concurrency.pg.test.ts` (N4 a, b, c on real PostgreSQL, in CI); `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. **Independently checked:** the fifth re-review (2026-09-27) judged it closable — N4's three races pass and their plants are caught, P1 is refused on every path, and unscheduled stress found no quote with two live ceilings |
 | **J11** | major | **Open.** `quote_issue.subtotal_minor` is not tied to its frozen lines. Not started |
-| **J12** | major | **Fixed, re-review owed.** R13 fixed with the owner's decisions of 2026-10-01: in `docs/design/domain-model.md` §6.2a the prose writer set is deleted (both paragraphs, "nothing else ever writes it", and the false "created unconditionally" opening), and the section points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 for the mechanism and its limits (R5, R7) and at the J12 block of `new-app/db/test/documents-core.test.ts` for what each insert moves; `docs/PRD-REVIEW-3.md` H2 row corrected for J4. `docs/RULES.md` Rule 21.10 added (a writer-set sentence cites its test or does not exist; no phrase guard, by the owner's decision). The R5 defect itself is recorded as owed in `docs/THREAT-MODEL.md` §4e, not fixed here. Lesson in `docs/MISTAKES.md` M39. Not changed, by Rule 6: the documents-core migration's comment that the writer set "cannot go stale" is false for the same reason. No code changed. The re-review of the seven had found J12's own fix put the writer set back into prose, false by execution (R13); the J12 test block itself is sound. Previously: `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
-| **J13** | major | **Fixed, re-review owed.** Built to `docs/design/acceptance-responses.md` (option C plus A, owner 2026-09-27; per-issue lock, owner 2026-10-01). Migration `20260927160000_acceptance_responses`: the one-row-per-issue key becomes a partial unique index on accepted rows (declines unlimited, one acceptance ever); a trigger refuses a decline after an acceptance under a per-issue lock taken after the quote lock; only an accepted row can be withdrawn; `quote_issue_state()` gains `withdrawn` and an acceptance outranks an earlier decline. `new-app/db/schema.prisma` models responses as a list and says why the partial key is migration-only. Tests: the J13 block of `new-app/db/test/documents-core.test.ts` (7), the reversed "issued again" test now expects `withdrawn`, two races in `new-app/db/test/concurrency.pg.test.ts`, and `new-app/db/test/no-stuck-state.test.ts` now numbers every issue, adds declines, and judges every response and every state with its own oracle. Seven plants, each restored with diff -q. `docs/PRD.md` R1.20 and `docs/design/domain-model.md` §6.3 updated. Found and NOT fixed: a response is taken on a superseded or unnumbered issue (true before J13; recorded in the design §3a for the owner). Previously: a withdrawn issue read "issued" and could never be re-accepted; since K4 and L1 made withdrawal the wrong-document remedy, this was the common path (N3) |
+| **J12** | major | **Open — the batched re-review (2026-10-01) found four sentences of the kind Rule 21.10 forbids still outside committed migrations (S7): `new-app/db/schema.prisma` on `issue_balance`, `docs/adr/README.md`'s ADR 0025 line, `docs/PRD.md` R1.24b, and the §6.3 "impossible transitions" list in `docs/design/domain-model.md`. The §6.2a deletion held.** Previously: R13 fixed with the owner's decisions of 2026-10-01: in `docs/design/domain-model.md` §6.2a the prose writer set is deleted (both paragraphs, "nothing else ever writes it", and the false "created unconditionally" opening), and the section points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 for the mechanism and its limits (R5, R7) and at the J12 block of `new-app/db/test/documents-core.test.ts` for what each insert moves; `docs/PRD-REVIEW-3.md` H2 row corrected for J4. `docs/RULES.md` Rule 21.10 added (a writer-set sentence cites its test or does not exist; no phrase guard, by the owner's decision). The R5 defect itself is recorded as owed in `docs/THREAT-MODEL.md` §4e, not fixed here. Lesson in `docs/MISTAKES.md` M39. Not changed, by Rule 6: the documents-core migration's comment that the writer set "cannot go stale" is false for the same reason. No code changed. The re-review of the seven had found J12's own fix put the writer set back into prose, false by execution (R13); the J12 test block itself is sound. Previously: `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
+| **J13** | major | **Fixed, re-review owed.** The batched re-review (2026-10-01) found the fix holds for every part claimed, by race and plant; two documentation findings outstanding: S8 (`docs/design/domain-model.md` §8 says a second response is refused) and S9 (the deadlock list in `new-app/CLAUDE.md` misses two pre-existing response shapes). Built to `docs/design/acceptance-responses.md` (option C plus A, owner 2026-09-27; per-issue lock, owner 2026-10-01). Migration `20260927160000_acceptance_responses`: the one-row-per-issue key becomes a partial unique index on accepted rows (declines unlimited, one acceptance ever); a trigger refuses a decline after an acceptance under a per-issue lock taken after the quote lock; only an accepted row can be withdrawn; `quote_issue_state()` gains `withdrawn` and an acceptance outranks an earlier decline. `new-app/db/schema.prisma` models responses as a list and says why the partial key is migration-only. Tests: the J13 block of `new-app/db/test/documents-core.test.ts` (7), the reversed "issued again" test now expects `withdrawn`, two races in `new-app/db/test/concurrency.pg.test.ts`, and `new-app/db/test/no-stuck-state.test.ts` now numbers every issue, adds declines, and judges every response and every state with its own oracle. Seven plants, each restored with diff -q. `docs/PRD.md` R1.20 and `docs/design/domain-model.md` §6.3 updated. Found and NOT fixed: a response is taken on a superseded or unnumbered issue (true before J13; recorded in the design §3a for the owner). Previously: a withdrawn issue read "issued" and could never be re-accepted; since K4 and L1 made withdrawal the wrong-document remedy, this was the common path (N3) |
 | **J14** | major | **Open.** The RLS exemption list still covers the credential tables. Not started |
 | **J15** | minor | **Closed.** Migration `20260926220000_withdrawal_after_full_credit` (`8e8236a`) replaced the guard in `20260926110000_withdrawal_preconditions`: a voided or fully credited invoice no longer blocks withdrawal; `20260927100000_withdrawal_with_variations` kept it. Tested in `new-app/db/test/documents-core.test.ts` ("J15 · allows withdrawal once the invoice is voided"), which goes red when the guard is reverted. Independently checked: the third re-review (N) and the fourth (P) both found nothing against it, the fourth re-running the revert |
 | **J16** | minor | **Closed.** `9115d8f`, migration `20260926170000_rejected_seal_no_delete`: `rejected_seal` from `20260926120000_rejected_seals` loses its DELETE path and its facts are frozen; executed in `new-app/db/test/documents-core.test.ts`. **Independently checked:** the re-review of the seven turned the policy to FOR ALL (DELETE test and policy-parity red) and dropped the trigger (both rewrite tests red). Its migration's comment that a later column "fails closed" is false — it fails open (R8); the comment cannot be edited (Rule 6) and is corrected here |
@@ -2531,3 +2531,282 @@ CONFIRMED by plant (docs/PRD.md R1.20, backup review6/prd.bak, anchor unique, re
 J1 NOT CLOSABLE (R11, R3; R12 minor). J2 CLOSABLE on the mechanism; row text owes correction (R5, R7). J3 NOT CLOSABLE (Q4 = R1 confirmed, R2 cross-tenant cascade; R16/R17 minor). J5 CLOSABLE once R14's count is corrected (R15 plausible, for the owner). J9 NOT CLOSABLE (R9; R10, R18 minor). J12 NOT CLOSABLE (R13). J16 CLOSABLE (R8 comment to correct).
 Tree: an untracked docs/design/acceptance-responses.md (mtime 16:38 UTC, "APPROVED by the owner 2026-09-27") appeared during this review; not created by this reviewer, not touched.
 Gate: typecheck+test 10/10 tasks, 0 cached, exit 0: db 143, api 183, web 11, core 9, contract 2 (concurrency.pg 15 of the db 143). Four checkers exit 0.
+
+
+---
+
+<!-- Copied verbatim from the reviewer's findings file on 2026-10-01, headings shifted one level; the reviewer's text is unchanged. -->
+
+## Review 5 — independent re-review of J1, J3, J9, J12, J13 at HEAD 8257173
+
+Reviewer: independent subagent (Opus). Written as found. Every probe ran against real PostgreSQL 16
+(`r5probe` = all 29 migrations + `pryvis_app`; `r5pre` = migrations up to 20260927140000) or against the
+real tools/tests, with each plant applied to a tracked file from a backup copy under this directory and
+restored (`diff -q` printed nothing; "restored" echoed after each).
+
+Baseline at HEAD: `PRYVIS_PG_URL=… npx vitest run` in new-app/db -> 8 files, 165 passed.
+Count claim checked: `r5pre` has 49 FKs, all 49 `confupdtype='c'` -> "all 49" is true.
+
+---
+
+### S1 — schema.prisma still disagrees with the migrations on ON DELETE for five keys, on the very lines 0e257b5 edited; `prisma migrate diff` would regenerate ON DELETE CASCADE — minor (J3)
+
+Where: new-app/db/schema.prisma:211 (AppSession.user), :267 (AppCredential.user), :582 (QuoteSection.quote),
+:607 (QuoteLine.quote), :609 (QuoteLine.section). DB side: 20260926180000_tenant_composite_keys sets
+ON DELETE RESTRICT on all five.
+
+Claim under test (commit 0e257b5 message, J3 disposition): "every relation states onUpdate: Restrict, so
+Prisma cannot regenerate the cascade". True for ON UPDATE. False for ON DELETE: the commit rewrote
+these five lines to add `onUpdate: Restrict` and left `onDelete: Cascade`, which the database does not have.
+
+Executed:
+    npx prisma migrate diff --from-url postgres://…/r5probe --to-schema-datamodel schema.prisma --script
+Output (excerpt):
+    ALTER TABLE "app_session" ADD CONSTRAINT "app_session_user_id_tenant_id_fkey" FOREIGN KEY ("user_id", "tenant_id") REFERENCES "app_user"("id", "tenant_id") ON DELETE CASCADE ON UPDATE RESTRICT;
+    ALTER TABLE "app_credential" ADD CONSTRAINT "app_credential_user_id_tenant_id_fkey" … ON DELETE CASCADE ON UPDATE RESTRICT;
+    ALTER TABLE "quote_section" ADD CONSTRAINT "quote_section_quote_id_tenant_id_fkey" … ON DELETE CASCADE ON UPDATE RESTRICT;
+    ALTER TABLE "quote_line" ADD CONSTRAINT "quote_line_quote_id_tenant_id_fkey" … ON DELETE CASCADE ON UPDATE RESTRICT;
+    ALTER TABLE "quote_line" ADD CONSTRAINT "quote_line_section_id_tenant_id_fkey" … ON DELETE CASCADE ON UPDATE RESTRICT;
+(preceded by DROP of the five live RESTRICT keys). No ON UPDATE CASCADE appears anywhere in the diff, so
+the ON UPDATE half of the claim holds.
+
+Failure scenario: anyone who generates a migration from schema.prisma (the drift R1 was about) gets
+deleting an app_user silently deleting its credential and sessions, and deleting a quote silently deleting
+its sections and lines, where today both are refused. Pre-existing since 20260926180000 (not introduced by
+0e257b5), but the commit's claim covers it and it edited those lines. schema-migration-parity.test.ts
+disclaims relations, so nothing in the suite sees this. Note also the diff renames ~50 constraints/indexes
+and drops/recreates three unique indexes (naming drift, pre-existing). CONFIRMED.
+
+---
+
+### S2 — check_schema_citations.py passes a phantom path silently when the citation climbs out of the repository; its comment says "said so in the report" and it is not — minor (J1, guard weakness)
+
+Where: tools/check_schema_citations.py:261-265 (`except ValueError: return True  # outside the repository;
+unjudgeable from here, and said so in the report`).
+
+Executed (plant in docs/design/acceptance-responses.md, appended line, restored from backup, diff -q clean):
+    The guard lives in `../../../../phantom/never-written.test.ts`.
+    -> "Every cited path and every named database object resolves." exit=0
+Control, same file:
+    The guard lives in `new-app/db/test/never-written.test.ts`.
+    -> "1 unresolved citation(s) … resolves to nothing" exit=1
+Nothing about the outside-repo pass is printed anywhere in the report. CONFIRMED.
+
+### S3 — a DROPPED index still "resolves": the schema parser never forgets an index, so a migration comment citing `acceptance_issue_key` (dropped by J13's own migration) passes — minor (J1, guard weakness)
+
+Where: tools/check_schema_citations.py:150 (`self.indexes.update(...)` — no DROP INDEX handling; same for
+functions, triggers, policies). The R3 fix added drop tracking for foreign keys only.
+
+Executed (appended to new-app/db/migrations/20260927160000_acceptance_responses/migration.sql, restored):
+    -- `acceptance_issue_key` still enforces one response per issue.
+    -> "Every cited path and every named database object resolves." exit=0
+Control:  -- `acceptance_issue_keyz` … -> exit=1 "is named here and is not a … index … that any migration declares".
+So "Text presence is not existence" (the tool's own docstring, J9) is violated for every dropped index,
+and J13 just created one. CONFIRMED.
+
+### S4 — the R3 fix ("foreign keys tracked by constraint name … a DROP with no re-add" stops counting) misses ordinary DROP forms, and the *_id check misses ordinary ADD COLUMN forms; each passes silently — major for J1's claim, guard weakness (J1, R3)
+
+Where: tools/check_schema_citations.py:165-171 (DROP regex needs `ALTER TABLE "t" DROP CONSTRAINT` adjacent),
+:197-201 (ADD COLUMN regex needs `ADD COLUMN "c" [A-Z]+`), :187 (CREATE TABLE column needs an
+upper-case type and a quoted name).
+
+Executed, each line appended to the J13 migration, checker run, restored; each line also run in
+BEGIN…ROLLBACK on r5probe and accepted by PostgreSQL 16 (valid DDL):
+  plant                                                                                         checker
+  ALTER TABLE IF EXISTS "quote_issue" DROP CONSTRAINT "quote_issue_client_id_fkey";              exit=0 PASS (key gone)
+  ALTER TABLE ONLY "quote_issue" DROP CONSTRAINT "quote_issue_client_id_fkey";                   exit=0 PASS (key gone)
+  ALTER TABLE "quote_issue" ADD CONSTRAINT "quote_issue_note_chk" CHECK (true),
+                            DROP CONSTRAINT "quote_issue_client_id_fkey";                        exit=0 PASS (key gone)
+  ALTER TABLE "quote_issue" DROP CONSTRAINT "quote_issue_client_id_fkey";  (control)             exit=1 caught
+  ALTER TABLE "variation" ADD COLUMN "approved_by_user_id" uuid;                                  exit=0 PASS (unkeyed)
+  ALTER TABLE "variation" ADD COLUMN IF NOT EXISTS "approved_by_user_id" UUID;                    exit=0 PASS (unkeyed)
+  ALTER TABLE "variation" ADD "approved_by_user_id" UUID;                                         exit=0 PASS (unkeyed)
+  ALTER TABLE "variation" ADD COLUMN "approved_by_user_id" UUID;  (control)                       exit=1 caught
+
+Consequence: R16's class (a NOT NULL/nullable actor reference with no tenant key) re-enters through any of
+the five uncaught forms. The structural guard does not back it up: with the lower-case plant in place,
+`npx vitest run test/tenant-isolation.test.ts test/policy-parity.test.ts test/row-convention.test.ts` ->
+3 files, 32 passed (that guard only inspects keys that EXIST; an absent key is invisible to it). Contrast
+the migration 20260927150000 comment: "Each gets a composite key, which Rule 4.1 and the structural guard
+in `db/test/tenant-isolation.test.ts` require" — the structural guard does not require a key to exist.
+(For quote_issue.client_id specifically, documents-core's R16 test would still go red; for a NEW column
+nothing but this tool looks, and the schema-migration-parity test only fails if prisma is not updated too.)
+CONFIRMED.
+
+### S5 — the banner "none skipped" omits 8 whole files (388 backticked path citations) and a silent *_id exemption — minor (J1, R11's class: the banner does not count what the tool passes over)
+
+Where: tools/check_schema_citations.py:304-305 (`if path in EVIDENCE_DOCS: continue`, never printed),
+:280-281 (UNCONSTRAINED_IDS `continue`, never printed), banner :402-407.
+
+Executed: `python3 tools/check_schema_citations.py` prints "scanned 176 files … 3 citation(s) exempted by
+name, none skipped" and lists 3 exemptions, 1 out-of-scope, 1 owed. Counting with the tool's own regex
+over `git ls-files`: 838 tracked files with scanned extensions; 654 under original-app/.claude (by stated
+scope); 8 EVIDENCE_DOCS present, containing 388 backticked path citations, none mentioned in the output;
+`audit_entry.subject_id` exempted and not printed. Among the 8 is docs/PRD-REVIEW-4.md — the register whose
+disposition rows cite the very tests and migrations claimed as fixes — and docs/MISTAKES.md, which credits
+guards by path. Rule 21.9 (as restated by a1b95ea): "the banner must count what the tool actually passes
+over". Exemption by purpose is allowed by 21.8; not printing it is the R11 defect in a new place. CONFIRMED.
+
+---
+
+### S6 — money-convention.test.ts passes an INTEGER money column named the way new-app/CLAUDE.md tells people to name money columns (`…_minor_units`) — major (J1, R12)
+
+Where: new-app/db/test/money-convention.test.ts:79 (`AMOUNT_SUFFIXES = ["_minor", "_thousandths", "_cents"]`)
+and :151 (the unit-name regex only matches names ENDING in amount|total|price|…). new-app/CLAUDE.md:59:
+"Money is integer minor units in 64-bit columns named `…_minor_units`".
+
+Executed (each appended to the J13 migration, `npx vitest run test/money-convention.test.ts`, restored, diff -q clean):
+    ALTER TABLE "invoice" ADD COLUMN "retention_minor_units" INTEGER;   -> Tests 6 passed (6)
+    ALTER TABLE "invoice" ADD COLUMN "retention_amount_jmd" INTEGER;    -> Tests 6 passed (6)
+    ALTER TABLE "invoice" ADD COLUMN "retention_minor" INTEGER;  (control) -> 2 failed (bigint, ceiling)
+
+Failure scenario: a developer follows the orientation file, adds `retention_minor_units INTEGER`, and the
+int32 cap ADR 0011 names (21,474,836.47) returns with the guard green. R12's own rationale for adding
+`_cents` ("the spelling most likely to come back, as a 32-bit column") applies with more force to the
+spelling the project's own CLAUDE.md prescribes. The R12 parts claimed (array element types, domain
+bases, `_cents`, ceiling through declared types) do hold — the `_minor` control fails as it should.
+CONFIRMED.
+
+---
+
+### S7 — false issue_balance writer/mechanism claims survive outside committed migrations, one of them in a sentence J13 rewrote — minor (J12, Rule 21.10)
+
+Rule 21.10 (added by 0297e64): a writer-set sentence cites its executing test or does not exist; the
+mechanism is stated once, in ADR 0025. Still present, none in a committed migration:
+
+1. new-app/db/schema.prisma:923-925 — "The application cannot write this table at all: its write policies
+   require a transaction-local flag that only `issue_balance_apply()` sets." False twice: `issue_balance_open()`
+   also sets it (R7's fact), and the application can set it itself (R5).
+2. docs/adr/README.md:40 — ADR 0025's index line: "`issue_balance` has no write grant and one locked
+   function". The app role has INSERT/UPDATE grants and there are two functions; ADR 0025 itself was
+   amended, its index was not.
+3. docs/PRD.md:385-388 (R1.24b) — "`accepted_total_minor` is written once, by the acceptance transaction
+   … and never again". A writer-set sentence with no test cited; "never again" is false by R5.
+4. docs/design/domain-model.md:392-396 (§6.3) — "Transitions that must be impossible, and are therefore
+   tested … writing `issue_balance` outside its function". 44dab87 (J13) rewrote this sentence and kept
+   the clause; THREAT-MODEL §4e (added by 0297e64) says the opposite.
+
+Executed (r5probe, as pryvis_app, tenant A, synthetic issue 100,000 accepted and opened):
+    UPDATE issue_balance SET accepted_total_minor = 9000000 …;                 -> UPDATE 0
+    BEGIN; SELECT set_config('pryvis.balance_write','on',true);
+    UPDATE issue_balance SET accepted_total_minor = 9000000 …; COMMIT;         -> UPDATE 1
+    SELECT accepted_total_minor, issue_ceiling_minor(issue_id) …               -> 9000000 | 9000000
+This is R5 itself (recorded as owed; NOT reported as new). The finding is that four prose/comment
+sentences still deny it after the J12 fix and the rule it added. CONFIRMED (the sentences exist; the
+behaviour they deny was executed).
+
+---
+
+### S8 — domain-model.md still says a second client response is refused; J13 made it taken — minor (J13, docs)
+
+Where: docs/design/domain-model.md:478 (§8 sync table, `acceptance` row): "First write wins; a second is
+refused, not merged". (Also :250, §6.2: "One acceptance per issue." — still true of ACCEPTED rows, but the
+same row calls the table "The client accepting or declining an issue", so a reader takes it as one
+response.) The J13 disposition says "`docs/design/domain-model.md` §6.3 updated" — §6.3 was; §6.2 and §8
+were not.
+
+Executed (r5race, all migrations, two pryvis_app sessions, tenant A, synthetic issue):
+  decline then decline on one issue                              -> "ok ok" (both committed)
+  T1 decline (open) ; T2 accept waits (advisory) ; T3 decline waits (advisory) ; T1 COMMIT
+                                                                 -> accept ok; second decline refused
+                                                                    (23514 "a decline cannot follow an acceptance")
+  rows: accepted 1, declined 1.
+So a second (and third) write is taken, not refused. The behaviour is the approved design; the
+sentence is stale. CONFIRMED.
+
+### S9 — deadlock list in new-app/CLAUDE.md is incomplete for responses; J13's "adds no deadlock shape" is true only because the shape pre-existed — minor (J13, documentation; not introduced)
+
+Where: new-app/CLAUDE.md ("Two shapes can deadlock … two quotes … write then seal"); J13 migration
+header "so it adds no deadlock shape to the two `new-app/CLAUDE.md` lists".
+
+Executed on real PostgreSQL 16, ONE quote, no seal, READ COMMITTED, two pryvis_app sessions:
+  A: rev1 = X, rev2 = Y. T1 BEGIN, decline X; T2 BEGIN, decline Y; T1 decline Y (waits: advisory);
+     T2 decline X  -> T1: ERR 40P01 deadlock detected; T2 ok.            (r5race, post-J13; 2 runs)
+  D: Y accepted+opened. T1 BEGIN, decline X; T2 BEGIN, invoice 100 on Y; T2 decline X (waits: advisory);
+     T1 invoice 100 on Y -> T2: ERR 40P01 deadlock detected; T1 ok.        (r5race, post-J13; 2 runs)
+Same two scripts on r5race_prej13 (every migration except 20260927160000):
+  A -> s0 waits on "transactionid" (the old unique index), 40P01.   D -> T2 waits "transactionid", 40P01.
+So J13 did NOT add these shapes (the claim holds in substance: the issue lock replaces the unique-index
+wait one-for-one). But both are single-quote, seal-free deadlocks outside the "two shapes" the project
+tells the application to retry, and after J13 shape A aborts a transaction both of whose responses are
+now legal (pre-J13 one of them would have failed anyway). CONFIRMED (execution); the impact on a
+future application is PLAUSIBLE.
+
+Also executed and HELD (no finding): three sessions, accept in flight + two declines waiting -> both
+declines refused, rows {accepted: 1}; decline in flight + accept + decline waiting -> accept taken,
+later decline refused; responses on two issues of one quote do not block each other (5-6 ms); the
+per-issue lock removed (plant, restored) -> both J13 races in concurrency.pg.test.ts fail (2 failed).
+
+---
+
+### S2 addendum — three more phantom-path forms that pass both tools silently (J1; Rule 21.8 says "checks every backticked path")
+
+Executed (one line appended to docs/design/acceptance-responses.md, both tools run, restored, diff -q clean):
+    Run `tools/never-written.sh`, see `new-app/db/never-written-dir/`, and `new-app/db/test/never-written.test.ts:12`.
+    check_schema_citations -> "Every cited path and every named database object resolves." (exit 0)
+    check_citations        -> "Every cited filename and symbol resolves. …"               (exit 0)
+Why: CITED_PATH needs a 2-6 letter extension at the very end, and PATH_EXTS has no `.sh`; a `:line` suffix
+or a trailing `/` defeats the match entirely. Directory citations are common in scanned files and are never
+checked; e.g. `apps/api/src/pricing/scrapers/` (docs/PRICING.md:35) and `infra/` (new-app/CLAUDE.md:155)
+match no tracked directory (some are planned work, which the tool cannot distinguish). Guard weakness, not a
+user-visible defect. CONFIRMED.
+
+---
+
+### Checked and found NOTHING (stated so "clean" is distinguishable from "not looked at")
+
+J3/J9 (database, r5probe as pryvis_app unless stated):
+- No ON UPDATE CASCADE key remains: catalogue lists 56 FKs, every `confupdtype='r'`; r5pre had 49/49 'c'.
+- Every uuid `*_id` column has a key, except audit_entry.subject_id (polymorphic, named), quote_line.recipe_id
+  (owed, printed) and the deliberate single-column person keys (audit_entry.actor_user_id, platform_capability,
+  mfa_*); every tenant-owned child key carries tenant_id. The seven R16 keys exist and are composite.
+- acceptance.document_render_id is NOT NULL and keyed (document_render_id, issue_id, tenant_id); plant
+  removing NOT NULL -> "R9 · REFUSES an acceptance that records no render at all" fails (1 failed), restored.
+- Tenant delete as pryvis_app: refused by the trigger; `SET LOCAL session_replication_role = replica` ->
+  permission denied; `TRUNCATE tenant CASCADE` -> permission denied; no SECURITY DEFINER function exists
+  in the schema (pg_proc prosecdef all f), so no definer path around the current_user check.
+- Audit rows: no UPDATE/DELETE policy on audit_entry; actor and tenant keys are RESTRICT; I found no
+  referential action that deletes or rewrites an audit row from the application.
+- No cross-tenant write through a referential action found: every remaining CASCADE is ON DELETE from
+  tenant (blocked for the app) or from app_user to that same user's mfa/capability rows.
+J13:
+- Correctness under three-session races (S9 list) held; the plant removing the lock is caught by both races.
+- State precedence: plant moving "sealed_awaiting_number" below the response states -> 1 documents-core
+  test red (H4 block), restored; so unnumbered precedence is guarded, though the walk never reaches it
+  (every walk seal is numbered in the same transaction).
+- Readers of acceptance (issue_ceiling_minor, issue_balance_enforce, quote_issue_one_live_ceiling,
+  acceptance_withdrawal_guard, quote_issue_state) all use EXISTS or key on the acceptance id; none assumes
+  one row per issue. No api code reads acceptance.
+- Walk oracle: derives responses, withdrawals and states from raw rows with no call to the functions under
+  test; its response prediction mirrors the known gap (responses on superseded issues taken) rather than
+  hiding a different one.
+- Two-key vs one-key advisory spaces: confirmed separate (objsubid 2 vs 1); nothing else uses the two-key form.
+J12: the J12 test block does assert accepted_total_minor unchanged after variation, invoice, credit note
+  and void, as §6.2a now says.
+
+Not checked: apps/api/web/mobile (out of these commits' scope; J13 has no api reader); Prisma Client runtime
+behaviour; check_dispositions/check_rules internals beyond their exit lines; THREAT-MODEL §4e wording beyond R5.
+
+---
+
+### Verdicts
+
+- **J1 — not closed.** R11's phrase window is gone and the exemption list is printed, but the banner
+  "none skipped" still omits 8 whole files / 388 path citations and an unprinted *_id exemption (S5);
+  phantom paths pass silently when they climb out of the repo, end in `.sh`, carry `:line`, or name a
+  directory (S2); a dropped index still resolves (S3). R3: the constraint/column tracker misses
+  `ALTER TABLE IF EXISTS|ONLY`, multi-clause DROP, lower-case types, `ADD COLUMN IF NOT EXISTS` and
+  `ADD` without COLUMN, each silently (S4). R12: arrays/domains/_cents/declared-type ceiling hold, but
+  `…_minor_units` — the spelling new-app/CLAUDE.md prescribes — escapes (S6).
+- **J3 — fix holds for the parts claimed in the database** (R1/Q4 all 49 converted, R2, R16, R4). Not
+  closed on the schema.prisma claim: "so Prisma cannot regenerate the cascade" is true for ON UPDATE only;
+  five relations still declare onDelete: Cascade against RESTRICT keys and prisma migrate diff regenerates
+  them (S1). R17 not examined (stated open).
+- **J9 — fix holds for the part claimed (R9).** R10/R18 not examined (stated open).
+- **J12 — not closed.** The §6.2a deletion holds, but four writer/mechanism sentences of the kind Rule 21.10
+  forbids remain outside committed migrations (schema.prisma:923-925, adr/README.md:40, PRD R1.24b,
+  domain-model §6.3 — the last re-written by the J13 commit) (S7).
+- **J13 — fix holds for the parts claimed** (partial index, decline-after-accept refusal under the issue
+  lock, withdrawal of accepted only, state "withdrawn"), verified by race and plant. Two documentation
+  findings: stale "a second is refused" in domain-model §8/§6.2 (S8), and the deadlock list it leans on
+  is incomplete, pre-existing (S9).
