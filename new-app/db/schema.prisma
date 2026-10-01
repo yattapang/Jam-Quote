@@ -663,7 +663,9 @@ model QuoteIssue {
 
   lines      QuoteIssueLine[]
   number     IssueNumber?
-  acceptance Acceptance?
+  /// J13: many responses per issue (declines are unlimited), at most ONE with outcome "accepted" —
+  /// a partial unique index the migration owns, which Prisma cannot express.
+  responses  Acceptance[]
   variations Variation[]
   invoices   Invoice[]
   balance    IssueBalance?
@@ -758,10 +760,11 @@ model Acceptance {
   /// child unrepresentable rather than merely invisible. Redundant as uniqueness; that is
   /// the point.
   @@unique([id, tenantId])
-  /// J3. Prisma requires this in the relation's field order; the real index is
-  /// (tenant_id, <column>), tenant first, because every query filters on the tenant. Same
-  /// uniqueness, different column order, and the migration owns the index.
-  @@unique([issueId, tenantId])
+  /// J13 replaced the one-row-per-issue key with a PARTIAL unique index on (tenant_id, issue_id)
+  /// WHERE outcome = 'accepted': declines are unlimited, acceptances one per issue, ever. Prisma has no
+  /// partial unique, so the rule lives only in the migration — never add it back here as @@unique, or a
+  /// generated migration would forbid a second decline.
+  @@index([tenantId, issueId])
   @@map("acceptance")
 }
 

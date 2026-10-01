@@ -274,8 +274,12 @@ demonstrated, it is not a requirement, it is a hope.
   default bar is grade 3**: a one-time code to a stored or typed channel, an explicit signing act
   labelled as one, consent to sign electronically, and a record carrying the signer's name, the
   timestamp, the IP, the user agent and the destination actually used — plus a **reference to the
-  `document_render` row whose hash is the document signed**, not a hash of its own (F17). One acceptance
-  per issue, immutable; many evidence rows.
+  `document_render` row whose hash is the document signed**, not a hash of its own (F17). **One
+  acceptance per issue, ever, immutable; many evidence rows.** A client may **decline and later accept**
+  the same issue, as often as it takes — a mis-tap or a negotiation costs no new revision — but a decline
+  cannot follow an acceptance, and once an acceptance is withdrawn the issue reads `withdrawn` and takes no
+  further response: the remedy is the next revision (J13, option C plus A, owner 2026-09-27;
+  `design/acceptance-responses.md`).
 - **R1.20e** **A channel is required at the point of use, not on the client (H9).** A client may exist
   with neither address — a walk-up at a gate is a real client — but a share link may only be minted for a
   client with at least one channel, and it may be typed at send time.

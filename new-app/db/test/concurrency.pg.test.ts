@@ -99,6 +99,41 @@ async function waitsOnLock(pid: number, kind: "quote" | "row"): Promise<void> {
   );
 }
 
+/**
+ * Resolves once `pid` waits on the per-ISSUE response lock (J13) — not the quote lock, which responses
+ * take shared and so never wait on each other. The issue lock uses the two-key advisory form, which
+ * `pg_locks` reports with objsubid 2; the quote lock's one-key form is objsubid 1.
+ */
+async function waitsOnIssueLock(pid: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const rows = (
+      await admin.query(
+        `SELECT 1 FROM pg_locks
+          WHERE pid = $1 AND NOT granted AND locktype = 'advisory' AND objsubid = 2`,
+        [pid],
+      )
+    ).rows;
+    if (rows.length > 0) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`session ${pid} never waited on the per-issue response lock`);
+}
+
+/** A client response with its own render (R9), without opening a balance. */
+function respondSql(issueId: string, outcome: "accepted" | "declined") {
+  return {
+    text: `WITH r AS (
+             INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+             VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
+                     encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
+             RETURNING id)
+           INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                   consented_to_sign, occurred_at)
+           SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+    values: [id(), TENANT, issueId, outcome],
+  };
+}
+
 /** Settles `pending` within `ms`, or reports that it was still blocked — for "must NOT wait" claims. */
 async function withinMs(pending: Promise<unknown>, ms: number) {
   const timer = new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), ms));
@@ -718,6 +753,63 @@ suite("concurrency against real PostgreSQL", () => {
       expect((await figures(rev1)).state).toBe("superseded");
     } finally {
       for (const s of [a, other]) await s.client.end();
+    }
+  });
+
+  it("J13 · a decline arriving while an acceptance is in flight waits on the issue lock, then is refused", async () => {
+    // Without the per-issue lock both commit: the shared quote lock lets them run together and neither
+    // sees the other's uncommitted row — a decline recorded after an acceptance.
+    const quote = await newQuote();
+    const setup = await session();
+    const issue = await seal(setup.client, quote, 1);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(respondSql(issue, "accepted"));
+
+      const declining = outcome(b.client.query(respondSql(issue, "declined")));
+      await waitsOnIssueLock(b.pid);
+      await a.client.query("COMMIT");
+
+      const result = await declining;
+      expect(result.ok).toBe(false);
+      expect(result.ok ? "" : result.error).toMatch(/a decline cannot follow an acceptance/);
+      const [row] = (
+        await owner.query<{ accepted: string; declined: string }>(
+          `SELECT count(*) FILTER (WHERE outcome = 'accepted') AS accepted,
+                  count(*) FILTER (WHERE outcome = 'declined') AS declined
+             FROM acceptance WHERE issue_id = $1`,
+          [issue],
+        )
+      ).rows;
+      expect(row).toEqual({ accepted: "1", declined: "0" });
+    } finally {
+      for (const s of [a, b]) await s.client.end();
+    }
+  });
+
+  it("J13 · an acceptance arriving while a decline is in flight waits, then is accepted", async () => {
+    const quote = await newQuote();
+    const setup = await session();
+    const issue = await seal(setup.client, quote, 1);
+    await setup.client.end();
+
+    const a = await session();
+    const b = await session();
+    try {
+      await a.client.query("BEGIN");
+      await a.client.query(respondSql(issue, "declined"));
+
+      const accepting = outcome(b.client.query(respondSql(issue, "accepted")));
+      await waitsOnIssueLock(b.pid);
+      await a.client.query("COMMIT");
+
+      expect(await accepting).toEqual({ ok: true });
+    } finally {
+      for (const s of [a, b]) await s.client.end();
     }
   });
 });

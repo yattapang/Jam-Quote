@@ -1,11 +1,12 @@
 # Design: what may follow a client's first answer on an issue
 
-**Status: APPROVED by the owner 2026-09-27 · independent review OUTSTANDING (Rule 1.10, Rule 24.6).**
+**Status: APPROVED by the owner 2026-09-27 · BUILT 2026-10-01 · independent review OUTSTANDING (Rule 1.10, Rule 24.6).**
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | ✅ **2026-09-27** — option **C plus A** of the four put to the owner |
-| **Independent review** | Will this do what it says? | **Outstanding** — J13 is not closed until someone who did not write this checks it |
+| **Owner approval** | Is this what you want built? | ✅ **2026-09-27** — option **C plus A** of the four put to the owner; the per-issue lock (§3a) **2026-10-01** |
+| **Built** | Is it in the schema? | ✅ `new-app/db/migrations/20260927160000_acceptance_responses/migration.sql` |
+| **Independent review** | Will this do what it says? | **Outstanding** — batched with J1, J3, J9 and J12 by the owner's choice |
 
 Date: 2026-09-27 · Answers finding **J13** (`PRD-REVIEW-4.md`) · Delegation (Rule 16.5): **Opus** — it changes
 the rule the ceiling, the per-quote lock and the evidence ladder all key on.
@@ -51,6 +52,26 @@ contractor's deliberate "this document was wrong".
   and no accepted row. Superseded and awaiting-number keep their precedence.
 - **Nothing else changes meaning.** `issue_ceiling_minor()`, the balance functions and the quote lock
   already key on "an accepted, un-withdrawn acceptance", which stays unique.
+
+## 3a. Found while building, and added (2026-10-01)
+
+Checking the design against the schema of its build day found three things it did not cover:
+
+1. **The state function checked `declined` before `accepted`.** An issue declined and then accepted would
+   have read `declined`. The precedence is now superseded, sealed awaiting a number, withdrawn, accepted,
+   declined, issued.
+2. **A decline could be withdrawn.** The withdrawal guard never read the outcome. Only an accepted row can
+   be withdrawn now.
+3. **A decline and an accept arriving together could both commit.** Responses take the per-quote lock
+   shared, so neither saw the other's uncommitted row. The response trigger now takes a per-issue
+   exclusive lock, always after the quote lock, in a separate advisory key space; the owner chose it over
+   taking the quote lock exclusively, which would have changed the lock contract and added a deadlock
+   shape. Two races in `new-app/db/test/concurrency.pg.test.ts` prove each order.
+
+**Found and NOT fixed here:** a response is accepted on an issue that is superseded or not yet numbered —
+probed on 2026-10-01, and true before J13 too. No money moves (a superseded issue's ceiling is 0), but the
+record can show a client accepting a document that had already been replaced. Recorded for the owner as
+its own item rather than widened into J13.
 
 ## 4. Rejected
 

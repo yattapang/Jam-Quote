@@ -904,7 +904,7 @@ describe("3 · a document's state is derived, so there is no value to disagree a
     expect(await state(issue)).toBe("issued");
   });
 
-  it("reads accepted, then issued again once the acceptance is withdrawn", async () => {
+  it("reads accepted, then withdrawn once the acceptance is withdrawn (J13 reversed 'issued again')", async () => {
     const issue = await seal(1, 100_000n);
     await sql(
       `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
@@ -920,8 +920,10 @@ describe("3 · a document's state is derived, so there is no value to disagree a
       [id(), TENANT, acceptance, USER],
     );
 
-    // No column was updated to make this happen — the state is a function of the rows.
-    expect(await state(issue)).toBe("issued");
+    // No column was updated to make this happen — the state is a function of the rows. Until J13 this
+    // read "issued", a state that promised an acceptance the schema then refused; the owner's decision
+    // (C plus A) makes a withdrawn issue final, with the next revision as the remedy.
+    expect(await state(issue)).toBe("withdrawn");
   });
 
   it("reads superseded when a later revision exists", async () => {
@@ -1758,5 +1760,99 @@ describe("R · no key rewrites history, and every document names its own tenant'
         [id(), TENANT, acceptance, OTHER_USER],
       ),
     ).rejects.toThrow(/acceptance_withdrawal_withdrawn_by_user_id_fkey/);
+  });
+});
+
+// ===========================================================================
+// J13 — what may follow a client's first answer (option C plus A; migration
+// 20260927160000_acceptance_responses). Each refusal is pinned to the index or the message that makes
+// it, so a test cannot pass on some other refusal.
+describe("J13 · decline then accept, one accepted row, and withdrawn is final", () => {
+  /** Numbers the issue, so its state reads past sealed_awaiting_number. */
+  async function numbered(revision = 1): Promise<string> {
+    const issue = await seal(revision, 100_000n);
+    await sql(
+      `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id(), TENANT, issue, SERIES, revision, `Q-${revision}`],
+    );
+    return issue;
+  }
+  /** A client response with its own render (R9). `accept()` is used where the balance must open. */
+  async function respond(issue: string, outcome: "accepted" | "declined"): Promise<string> {
+    const responseId = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [responseId, TENANT, issue, outcome]);
+    return responseId;
+  }
+  async function withdraw(acceptanceId: string) {
+    return sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+  const responses = async (issue: string) =>
+    (await sql(`SELECT 1 FROM acceptance WHERE issue_id = $1`, [issue])).length;
+
+  it("accepts after a decline, keeps the decline, and opens the balance", async () => {
+    const issue = await numbered();
+    await respond(issue, "declined");
+    expect(await state(issue)).toBe("declined");
+
+    await accept(issue);
+    expect(await state(issue)).toBe("accepted");
+    expect(await responses(issue)).toBe(2);
+    // The money side keys on the one accepted row, undisturbed by the decline before it.
+    await invoice(issue, 100_000n);
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(100_000);
+  });
+
+  it("accepts after several declines", async () => {
+    const issue = await numbered();
+    for (let i = 0; i < 3; i += 1) await respond(issue, "declined");
+    expect(await state(issue)).toBe("declined");
+    await accept(issue);
+    expect(await state(issue)).toBe("accepted");
+    expect(await responses(issue)).toBe(4);
+  });
+
+  it("REFUSES a second acceptance of the same issue", async () => {
+    const issue = await numbered();
+    await accept(issue);
+    await expect(respond(issue, "accepted")).rejects.toThrow(/acceptance_accepted_issue_key/);
+  });
+
+  it("REFUSES a decline after an acceptance", async () => {
+    const issue = await numbered();
+    await accept(issue);
+    await expect(respond(issue, "declined")).rejects.toThrow(/a decline cannot follow an acceptance/);
+    expect(await state(issue)).toBe("accepted");
+  });
+
+  it("reads withdrawn after a withdrawal, and REFUSES any response after it", async () => {
+    const issue = await numbered();
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+    expect(await state(issue)).toBe("withdrawn");
+
+    // The withdrawn row still holds the one accepted slot: the remedy is the next revision.
+    await expect(respond(issue, "accepted")).rejects.toThrow(/acceptance_accepted_issue_key/);
+    await expect(respond(issue, "declined")).rejects.toThrow(/a decline cannot follow an acceptance/);
+    expect(await state(issue)).toBe("withdrawn");
+  });
+
+  it("REFUSES withdrawing a decline", async () => {
+    const issue = await numbered();
+    const decline = await respond(issue, "declined");
+    await expect(withdraw(decline)).rejects.toThrow(/only an acceptance can be withdrawn/);
+    expect(await state(issue)).toBe("declined");
+  });
+
+  it("an earlier decline does not outrank a later acceptance's withdrawal", async () => {
+    const issue = await numbered();
+    await respond(issue, "declined");
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+    expect(await state(issue)).toBe("withdrawn");
   });
 });

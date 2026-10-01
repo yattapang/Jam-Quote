@@ -381,14 +381,17 @@ paragraphs to disagree about.
 |---|---|
 | `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered |
 | `issued` | an `issue_number` row exists |
+| `withdrawn` | the issue's one accepted row has a withdrawal — final for this issue; the remedy is the next revision (J13) |
 | `accepted` | an `acceptance` row exists with outcome `accepted` and no withdrawal |
-| `declined` | a declining `acceptance` row exists |
+| `declined` | a declining row exists and no accepted one — a client may still accept afterwards (J13) |
 | `superseded` | a later revision of the same quote exists |
 
-Read the function for the precedence between them; it is eleven lines and it is authoritative.
+Read the function for the precedence between them (its latest definition is in
+`new-app/db/migrations/20260927160000_acceptance_responses/migration.sql`); it is authoritative.
 
 **Transitions that must be impossible, and are therefore tested** (`db/test/documents-core.test.ts`):
-editing or deleting an issue · editing an acceptance · accepting twice · invoicing past the ceiling ·
+editing or deleting an issue · editing an acceptance · accepting twice, or after a withdrawal · a decline
+after an acceptance · withdrawing a decline · invoicing past the ceiling ·
 sealing a second issue for the same (quote, revision) (G4) · writing `issue_balance` outside its function
 · withdrawing an acceptance twice · deleting a balance row.
 

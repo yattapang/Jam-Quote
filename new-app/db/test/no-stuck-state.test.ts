@@ -60,8 +60,9 @@
  *   passing on nothing — including withdrawal after money has moved, which the first version reached zero
  *   times (L3).
  * - **Not concurrency.** Writes are serial on one PGlite connection.
- * - **One tenant, small amounts, no declines and no issue numbering.** A defect that needs a declined
- *   acceptance or a numbered issue is outside this walk.
+ * - **One tenant, small amounts, one number series.** Declines and issue numbering joined the walk with
+ *   J13 (2026-10-01), so the response rules and the derived state are judged by the oracle too; a
+ *   defect that needs a second tenant or a series gap is outside it.
  * - **Not the locks.** One connection cannot race; `concurrency.pg.test.ts` does that against real
  *   PostgreSQL.
  * - **Not a defect both implementations share.** If the PRD's rule itself is wrong, both agree.
@@ -73,6 +74,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const TENANT = "11111111-1111-4111-8111-111111111111";
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CLIENT = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const SERIES = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+/** Issue numbers allocated so far; every sealed issue is numbered, so its state reads past "sealed". */
+let numbers = 0;
 
 const RUNS = 200;
 const WRITES_PER_RUN = 16;
@@ -120,6 +124,12 @@ beforeEach(async () => {
     `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'A Client', now())`,
     [CLIENT, TENANT],
   );
+  await db.query(
+    `INSERT INTO number_series (id, tenant_id, document_kind, prefix, updated_at)
+     VALUES ($1, $2, 'quote', 'Q-', now())`,
+    [SERIES, TENANT],
+  );
+  numbers = 0;
   await db.exec(`SET ROLE ${APP_ROLE};`);
   await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [TENANT]);
 });
@@ -187,6 +197,40 @@ async function oracle(issueId: string) {
   return { ceiling, billed, variations, invoiceCount: invoices.length };
 }
 
+/**
+ * The state oracle (J13, option C plus A), derived from raw rows and sharing no SQL with
+ * `quote_issue_state()`: superseded, then unnumbered, then the one accepted row withdrawn, then accepted,
+ * then any decline, then issued.
+ */
+async function expectedState(issueId: string): Promise<string> {
+  const [issue] = await sql<{ quote_id: string; revision: number }>(
+    `SELECT quote_id, revision FROM quote_issue WHERE id = $1`,
+    [issueId],
+  );
+  const siblings = await sql<{ revision: number }>(
+    `SELECT revision FROM quote_issue WHERE quote_id = $1`,
+    [issue!.quote_id],
+  );
+  if (siblings.some((s) => s.revision > issue!.revision)) return "superseded";
+  if ((await sql(`SELECT 1 FROM issue_number WHERE issue_id = $1`, [issueId])).length === 0) {
+    return "sealed_awaiting_number";
+  }
+  const responses = await sql<{ id: string; outcome: string }>(
+    `SELECT id, outcome FROM acceptance WHERE issue_id = $1`,
+    [issueId],
+  );
+  const withdrawnIds = new Set(
+    (await sql<{ acceptance_id: string }>(`SELECT acceptance_id FROM acceptance_withdrawal`)).map(
+      (w) => w.acceptance_id,
+    ),
+  );
+  const accepted = responses.find((r) => r.outcome === "accepted");
+  if (accepted && withdrawnIds.has(accepted.id)) return "withdrawn";
+  if (accepted) return "accepted";
+  if (responses.some((r) => r.outcome === "declined")) return "declined";
+  return "issued";
+}
+
 /** Runs the walk for one seed and returns what it examined and what it found. */
 async function walk(seed: number) {
   let state = seed;
@@ -203,6 +247,12 @@ async function walk(seed: number) {
   let wrongDocumentWithdrawals = 0;
   let wrongDocumentWithVariation = 0;
   let taxedAcceptances = 0;
+  let declines = 0;
+  let acceptsAfterDecline = 0;
+  let refusedAsPredicted = 0;
+  let statesByName: Record<string, number> = {};
+  const wrongResponses: string[] = [];
+  const wrongStates: string[] = [];
   const stuck: string[] = [];
   const disagreements: string[] = [];
   const overCeiling: string[] = [];
@@ -226,7 +276,7 @@ async function walk(seed: number) {
       const issue = issues.length
         ? issues[issues.length - 1 - (next(3) === 0 ? next(issues.length) : 0)]!
         : "";
-      const op = issues.length ? next(12) : 0;
+      const op = issues.length ? next(13) : 0;
       let ok = false;
 
       if (op <= 1) {
@@ -235,8 +285,9 @@ async function walk(seed: number) {
         const taxed = next(2) === 0;
         const tax = taxed ? Math.floor((subtotal * 15) / 100) : 0;
         revision += 1;
-        ok = await attempt(() =>
-          sql(
+        const number = numbers + 1;
+        ok = await attempt(async () => {
+          await sql(
             `INSERT INTO quote_issue
                (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
                 currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
@@ -244,13 +295,31 @@ async function walk(seed: number) {
              VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', $6, $7, $8, $9,
                      now(), $10, now())`,
             [issueId, TENANT, quote, revision, CLIENT, taxed ? 1500 : 0, subtotal, tax, subtotal + tax, USER],
-          ),
-        );
-        if (ok) issues.push(issueId);
-      } else if (op <= 3) {
+          );
+          // Numbered with the seal, so the J13 states (declined, accepted, withdrawn) are reachable.
+          await sql(
+            `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [id(), TENANT, issueId, SERIES, number, `Q-${number}`],
+          );
+        });
+        if (ok) {
+          issues.push(issueId);
+          numbers = number;
+        }
+      } else if (op <= 3 || op === 12) {
+        // A client response (J13). Op 12 is a DECLINE, added as an extra operation rather than carved
+        // out of the acceptances: carving them out cut the money paths the floors below were measured
+        // on (withdrawals after money fell to 1). The oracle predicts, from the rows alone, whether the
+        // database must take the response or refuse it, and a disagreement either way is a finding.
+        const outcome = op === 12 ? "declined" : "accepted";
         const acceptanceId = id();
+        const prior = await sql<{ outcome: string }>(
+          `SELECT outcome FROM acceptance WHERE issue_id = $1`,
+          [issue],
+        );
+        const mayRespond = !prior.some((p) => p.outcome === "accepted");
         ok = await attempt(async () => {
-          // Every acceptance records its own issue's render (R9), so render first, in one statement.
           await sql(
             `WITH r AS (
                INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
@@ -259,12 +328,18 @@ async function walk(seed: number) {
                RETURNING id)
              INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
                                      consented_to_sign, occurred_at)
-             SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r`,
-            [acceptanceId, TENANT, issue],
+             SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+            [acceptanceId, TENANT, issue, outcome],
           );
-          await sql(`SELECT issue_balance_open($1)`, [issue]);
+          if (outcome === "accepted") await sql(`SELECT issue_balance_open($1)`, [issue]);
         });
-        if (ok) {
+        if (ok !== mayRespond) {
+          wrongResponses.push(`${issue}: ${outcome} after [${prior.map((p) => p.outcome)}] was ${ok ? "taken" : "refused"}`);
+        }
+        if (!ok && !mayRespond) refusedAsPredicted += 1;
+        if (ok && outcome === "declined") declines += 1;
+        if (ok && outcome === "accepted" && prior.some((p) => p.outcome === "declined")) acceptsAfterDecline += 1;
+        if (ok && outcome === "accepted") {
           acceptances.push({ id: acceptanceId, issue });
           const [row] = await sql<{ tax: string }>(`SELECT tax_minor AS tax FROM quote_issue WHERE id = $1`, [issue]);
           if (Number(row!.tax) > 0) taxedAcceptances += 1;
@@ -411,6 +486,14 @@ async function walk(seed: number) {
       if (expected.billed > expected.ceiling) overCeiling.push(issue);
     }
     if (liveInQuote > 1) twoLiveCeilings.push(quote);
+
+    // J13: every issue's state, judged by the oracle's own precedence.
+    for (const issue of issues) {
+      const expected = await expectedState(issue);
+      const [row] = await sql<{ s: string }>(`SELECT quote_issue_state($1) AS s`, [issue]);
+      statesByName = { ...statesByName, [row!.s]: (statesByName[row!.s] ?? 0) + 1 };
+      if (row!.s !== expected) wrongStates.push(`${issue}: db ${row!.s} oracle ${expected}`);
+    }
   }
 
   return {
@@ -422,6 +505,12 @@ async function walk(seed: number) {
     wrongDocumentWithdrawals,
     wrongDocumentWithVariation,
     taxedAcceptances,
+    declines,
+    acceptsAfterDecline,
+    refusedAsPredicted,
+    statesByName,
+    wrongResponses,
+    wrongStates,
     stuck,
     disagreements,
     overCeiling,
@@ -438,6 +527,8 @@ describe("K6 and L3 · no sequence of financial writes leaves an issue stuck, ov
         `walk seed ${seed}:`,
         JSON.stringify({
           ...result,
+          wrongResponses: result.wrongResponses.length,
+          wrongStates: result.wrongStates.length,
           stuck: result.stuck.length,
           disagreements: result.disagreements.length,
           overCeiling: result.overCeiling.length,
@@ -461,7 +552,19 @@ describe("K6 and L3 · no sequence of financial writes leaves an issue stuck, ov
       expect(result.wrongDocumentWithdrawals).toBeGreaterThan(12);
       expect(result.wrongDocumentWithVariation).toBeGreaterThan(4);
       expect(result.taxedAcceptances).toBeGreaterThan(60);
+      // J13, measured 2026-10-01 with declines as op 12, seeds 1 and 2: 121-143 declines, 43-52 accepts
+      // after a decline, 37-38 issues ending withdrawn and 17-18 ending declined, and the refusals below.
+      // Floors at about half, as above.
+      expect(result.declines).toBeGreaterThan(60);
+      expect(result.acceptsAfterDecline).toBeGreaterThan(20);
+      expect(result.statesByName.withdrawn ?? 0).toBeGreaterThan(18);
+      expect(result.statesByName.declined ?? 0).toBeGreaterThan(8);
+      // 301-315 responses refused, each as the oracle predicted: the refusal path is exercised, not
+      // only the acceptances.
+      expect(result.refusedAsPredicted).toBeGreaterThan(150);
 
+      expect(result.wrongResponses).toEqual([]);
+      expect(result.wrongStates).toEqual([]);
       expect(result.stuck).toEqual([]);
       expect(result.disagreements).toEqual([]);
       expect(result.overCeiling).toEqual([]);
