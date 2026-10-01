@@ -302,8 +302,9 @@ describe("J2 · the ceiling is enforced by the database, not by callers remember
   });
 
   it("REFUSES invoicing an issue that was never accepted — a second hole that was only prose", async () => {
-    // No acceptance means no balance row, and the function raises rather than treating a missing row as
-    // permission. Previously this was a sentence in the PRD and nothing in the database.
+    // Without an acceptance the ceiling is 0, so the invoice is refused. (Not "no acceptance means no
+    // balance row": issue_balance_open() does not check for an acceptance, so a row can exist without
+    // one — finding V18. Either way nothing can be invoiced.) Previously this was a sentence in the PRD and nothing in the database.
     const issue = await seal(1, 100_000n);
     await expect(invoiceDirectly(issue, 1_000n)).rejects.toThrow(/issue_balance row missing/);
   });
@@ -1217,7 +1218,9 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     await expect(invoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling/);
   });
 
-  it("leaves accepted_total untouched, because an immutable copy is what makes it safe", async () => {
+  // Finding V16: the column is not immutable — a caller that sets the flag can rewrite it (R5). What this
+  // executes is that WITHDRAWAL does not touch it; the copy is safe because the ISSUE cannot change.
+  it("leaves accepted_total untouched on withdrawal; the issue it copies is immutable", async () => {
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await withdraw(acceptance);

@@ -1,4 +1,4 @@
-"""Every cited path and every named database object is resolved against what actually exists.
+"""Cited paths and named database objects, in the forms listed below, are resolved against what exists.
 
 ## Why this exists, and why it is a NEW tool rather than a fifth patch to `check_citations.py`
 
@@ -59,8 +59,16 @@ nothing fails the run.
 - **Citation forms outside the list above**, which pass silently: a path with no slash, or no extension
   and no trailing slash (`tools/never_written`, a directory written without its `/`); an extension not in
   PATH_EXTS; a single-word identifier with no underscore (`nevertable`); a call or identifier in a prose
-  document rather than a migration comment; anything not in backticks. A regular expression over free
-  text cannot recognise every way a claim is written (T1, T2); these are the stated limits.
+  document rather than a migration comment; anything not in backticks; a call written with a space
+  before its parenthesis (`name ()`); an identifier with a `$` or a non-ASCII letter, or a double-quoted
+  identifier inside the backticks; a mixed-case `Table.column`. A regular expression over free text cannot
+  recognise every way a claim is written (T1, T2, V2, V3); these are the stated limits.
+- **Settings read inside quoted text.** A setting counts as real if a `current_setting(...)` or
+  `set_config(...)` call appears in a migration outside `--` and non-nested `/* */` comments. Real reads sit
+  inside `$$`-quoted function bodies, so quoted text cannot be stripped, and a call inside a dollar-quoted
+  STRING, or a nested block comment, also counts (V1). Accepted by the owner, 2026-10-01.
+- **That a leading slash means the repository root.** The slash is dropped, so /x/y.ts resolves wherever
+  x/y.ts would, as a suffix too (V14). It still has to name a file that exists.
 - **Not that a cited mechanism is REACHABLE.** This is J2's lesson and it is the important limit.
   `issue_balance_apply()` existed, was declared, was correctly named everywhere — and nothing
   required an invoice to pass through it. Only the trigger and the plant in
@@ -118,7 +126,7 @@ NEAR_MISS_SUFFIXES = ("minor", "thousandths", "id", "at", "key", "hash", "kind")
 _PATH_FIRST = r"[A-Za-z0-9_@./~$+(\[]"
 _PATH_REST = r"[A-Za-z0-9_@./~$+()\[\]-]"
 CITED_PATH = re.compile(
-    r"`(" + _PATH_FIRST + _PATH_REST + r"*/[A-Za-z0-9_.~$+()\[\]-]+\.[A-Za-z]{1,8})"
+    r"`(" + _PATH_FIRST + _PATH_REST + r"*/[A-Za-z0-9_@.~$+()\[\]-]+\.[A-Za-z]{1,8})"  # V5: `@` too
     # T2: a `#anchor`, `:12`, `:12-20`, `:12:5` or `:L12` suffix no longer defeats the match.
     r"(?:#[^`]*|:L?\d+(?::\d+)?(?:-L?\d+)?)?`"
 )
@@ -130,9 +138,10 @@ CITED_IDENTIFIER = re.compile(r"`([a-z][a-z0-9]*(?:_[a-z0-9]+)+)`")
 # U3: any token with an underscore — leading, trailing or doubled underscores included.
 CITED_IDENTIFIER_ANY_CASE = re.compile(r"`([A-Za-z_][A-Za-z0-9_]*_[A-Za-z0-9_]*)`")
 # A function cited as a call, `name()` or `name(args)` — the form every migration uses (T1).
-CITED_CALL = re.compile(r"`(?:public\.)?([A-Za-z_][A-Za-z0-9_]*)\([^`]*\)`")  # U4: public.fn() too
+# U4, V3: optionally schema-qualified, in any case — `public.fn()`, `PUBLIC.fn()`, `pg_catalog.fn()`.
+CITED_CALL = re.compile(r"`(?:([A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z_][A-Za-z0-9_]*)\([^`]*\)`")
 # A dotted name: a setting such as `pryvis.balance_write`, or a public-qualified name (T1).
-CITED_DOTTED = re.compile(r"`([a-z][a-z0-9_]*)\.([a-z][a-z0-9_.]*)`")
+CITED_DOTTED = re.compile(r"`([A-Za-z][A-Za-z0-9_]*)\.([A-Za-z][A-Za-z0-9_.]*)`")  # V4: any case
 
 # Citations that are deliberately to something absent, keyed by (citing file, citation) — not by a
 # phrase near them (finding R11) and not by line number, which moves with every edit above it. Every
@@ -150,7 +159,7 @@ CITATION_EXEMPTIONS: dict[tuple[str, str], str] = {
         "PL/pgSQL's GET DIAGNOSTICS item, not a schema object. A committed migration (Rule 6)."
     ),
     ("docs/ARCHITECTURE.md", "extracted/JamQuote.dc.html"): (
-        "A mockup deleted on 2026-09-26; cited as the history of the design tokens."
+        "A mockup deleted on 2026-09-24 (604e774); cited as the history of the design tokens."
     ),
     ("new-app/db/migrations/20260925120000_documents_core/migration.sql", "withdrawn_at"): (
         "Names the design ADR 0025 rejected (a nullable column on acceptance), to say why it was "
@@ -227,8 +236,10 @@ class Schema:
 
 
 def tracked() -> list[str]:
-    out = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout
-    return out.split()
+    # -z: NUL-separated. Splitting on whitespace turned `docs/Pryvis Logo.png` into fake entries that a
+    # phantom could resolve to (V6).
+    out = subprocess.run(["git", "ls-files", "-z"], capture_output=True, text=True, check=True).stdout
+    return [f for f in out.split("\0") if f]
 
 
 def resolve(cited: str, citing: str, known: set[str], suffixes: set[str]) -> str | None:
@@ -300,6 +311,10 @@ def main() -> int:
     for path in files:
         # U6: a file skipped for its extension, or because it cannot be read as text, is COUNTED and
         # printed — "states everything it does not scan" was false while these went unmentioned.
+        if path.startswith(SKIP_SCAN_PREFIXES) and not path.endswith(SCAN_EXTS):
+            # V7: every file in a skipped tree is counted, not only those with a scanned extension.
+            prefix_skipped[next(p for p in SKIP_SCAN_PREFIXES if path.startswith(p))][0] += 1
+            continue
         if not path.endswith(SCAN_EXTS):
             if not path.startswith(SKIP_SCAN_PREFIXES):
                 ext = Path(path).suffix.lower() or "(no extension)"
@@ -365,6 +380,7 @@ def main() -> int:
             # identifier checks above could never reach one (T1). A public-qualified name is checked against relations, functions and types (U5).
             for head, tail in CITED_DOTTED.findall(line):
                 dotted = f"{head}.{tail}"
+                head, tail = head.lower(), tail.lower()  # PostgreSQL folds unquoted names (V4)
                 schema_level = set(schema.tables) | schema.functions | schema.indexes | schema.sequences | schema.types
                 # U5: `public.` qualifies a relation, function or type — a column name is not one.
                 if head == "public" and tail not in schema_level:
@@ -374,9 +390,15 @@ def main() -> int:
                     report(path, dotted, f"{where}: `{dotted}` is not a setting any migration reads or sets")
 
             if in_migration:
-                for name in CITED_CALL.findall(line):
-                    if name.lower() not in schema.functions and name.lower() not in schema.builtin_functions \
-                            and name.lower() not in SQL_CONSTRUCTS:
+                for qualifier, name in CITED_CALL.findall(line):
+                    q, n = qualifier.lower(), name.lower()
+                    if q in ("", "public"):
+                        known_fn = n in schema.functions or n in schema.builtin_functions or n in SQL_CONSTRUCTS
+                    elif q == "pg_catalog":
+                        known_fn = n in schema.builtin_functions
+                    else:
+                        known_fn = f"{q}.{n}" in schema.functions
+                    if not known_fn:
                         report(
                             path, name,
                             f"{where}: `{name}()` is cited as a function and no migration creates it",
@@ -442,7 +464,8 @@ def main() -> int:
             "it does not scan."
         )
         return 1
-    print("\nEvery cited path and every named database object resolves.")
+    # V11: "every cited path resolves" was false whenever a form outside the docstring's list existed.
+    print("\nEvery citation in the forms this tool checks resolves (its docstring lists them, and what it does not check).")
     return 0
 
 

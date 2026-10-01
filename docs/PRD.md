@@ -375,9 +375,11 @@ demonstrated, it is not a requirement, it is a hope.
   building no acceptance would have been the worse outcome: an invariant that reads stronger than it is.
   When release 2 makes variations signable, this requirement tightens to "accepted" and the ceiling
   becomes what it claims to be.
-- **R1.24a** It is **enforced by a lock, not by prose** (domain model §6.2a). The `issue_balance` row is
-  created **in the same transaction as the acceptance**, by an explicit `issue_balance_open()` call the
-  acceptance path must make — nothing creates it automatically (R7; "unconditionally" removed 2026-10-01,
+- **R1.24a** It is **enforced by a lock, not by prose** (domain model §6.2a). The acceptance path
+  **must** create the `issue_balance` row **in the same transaction as the acceptance**, by an explicit
+  `issue_balance_open()` call — nothing creates it automatically, and an acceptance committed without the
+  call has no row until one is made (the N2 test in `db/test/documents-core.test.ts` reaches that state;
+  finding V17) (R7; "unconditionally" removed 2026-10-01,
   finding U11) — because a `SELECT … FOR UPDATE`
   that matches no row takes **no lock at all**, so a missing row would have let the very first pair of
   concurrent invoices through (G2). Issuing an invoice then takes `SELECT … FOR UPDATE` on that row, computes the new total, refuses if it would

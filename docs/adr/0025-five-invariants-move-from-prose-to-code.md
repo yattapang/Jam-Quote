@@ -66,7 +66,9 @@ by a comment asking politely.
 
 **Amended 2026-09-27 (finding Q7 of the fifth J4 re-review).** The mechanism built is not the one above.
 There is no `SECURITY DEFINER` function, and the application role does hold table grants — the test
-harness grants write on every table. What enforces the writer set is **row security**:
+harness grants write on every table. What enforces that a write carries the flag is **row security** (not
+a writer set: the flag is not a secret, R5 below; *"enforces the writer set" corrected 2026-10-01, finding
+V15*):
 `new-app/db/policies/002-documents-isolation.sql` gives `issue_balance` write policies that require a
 transaction-local flag that `issue_balance_open()` and `issue_balance_apply()` set (*"only" removed
 2026-10-01, finding S7: the next sentences say why it is not only them*). Since J2,
@@ -136,8 +138,10 @@ because the row *is* the record.
   contradicted Decision 2**, which then said `accepted_total_minor` is written once, "never again" (*it no
   longer does; tense corrected 2026-10-01, finding T10*). Both cannot
   hold, and the contradiction sat inside one ADR — the same failure the ADR was written to stop, one
-  level up. Resolved in favour of Decision 2, because an immutable column is what makes the copy safe
-  at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change.
+  level up. Resolved in favour of Decision 2, because an immutable source is what makes the copy safe
+  at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change. (*"an immutable
+  column" corrected 2026-10-01, finding V16: the column itself can be rewritten by a caller who sets the
+  flag, R5; it is the ISSUE that cannot change.*)
 
   **Nothing is mutated on withdrawal. `issue_ceiling_minor()` is state-aware instead** — it returns
   zero unless an un-withdrawn acceptance exists (migration `20260926110000_withdrawal_preconditions`).

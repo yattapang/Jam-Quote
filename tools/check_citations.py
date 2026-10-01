@@ -18,7 +18,8 @@ Rule 24.5's test: would this have caught it mechanically? Both, yes, and in unde
 1. **Cited repository paths — retired here (finding R11, owner's decision 2026-09-30).** This tool
    skipped any path whose first segment was not a top-level directory (J1) and any line near a
    "denial" phrase (R11). Paths are checked by `tools/check_schema_citations.py`, which resolves
-   every one with no skip; one guard per class rather than two that drift apart. Its check that a
+   paths in the forms its docstring lists and states the forms it does not (V13: this said "every one
+   with no skip", which Rule 21.8 forbids); one guard per class rather than two that drift apart. Its check that a
    migration comment's identifier appears as text is retired for the same reason: that tool checks
    the identifier against the catalogue the migrations build instead.
 2. **Cited bare filenames exist somewhere.** A backticked filename with no directory must match some

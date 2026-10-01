@@ -23,6 +23,10 @@
  *
  * WHAT IT DOES NOT PROVE (Rule 21.4)
  *
+ * - **Not amounts held inside a composite or range type** (a numeric field of a composite, `numrange`),
+ *   **nor columns of a materialised view**: only plain and partitioned tables' columns of scalar or array
+ *   type are read (finding V10, accepted by the owner as a stated limit, 2026-10-01).
+ *
  * - **Not that the arithmetic is right.** `issue_balance_apply()` could still add when it should
  *   subtract; `documents-core.test.ts` executes that, including J4's block (a negative variation,
  *   and the credit notes that make room for it), which is about exactly this distinction.
@@ -148,12 +152,14 @@ describe("money is stored as integer minor units, everywhere", () => {
            -- Every type, resolved through ANY depth of domains to the first non-domain type. Finding U7:
            -- the first version unwrapped two levels, so a NUMERIC column behind a third domain was
            -- reported by the middle domain's name and matched no rule — past the closed list.
-           unwrap(start, cur, depth) AS (
-             SELECT t.oid, t.oid, 0 FROM pg_type t
+           -- No depth cap: PostgreSQL cannot create a domain cycle, so the recursion ends. The first fix
+           -- stopped at 64 levels and the 65th silently dropped the column (finding V8).
+           unwrap(start, cur) AS (
+             SELECT t.oid, t.oid FROM pg_type t
              UNION ALL
-             SELECT u.start, p.typbasetype, u.depth + 1
+             SELECT u.start, p.typbasetype
                FROM unwrap u JOIN pg_type p ON p.oid = u.cur
-              WHERE p.typtype = 'd' AND u.depth < 64),
+              WHERE p.typtype = 'd'),
            resolved(start, base) AS (
              SELECT u.start, u.cur FROM unwrap u JOIN pg_type p ON p.oid = u.cur WHERE p.typtype <> 'd')
          SELECT CASE WHEN n.nspname = 'public' THEN c.relname ELSE n.nspname || '.' || c.relname END

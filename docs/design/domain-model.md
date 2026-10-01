@@ -289,7 +289,8 @@ are each individually under the total and together over it. That failure is sile
 over-billing of a real client, and is found by their accountant rather than by us.
 
 **The mechanism: an `issue_balance` row, locked for the duration of the transaction that issues an
-invoice.** One row per accepted issue.
+invoice.** At most one row per issue, opened by `issue_balance_open()` — which does not itself check that
+the issue was accepted; without an acceptance the ceiling is 0 either way (finding V18).
 
 **Amended 2026-09-25 (G2, G12), and the correction matters more than the original.** The first version
 said "take `SELECT … FOR UPDATE` on the issue's `issue_balance` row" and never said what creates that row.
