@@ -780,3 +780,24 @@ on NOT FOUND, in any of the spellings the second re-review used to get past its 
 comments stripped (X5), and says what it would miss. The first fix over-reached the other way (X1): it
 refused a staff erasure, because for a role that bypasses row security "not found" means "deleted". The lesson: **under row security,
 "not visible" is an input the caller controls — a check never treats it as "nothing to check".**
+
+### M41 · No function pinned its search path, so a temporary table could stand in for any real one
+`Repeat of:` none by name. Found on the third adversarial pass over J6-J8/J11 (Y2), and widened by the
+builder to the ceiling (Y7).
+
+Every trigger and helper function read its tables by unqualified name with the caller's search path, and
+PostgreSQL searches the session's temporary schema first for tables. A role with the default TEMPORARY
+privilege could shadow `invoice`, `quote_issue`, `acceptance` or the catalogue's `pg_roles`. Executed on
+PostgreSQL 16 as the application role: a 9,000,000 invoice past a ceiling of 1,000 (J2, Closed), an issue
+with no lines and a subtotal of 555,555 (J11), a deposit on a decline (J6), and the X1 staff skip taken by
+a role that is not staff (Y1). Two adversarial rounds and every earlier review read these functions and
+did not ask what name resolution they ran under.
+
+**Cost:** the product's central money invariant was bypassable from its own role since the first ceiling
+migration; a Closed blocker reopened.
+
+**Prevented by:** every function pinned to `pg_catalog, public, pg_temp`, and TEMPORARY revoked from
+PUBLIC (`new-app/db/migrations/20260927210000_pin_search_path/migration.sql`); `new-app/db/test/function-search-path.test.ts`
+fails on an unpinned function; the attacks are executed tests, each layer proved without the other; the
+production role's provisioning rule is `docs/THREAT-MODEL.md` §4g. The lesson: **a check in the database is
+only as good as the names it resolves — review what a function reads, and also how it finds it.**

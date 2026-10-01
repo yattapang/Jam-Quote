@@ -2370,3 +2370,149 @@ describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at 
     expect(await meetsBar(issue)).toBe(true);
   });
 });
+
+// ===========================================================================
+// Findings Y1, Y2, Y3, Y6 of the third re-review, and Y7, fixed by migration
+// 20260927210000_pin_search_path. Layer one (every function's search path pinned) is proved WITHOUT layer
+// two: each shadowing attack runs as a role that may create temp tables — the superuser, or the
+// application role granted TEMPORARY back for the test — so a pass means the pin held, not that the temp
+// table could not be made.
+describe("Y · a temporary table cannot stand in for a real one", () => {
+  // Qualified: in a session that holds a temp `invoice`, the bare name would reach the temp table.
+  const INVOICE = `INSERT INTO public.invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+                   VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`;
+
+  /** Runs `work` in one transaction as the superuser, whose temp tables are dropped at its end. */
+  async function asSuperuserInTransaction(work: () => Promise<unknown>) {
+    await asSuperuser(db, async () => {
+      await db.exec("BEGIN");
+      try {
+        await work();
+        await db.exec("COMMIT");
+      } catch (error) {
+        await db.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+  }
+
+  it("Y7 · REFUSES an invoice past the ceiling even with an empty temp `invoice` shadowing the real one", async () => {
+    const issue = await seal(1, 1_000n);
+    await accept(issue);
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE invoice (id uuid, issue_id uuid, amount_minor bigint) ON COMMIT DROP`);
+        await sql(INVOICE, [id(), TENANT, issue, "9000000"]);
+      }),
+    ).rejects.toThrow(/exceeds the ceiling 1000/);
+    expect(await sql(`SELECT 1 FROM public.invoice WHERE issue_id = $1`, [issue])).toEqual([]);
+  });
+
+  it("Y7 · the ceiling's own function, called directly, sums the real invoices and not a temp table", async () => {
+    // Through the trigger, the trigger's own pin covers the function it calls; this calls it bare, so the
+    // pin on issue_balance_apply() itself is what is proved (planting it away left the test above green).
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 40_000n);
+    await asSuperuserInTransaction(async () => {
+      await sql(`CREATE TEMP TABLE invoice (id uuid, issue_id uuid, amount_minor bigint) ON COMMIT DROP`);
+      await sql(`SELECT issue_balance_apply($1)`, [issue]);
+    });
+    expect(await sql(`SELECT invoiced_total_minor FROM issue_balance WHERE issue_id = $1`, [issue])).toEqual([
+      { invoiced_total_minor: 40_000 },
+    ]);
+  });
+
+  it("Y2 · REFUSES at COMMIT an issue whose lines do not add up, with a temp `quote_issue` shadowing it", async () => {
+    const issue = id();
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE quote_issue (id uuid, subtotal_minor bigint) ON COMMIT DROP`);
+        await sql(`INSERT INTO pg_temp.quote_issue VALUES ($1, 0)`, [issue]);
+        await sql(
+          `INSERT INTO public.quote_issue
+             (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+              currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+              sealed_at, sealed_by_user_id, catalog_synced_at)
+           VALUES ($1, $2, $3, 1, $4, 'X', 'F', 'itemised', 'JMD', 'T', 0, 555555, 0, 555555, now(), $5, now())`,
+          [issue, TENANT, QUOTE, CLIENT, USER],
+        );
+      }),
+    ).rejects.toThrow(/subtotal_minor 555555, but its lines sum to 0/);
+  });
+
+  it("Y2 · REFUSES evidence on a decline with a temp `acceptance` saying it was accepted", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE acceptance (id uuid, issue_id uuid, outcome text) ON COMMIT DROP`);
+        await sql(`INSERT INTO pg_temp.acceptance VALUES ($1, $2, 'accepted')`, [decline, issue]);
+        await sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'Y2-1', now())`,
+          [id(), TENANT, decline],
+        );
+      }),
+    ).rejects.toThrow(/is a decline, which carries no evidence/);
+  });
+
+  it("Y1 · REFUSES the application role J11's staff skip through a temp `pg_roles` view", async () => {
+    // Layer two taken away for this test only, so the attack is the reviewer's and the pin must hold alone.
+    const [{ name }] = (await sql<{ name: string }>(`SELECT current_database() AS name`)) as [{ name: string }];
+    await asSuperuser(db, () => sql(`GRANT TEMPORARY ON DATABASE "${name}" TO ${APP_ROLE}`));
+    await sql(`CREATE TEMP VIEW pg_roles AS
+                 SELECT current_user::name AS rolname, true AS rolsuper, true AS rolbypassrls`);
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'F', 'itemised', 'JMD', 'T', 0, 999999, 0, 999999, now(), $5, now())
+         RETURNING set_config('search_path', 'pg_temp, pg_catalog, public', false) IS NOT NULL
+               AND set_config('app.tenant_id', '', false) IS NOT NULL`,
+        [id(), TENANT, QUOTE, CLIENT, USER],
+      ),
+    ).rejects.toThrow(/cannot be seen by this transaction at COMMIT/);
+  });
+
+  it("Y3 · REFUSES a provider id with Unicode space or a non-ASCII character at either end, and keeps ordinary ids", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const externalId of [" ", "TX-1 ", "　TX-1", "TX-1​", "﻿TX-1", "TX-1\u0085"]) {
+      await expect(
+        sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', $4, now())`,
+          [id(), TENANT, acceptance, externalId],
+        ),
+        JSON.stringify(externalId),
+      ).rejects.toThrow(/acceptance_evidence_external_id_shape_check/);
+    }
+    for (const externalId of ["TX-1", "<a.b@mail.example>", "REF 100 A"]) {
+      await expect(
+        sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', $4, now())`,
+          [id(), TENANT, acceptance, externalId],
+        ),
+      ).resolves.toBeTruthy();
+    }
+  });
+
+  it("Y6 · REFUSES evidence on an issue whose number a staff role removed", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await asSuperuser(db, () => sql(`DELETE FROM issue_number WHERE issue_id = $1`, [issue]));
+    await expect(
+      sql(
+        `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+         VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'Y6-1', now())`,
+        [id(), TENANT, acceptance],
+      ),
+    ).rejects.toThrow(/is sealed_awaiting_number; it takes no evidence/);
+  });
+});

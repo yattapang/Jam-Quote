@@ -246,6 +246,24 @@ authentication role or `SECURITY DEFINER` functions, never by the application's 
 with these tables readable by the application role. Exposure until then needs a defect in our own
 server, and none is deployed.
 
+## 4g. Temporary tables and the search path (added 2026-10-01, findings Y1, Y2, Y7; fixed, with a provisioning rule owed)
+
+**What happened.** No database function pinned its search path, and PostgreSQL looks in a session's own
+temporary tables before the real ones. Any role allowed to create a temporary table could therefore make a
+check read a fake table. Executed as the application role on PostgreSQL 16: an empty temp `invoice` let a
+9,000,000 invoice past a ceiling of 1,000 (Y7).
+
+**What holds it now** (`new-app/db/migrations/20260927210000_pin_search_path/migration.sql`): every function
+runs with `search_path = pg_catalog, public, pg_temp`, held by `new-app/db/test/function-search-path.test.ts`;
+and TEMPORARY on the database is revoked from PUBLIC, executed on a real database by
+`new-app/db/test/concurrency.pg.test.ts` ("Y7 layer two").
+
+**Owed with the role provisioning (§4e):** the production application role is created outside the
+migrations, so **it must not be granted TEMPORARY**, and the deployment check must confirm
+`has_database_privilege(<role>, current_database(), 'TEMP')` is false. The pin on every function is the
+first layer and does not depend on this; the revoke is defence in depth for a function a later migration
+forgets to pin.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

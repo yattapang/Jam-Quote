@@ -85,6 +85,11 @@ then a real failure gets re-run too. If you want the parallel run while iteratin
 A change to a `@wire` type is not finished until the contract is regenerated and committed. CI
 regenerates it and fails on a diff.
 
+**A new or replaced function must pin its search path** — `SET search_path = pg_catalog, public, pg_temp`
+(or an `ALTER FUNCTION` after it). `CREATE OR REPLACE` drops the setting, and without it a temporary table
+can stand in for a real one: that let an invoice past the ceiling (finding Y7). `db/test/function-search-path.test.ts`
+fails on any unpinned function.
+
 **A new migration is not finished until `db/schema-objects.json` is regenerated and committed:** in
 `db/`, run `PRYVIS_WRITE_SCHEMA_OBJECTS=1 npx vitest run test/schema-objects.test.ts`. That file is the
 list of every table, column, function, trigger, policy, index and constraint the migrations build, read

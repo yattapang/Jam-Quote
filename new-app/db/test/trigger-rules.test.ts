@@ -14,9 +14,10 @@
  *
  * WHAT IT DOES NOT PROVE (Rule 21.4)
  *
- * - Half 1 matches an UNCONDITIONAL skip on NOT FOUND: `CONTINUE WHEN NOT FOUND`, or `IF [(]NOT FOUND[)]
- *   THEN` followed directly by RETURN or CONTINUE (finding X4: the first version matched two spellings and
- *   missed `IF NOT FOUND THEN CONTINUE` and `IF (NOT FOUND) THEN RETURN NULL`). Comments are stripped first.
+ * - Half 1 matches an UNCONDITIONAL skip on NOT FOUND: `CONTINUE` or `EXIT` `WHEN NOT FOUND`, or
+ *   `IF [(]NOT FOUND[)] THEN` followed by RETURN, CONTINUE or EXIT, after any number of `RAISE NOTICE`-level
+ *   messages (findings X4 and Y4 each found spellings the previous version missed). Strings and comments
+ *   are removed first by a scanner, not a pattern (Y4, Y5).
  *   It does NOT catch a skip on another test (`IF v_x IS NULL THEN RETURN NULL`), nor a conditional one —
  *   which is how J11's check deliberately skips for a role that bypasses row security (X1). The executed
  *   tests in `documents-core.test.ts` (W1, W13, X1) are what prove those triggers behave.
@@ -34,9 +35,46 @@ import { applyMigrations } from "./harness.js";
 
 type Fn = { trigger: string; table: string; timing: "BEFORE" | "AFTER"; fn: string; src: string };
 
-/** A PL/pgSQL body with its comments removed, so a comment can neither trip nor satisfy a check. */
-function code(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ");
+/**
+ * A PL/pgSQL body with its string literals emptied and its comments removed, so neither can trip nor
+ * satisfy a check. Scanned left to right, because the two interact: `'--'` is a string, not a comment
+ * (finding Y4), and `'/*'` is a string, not the start of one (Y5). Handles '...' with '' escapes, E'...'
+ * with backslash escapes, $tag$...$tag$, -- comments and /* *\/ comments (not nested ones).
+ */
+export function code(src: string): string {
+  let out = "";
+  let i = 0;
+  while (i < src.length) {
+    const rest = src.slice(i);
+    const dollar = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/.exec(rest);
+    if (rest.startsWith("--")) {
+      const end = src.indexOf("\n", i);
+      i = end === -1 ? src.length : end;
+      out += " ";
+    } else if (rest.startsWith("/*")) {
+      const end = src.indexOf("*/", i + 2);
+      i = end === -1 ? src.length : end + 2;
+      out += " ";
+    } else if (dollar) {
+      const end = src.indexOf(dollar[0], i + dollar[0].length);
+      i = end === -1 ? src.length : end + dollar[0].length;
+      out += "''";
+    } else if (src[i] === "'" || ((src[i] === "E" || src[i] === "e") && src[i + 1] === "'" && !/\w/.test(src[i - 1] ?? ""))) {
+      const backslash = src[i] !== "'";
+      i += backslash ? 2 : 1;
+      while (i < src.length) {
+        if (backslash && src[i] === "\\") { i += 2; continue; }
+        if (src[i] === "'" && src[i + 1] === "'") { i += 2; continue; }
+        if (src[i] === "'") { i += 1; break; }
+        i += 1;
+      }
+      out += "''";
+    } else {
+      out += src[i];
+      i += 1;
+    }
+  }
+  return out;
 }
 
 let db: PGlite;
@@ -64,8 +102,13 @@ afterAll(async () => {
 });
 
 describe("an AFTER or deferred check refuses a row it cannot see (W1, W13)", () => {
-  const SKIP =
-    /CONTINUE\s+WHEN\s+\(?\s*NOT\s+FOUND\s*\)?|IF\s*\(?\s*NOT\s+FOUND\s*\)?\s*THEN\s+(RETURN|CONTINUE)\b/i;
+  const SKIP = new RegExp(
+    [
+      String.raw`\b(CONTINUE|EXIT)\s+WHEN\s+\(?\s*NOT\s+FOUND`,
+      String.raw`\bIF\s*\(?\s*NOT\s+FOUND\s*\)?\s*THEN\s+(RAISE\s+(DEBUG|LOG|INFO|NOTICE|WARNING)\b[^;]*;\s*)*(RETURN|CONTINUE|EXIT)\b`,
+    ].join("|"),
+    "i",
+  );
 
   it("matches every spelling of the skip it claims to (X4), and not the conditional one", () => {
     for (const skip of [
@@ -74,11 +117,24 @@ describe("an AFTER or deferred check refuses a row it cannot see (W1, W13)", () 
       "IF NOT FOUND THEN CONTINUE; END IF;",
       "IF (NOT FOUND) THEN RETURN NULL; END IF;",
       "if  not found\n  then\n    return new;",
+      // Y4, the third re-review's spellings:
+      "EXIT WHEN NOT FOUND;",
+      "IF NOT FOUND THEN RAISE NOTICE 'skipping %', v_id; RETURN NULL; END IF;",
+      "v_state := 'W1--'; IF NOT FOUND THEN RETURN NULL; END IF;",
     ]) {
       expect(SKIP.test(code(skip)), skip).toBe(true);
     }
     expect(SKIP.test(code("IF NOT FOUND THEN\n  IF bypasses THEN CONTINUE; END IF;\n  RAISE EXCEPTION 'x';"))).toBe(false);
     expect(SKIP.test(code("-- CONTINUE WHEN NOT FOUND, as it once was\nRAISE EXCEPTION 'x';"))).toBe(false);
+    expect(SKIP.test(code("RAISE EXCEPTION 'CONTINUE WHEN NOT FOUND';"))).toBe(false);
+  });
+
+  it("removes strings before comments, so neither hides code from the other (Y4, Y5)", () => {
+    expect(code("v := 'W1--'; RETURN NULL;")).toBe("v := ''; RETURN NULL;");
+    expect(code("v := '/*'; PERFORM a(); v := '*/';")).toBe("v := ''; PERFORM a(); v := '';");
+    expect(code("v := $x$ -- $x$; PERFORM a();")).toBe("v := ''; PERFORM a();");
+    expect(code("v := E'it\\'s'; PERFORM a(); -- note")).toBe("v := ''; PERFORM a();  ");
+    expect(code("v := 'don''t'; PERFORM a();")).toBe("v := ''; PERFORM a();");
   });
 
   it("found AFTER triggers to check at all", () => {

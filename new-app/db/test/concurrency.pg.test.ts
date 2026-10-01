@@ -965,4 +965,21 @@ suite("concurrency against real PostgreSQL", () => {
       for (const s of [a, b]) await s.client.end();
     }
   });
+
+  it("Y7 layer two · the application role cannot create a temporary table, on a real database", async () => {
+    // A database PostgreSQL creates grants TEMPORARY to PUBLIC; the migration revokes it. PGlite's
+    // template1 never grants it, which is why this lives here. The control proves the role is the one
+    // under test: the superuser, who keeps the privilege, can.
+    const control = await owner.query(`SELECT has_database_privilege($1, current_database(), 'TEMP') AS t`, [APP_ROLE]);
+    expect(control.rows).toEqual([{ t: false }]);
+    const s = await session();
+    try {
+      const made = await outcome(s.client.query(`CREATE TEMP TABLE invoice (id uuid)`));
+      expect(made.ok).toBe(false);
+      expect(made.ok ? "" : made.error).toMatch(/permission denied to create temporary tables/);
+    } finally {
+      await s.client.end();
+    }
+    await owner.query(`CREATE TEMP TABLE owner_may (id int)`);
+  });
 });

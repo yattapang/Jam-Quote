@@ -523,6 +523,15 @@ closing check follows if nothing blocking is found. No build work, gate run or c
 From Y2's mechanism the builder executed **Y7, a blocker: a temp table named `invoice` let a 90,000.00
 invoice past a 10.00 ceiling.** No function in the schema pins `search_path`. **J2 reopened.**
 
+**Owner's decision, 2026-10-01:** both layers — pin every function's search path, and revoke TEMPORARY.
+
+**Built 2026-10-01: the Y fixes** (migration `20260927210000_pin_search_path`): every function pinned
+(guard `db/test/function-search-path.test.ts`), TEMPORARY revoked (executed on PostgreSQL 16 — a PGlite test
+passed without the revoke, because PGlite's `template1` never grants it, so the test moved), Y1, Y3, Y6, and
+the guard's scanner for Y4, Y5. Each layer proved without the other; nine plants caught. Ledger M41; the
+production role must not be granted TEMPORARY (`docs/THREAT-MODEL.md` §4g). **J2, J6, J7, J11 now: Fixed,
+re-review owed; J8 judged closable by the third pass.**
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
