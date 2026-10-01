@@ -333,6 +333,14 @@ J9 (R9, a blocker, reproduced by the author: an acceptance can bind another issu
 (R13). Also found: R4, a tenant deleting its own audit trail by deleting its tenant row. Text claims R5,
 R7 and R8 corrected in the ADR, the test header and the J16 row.
 
+**Batched re-review of J1, J3, J9, J12 and J13, launched 2026-10-01 on the owner's instruction
+("option 1").** *Delegation (Rule 16.5), declared before launch: `commit-reviewer` agent, **Opus** — J1 is
+a guard fix (a defect in a guard leaves the suite green), J3 and J9 are tenant-isolation and evidence
+keys, and J13 changes the lock contract; that is adversarial work, not a mechanical check, so Sonnet is
+not the cheapest reliable tier here. One agent live, no build work, gate run or commit alongside it (Rule
+16.2). Findings to a scratchpad file as found, copied into `PRD-REVIEW-4.md` and committed before anything
+else. The brief's expectations are executed last, on the exact HEAD it names (M36, M37).*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
