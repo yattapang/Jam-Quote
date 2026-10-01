@@ -297,14 +297,16 @@ said "take `SELECT … FOR UPDATE` on the issue's `issue_balance` row" and never
 concurrent invoices, which is the case this exists to stop, would have sailed through. A mechanism with a
 missing precondition is not a mechanism.
 
-**When the row is created: in the same transaction as the acceptance, unconditionally.** An issue becomes
-accepted and acquires its balance row together, or neither happens. That removes the empty case rather
-than defending against it, and it is the only ordering that cannot be forgotten later.
+**When the row is created: by `issue_balance_open()`, which the acceptance path must call in the same
+transaction.** It is not reached by a trigger, so an acceptance inserted without that call has no balance
+row, and nothing can be invoiced against it until one is opened (finding R7). The N2 test in
+`db/test/documents-core.test.ts` reaches that state on purpose. This section said, until 2026-10-01, that
+the row was created "unconditionally" and "cannot be forgotten"; neither was true (R13).
 
 | Column | Kind |
 |---|---|
 | `issue_id` | identity |
-| `accepted_total_minor` | **derived, written once** from the accepted issue's own frozen lines |
+| `accepted_total_minor` | **derived copy** of the accepted issue's frozen total |
 | `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
 | `invoiced_total_minor` | **derived cache**, re-summed by `issue_balance_apply()` |
 
@@ -333,28 +335,24 @@ invoiced total, so the sentence is now exact. A table wired in without being nam
 rather than skipping the ceiling. This section does not repeat which row moves what, because repeating it
 is what produced H2, H2's own fix, J12 — and would have made this paragraph wrong the day J4 landed.
 
-What is worth stating here, because it is the *shape* rather than the list: **no caller chooses to
-maintain this row.** `issue_balance` has no INSERT or UPDATE policy the application can satisfy, so the
-only door is `issue_balance_apply()` and `issue_balance_open()`; and since J2 those are not reached by a
-caller remembering to call them but by triggers on every table that can move a total. The writer set is
-therefore a property of the schema, and `db/test/documents-core.test.ts` executes which insert moves
-which column.
-
-What enforces it now: `issue_balance` has **no INSERT or UPDATE policy the application can satisfy**, so
-the only way in is `issue_balance_apply()` and `issue_balance_open()`, which set the transaction-local
-flag the write policies require. **The writer set is therefore the set of callers of those two functions,
-and it cannot go stale**, because there is no other door. `db/test/policy-parity.test.ts` asserts the flag
-predicate is present, so the mechanism is checked rather than described.
+**Who can write this row, and the two limits of that, are stated in one place: ADR 0025, decision 2**
+(`docs/adr/0025-five-invariants-move-from-prose-to-code.md`, as amended 2026-09-27). This section does not
+restate them. It did, twice, and both times it was false by execution (R13): it said the application had
+no write policy it could satisfy and "no other door", when the balance-write flag is not a secret (R5);
+and it said both balance functions are reached by triggers, when `issue_balance_open()` is not (R7).
+Closing the first of those properly — no write grant to the application role at all — is owed as its own
+security item, not claimed here.
 
 Issuing an invoice is one transaction: lock the row · re-sum from the rows rather than trusting the
 cached figure · **refuse** if the new total would exceed `accepted_total + variations_total` · insert the
 invoice and update the balance. Re-summing inside the lock is what makes the cached columns a genuine
 cache rather than a second source of truth — the decision is never taken on the cached number alone.
 
-`accepted_total_minor` is a **copy**, and Rule 7 says one rule lives in one place, so its producer is named:
-the acceptance transaction computes it from the issue's frozen lines, and nothing else ever writes it.
-The issue is immutable, so the value it derives from cannot change — which is what makes the copy safe
-here and would not make it safe anywhere else.
+`accepted_total_minor` is a **copy** of the accepted issue's frozen total. The issue is immutable, so the
+value it copies cannot change — which is what makes the copy safe here and would not make it safe
+anywhere else. That no variation, invoice, void or credit note moves it is asserted in the J12 block of
+`db/test/documents-core.test.ts`, which reads all three columns after each insert; it is not stated here
+as a list of writers.
 
 **The reconciliation job has a cadence and an action**, because a job with neither is a comment: nightly,
 per tenant, it rebuilds all three derived columns from the underlying rows and compares. On a mismatch it

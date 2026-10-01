@@ -212,6 +212,23 @@ does, so this needs a SQL-injection-class defect in our code, which would be wor
 role and take the lock inside a `SECURITY DEFINER` function that re-checks visibility — after confirming
 the managed PostgreSQL provider permits revoking from `pg_catalog`.
 
+## 4e. The balance-write flag is not a secret (added 2026-10-01, R5; owed, not yet scheduled)
+
+`issue_balance` — the row that holds each accepted issue's ceiling and invoiced total — is written only
+under a row-security policy that requires the transaction-local setting `pryvis.balance_write`.
+`issue_balance_open()` and `issue_balance_apply()` set it; nothing stops the application's own SQL setting
+it too, and then a direct `UPDATE` can raise `accepted_total_minor` and invoice past the real ceiling
+(finding R5, executed). The policies stop the application *forgetting* the balance, not a hostile caller.
+Same precondition as §4d: it needs a SQL-injection-class defect in our server, because tenants never hold a
+SQL session.
+
+**Not accepted, not fixed — owed, for the owner to schedule.** The fix is ADR 0025's original decision:
+no INSERT or UPDATE grant on `issue_balance` to the application role at all, and the two balance functions
+`SECURITY DEFINER` with a pinned `search_path`. It needs the database privilege model to live in the
+migrations — today the application role's grants exist only in the test harness — so it is a deployment
+change, deliberately kept out of J12's documentation fix (owner's decision, 2026-10-01). The mechanism and
+both of its current limits are stated in ADR 0025, decision 2.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's

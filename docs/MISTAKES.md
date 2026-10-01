@@ -737,3 +737,24 @@ schema tool, including removing each half of the R3 fix, 4 on the old tool, 6 on
 21.8 and 21.9 restated. The lesson that is not mechanical: **a banner is a claim, and it must count what
 the code passes over, not what its author meant it to** — the next guard's banner is checked by a plant
 that exercises the skip, not by reading the print statement.
+
+### M39 · The writer list was removed, and restated two paragraphs later, a third time
+`Repeat of:` **H2** and **M23** (J12) — the same section, the same fact, the third failure.
+
+J12's fix deleted the writer column from the `issue_balance` table in `docs/design/domain-model.md` and
+wrote a paragraph explaining that the list was gone because prose lists go stale. Two paragraphs below,
+the same commit stated the writer set again, in prose, twice: "no INSERT or UPDATE policy the application
+can satisfy", "the only door", "it cannot go stale", "nothing else ever writes it". Both absolute claims
+were false by execution: the balance-write flag is not a secret (R5), and `issue_balance_open()` is not
+reached by a trigger (R7). Section 6.2a's opening line ("created unconditionally… cannot be forgotten")
+was false the same way. The review-3 H2 row, rewritten by the same fix, went stale when J4 landed.
+
+**Cost:** a major finding re-opened for the third time, and an ADR already amended for R5 and R7 the day
+before while the design document beside it still said the opposite.
+
+**Prevented by:** the sentences are gone; `domain-model.md` §6.2a points at ADR 0025 decision 2 for the
+mechanism and its limits, and at the J12 block for what each insert moves. **Rule 21.10**: a sentence
+saying who may write a table cites the test that executes it, or does not exist. Not mechanical, by the
+owner's decision — a phrase guard was rejected as one more deny-list of wordings (R11). The defect itself
+(R5) is now owed as `docs/THREAT-MODEL.md` §4e. The lesson: **"we removed the list" is itself a claim, and
+the reviewer of a fix that removes prose re-reads the whole section, not only the deleted lines.**

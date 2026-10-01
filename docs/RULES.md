@@ -770,6 +770,21 @@ diff. It cannot catch a control that fires correctly on the wrong thing — a sc
 our particular secret format fires, satisfies 21.2, and still misses. Rule 9's independent review is
 the only answer to that, and 21 does not replace it.
 
+**21.10 A sentence that says who may write a table cites the test that executes it, or does not exist
+(added 2026-10-01).** "Only X writes this", "there is no other door", "nothing else ever writes it",
+"it cannot go stale": each is a claim about every code path, now and later, and prose cannot hold it. If
+the claim matters, a test inserts through each path and reads the result, and the sentence names that
+test; the mechanism and its limits are stated once, in the ADR that decided them, and other documents
+point there rather than restating them.
+
+> Why: `issue_balance`'s writer set was written in prose three times and was wrong three times — H2, the
+> fix for H2, and the fix for J12 — the third time two paragraphs after a sentence announcing that the
+> list had been removed. Both of its absolute claims were false by execution: the balance-write flag is
+> not a secret (R5), and the balance row is opened by an explicit call, not a trigger (R7). The executed
+> home already existed (the J12 block); the prose kept coming back beside it (R13, M39). A phrase-based
+> guard was considered and rejected by the owner: it would be one more deny-list of wordings, right after
+> one such list was found hiding a real defect (R11), and it would miss the next wording.
+
 ---
 
 ## 22. A scripted edit is verified mechanically, not by eye (added 2026-09-24)

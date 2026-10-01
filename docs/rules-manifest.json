@@ -196,7 +196,11 @@
     },
     "21.9": {
       "title": "A guard patched twice for the same class is replaced, not patched a third time (added\n2026-09-26)",
-      "hash": "880a761786e203d9"
+      "hash": "473bc4347ade1b83"
+    },
+    "21.10": {
+      "title": "A sentence that says who may write a table cites the test that executes it, or does not exist\n(added 2026-10-01)",
+      "hash": "e5770b22addb0011"
     },
     "22": {
       "title": "A scripted edit is verified mechanically, not by eye (added 2026-09-24)",
