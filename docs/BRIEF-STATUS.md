@@ -368,6 +368,20 @@ Rule 21.8) to exactly the forms checked, listing what is not; J1 closes when a r
 no miss within that stated scope. Then J12's six T10 sentences (recording, not editing, the policies file
 policy-parity ties to a committed migration), then one re-review of J1, J12 and J13.
 
+**Owner's decisions, 2026-10-01 (second set) — recorded, not yet built:**
+1. **R5** (the application can set the balance-write flag; `THREAT-MODEL.md` §4e): fixed **when the API
+   layer starts**, together with the connection roles — a privilege model in the migrations, no write grant
+   on `issue_balance`, `SECURITY DEFINER` balance functions. Stays owed, not accepted, until then.
+2. **Responses on a superseded or unnumbered issue** (`design/acceptance-responses.md` §3a): **refused in
+   the database**, by extending J13's response trigger, as a small item after J1.
+3. **Tenant erasure** (R4's follow-on): designed **with the staff console and the retention ADR**; until
+   then an erasure request is a manual staff process.
+4. **Governance proposals of 2026-09-27:** adopt three — **briefs as checked files** that run their own
+   expectations at launch (M36, M37); a **delegation log** of tier and escalation cause; **"cheapest reliable
+   execution"** as the tier rule. Defer the rules-review block, sequence tests as a named obligation, and
+   recurrence counts per mistake class. Writing the three into `docs/RULES.md` is owed.
+5. **Root `CLAUDE.md`:** replaced by a short pointer — done in `eee4709`.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
