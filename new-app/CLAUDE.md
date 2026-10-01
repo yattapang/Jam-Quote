@@ -113,7 +113,10 @@ writes on a quote and then seals the same quote — which includes the wrong-doc
 withdraw, seal the next revision) if it is run as ONE transaction; and one that writes on **two issues of
 the same quote** — two client responses, or a response and an invoice — while another transaction does the
 same in the other order (finding S9, executed on real PostgreSQL 16; it deadlocked before J13 too, on the
-old unique index). Run those steps as separate transactions: one client response per transaction, always.
+old unique index). Run those steps as separate transactions: **a client response is alone in its
+transaction** — no second response, and no invoice, void, credit note or variation on the same quote beside
+it (finding T11: one response plus an invoice on another issue of the quote, in opposite order, deadlocked
+2 of 2). If a flow must combine them, retry on 40P01.
 
 **A test counts only once it has been shown to fail.** Plant the defect, watch the test catch
 it, restore from a *backup copy* — never `git checkout`, which has destroyed uncommitted work
