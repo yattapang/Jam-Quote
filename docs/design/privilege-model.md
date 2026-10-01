@@ -158,7 +158,9 @@ the design left open:
 
 - `assert_least_privilege()` is built as `least_privilege_violations()`, returning the list rather than
   raising, so a test can see each line and the API can print all of them;
-  `new-app/api/src/core/auth/least-privilege.ts` is the part that refuses.
+  `new-app/api/src/core/auth/least-privilege.ts` is the part that refuses. Migration
+  `20260927230000_least_privilege_creates` adds two lines D4 did not list: CREATE on schema public, and
+  owning any table or function in it (the API connected as the migrating role).
 - `registration_claim` has no doors: registration is not built, so the application simply cannot reach it.
   Its doors come with sign-up.
 - The parser-based guard of ADR 0025 decision 2 is withdrawn: the database refuses the write whatever

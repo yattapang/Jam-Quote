@@ -266,8 +266,9 @@ and TEMPORARY on the database is revoked from PUBLIC, executed on a real databas
 **The deployment check (built 2026-10-01, design D4).** The production application role is created
 outside the migrations, so **it must not be granted TEMPORARY**. `least_privilege_violations()` (migration
 `20260927220000_privilege_model`) names it, with superuser, BYPASSRLS, CREATEROLE, CREATEDB, membership of
-an owning role, and any direct reach into the credential tables or write to `issue_balance` or
-`platform_capability`; `new-app/api/src/core/auth/least-privilege.ts` refuses to start on any of them. The
+an owning role, any direct reach into the credential tables or write to `issue_balance` or
+`platform_capability`, and (migration `20260927230000_least_privilege_creates`) CREATE on schema public
+or ownership of anything in it; `new-app/api/src/core/auth/least-privilege.ts` refuses to start on any of them. The
 TEMPORARY line is planted on real PostgreSQL in `new-app/db/test/concurrency.pg.test.ts` ("§4g"), the rest
 in `new-app/db/test/privilege-model.test.ts`. **Still owed:** nothing calls the start-up check yet, because
 there is no application bootstrap; wiring it in is owed with that module. The pin on every function is the

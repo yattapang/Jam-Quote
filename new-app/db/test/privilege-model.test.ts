@@ -23,7 +23,7 @@
  *    a dumped `app_session` row is not a login.
  * 6. `least_privilege_violations()` is empty for the application role, and names each planted excess:
  *    superuser, BYPASSRLS, membership of an owning role, a direct grant on a credential table, a write
- *    grant on `issue_balance`.
+ *    grant on `issue_balance`, CREATE on schema public, ownership of a table (migration 20260927230000).
  *
  * WHAT IT DOES NOT PROVE
  *
@@ -307,15 +307,21 @@ describe("least_privilege_violations() (D4)", () => {
       // Membership inherits the owning role's grants, so its reach is named too.
       ["is a member of pryvis_auth", "can reach app_credential directly", "can reach app_session directly",
        "can reach mfa_totp directly", "can reach mfa_recovery_code directly",
-       "can reach registration_claim directly"]],
+       "can reach registration_claim directly", "owns objects in schema public"]],
     ["membership of pryvis_balance", `GRANT pryvis_balance TO ${APP_ROLE}`,
-      `REVOKE pryvis_balance FROM ${APP_ROLE}`, ["is a member of pryvis_balance", "can write issue_balance directly"]],
+      `REVOKE pryvis_balance FROM ${APP_ROLE}`, ["is a member of pryvis_balance", "can write issue_balance directly",
+       "owns objects in schema public"]],
     ["a direct grant on a credential table", `GRANT SELECT ON app_credential TO ${APP_ROLE}`,
       `REVOKE SELECT ON app_credential FROM ${APP_ROLE}`, ["can reach app_credential directly"]],
     ["a write grant on issue_balance", `GRANT UPDATE ON issue_balance TO ${APP_ROLE}`,
       `REVOKE UPDATE ON issue_balance FROM ${APP_ROLE}`, ["can write issue_balance directly"]],
     ["a write grant on platform_capability", `GRANT INSERT ON platform_capability TO ${APP_ROLE}`,
       `REVOKE INSERT ON platform_capability FROM ${APP_ROLE}`, ["can write platform_capability directly"]],
+    // Added with migration 20260927230000: the two privileges that undo the model from inside it.
+    ["CREATE on schema public", `GRANT CREATE ON SCHEMA public TO ${APP_ROLE}`,
+      `REVOKE CREATE ON SCHEMA public FROM ${APP_ROLE}`, ["may create objects in schema public"]],
+    ["ownership of a business table", `ALTER TABLE rate_limit_bucket OWNER TO ${APP_ROLE}`,
+      "ALTER TABLE rate_limit_bucket OWNER TO CURRENT_USER", ["owns objects in schema public"]],
   ];
   for (const [what, plant, unplant, expected] of PLANTS) {
     it(`names ${what}`, async () => {

@@ -626,6 +626,9 @@ THREAT-MODEL §4e, §4f, §4g; ADR 0025 decision 2 amended; PRD R1.24b and R1.15
 review 4's J14 row (**Fixed, re-review owed**); `new-app/CLAUDE.md`. The folder docs/wip/privilege-model/ is removed — the
 migration it held is now committed. **R5 and J14 are not Closed**: next, an adversarial review (Opus) and a
 mechanical closing check (Sonnet), each from a committed brief run through `tools/run_brief.py`.
+*Added the same day, after that commit:* migration `20260927230000_least_privilege_creates` — the check also
+names CREATE on schema public and ownership of anything in it, which D4's list missed (found by the builder
+while writing the review brief). Two more plants, both caught; two more tests.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
