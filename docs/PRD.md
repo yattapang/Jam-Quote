@@ -208,7 +208,8 @@ demonstrated, it is not a requirement, it is a hope.
   stop blocking (J15 with it); L1 let variations stop blocking once K6's twin check made them inert —
   both owner's decisions, 2026-09-27. Until J4 a credit note moved no figure at all.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
-  `accepted_total_minor` stays written-once and the ceiling is state-aware instead (ADR 0025, corrected). The
+  no function rewrites `accepted_total_minor` (the J12 block asserts it; a caller that sets the write flag
+  can, R5 — finding U11) and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
   simply inert.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from
@@ -375,15 +376,18 @@ demonstrated, it is not a requirement, it is a hope.
   When release 2 makes variations signable, this requirement tightens to "accepted" and the ceiling
   becomes what it claims to be.
 - **R1.24a** It is **enforced by a lock, not by prose** (domain model §6.2a). The `issue_balance` row is
-  created **in the same transaction as the acceptance, unconditionally** — because a `SELECT … FOR UPDATE`
+  created **in the same transaction as the acceptance**, by an explicit `issue_balance_open()` call the
+  acceptance path must make — nothing creates it automatically (R7; "unconditionally" removed 2026-10-01,
+  finding U11) — because a `SELECT … FOR UPDATE`
   that matches no row takes **no lock at all**, so a missing row would have let the very first pair of
   concurrent invoices through (G2). Issuing an invoice then takes `SELECT … FOR UPDATE` on that row, computes the new total, refuses if it would
   exceed the ceiling, and inserts the invoice in the same transaction. Per-row version checks do nothing
   here — two invoices each individually under the total are together over it. Review found this
   invariant stated twice in prose with nowhere to live (F4), which is Rule 1.10's "invariant with no
   owner".
-- **R1.24b** `issue_balance` is a **derived cache with a lock**: the balance functions re-sum from the
-  underlying rows **inside** the lock rather than trusting the cached figure. They cannot stop a caller
+- **R1.24b** `issue_balance` is a **derived cache with a lock**: the balance functions re-sum the
+  variations and invoiced totals from the underlying rows **inside** the lock; the ceiling still reads the
+  cached `accepted_total_minor` (finding U13), which is why R5 lets a caller who sets the flag raise it. They cannot stop a caller
   that sets the write flag itself (R5, owed as `docs/THREAT-MODEL.md` §4e; Rule 21.10, finding T10). `accepted_total_minor` is a
   copy of the accepted issue's frozen total — safe only because the issue is immutable (G12). That no
   variation, invoice, void or credit note moves it is asserted by the J12 block of

@@ -809,11 +809,13 @@ describe("K4 · a wrong document is withdrawn once nothing is still billed on it
   });
 });
 
-describe("2 · issue_balance has exactly one writer", () => {
+describe("2 · issue_balance refuses a write that does not carry the flag", () => {
   it("refuses a direct UPDATE from the application, however it is granted", async () => {
     // The harness grants UPDATE on every table (see test-support), which is exactly why the control
     // cannot be a grant: a REVOKE in the migration would be undone here. The write policies require
-    // a transaction-local flag that only the function sets.
+    // a transaction-local flag that the balance functions set. They are not the only possible setter:
+    // the application can set it too (R5, THREAT-MODEL §4e). This test proves only the no-flag case
+    // (finding U10 corrected the claim that only the function sets it).
     const issue = await seal(1, 100_000n);
     await accept(issue);
 
@@ -857,7 +859,9 @@ describe("2 · issue_balance has exactly one writer", () => {
     );
   });
 
-  it("opens the balance row as part of accepting, not as a separate step somebody may forget", async () => {
+  // `accept()` calls issue_balance_open() explicitly in the same transaction. Nothing opens the row by
+  // itself — the N2 test reaches an acceptance without one (R7; finding U10 corrected this title).
+  it("opens the balance row when the acceptance transaction calls issue_balance_open()", async () => {
     const issue = await seal(1, 100_000n);
     expect(await sql(`SELECT 1 FROM issue_balance WHERE issue_id = $1`, [issue])).toHaveLength(0);
 
@@ -1202,7 +1206,7 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
   });
 
   it("drops the ceiling to zero on withdrawal, so nothing more can be invoiced", async () => {
-    // Nothing is mutated to achieve this. `accepted_total_minor` stays written-once, and the CEILING is
+    // Nothing is mutated to achieve this. no function rewrites `accepted_total_minor` (R5 aside), and the CEILING is
     // state-aware — which is how ADR 0025's own contradiction was resolved.
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);

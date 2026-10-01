@@ -46,7 +46,7 @@ expression changes** and the documents do not need to.
 
 ---
 
-## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph
+## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph (as decided; not built so — see the amendment)
 
 **The contradiction:** §6.2a declared the `issue_balance` writer set "closed and named" and omitted the
 acceptance transaction that creates the row — the exact fix the previous finding asked for (H2, G2).
@@ -74,8 +74,9 @@ transaction-local flag that `issue_balance_open()` and `issue_balance_apply()` s
 is NOT — the acceptance path must call it, and an acceptance inserted without that call has no balance row
 (so it can be invoiced against nothing: the recompute raises). *Corrected the same day, finding R7.* And
 the flag is not a secret: a caller that sets it itself can write `issue_balance` directly — the policies
-stop the application forgetting, not a hostile caller (finding R5). The decision stands — the writer set is
-enforced by the schema, not a paragraph — but its mechanism is policies plus triggers, and all three bullets
+stop the application forgetting, not a hostile caller (finding R5). What stands is that a write
+without the flag is refused by the schema, not by a paragraph — the writer set itself is not enforced (R5;
+*"the writer set is enforced" corrected 2026-10-01, finding U12*) — and its mechanism is policies plus triggers, and all three bullets
 above are kept as the decision of its day, none built as written: there is no `SECURITY DEFINER` function,
 the writer list is not closed (R5), and no parser-based guard exists (*the last two added 2026-10-01,
 finding T10*). J2's disposition credited this
