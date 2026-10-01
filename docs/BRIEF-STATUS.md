@@ -439,6 +439,14 @@ J7, J8, J11, J14. **Next, in the owner's order:** size J6, J7, J8, J11 and J14 (
 refusal of responses on superseded or unnumbered issues; then review 3's H17, H19, H20 and the ten legacy
 gaps; then writing the three adopted governance rules into `docs/RULES.md`.
 
+**Owner's decisions, 2026-10-01 (sizing of the last five):** order — J11 first; then J6, J7, J8 as one
+acceptance-evidence batch after a design pass with options; J14 with R5's privilege model when the API
+layer starts, recorded now as a launch blocker (`docs/THREAT-MODEL.md` §4f). **J11:** a line total is
+quantity × unit price rounded HALF AWAY FROM ZERO at the cent, as an exact integer check in the database
+(half-up for positive amounts, matching the earlier application); discounts may be offered, so lines may be
+negative and round symmetrically. Tax consistency is NOT part of J11 — owed as its own item with the GCT
+rules.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

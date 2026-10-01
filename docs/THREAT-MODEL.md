@@ -229,6 +229,23 @@ migrations — today the application role's grants exist only in the test harnes
 change, deliberately kept out of J12's documentation fix (owner's decision, 2026-10-01). The mechanism and
 both of its current limits are stated in ADR 0025, decision 2.
 
+## 4f. The credential tables have no row-level security (added 2026-10-01, J14; a LAUNCH BLOCKER)
+
+`app_credential` (password hashes), `mfa_totp`, `mfa_recovery_code` (second-factor material) and
+`registration_claim` (single-use registration tokens) have no row-level security, because they are read
+before a tenant is known. So any session holding the application role can read every tenant's credential
+material — one SQL-injection or confused-deputy query in our server would expose all of it (finding J14,
+executed: all four readable with no tenant in context).
+
+**Deferred by the owner on 2026-10-01 to the privilege-model work scheduled for R5 (§4e)**, not fixed with
+a session-flag policy: the application can set such a flag itself (R5), so it would look like protection
+without being it. The real fix is the same as R5's — these tables readable only by a separate
+authentication role or `SECURITY DEFINER` functions, never by the application's ordinary role.
+
+**It is a launch blocker, alongside staff MFA:** no deployment that holds real users' credentials ships
+with these tables readable by the application role. Exposure until then needs a defect in our own
+server, and none is deployed.
+
 ## 5. The five things I would fix first, in order
 
 1. **Staff MFA** (§4.4). One password currently stands between an attacker and every tenant's
