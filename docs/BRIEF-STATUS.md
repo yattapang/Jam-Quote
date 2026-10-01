@@ -459,7 +459,11 @@ pass with options.
 plants with a stated expected result each, a fixture sweep with a stated expected list, and two rows of text
 to read. So the cheapest reliable tier is the one that follows stated expectations exactly; every
 expectation was run before launch on the HEAD the brief names (M36, M37). No build work, gate run or commit
-alongside it.*
+alongside it.* **Reported 2026-10-01: all seven items PASSED, no deviation; one wording
+note (the J11 row deferred "header total" to §6.2a) answered by stating it in the row. J11 CLOSED.**
+
+**Review 4 now:** Closed — J1, J2, J3, J4, J5, J9, J10, J11, J12, J13, J15, J16 (12) · Open, not started —
+J6, J7, J8 (one batch, design pass with options next) · J14 deferred to R5 (launch blocker).
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
