@@ -32,6 +32,7 @@ import {
   ipKey,
 } from "../rate-limit/rate-limiter.js";
 import { hashPassword, needsRehash, verifyPassword } from "./password.js";
+import { newSessionSecret, sessionTokenHash } from "./session-token.js";
 import { type Queryable } from "./db-caller-resolver.js";
 import { withTenant, withoutTenant } from "../tenancy/tenant-context.js";
 
@@ -249,11 +250,12 @@ export class SignInService {
       };
     }
 
-    // The bootstrap read, outside row-level security. app_credential is one of exactly
-    // two tables that allow this, and the reason is in its migration.
+    // The bootstrap read, before any tenant is known. The application has no privilege on
+    // app_credential: it asks the door function for THIS email's row and can get no other
+    // (privilege model, D1 — `20260927220000_privilege_model`).
     const credentials = await withoutTenant(this.db, "authentication", (tx) =>
       (tx as Queryable).$queryRawUnsafe<CredentialRow>(
-        `SELECT user_id, tenant_id, password_hash FROM app_credential WHERE email = $1`,
+        `SELECT user_id, tenant_id, password_hash FROM credential_for_email($1)`,
         normalised,
       ),
     );
@@ -286,10 +288,7 @@ export class SignInService {
                 -- rest of the user's state, rather than after the session is issued. A session
                 -- inserted first and then marked pending would be fully valid for the width of
                 -- that gap, which is the kind of window that only ever shows up in production.
-                EXISTS (
-                  SELECT 1 FROM mfa_totp m
-                   WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL
-                ) AS has_confirmed_factor,
+                mfa_has_confirmed_factor(u.id) AS has_confirmed_factor,
                 EXISTS (
                   SELECT 1 FROM platform_capability pc
                    WHERE pc.user_id = u.id AND pc.revoked_at IS NULL
@@ -329,14 +328,16 @@ export class SignInService {
       const upgraded = await hashPassword(password);
       await withoutTenant(this.db, "authentication", (tx) =>
         tx.$executeRawUnsafe(
-          `UPDATE app_credential SET password_hash = $1, updated_at = now() WHERE user_id = $2`,
-          upgraded,
+          `SELECT credential_rehash($1::uuid, $2)`,
           credential.user_id,
+          upgraded,
         ),
       );
     }
 
-    const sessionId = randomUUID();
+    // The client holds the secret; the database stores only its hash (D2). The row's own id is a
+    // separate, internal identifier, never handed out.
+    const sessionSecret = newSessionSecret();
     const expiresAt = new Date(this.now().getTime() + SESSION_LIFETIME_MS);
 
     /**
@@ -351,9 +352,9 @@ export class SignInService {
 
     await withoutTenant(this.db, "authentication", (tx) =>
       tx.$executeRawUnsafe(
-        `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, mfa_pending)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        sessionId,
+        `SELECT session_create($1::uuid, $2, $3::uuid, $4::uuid, $5::integer, $6::timestamptz, $7::boolean)`,
+        randomUUID(),
+        sessionTokenHash(sessionSecret),
         credential.user_id,
         credential.tenant_id,
         // Snapshot of the user's current version. Bumping session_version later makes
@@ -372,7 +373,7 @@ export class SignInService {
 
     return {
       ok: true,
-      session: { sessionId, version: user.session_version },
+      session: { sessionId: sessionSecret, version: user.session_version },
       expiresAt,
       ...(mfaPending
         ? {

@@ -220,6 +220,10 @@ model AppSession {
   tenantId String @map("tenant_id") @db.Uuid
   tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade, onUpdate: Restrict)
 
+  /// SHA-256 (hex) of the secret the client holds — the secret itself is never stored, so a copy of this
+  /// table is not a list of live logins (privilege model, D2). Reached only through the door functions.
+  tokenHash String @unique @map("token_hash")
+
   /// app_user.session_version at the moment this session was issued. A mismatch on
   /// any later request means the session was superseded.
   version Int

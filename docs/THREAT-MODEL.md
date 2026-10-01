@@ -212,39 +212,44 @@ does, so this needs a SQL-injection-class defect in our code, which would be wor
 role and take the lock inside a `SECURITY DEFINER` function that re-checks visibility — after confirming
 the managed PostgreSQL provider permits revoking from `pg_catalog`.
 
-## 4e. The balance-write flag is not a secret (added 2026-10-01, R5; owed, not yet scheduled)
+## 4e. The balance-write flag was not a secret (added 2026-10-01, R5; built 2026-10-01, closing check owed)
 
-`issue_balance` — the row that holds each accepted issue's ceiling and invoiced total — is written only
-under a row-security policy that requires the transaction-local setting `pryvis.balance_write`.
-`issue_balance_open()` and `issue_balance_apply()` set it; nothing stops the application's own SQL setting
-it too, and then a direct `UPDATE` can raise `accepted_total_minor` and invoice past the real ceiling
-(finding R5, executed). The policies stop the application *forgetting* the balance, not a hostile caller.
-Same precondition as §4d: it needs a SQL-injection-class defect in our server, because tenants never hold a
-SQL session.
+`issue_balance` — the row that holds each accepted issue's ceiling and invoiced total — was written only
+under a row-security policy that required the transaction-local setting `pryvis.balance_write`.
+`issue_balance_open()` and `issue_balance_apply()` set it; nothing stopped the application's own SQL setting
+it too, and then a direct `UPDATE` could raise `accepted_total_minor` and invoice past the real ceiling
+(finding R5, executed). The policies stopped the application *forgetting* the balance, not a hostile caller.
 
-**Not accepted, not fixed — owed, for the owner to schedule.** The fix is ADR 0025's original decision:
-no INSERT or UPDATE grant on `issue_balance` to the application role at all, and the two balance functions
-`SECURITY DEFINER` with a pinned `search_path`. It needs the database privilege model to live in the
-migrations — today the application role's grants exist only in the test harness — so it is a deployment
-change, deliberately kept out of J12's documentation fix (owner's decision, 2026-10-01). The mechanism and
-both of its current limits are stated in ADR 0025, decision 2.
+**Built 2026-10-01** (`docs/design/privilege-model.md` §5; migration
+`new-app/db/migrations/20260927220000_privilege_model`): the application role holds SELECT only on
+`issue_balance`; the two balance functions are `SECURITY DEFINER`, owned by `pryvis_balance`, the only role
+with INSERT and UPDATE; the write policies require `current_user = 'pryvis_balance'` with the tenant match,
+and the flag is gone. Evidence: `new-app/db/test/documents-core.test.ts` block 2 (R5's exact attack, flag
+set, now "permission denied"; and no live function reads the flag), the policy predicate in
+`new-app/db/test/policy-parity.test.ts`, and the 22 races on real PostgreSQL unchanged. Each proved with a
+planted defect. **Not Closed** until the independent closing check (Rule 24.6).
 
-## 4f. The credential tables have no row-level security (added 2026-10-01, J14; a LAUNCH BLOCKER)
+## 4f. The credential tables had no row-level security (added 2026-10-01, J14; a LAUNCH BLOCKER; built 2026-10-01, closing check owed)
 
 `app_credential` (password hashes), `mfa_totp`, `mfa_recovery_code` (second-factor material) and
 `registration_claim` (single-use registration tokens) have no row-level security, because they are read
-before a tenant is known. So any session holding the application role can read every tenant's credential
-material — one SQL-injection or confused-deputy query in our server would expose all of it (finding J14,
-executed: all four readable with no tenant in context).
+before a tenant is known. So any session holding the application role could read every tenant's credential
+material (finding J14, executed). The design pass found `app_session` was the same exposure and worse: its
+`id` was the bearer credential, so a dump of it was a list of live logins.
 
-**Deferred by the owner on 2026-10-01 to the privilege-model work scheduled for R5 (§4e)**, not fixed with
-a session-flag policy: the application can set such a flag itself (R5), so it would look like protection
-without being it. The real fix is the same as R5's — these tables readable only by a separate
-authentication role or `SECURITY DEFINER` functions, never by the application's ordinary role.
+**Built 2026-10-01** (`docs/design/privilege-model.md` D1, D2, D5): the application role holds no
+privilege on any of the five tables. It reaches them only through fifteen `SECURITY DEFINER` door
+functions owned by `pryvis_auth`, each reading or writing one row by its key, executable by the
+application and not by PUBLIC. `app_session` stores only the SHA-256 of the secret the client holds, so a
+dumped row does not resolve. `platform_capability` is read-only to the application. Evidence:
+`new-app/db/test/privilege-model.test.ts` — no reach into the tables, by query and in the catalogue; a
+guard that any table outside row security reachable by the application is named with a reason (only
+`rate_limit_bucket` and `platform_capability`); a guard on every `SECURITY DEFINER` function and its owner;
+one row per key; no resolution by the secret or the row id — each proved with a planted defect.
 
-**It is a launch blocker, alongside staff MFA:** no deployment that holds real users' credentials ships
-with these tables readable by the application role. Exposure until then needs a defect in our own
-server, and none is deployed.
+**What it does not do:** a door that WRITES (creating a session, rehashing a password) can still be called
+by an injection with a user id it knows, because sign-in must. What the doors remove is the bulk read.
+**Not Closed** until the independent closing check (Rule 24.6), and the launch blocker stands until then.
 
 ## 4g. Temporary tables and the search path (added 2026-10-01, findings Y1, Y2, Y7; fixed, with a provisioning rule owed)
 
@@ -258,16 +263,21 @@ runs with `search_path = pg_catalog, public, pg_temp`, held by `new-app/db/test/
 and TEMPORARY on the database is revoked from PUBLIC, executed on a real database by
 `new-app/db/test/concurrency.pg.test.ts` ("Y7 layer two").
 
-**Owed with the role provisioning (§4e):** the production application role is created outside the
-migrations, so **it must not be granted TEMPORARY**, and the deployment check must confirm
-`has_database_privilege(<role>, current_database(), 'TEMP')` is false. The pin on every function is the
+**The deployment check (built 2026-10-01, design D4).** The production application role is created
+outside the migrations, so **it must not be granted TEMPORARY**. `least_privilege_violations()` (migration
+`20260927220000_privilege_model`) names it, with superuser, BYPASSRLS, CREATEROLE, CREATEDB, membership of
+an owning role, and any direct reach into the credential tables or write to `issue_balance` or
+`platform_capability`; `new-app/api/src/core/auth/least-privilege.ts` refuses to start on any of them. The
+TEMPORARY line is planted on real PostgreSQL in `new-app/db/test/concurrency.pg.test.ts` ("§4g"), the rest
+in `new-app/db/test/privilege-model.test.ts`. **Still owed:** nothing calls the start-up check yet, because
+there is no application bootstrap; wiring it in is owed with that module. The pin on every function is the
 first layer and does not depend on this; the revoke is defence in depth for a function a later migration
 forgets to pin.
 
 **Two limits the fourth re-review executed.** If the role that runs the migrations is neither a superuser
 nor the database's owner, the revoke does nothing and PostgreSQL only WARNS ("no privileges could be
-revoked"); the migration still succeeds (Z4). The deployment check above is what catches that — so it is
-owed before launch, not after. And the pin covers plain functions in `public` only: a procedure, or a
+revoked"); the migration still succeeds (Z4). The deployment check above is what catches that, once it is
+wired into start-up. And the pin covers plain functions in `public` only: a procedure, or a
 function in another schema, would need its own (Z3).
 
 ## 5. The five things I would fix first, in order

@@ -296,14 +296,7 @@ suite("concurrency against real PostgreSQL", () => {
     for (const name of await migrationNames()) {
       await owner.query(await migrationSql(name));
     }
-    // The role is cluster-wide, so a previous run may have made it.
-    await owner.query(`DO $$ BEGIN
-                         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN
-                           CREATE ROLE ${APP_ROLE} NOLOGIN;
-                         END IF;
-                       END $$`);
-    await owner.query(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE};
-                       GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
+    // The roles and every grant come from the migrations (`20260927220000_privilege_model`), as in production.
     await owner.query(
       `INSERT INTO tenant (id, name, country_code, currency, updated_at)
        VALUES ($1, 'Delroy Construction', 'JM', 'JMD', now())`,
@@ -981,5 +974,26 @@ suite("concurrency against real PostgreSQL", () => {
       await s.client.end();
     }
     await owner.query(`CREATE TEMP TABLE owner_may (id int)`);
+  });
+
+  it("§4g · least_privilege_violations() is empty for the application role, and names a granted TEMPORARY", async () => {
+    // The API's start-up check calls this function (design D4). PGlite cannot test the TEMPORARY line, for
+    // the reason above; here it is planted on a real database, seen, and taken back.
+    const read = async () => {
+      const s = await session();
+      try {
+        return (await s.client.query<{ v: string[] }>(`SELECT least_privilege_violations() AS v`)).rows[0]!.v;
+      } finally {
+        await s.client.end();
+      }
+    };
+    expect(await read()).toEqual([]);
+    await owner.query(`GRANT TEMPORARY ON DATABASE "${databaseName}" TO ${APP_ROLE}`);
+    try {
+      expect(await read()).toEqual(["may create temporary tables"]);
+    } finally {
+      await owner.query(`REVOKE TEMPORARY ON DATABASE "${databaseName}" FROM ${APP_ROLE}`);
+    }
+    expect(await read()).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 # Design: the database privilege model (R5, J14, and the §4g deployment check)
 
-**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D5).**
+**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D5). BUILT
+2026-10-01 (§8); adversarial review and closing check owed (Rule 24.6).**
 
 Date: 2026-10-01 · Answers `docs/THREAT-MODEL.md` §4e (R5), §4f (J14, a launch blocker) and §4g's owed
 deployment check · Delegation (Rule 16.5): Opus — the credential path and row-security policy text, two of
@@ -148,3 +149,39 @@ through `tools/run_brief.py` (Rule 16.7).
   table that records capabilities.
 - It does not protect against the database owner or a superuser, which bypass every policy.
 - It does not rotate or encrypt password hashes: scrypt's cost is the protection for a hash that leaks.
+
+## 8. As built, and how a deployment must be set up
+
+**Built 2026-10-01** as §6 describes, in migration `new-app/db/migrations/20260927220000_privilege_model`
+(policy text in `new-app/db/policies/006-privilege-model.sql`). Three differences from §6, each a detail
+the design left open:
+
+- `assert_least_privilege()` is built as `least_privilege_violations()`, returning the list rather than
+  raising, so a test can see each line and the API can print all of them;
+  `new-app/api/src/core/auth/least-privilege.ts` is the part that refuses.
+- `registration_claim` has no doors: registration is not built, so the application simply cannot reach it.
+  Its doors come with sign-up.
+- The parser-based guard of ADR 0025 decision 2 is withdrawn: the database refuses the write whatever
+  module sends it.
+
+Tests: `new-app/db/test/privilege-model.test.ts`, `new-app/db/test/documents-core.test.ts` block 2,
+`new-app/db/test/policy-parity.test.ts`, `new-app/db/test/concurrency.pg.test.ts` ("§4g") and
+`new-app/api/src/core/auth/least-privilege.test.ts`, each control proved with a planted defect.
+
+**Setting up a deployment.** The migrations create the three group roles and every grant; they do not
+create the login role the API connects as, because that holds a password and belongs to the deployment.
+
+1. **The migrating role** must be able to create roles once (CREATEROLE, or the roles created beforehand
+   with the same names), must own the database or be a superuser so the TEMPORARY revoke takes effect
+   (Z4), and must be able to make `pryvis_balance` and `pryvis_auth` own functions — on PostgreSQL 16
+   a non-superuser needs `GRANT pryvis_balance, pryvis_auth TO <migrator> WITH SET TRUE`. Without it the
+   migration fails loudly at `ALTER FUNCTION … OWNER TO`, rather than leaving the functions owned by the
+   migrator.
+2. **The API's login role** is created as `CREATE ROLE <name> LOGIN PASSWORD '…' NOSUPERUSER NOBYPASSRLS
+   NOCREATEROLE NOCREATEDB IN ROLE pryvis_app` — a member of `pryvis_app` and of nothing else, owning
+   nothing. It is never the migrating role.
+3. **Check it before the first start:** connected as that role, `SELECT least_privilege_violations()`
+   must return `{}`. The API refuses to start otherwise, once its bootstrap calls
+   `assertLeastPrivilege` — **owed**: there is no bootstrap yet.
+4. On a managed database whose provider grants TEMPORARY to PUBLIC on every new database, the revoke in
+   `20260927210000_pin_search_path` must have run as the database owner; step 3 is what shows it did.

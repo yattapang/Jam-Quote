@@ -343,8 +343,8 @@ is what produced H2, H2's own fix, J12 — and would have made this paragraph wr
 restate them. It did, twice, and both times it was false by execution (R13): it said the application had
 no write policy it could satisfy and "no other door", when the balance-write flag is not a secret (R5);
 and it said both balance functions are reached by triggers, when `issue_balance_open()` is not (R7).
-Closing the first of those properly — no write grant to the application role at all — is owed as its own
-security item, not claimed here.
+The first was closed properly on 2026-10-01 — no write grant to the application role at all (R5, the
+privilege model) — and is stated in the ADR, not here.
 
 Issuing an invoice is one transaction: lock the row · re-sum from the rows rather than trusting the
 cached figure · **refuse** if the new total would exceed `accepted_total + variations_total` · insert the
@@ -406,7 +406,8 @@ editing or deleting an issue · editing an acceptance · accepting twice, or aft
 after an acceptance · withdrawing a decline · invoicing past the ceiling ·
 sealing a second issue for the same (quote, revision) (G4) · withdrawing an acceptance twice · deleting a
 balance row. (This list named "writing `issue_balance` outside its function" until 2026-10-01; it is not
-impossible — the write flag is not a secret, R5, owed as `docs/THREAT-MODEL.md` §4e — finding S7.)
+impossible — the write flag was not a secret, R5 — finding S7. Since 2026-10-01 it is refused by the
+grants, `docs/THREAT-MODEL.md` §4e; it stays off this list because the database owner can still do it.)
 
 **Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
 recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to

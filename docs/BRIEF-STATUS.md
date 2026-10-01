@@ -606,10 +606,26 @@ stays writable, staff capabilities become read-only to the application.
 in-session at **Opus** — the credential path and row-security policy text are two of 16.5's three named
 exceptions, and the work is one ordered protocol (roles, then grants, then functions, then the code that calls
 them) that Rule 16.6 says is not delegated in pieces.*
-**Paused 2026-10-01 at the session limit, work saved in `docs/wip/privilege-model/`** (its README says how to
+**Paused 2026-10-01 at the session limit, work saved in docs/wip/privilege-model/** (its README says how to
 resume): the migration is written but NOT applied or tested, so it is kept out of `migrations/` (Rule 6). Not
 yet done: the harness and race-suite role changes, the API auth code on the door functions, the tests, plants,
 gate and review.
+
+**Built 2026-10-01: the privilege model** (`docs/design/privilege-model.md` §8). Migration
+`20260927220000_privilege_model` and policy `006-privilege-model.sql`: the three roles and every grant (the test
+harness grants nothing now); fifteen door functions owned by `pryvis_auth`; the balance functions `SECURITY
+DEFINER` under `pryvis_balance`, the flag gone; `app_session.token_hash`; `least_privilege_violations()`. The
+API's auth code calls the doors and holds the session secret (`session-token.ts`); `least-privilege.ts` is the
+start-up check, **not yet wired** (no bootstrap). New tests: `db/test/privilege-model.test.ts` (27), the race
+suite's "§4g" check, `least-privilege.test.ts` (5). **Fourteen plants**, each restored from a backup copy and
+proved with `diff -q`, all caught: the credential, capability and balance revokes; PUBLIC execute on a door; a
+stray definer function; an unrevoked new table; a session resolved by its id; an email matched by pattern; the
+TEMPORARY and membership lines; the policy's role condition (in the migration alone, and in both files); and two
+in the start-up check. Gate: db 250 (races required, PostgreSQL 16), api 188, typecheck clean. Documents:
+THREAT-MODEL §4e, §4f, §4g; ADR 0025 decision 2 amended; PRD R1.24b and R1.15c; domain model §6.2a and §6.3;
+review 4's J14 row (**Fixed, re-review owed**); `new-app/CLAUDE.md`. The folder docs/wip/privilege-model/ is removed — the
+migration it held is now committed. **R5 and J14 are not Closed**: next, an adversarial review (Opus) and a
+mechanical closing check (Sonnet), each from a committed brief run through `tools/run_brief.py`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

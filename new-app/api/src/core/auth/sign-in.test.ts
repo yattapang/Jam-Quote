@@ -496,7 +496,7 @@ describe("the second factor", () => {
 
   async function pendingFlag(sessionId: string): Promise<boolean> {
     const result = await asOwner(
-      `SELECT mfa_pending FROM app_session WHERE id = $1`,
+      `SELECT mfa_pending FROM app_session WHERE token_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')`,
       [sessionId],
     );
     return (result!.rows[0] as { mfa_pending: boolean }).mfa_pending;

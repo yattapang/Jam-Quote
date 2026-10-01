@@ -208,8 +208,8 @@ demonstrated, it is not a requirement, it is a hope.
   stop blocking (J15 with it); L1 let variations stop blocking once K6's twin check made them inert —
   both owner's decisions, 2026-09-27. Until J4 a credit note moved no figure at all.
 - **R1.15c** A withdrawal **drops the invoiceable ceiling to zero immediately**, and mutates nothing:
-  no function rewrites `accepted_total_minor` (the J12 block asserts it; a caller that sets the write flag
-  can, R5 — finding U11) and the ceiling is state-aware instead (ADR 0025, corrected). The
+  no function rewrites `accepted_total_minor` (the J12 block asserts it; until 2026-10-01 a caller that set
+  the write flag could, R5 — finding U11) and the ceiling is state-aware instead (ADR 0025, corrected). The
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
   simply inert.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from
@@ -404,11 +404,12 @@ demonstrated, it is not a requirement, it is a hope.
   owner".
 - **R1.24b** `issue_balance` is a **derived cache with a lock**: the balance functions re-sum the
   variations and invoiced totals from the underlying rows **inside** the lock; the ceiling still reads the
-  cached `accepted_total_minor` (finding U13), which is why R5 lets a caller who sets the flag raise it. They cannot stop a caller
-  that sets the write flag itself (R5, owed as `docs/THREAT-MODEL.md` §4e; Rule 21.10, finding T10). `accepted_total_minor` is a
+  cached `accepted_total_minor` (finding U13), so the ceiling is only as safe as the row's writers. Only
+  the two balance functions can write it — the application role holds SELECT alone (R5, built 2026-10-01,
+  `docs/THREAT-MODEL.md` §4e; Rule 21.10, finding T10). `accepted_total_minor` is a
   copy of the accepted issue's frozen total — safe only because the issue is immutable (G12). That no
   variation, invoice, void or credit note moves it is asserted by the J12 block of
-  `db/test/documents-core.test.ts`; who can write the row at all, and the limit of that (R5), is stated
+  `db/test/documents-core.test.ts`; who can write the row at all is stated
   once, in ADR 0025 decision 2 (Rule 21.10).
 - **R1.24e** The **reconciliation job runs nightly per tenant**, rebuilds all three derived columns,
   and on a mismatch writes an audit entry, alerts us and **refuses further invoicing against that issue**

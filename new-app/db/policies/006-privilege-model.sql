@@ -7,8 +7,8 @@
 -- is embedded in a committed migration (Rule 6), so its text still shows the old policies; this file,
 -- embedded in `20260927220000_privilege_model`, is what the database holds.
 --
--- `current_user` inside a SECURITY DEFINER function is the function's OWNER, and outside one it is the
--- caller; the application cannot make itself `pryvis_balance`. The tenant match stays, so even the balance
+-- current_user inside a SECURITY DEFINER function is the function's OWNER, and outside one it is the
+-- caller; the application cannot make itself pryvis_balance. The tenant match stays, so even the balance
 -- functions write only the tenant in scope. The application role also has no INSERT or UPDATE grant on
 -- the table at all — the policy is the second lock, not the only one.
 DROP POLICY IF EXISTS issue_balance_create ON "issue_balance";

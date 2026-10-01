@@ -46,7 +46,7 @@ expression changes** and the documents do not need to.
 
 ---
 
-## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph (as decided; not built so — see the amendment)
+## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph (as decided; built 2026-10-01 — see the second amendment)
 
 **The contradiction:** §6.2a declared the `issue_balance` writer set "closed and named" and omitted the
 acceptance transaction that creates the row — the exact fix the previous finding asked for (H2, G2).
@@ -83,6 +83,20 @@ above are kept as the decision of its day, none built as written: there is no `S
 the writer list is not closed (R5), and no parser-based guard exists (*the last two added 2026-10-01,
 finding T10*). J2's disposition credited this
 amendment before it existed; that is what Q7 found.
+
+**Amended 2026-10-01 (R5, the privilege model — `docs/design/privilege-model.md` §5).** The grants half of
+the original decision is now built, by migration `new-app/db/migrations/20260927220000_privilege_model`:
+the application role (`pryvis_app`, created by the migrations, no longer by the test harness) holds SELECT
+only on `issue_balance`; `issue_balance_open()` and `issue_balance_apply()` are `SECURITY DEFINER`, owned by
+`pryvis_balance`, the one role with INSERT and UPDATE on the table; and the write policies require
+`current_user = 'pryvis_balance'` with the tenant match, a condition the application cannot set. The flag
+is gone, so the first amendment's mechanism is history. The writers are therefore the two functions'
+callers — the triggers that move a total, and the acceptance path that opens the row — and there is no
+other way in: R5's attack (set the flag, UPDATE the row) is refused with "permission denied", in
+`new-app/db/test/documents-core.test.ts` block 2. **Still not built:** the parser-based guard of the third
+bullet. It is not needed for the grant to hold — the database refuses the write whatever module sends it —
+and is withdrawn rather than owed. Two functions, not one, as the first amendment says. The statement
+stands until the closing check (Rule 24.6).
 
 ---
 

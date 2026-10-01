@@ -843,42 +843,42 @@ describe("K4 · a wrong document is withdrawn once nothing is still billed on it
   });
 });
 
-describe("2 · issue_balance refuses a write that does not carry the flag", () => {
-  it("refuses a direct UPDATE from the application, however it is granted", async () => {
-    // The harness grants UPDATE on every table (see test-support), which is exactly why the control
-    // cannot be a grant: a REVOKE in the migration would be undone here. The write policies require
-    // a transaction-local flag that the balance functions set. They are not the only possible setter:
-    // the application can set it too (R5, THREAT-MODEL §4e). This test proves only the no-flag case
-    // (finding U10 corrected the claim that only the function sets it).
+describe("2 · only the balance functions can write issue_balance (R5, privilege model)", () => {
+  // Until 2026-10-01 the write policies required a transaction-local flag the balance functions set —
+  // and the application could set it too (R5, executed). Now the application role has SELECT only on
+  // `issue_balance`, and the write policies require `current_user = 'pryvis_balance'`, which only the
+  // SECURITY DEFINER balance functions are (`20260927220000_privilege_model`). Each test sets the old flag
+  // by hand first: R5's exact attack, refused.
+  const withOldFlag = () => sql(`SELECT set_config('pryvis.balance_write', 'on', false)`);
+
+  it("R5 · refuses a direct UPDATE from the application, even with the old flag set", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
-
-    const affected = await db.query(
-      `UPDATE issue_balance SET invoiced_total_minor = 999999 WHERE issue_id = $1`,
-      [issue],
-    );
-    expect(affected.affectedRows ?? 0).toBe(0);
-    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(0);
+    await withOldFlag();
+    await expect(
+      db.query(`UPDATE issue_balance SET accepted_total_minor = 999999999 WHERE issue_id = $1`, [issue]),
+    ).rejects.toThrow(/permission denied for table issue_balance/);
+    expect(minor((await balance(issue)).accepted_total_minor)).toBe(100_000);
   });
 
-  it("refuses a direct INSERT, so a row cannot be conjured to satisfy a later lock", async () => {
+  it("R5 · refuses a direct INSERT, so a row cannot be conjured to satisfy a later lock", async () => {
     const issue = await seal(1, 100_000n);
-
+    await withOldFlag();
     await expect(
       db.query(
         `INSERT INTO issue_balance (issue_id, tenant_id, accepted_total_minor)
          VALUES ($1, $2, 500)`,
         [issue, TENANT],
       ),
-    ).rejects.toThrow(/policy/i);
+    ).rejects.toThrow(/permission denied for table issue_balance/);
   });
 
-  it("has no DELETE policy at all, so a balance row cannot be removed", async () => {
+  it("refuses a DELETE, so a balance row cannot be removed", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
-
-    const affected = await db.query(`DELETE FROM issue_balance WHERE issue_id = $1`, [issue]);
-    expect(affected.affectedRows ?? 0).toBe(0);
+    await expect(db.query(`DELETE FROM issue_balance WHERE issue_id = $1`, [issue])).rejects.toThrow(
+      /permission denied for table issue_balance/,
+    );
     expect(await balance(issue)).toBeDefined();
   });
 
@@ -903,25 +903,22 @@ describe("2 · issue_balance refuses a write that does not carry the flag", () =
     expect(minor((await balance(issue)).accepted_total_minor)).toBe(100_000);
   });
 
-  it("sets the write flag in exactly one place, so the predicate cannot be defeated casually", async () => {
-    // The flag is not a secret and the policy comment says so. What keeps it honest is that it is
-    // set in one file: the migration. A guard, because a grep in a comment is not a control.
-    const migration = await readFile(
-      join(import.meta.dirname, "..", "migrations", "20260925120000_documents_core", "migration.sql"),
-      "utf8",
+  it("runs both balance functions as pryvis_balance, and no live function sets the old flag", async () => {
+    // Read from the catalogue: what the database runs, not what a migration once said.
+    const fns = await sql<{ name: string; definer: boolean; owner: string }>(
+      `SELECT p.proname AS name, p.prosecdef AS definer, r.rolname AS owner
+         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+        WHERE p.proname IN ('issue_balance_apply', 'issue_balance_open') ORDER BY p.proname`,
     );
-    // Comment lines are excluded, because the policy block deliberately MENTIONS the call while
-    // explaining that the flag is not a secret — and the first version of this assertion counted
-    // that sentence as if it were a call, which is a guard measuring the wrong thing.
-    const code = migration
-      .split(SPLIT_ON_NEWLINES)
-      .filter((line: string) => !line.trim().startsWith("--"))
-      .join(" ");
-    const occurrences = code.match(/set_config\('pryvis\.balance_write'/g) ?? [];
-    // Two per function (raise, then clear), for exactly two functions.
-    expect(occurrences).toHaveLength(4);
-    expect(migration).toContain("issue_balance_apply");
-    expect(migration).toContain("issue_balance_open");
+    expect(fns).toEqual([
+      { name: "issue_balance_apply", definer: true, owner: "pryvis_balance" },
+      { name: "issue_balance_open", definer: true, owner: "pryvis_balance" },
+    ]);
+    const flagSetters = await sql<{ name: string }>(
+      `SELECT p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.prosrc LIKE '%pryvis.balance_write%'`,
+    );
+    expect(flagSetters).toEqual([]);
   });
 });
 

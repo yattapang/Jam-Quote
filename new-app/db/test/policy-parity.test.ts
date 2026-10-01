@@ -204,7 +204,8 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
       };
 
       /**
-       * Tables whose writes must carry the balance-write flag — meant for the balance functions only.
+       * Tables whose writes must come from the role that owns the balance functions (since the privilege
+       * model, 2026-10-01; before it, a flag the application could set — R5).
        *
        * A third shape, and it exists because the other two could not express `issue_balance`
        * (ADR 0025 decision 2). It is legitimately mutable — it is a derived cache — so append-only
@@ -235,8 +236,8 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
       };
 
       const FUNCTION_GUARDED: Record<string, string> = {
-        issue_balance:
-          "current_setting('pryvis.balance_write'::text, true) = 'on'::text",
+        // Since 20260927220000_privilege_model: the owning ROLE, not a setting the application could set (R5).
+        issue_balance: "CURRENT_USER = 'pryvis_balance'::name",
       };
 
       const EXEMPT: Record<string, string> = {
@@ -391,8 +392,8 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
                 }
                 if (!normalise(expr).includes(normalise(predicate))) {
                   unprotected.push(
-                    `${table}.${policy.polname} ${label} does not require the function's write ` +
-                      `flag, so anything with an UPDATE grant can write it — got ${expr}`,
+                    `${table}.${policy.polname} ${label} does not require the role that owns the ` +
+                      `balance functions, so another writer could pass it — got ${expr}`,
                   );
                 }
               }

@@ -394,6 +394,9 @@ describe("J3 · a tenant-owned child carries its tenant into its foreign key", (
     // lets one tenant consume a slot another tenant needs. `acceptance_issue_key` was the worst
     // case — a foreign acceptance meant the rightful owner could never accept their own quote.
     const GLOBAL_ON_PURPOSE: Record<string, string> = {
+      app_session_token_hash_key:
+        "The SHA-256 of a 256-bit random secret names one session in the world; per tenant would add " +
+        "nothing, and the table is reached only through door functions by that hash (privilege model).",
       app_credential_email_key:
         "A login address identifies one credential across the whole product; per-tenant would let " +
         "two tenants hold the same sign-in.",

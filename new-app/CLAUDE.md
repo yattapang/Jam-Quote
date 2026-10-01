@@ -153,8 +153,28 @@ Also built: **rate limiting** (token buckets in Postgres, per IP and per hashed 
 before the expensive hash — ADR 0016), **password hashing** (Node's scrypt, parameters stored in the hash, rehash on
 successful sign-in — ADR 0014) and **sign-in** (ADR 0015). Credentials live in `app_credential`,
 outside row-level security, because sign-in must find a user by email before any tenant is known;
-that is one of exactly **two** RLS exemptions, both named with their reasons in
-`db/test/policy-parity.test.ts`.
+every exemption from row security is named with its reason in `db/test/policy-parity.test.ts`.
+
+**The privilege model** (`docs/design/privilege-model.md`; migration `20260927220000_privilege_model`).
+The migrations create three NOLOGIN roles and every grant — the test harness grants nothing of its own:
+
+- `pryvis_app` — the ordinary role every request runs as. Ordinary access to every table, except: **no
+  privilege at all** on the credential tables (`app_credential`, `app_session`, `mfa_totp`,
+  `mfa_recovery_code`, `registration_claim`), and SELECT only on `issue_balance` and
+  `platform_capability`. A new table gets its grants by default — so **a new secret table must be revoked
+  explicitly**; `db/test/privilege-model.test.ts` fails on any table outside row security the application
+  can reach that it does not name.
+- `pryvis_auth` — owns the **door functions** (`credential_for_email`, `session_create`,
+  `session_resolve`, `mfa_*`, …), `SECURITY DEFINER`, each reading or writing one row by its key. Auth
+  code calls these; it never writes SQL against a credential table.
+- `pryvis_balance` — owns `issue_balance_open()` and `issue_balance_apply()`, the only writers of
+  `issue_balance`.
+
+A session secret never reaches the database: the client holds it, `app_session.token_hash` holds its
+SHA-256 (`api/src/core/auth/session-token.ts`). `least_privilege_violations()` describes the calling role,
+and `api/src/core/auth/least-privilege.ts` refuses to start on any violation — **not yet called by
+anything**, because there is no bootstrap. In tests, writing a credential table directly needs `RESET
+ROLE` first (the owner), as the fixtures in `api/src/core/auth/*.test.ts` do.
 
 Not built yet, and each is honest work owed rather than a detail:
 

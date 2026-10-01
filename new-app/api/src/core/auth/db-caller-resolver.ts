@@ -10,8 +10,10 @@
  * THE ORDER OF OPERATIONS IS THE DESIGN
  *
  *   1. Read the session row with NO tenant in scope. This is the only read that
- *      happens outside row-level security, and app_session is the only table that
- *      allows it — see the migration that creates it for the full reasoning.
+ *      happens outside row-level security. It goes through the door function
+ *      `session_resolve`, by the HASH of the secret the client holds: the application
+ *      role cannot read app_session itself, and the table holds no secret
+ *      (`docs/design/privilege-model.md` D1, D2).
  *   2. Take the tenant id FROM THAT ROW. This is the single point at which a tenant
  *      id enters a request, and it comes from our own store rather than the caller.
  *   3. Re-read the user and the tenant WITH that tenant in scope, under row-level
@@ -31,6 +33,7 @@
  */
 import type { CallerResolver, CallerResult, SessionRef } from "./caller.js";
 import { type TransactionalClient, withTenant, withoutTenant } from "../tenancy/tenant-context.js";
+import { sessionTokenHash } from "./session-token.js";
 
 /**
  * The narrow query surface this resolver needs.
@@ -93,15 +96,11 @@ export class DbCallerResolver implements CallerResolver {
         // Expiry is still decided in the same statement as the read, so there is one
         // comparison and no window between them — but against the caller's clock, bound as
         // a parameter, not the database's.
-        `SELECT user_id,
-                tenant_id,
-                version,
-                (expires_at <= $2::timestamptz) AS expired,
-                (revoked_at IS NOT NULL) AS revoked,
-                mfa_pending
-           FROM app_session
-          WHERE id = $1`,
-        sessionRef.sessionId,
+        // Through the door function, by the HASH of the secret the client holds: the application has no
+        // privilege on app_session, and the database never sees the secret (privilege model, D1 and D2).
+        `SELECT user_id, tenant_id, version, expired, revoked, mfa_pending
+           FROM session_resolve($1, $2::timestamptz)`,
+        sessionTokenHash(sessionRef.sessionId),
         at,
       ),
     );
@@ -137,10 +136,7 @@ export class DbCallerResolver implements CallerResolver {
                   SELECT 1 FROM platform_capability pc
                    WHERE pc.user_id = u.id AND pc.revoked_at IS NULL
                 ) AS holds_capability,
-                EXISTS (
-                  SELECT 1 FROM mfa_totp m
-                   WHERE m.user_id = u.id AND m.confirmed_at IS NOT NULL
-                ) AS has_confirmed_factor
+                mfa_has_confirmed_factor(u.id) AS has_confirmed_factor
            FROM app_user u
            JOIN tenant  t ON t.id = u.tenant_id
           WHERE u.id = $1`,

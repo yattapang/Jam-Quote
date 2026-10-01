@@ -5,15 +5,15 @@
 --
 -- 1. THREE ROLES, MADE HERE (D3). The privilege model is code, reviewed and tested, instead of grants the
 --    test harness invented — which is how R5 hid. All three are NOLOGIN group roles:
---    - `pryvis_app`: the application. A deployment's login role is made a member of it and of nothing else.
---    - `pryvis_balance`: owns `issue_balance_open()` and `issue_balance_apply()`, and is the only role that
+--    - pryvis_app: the application. A deployment's login role is made a member of it and of nothing else.
+--    - pryvis_balance: owns `issue_balance_open()` and `issue_balance_apply()`, and is the only role that
 --      may write `issue_balance`.
---    - `pryvis_auth`: owns the credential door functions, and is the only role that may touch the
+--    - pryvis_auth: owns the credential door functions, and is the only role that may touch the
 --      credential tables.
 --    Roles belong to the cluster, not the database, so they are created only if absent; the grants are per
 --    database and are made every time.
 -- 2. R5 FIXED: the application has SELECT on `issue_balance` and nothing else. The balance functions are
---    SECURITY DEFINER, owned by `pryvis_balance`, and the write policies require that role
+--    SECURITY DEFINER, owned by pryvis_balance, and the write policies require that role
 --    (`db/policies/006-privilege-model.sql`) instead of the setting `pryvis.balance_write`, which the
 --    application could set itself. The flag is gone.
 -- 3. J14 FIXED, WITH `app_session` ADDED (D1): the application has NO privilege on `app_credential`,
@@ -38,7 +38,7 @@
 --   password, recording a factor — can be called by an injection with a user id it knows, because the
 --   application must be able to do exactly that. What the doors remove is the bulk read: no query the
 --   application can run returns more than one credential row. The ordinary path still reads and writes the
---   tenant's business rows under row security, and a hostile `set_config` of `app.tenant_id` still chooses
+--   tenant's business rows under row security, and a hostile set_config of `app.tenant_id` still chooses
 --   the tenant (row security stops forgetting, not hostility — R5's own lesson).
 -- - It does not bind the deployed LOGIN role: that role is created outside the migrations. The API's
 --   start-up check and `least_privilege_violations()` are what refuse an over-privileged one.
@@ -89,7 +89,7 @@ GRANT SELECT, INSERT, UPDATE ON "app_credential", "app_session", "mfa_totp", "mf
   "registration_claim" TO pryvis_auth;
 
 -- ---------------------------------------------------------------------------
--- 3. The balance functions run as `pryvis_balance`, without the flag. Otherwise unchanged from
+-- 3. The balance functions run as pryvis_balance, without the flag. Otherwise unchanged from
 --    `20260927130000_balance_open_takes_lock` and `20260927120000_lock_isolation_and_tenancy`.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION issue_balance_open(p_issue_id UUID) RETURNS VOID
@@ -209,8 +209,8 @@ ALTER FUNCTION issue_balance_apply(uuid) OWNER TO pryvis_balance;
 -- is embedded in a committed migration (Rule 6), so its text still shows the old policies; this file,
 -- embedded in `20260927220000_privilege_model`, is what the database holds.
 --
--- `current_user` inside a SECURITY DEFINER function is the function's OWNER, and outside one it is the
--- caller; the application cannot make itself `pryvis_balance`. The tenant match stays, so even the balance
+-- current_user inside a SECURITY DEFINER function is the function's OWNER, and outside one it is the
+-- caller; the application cannot make itself pryvis_balance. The tenant match stays, so even the balance
 -- functions write only the tenant in scope. The application role also has no INSERT or UPDATE grant on
 -- the table at all — the policy is the second lock, not the only one.
 DROP POLICY IF EXISTS issue_balance_create ON "issue_balance";
@@ -237,7 +237,7 @@ CREATE UNIQUE INDEX "app_session_token_hash_key" ON "app_session" ("token_hash")
 
 -- ---------------------------------------------------------------------------
 -- 6. The door functions (D1): the only way the application reaches a credential table. Each runs as
---    `pryvis_auth`, reads or writes ONE row by its key, and returns at most one row.
+--    pryvis_auth, reads or writes ONE row by its key, and returns at most one row.
 -- ---------------------------------------------------------------------------
 CREATE FUNCTION credential_for_email(p_email TEXT)
 RETURNS TABLE (user_id UUID, tenant_id UUID, password_hash TEXT)
