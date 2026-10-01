@@ -558,10 +558,13 @@ snapshot that has never reached the server — a retention limit that can destro
 financial document is not a retention limit, it is data loss on a timer.
 
 **What a seal must be re-checked against at sync**, because sealing offline means none of it was checkable
-at the time: the tenant is not suspended · the user is still active and still a member · the client has not
-been deleted · the entitlement still permits it (ADR 0023 meters at *numbering*, so the month is the month
-it syncs) · and no colleague has already sealed that revision. Each refusal is explained to the user in
-terms of what happened, not as a sync error.
+at the time: the tenant is not suspended · the user is still active, still a member, and in a role that
+still permits sealing · the client has not been deleted · the entitlement still permits it (ADR 0023 meters
+at *numbering*, so the month is the month it syncs) · and no colleague has already sealed that revision.
+Each refusal is explained to the user in terms of what happened, not as a sync error. A seal refused because
+its client was deleted becomes a `rejected_seal` with that reason; the tenant restores the client and
+resolves it (finding H20). **Not re-checked, on purpose:** the catalogue prices the seal froze — the
+snapshot is self-contained, and a catalogue change must not void work already priced.
 
 **The residual risk, named rather than dressed up:** a device that seals and never syncs holds the only
 copy. Mitigations are a visible pending count, a warning after a few days, and the fact that the draft

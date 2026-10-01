@@ -556,6 +556,16 @@ CLOSED.**
 adopted governance rules into `docs/RULES.md`; then the API layer, where R5, J14 and the §4g deployment check
 are built together.
 
+**Owner's decisions, 2026-10-01 (review 3's H17, H19, H20):** a verification code lasts 30 minutes,
+single-use, five attempts; the share page wakes the API on open until launch; a paid, always-on API is a
+**launch requirement** (ADR 0026); H19's comment corrected now, the shared feature list owed with the pricing
+page; a seal whose client was deleted offline is refused into a refused seal with the reason.
+
+**Done 2026-10-01: H17, H19, H20** — documents only, nothing here is code: ADR 0026; `docs/PRD.md` R1.18e,
+R1.20b, R1.21a, R1.32, N10, §8a; `docs/THREAT-MODEL.md` §4a; `docs/SERVICE-REGISTER.md` §4a;
+`docs/design/domain-model.md` §8; the site guard's coverage statement. **Fixed, re-review owed.** Next: one
+mechanical closing check for the three.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

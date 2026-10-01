@@ -242,8 +242,13 @@ describe("nothing untrue", () => {
     // eleven lines individually produces a list nobody reads.
     //
     // WHAT THIS DOES NOT PROVE: that a line marked "coming in release 2" will in fact arrive in
-    // release 2, and not that a delivered line is delivered WELL. It proves the page does not claim
-    // something the plan says is absent — no more.
+    // release 2, and not that a delivered line is delivered WELL. And narrower than "the page claims
+    // nothing the plan says is absent" (finding H19):
+    // - a tier marked "coming in release N" as a whole is checked ONCE, at the tier; none of its lines is
+    //   checked, now or when one is added (Business has eleven);
+    // - `delivered` below is a hand-maintained restatement of the plan. It bounds the page against THIS
+    //   FILE, not against the PRD or TIERS.md; nothing compares the two. One machine-readable list both
+    //   read is owed with the pricing-page work (the remedy H15 also pointed to).
     const RELEASE = 1;
 
     // What release 1 delivers, in the site's own words. Adding a line to the site without adding it

@@ -144,7 +144,10 @@ ended in `|| true`, so even a 90-second timeout recorded green. It is now an hon
 (`API liveness`) that fails loudly on anything but 200 and states in its own header that it does
 not keep anything warm.
 
-**Two ways to actually fix it, both with a cost, neither chosen:**
+**Decided 2026-10-01 (ADR 0026, finding H17):** at launch the API is a **paid instance that does not
+sleep** — a launch requirement. Until then the share page wakes the API in the background when a client
+opens it, so the accept path usually finds it awake; the external pinger below is not adopted. The two
+options as they stood:
 
 | Option | Cost | Note |
 |---|---|---|

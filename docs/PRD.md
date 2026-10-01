@@ -256,9 +256,13 @@ demonstrated, it is not a requirement, it is a hope.
   cached reads; it may not delete a sealed document that has not reached the server. A retention limit that
   can destroy the only copy of a financial document is data loss on a schedule (G5).
 - **R1.18e** **At sync, a seal is re-checked** against what could not be checked offline: the tenant is not
-  suspended, the user is still an active member, the client still exists, the entitlement still permits it
-  (metered at numbering — ADR 0023), and no colleague sealed that revision. Each refusal is explained in
-  terms of what happened, never as a sync error.
+  suspended, the user is still an active member **whose role still permits sealing**, the client still exists,
+  the entitlement still permits it (metered at numbering — ADR 0023), and no colleague sealed that revision.
+  Each refusal is explained in terms of what happened, never as a sync error. **A seal whose client was
+  deleted while the device was offline is refused into a refused seal** (R1.18c), with that reason; the
+  tenant can restore the client and then resolve it — the seal does not silently undo a colleague's
+  deletion (finding H20, owner 2026-10-01). **The catalogue prices it froze are NOT re-checked:** the seal is
+  a self-contained snapshot, and a later catalogue change must not void work priced at the gate.
 - **R1.18b** A device holding unsynced seals for more than a stated number of days warns the user. An
   outbox is not a backup, and the app must not imply it is.
 - **R1.18f** **The phone is now a place tenant data lives, and the threat model says so** (`THREAT-MODEL.md`
@@ -310,7 +314,8 @@ demonstrated, it is not a requirement, it is a hope.
   implementation clears Jamaica's bar is the owner's attorney's answer, not ours.
 - **R1.20b** Release 1 verifies by **email**, because it needs no new service — only the verified sending
   domain already owed (§9 item 1a). SMS is a new paid sub-processor and absent from the register;
-  WhatsApp Business sending is release 3.
+  WhatsApp Business sending is release 3. **A code lasts 30 minutes, is single-use, and allows five wrong
+  attempts** — longer than two cold starts and a slow inbox together (finding H17, ADR 0026).
 - **R1.20c** **A signed copy may be uploaded against an issue**, and it is recorded at **grade 1 —
   witnessed by nobody** (finding J5). The PDF carries a signature block and the returned paper is attached
   with its own render and hash. It is the fallback where a client has no email, and in a dispute between
@@ -331,8 +336,10 @@ demonstrated, it is not a requirement, it is a hope.
   (`SERVICE-REGISTER.md` §4a). A client who taps a quote link and waits a minute on a blank screen is
   the worst impression the product can make, and it lands on the tenant, not on us. So the page is served
   statically or from cache with the document rendered ahead of time, and only *accepting* touches the
-  API — with the wait shown honestly when it happens. This is the strongest argument in the PRD for
-  Rule 10's paid-infrastructure trigger firing before launch, not after.
+  API — with the wait shown honestly when it happens. **Accepting is in scope too (finding H17):** it takes
+  several calls separated by the client's trip to their inbox, so until launch the page **wakes the API
+  in the background when it opens**, and **at launch the API is a paid instance that does not sleep** —
+  a launch requirement (ADR 0026), the paid-infrastructure trigger N10 said was owed.
 
 ### W6a · Variations, minimal — added by review (F3)
 - **R1.22f** A variation may be **recorded offline** but its effect on the ceiling is computed
@@ -464,7 +471,8 @@ demonstrated, it is not a requirement, it is a hope.
 - **R1.31** Plans and entitlements are **data**, resolved by one resolver, enforced on the server. The
   client may ask; it may never decide.
 - **R1.32** Free tier limit: **3 distinct jobs *numbered* per calendar month** (ADR 0023), enforced
-  server-side. Not counted on sealing — sealing happens offline and metering it would mean trusting a
+  server-side. **The meter counts distinct QUOTES, not numbers allocated** (finding H20): a revision is a new
+  issue taking a new number from the same series, so counting numbers would charge for revisions. Not counted on sealing — sealing happens offline and metering it would mean trusting a
   client-side count or refusing work already done at a client's gate. Not counted on sending. **Revisions
   and declines are free**: charging for a revision meters care, and billing for a declined quote teaches
   contractors to quote less.
@@ -523,7 +531,7 @@ a stated gap can be closed, an implied test cannot.
 | **N7** | No personal data or secrets in logs; uploads private and scanned | Rule 5 |
 | **N8** | No tenant or client personal data, and no secrets, ever sent to the Claude API — redacted or synthetic only | Rule 15 |
 | **N9** | The public site keeps working when the API is asleep | Rule 20; the free tier spins down and the front door must not look broken. **Instrument:** the existing site guards prove no external host is loaded and the site builds standalone; R1.21a extends this to the share page, which is the surface that actually matters to a client |
-| **N10** | Free-tier infrastructure now, with a written trigger for moving to paid | Rule 10. **The API sleeps after ~15 min and the first visit waits ~50s** — acceptable for a prototype, not at launch. **Instrument:** the `API liveness` workflow records the cold-start figure on every run, so the number in this row is measured rather than remembered. **The trigger itself is still an owed ADR**, and R1.21a is the strongest argument for it firing before launch |
+| **N10** | Free-tier infrastructure now, with a written trigger for moving to paid | Rule 10. **The API sleeps after ~15 min and the first visit waits ~50s** — acceptable for a prototype, not at launch. **Instrument:** the `API liveness` workflow records the cold-start figure on every run, so the number in this row is measured rather than remembered. **The trigger is ADR 0026:** a paid, always-on API is a launch requirement, and until then the share page wakes the API when it opens (R1.21a, finding H17) |
 
 ## 7. Tiers in release 1
 
@@ -601,8 +609,8 @@ to catch.
 2. **Is offline use a Free feature or a Pro one?** (F8) `TIERS.md` said Pro, §7 gave it to Free, the site
    said Pro — three documents, three answers. **ANSWERED (ADR 0023):** offline **sealing** on every tier,
    because it is the core promise and a free tier that fails at the gate does not spread by word of mouth,
-   which is the only distribution this product has. Offline *issuing* (R2) carries the Pro line. §7 is
-   amended; `TIERS.md` and the site copy are owed.
+   which is the only distribution this product has. Offline *issuing* (R2) carries the Pro line. §7,
+   `TIERS.md` and the site copy are all amended (the stale "owed" here was finding H20).
 3. **Can a Free tenant do anything useful with recipes?** (F7) "View only" gave a new free tenant nothing
    to view, so the wedge could not demonstrate the one feature the product is chosen for.
    **ANSWERED (ADR 0023):** Free may create **one** recipe — enough to price the same job twice and feel
