@@ -37,4 +37,7 @@ real PostgreSQL via `PRYVIS_PG_URL` (see `new-app/CLAUDE.md`).
 - Never edit a committed migration (Rule 6); correct it in a new one.
 - A guard or control is not closed until a planted defect proves it fails.
 - A finding is Closed only after an independent check (Rule 24.6).
+- An agent's brief is a committed file whose expectations `tools/run_brief.py` runs on the HEAD it names
+  before launch (Rule 16.7); every launch goes in `docs/DELEGATION-LOG.md` (16.8); pick the cheapest tier
+  that can do it reliably as briefed (16.9).
 - Never send tenant or client personal data, or secrets, to any model.

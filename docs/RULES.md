@@ -551,6 +551,50 @@ So the default in 16.5 is narrower than it was written:
 Recorded as a finding about the tooling rather than about a model, so the next person does not
 re-derive it by losing an afternoon.
 
+### 16.7 A brief is a checked file
+
+*Adopted by the owner 2026-10-01, from the governance proposals of 2026-09-27; the prevention M36 and M37
+named and called "not mechanical".*
+
+A brief that tells an agent what to check, and what it should find, is a **file committed under
+`docs/briefs/`**, not text pasted into a launch. Each expected output is a fenced `check` block: the command,
+then the exact output it must give. Before launch, after the brief's own commit, the builder runs
+`python3 tools/run_brief.py <brief>`; it refuses a dirty tree, prints the HEAD, executes every check, and fails
+if any expectation does not hold or if a check leaves the tree changed. The launch entry in `BRIEF-STATUS.md`
+records the brief's path, the HEAD and the count ("9 of 9 expectations hold"). The checker runs the same
+command and reports its output; anything the brief asks it to READ rather than run stays prose.
+
+A brief whose expectations were not executed on the HEAD it names is not a checked brief, and is not
+launched. What the runner does not prove — that the expectations are the right ones — is in its header.
+
+### 16.8 Every delegation is logged, with its tier and any escalation cause
+
+*Adopted 2026-10-01, as 16.7.*
+
+`docs/DELEGATION-LOG.md` holds one row per agent launch: the date, the task, the agent and tier, the reason
+for that tier (the 16.5 line), the outcome, and — when the run had to be redone or the tier changed — **the
+escalation cause, from a fixed list**: *brief incomplete* (the expectations or scope were wrong), *tier too
+low* (the model could not do what the brief asked), *scope too broad*, or *tooling or session* (the agent died,
+or the environment failed it). A review that FINDS defects has not escalated: finding them is its job.
+
+The log is written when the outcome is known, in the same commit that records the outcome. Its point is the
+pattern across rows: a cause that recurs is a finding about how work is delegated, not about a model.
+
+### 16.9 Cheapest reliable execution is the tier rule
+
+*Adopted 2026-10-01, as 16.7.*
+
+**Choose the cheapest tier that can do the task reliably AS BRIEFED.** A task whose every step and expected
+output is written down — a closing check, a plant run, a build to an approved design — is Sonnet's, or
+Haiku's for pure inventory; a task whose value is judgement — adversarial review, design, threat modelling —
+is Opus's. 16.2's table is the default; 16.5's three exceptions (the credential path, row-security policy
+text, money arithmetic) stay Opus whatever the brief says.
+
+**When a cheaper tier falls short, the brief is suspected first.** M36 was a correct model following a wrong
+brief. The cause is logged (16.8); the brief is fixed and the same tier re-run before the tier is raised. Raising
+it is right only when the brief was complete and the model still could not follow it — and that is logged as
+*tier too low*, so the pattern is visible.
+
 ## 17. Where we are weak, stated plainly
 
 Honesty about gaps is a rule, not a courtesy. Known gaps live in the module register and the

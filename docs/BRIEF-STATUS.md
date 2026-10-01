@@ -379,7 +379,8 @@ policy-parity ties to a committed migration), then one re-review of J1, J12 and 
 4. **Governance proposals of 2026-09-27:** adopt three — **briefs as checked files** that run their own
    expectations at launch (M36, M37); a **delegation log** of tier and escalation cause; **"cheapest reliable
    execution"** as the tier rule. Defer the rules-review block, sequence tests as a named obligation, and
-   recurrence counts per mistake class. Writing the three into `docs/RULES.md` is owed.
+   recurrence counts per mistake class. ~~Writing the three into `docs/RULES.md` is owed.~~ **Done
+   2026-10-01: Rules 16.7-16.9**, with `tools/run_brief.py` and `docs/DELEGATION-LOG.md` (below).
 5. **Root `CLAUDE.md`:** replaced by a short pointer — done in `eee4709`.
 
 **Built 2026-10-01 (next session):** T7 (`4b12831`); T5, T6, T8 (`67078e9`); J1's closing standard — T1-T4,
@@ -581,6 +582,15 @@ pointer — amended. `tools/check_dispositions.py` now enforces path scope on **
 list, so none can be left out silently — a plant showed an opt-in set would pass a gap without a word),
 with the status-wording check kept to review 4. Four plants, one per review, each failed the build;
 restored identical.
+
+**Done 2026-10-01: the three adopted governance rules** — `docs/RULES.md` 16.7 (a brief is a checked file,
+under `docs/briefs/`, its expectations executed by `tools/run_brief.py` on the HEAD it names — the
+mechanical half of M36's and M37's prevention), 16.8 (every launch in `docs/DELEGATION-LOG.md`, with tier,
+reason, outcome and a fixed-list escalation cause; backfilled with the 19 launches recorded here since
+2026-09-27), 16.9 (cheapest reliable execution as the tier rule, a cheaper tier's shortfall blamed on the
+brief first; 16.5's three exceptions stay Opus). The runner was proved on a throwaway worktree: a dirty tree
+is refused, a wrong expectation fails, a check that leaves a file behind fails, a brief with no checks is
+refused. **From the next launch, every brief goes through it.**
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
