@@ -66,6 +66,39 @@ const NOT_MONEY: Record<string, string> = {
     "and no amount is derived from it.",
 };
 
+const VERSION = "An optimistic-concurrency counter: a count of edits, not an amount.";
+const POSITION = "An ordering index within its parent: a position, not an amount.";
+const REVISION = "A quote revision number: a count, not an amount.";
+
+/**
+ * T7 — a CLOSED list. Money must be `bigint` (ADR 0011), so every numeric column that is NOT bigint is
+ * named here with why it is not money, and anything else fails, whatever it is called. The rule before
+ * this was a list of amount WORDS, and review found `fees_jmd INTEGER` and `gct_jmd INTEGER` passing it:
+ * a word list can always be named around; a list of the columns themselves cannot (the owner's decision,
+ * 2026-10-01, and Rule 21.9's move again). Adding a non-bigint numeric column now means adding it here,
+ * with a reason a reviewer can disagree with.
+ */
+const NUMERIC_NOT_MONEY: Record<string, string> = {
+  ...NOT_MONEY,
+  "app_session.version": VERSION,
+  "app_user.session_version": "Bumped to revoke every session of a user at once: a counter, not an amount.",
+  "app_user.version": VERSION,
+  "client.version": VERSION,
+  "mfa_totp.failed_attempts": "A count of failed second-factor attempts, for lockout.",
+  "quote.version": VERSION,
+  "quote_issue.revision": REVISION,
+  "quote_issue.tax_rate_basis_points": "A tax RATE in hundredths of a percent; the tax AMOUNT is tax_minor, bigint.",
+  "quote_issue_line.position": POSITION,
+  "quote_line.position": POSITION,
+  "quote_line.version": VERSION,
+  "quote_section.position": POSITION,
+  "quote_section.version": VERSION,
+  "rejected_seal.revision_attempted": REVISION,
+  "rejected_seal.version": VERSION,
+  "rejected_seal_line.position": POSITION,
+  "tenant.version": VERSION,
+};
+
 /**
  * Suffixes that make a column an amount, and therefore subject to the convention. `_cents` is not
  * this schema's spelling, and that is why it is here (finding R12): it is the spelling the old
@@ -111,7 +144,8 @@ describe("money is stored as integer minor units, everywhere", () => {
     await applyMigrations(db);
     columns = (
       await db.query<ColumnRow>(
-        `SELECT c.relname AS table_name, a.attname AS column_name,
+        `SELECT CASE WHEN n.nspname = 'public' THEN c.relname ELSE n.nspname || '.' || c.relname END
+                  AS table_name, a.attname AS column_name,
                 format_type(CASE WHEN base.typtype = 'd' THEN base.typbasetype ELSE base.oid END, NULL)
                   AS data_type,
                 (t.typcategory = 'A') AS is_array,
@@ -124,7 +158,10 @@ describe("money is stored as integer minor units, everywhere", () => {
            JOIN pg_type d ON d.oid = a.atttypid
            JOIN pg_type t ON t.oid = CASE WHEN d.typtype = 'd' THEN d.typbasetype ELSE d.oid END
            JOIN pg_type base ON base.oid = CASE WHEN t.typcategory = 'A' THEN t.typelem ELSE t.oid END
-          WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+          -- Every user schema, not only public (T7: a money column in another schema escaped), and
+          -- partitioned parents as well as plain tables.
+          WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema'
+            AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
           ORDER BY 1, 2`,
       )
     ).rows;
@@ -155,6 +192,23 @@ describe("money is stored as integer minor units, everywhere", () => {
       const [table, column] = name.split(".");
       expect(columns.some((c) => c.table_name === table && c.column_name === column)).toBe(true);
     }
+  });
+
+  it("names every numeric column that is not bigint, with why it is not money (T7, a closed list)", () => {
+    const numeric = new Set(["smallint", "integer", "numeric", "real", "double precision", "money"]);
+    const unnamed = columns
+      .filter((c) => numeric.has(c.data_type) || (c.is_array && c.data_type === "bigint"))
+      .filter((c) => NUMERIC_NOT_MONEY[`${c.table_name}.${c.column_name}`] === undefined)
+      .map((c) => `${c.table_name}.${c.column_name} is ${c.declared}: money must be bigint, or name it as not money`);
+    expect(unnamed).toEqual([]);
+  });
+
+  it("has no stale entry in the closed list — each still names a non-bigint numeric column", () => {
+    const numeric = new Set(["smallint", "integer", "numeric", "real", "double precision", "money"]);
+    const stale = Object.keys(NUMERIC_NOT_MONEY).filter(
+      (name) => !columns.some((c) => `${c.table_name}.${c.column_name}` === name && numeric.has(c.data_type)),
+    );
+    expect(stale).toEqual([]);
   });
 
   it("stores every amount column as bigint", () => {
