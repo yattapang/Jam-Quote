@@ -532,6 +532,12 @@ the guard's scanner for Y4, Y5. Each layer proved without the other; nine plants
 production role must not be granted TEMPORARY (`docs/THREAT-MODEL.md` §4g). **J2, J6, J7, J11 now: Fixed,
 re-review owed; J8 judged closable by the third pass.**
 
+**Fourth re-review — scoped to `ccca8a1`, adversarial — launched 2026-10-01 on the owner's instruction.**
+*Delegation (Rule 16.5), declared before launch: one `commit-reviewer` agent, **Opus**. Scoped to the Y
+fixes: confirm each Y finding closed by re-executing it, attack both layers, and re-run the ceiling races.
+A single mechanical (Sonnet) closing check for J2, J6, J7, J8 and J11 follows if nothing blocking is
+found. No build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
