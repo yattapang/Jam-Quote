@@ -480,6 +480,11 @@ evidence row. **J6, J7, J8 now: Fixed, re-review owed.** Next: the independent c
 corrections with a stated expected output, so the check must hunt for what the build gets wrong — bypasses
 executed, not reasoned about — which needs the strongest tier; a mechanical (Sonnet) closing check follows
 only if it finds nothing blocking. It reviews `009a1c6`; no build work, gate run or commit alongside it.*
+**Reported 2026-10-01: none of the three closable** — twelve findings (W1-W12, two major) and two
+suspicions, all appended verbatim to `docs/PRD-REVIEW-4.md`. Reading W1, the builder found and executed W13:
+the same skip-if-invisible pattern lets J11's subtotal check be bypassed by clearing the tenant before
+COMMIT. **J6, J7, J8 and J11 reopened.** *Tier log: Opus was right — every finding was executed, and W1's
+mechanism exposed a hole in a finding already Closed.*
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

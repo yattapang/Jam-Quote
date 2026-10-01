@@ -28,12 +28,12 @@ The J4 line's four re-reviews are appended at the end of this file (K, L, N and 
 | **J3** | blocker | **Closed.** Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `3ceef3f`): R17's plant matched the finding and the test went red without the ROW_COUNT check and green with it; R1/Q4, R2, R16 and R4 had been independently checked by the batched re-review; the five relations of S1 confirmed by `prisma migrate diff`. Covered by migrations `20260926180000_tenant_composite_keys` and `20260927150000_keys_cannot_rewrite_history`, `new-app/db/schema.prisma`, `new-app/db/policies/002-documents-isolation.sql` (unchanged), `new-app/db/test/documents-core.test.ts`, `db/test/tenant-isolation.test.ts`, `new-app/db/test/reference-keys.test.ts`, and `docs/RULES.md` Rule 4.1. R17 fixed 2026-10-01: a test in `new-app/db/test/documents-core.test.ts` suppresses the balance UPDATE with a trigger on a recompute whose figures would read back unchanged, so only the ROW_COUNT check in `issue_balance_apply()` (migration `20260927120000_lock_isolation_and_tenancy`) can refuse it; with that check removed — the reviewer's own plant — the test goes red. R1/Q4, R2, R16 and R4 independently checked and holding in the database (batched re-review, 2026-10-01). S1 fixed 2026-10-01: the five relations now say `onDelete: Restrict`, and `prisma migrate diff` from a freshly migrated PostgreSQL 16 database to `new-app/db/schema.prisma` now reports no foreign-key change at all (with the old schema it regenerated exactly the five cascades). Not closed until then on S1: five `new-app/db/schema.prisma` relations still say `onDelete: Cascade` against RESTRICT keys, so the claim that Prisma cannot regenerate a cascade holds for ON UPDATE only; R17 (no red test for the ROW_COUNT check) still open.** Migration `20260927150000_keys_cannot_rewrite_history` turns all 49 ON UPDATE CASCADE keys into ON UPDATE RESTRICT and asserts none remains (R1, R2), and gives the seven unkeyed references composite tenant keys (R16); `new-app/db/schema.prisma` states `onUpdate: Restrict` on every relation so Prisma cannot regenerate the cascade. Tested in the R block of `new-app/db/test/documents-core.test.ts`; each of the eight rules was planted out and its own test went red. The re-review of the seven had found Q4 confirmed (R1: ON UPDATE CASCADE rewrites sealed rows) and a cross-tenant write through a key J3 kept single-column (R2); the composite keys themselves held on every probe. Previously: `065154e`, migration `20260926180000_tenant_composite_keys`: composite tenant foreign keys on all parent-child relations of `20260925120000_documents_core` and `20260926120000_rejected_seals`, tenant-scoped unique indexes, policies in `new-app/db/policies/002-documents-isolation.sql` unchanged; behaviour and structure tested in `new-app/db/test/documents-core.test.ts` and `db/test/tenant-isolation.test.ts`; `docs/RULES.md` Rule 4.1 added. The fourth J4 re-review saw foreign-id writes refused with 23503 in passing. **For J3's re-review (Q4):** the composite keys use ON UPDATE CASCADE, so `UPDATE quote SET id = …` rewrites a sealed issue's `quote_id` — an UPDATE path on a document said to have none |
 | **J4** | blocker | **Closed.** Agreed scope can be reduced after it is invoiced: credit notes net into the invoiced figure, so the remedy is credit-then-reduce in one transaction, and a wrong document is withdrawn once nothing is billed (owner's decisions 2026-09-26/27, `docs/design/scope-reduction.md`). This corrects what `20260925120000_documents_core` ("may be negative" with no path) and `20260926110000_withdrawal_preconditions` (a credit note that moved nothing) got wrong, through migrations `20260926200000` to `20260927140000`; tested in `new-app/db/test/documents-core.test.ts` (J4, K4, H4 blocks), `no-stuck-state.test.ts` (a seeded walk with its own oracle) and `concurrency.pg.test.ts` (15 races on real PostgreSQL, in CI); `docs/PRD.md` R1.15b, R1.22a, R1.22c, R1.24, R1.25 amended. Commits `06e9b73` to `422d9e8`. **Independently checked:** five Opus re-reviews (K, L, N, P, Q — their findings all answered), then two Sonnet closing checks: every plant failed exactly its named race and the gate matched; the one item not passed was the brief's own list omitting a register, as the checker read and stated. Closed on that evidence with the owner's acceptance, 2026-09-27 |
 | **J5** | blocker | **Closed.** `683a638`: grade 5 retired in `docs/design/acceptance-evidence.md` (number tombstoned) so the ladder's third-party principle holds; `docs/PRD.md` R1.20c, `docs/adr/0024-acceptance-evidence.md` and `docs/design/domain-model.md` agree. **Independently checked:** the re-review of the seven found the four documents consistent and judged it closable once "six grades" was corrected (R14) — corrected 2026-09-27 in `docs/PRD.md` R1.20, `docs/design/README.md`, `docs/TIERS.md` and `docs/THREAT-MODEL.md`. R15 (grades 2 and 3 have no third party either) is PLAUSIBLE only and goes to the owner with J6 |
-| **J6** | blocker | **Fixed, re-review owed.** Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `acceptance_grade()` is the one definition: the highest grade among the kinds of evidence on the issue's accepted acceptance (D1), none once withdrawn (D3); a trigger refuses evidence on a decline or a withdrawn acceptance (D2, D3), serialised against the withdrawal by the per-issue lock; every accepted acceptance must have its first evidence row at COMMIT. `docs/design/acceptance-evidence.md` §4.2 and §7 (the "remove a row and the grade falls" proof replaced), `docs/PRD.md` R1.20f and `docs/design/domain-model.md` now point at the function. **Not done:** nothing confines who may write the third-party kinds — owed with R5's privilege model (J14) |
-| **J7** | blocker | **Fixed, re-review owed.** Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `acceptance_evidence_source_external_id_key`: unique (source, external_id) across all tenants where an id is present (D4), covering deposit notices as well as replies — the shape of `variation_issue_client_reference_key` (M18, `docs/MISTAKES.md`), cited in `new-app/db/migrations/20260926100000_variation_idempotency/migration.sql`'s lesson; a test reads the index from the catalogue so a per-tenant key cannot pass. The reply-address preparation was corrected, not built (D5): its premise was wrong — no column makes a sent email attributable — so the address is derived from the issue id once inbound mail exists and release-1 quotes never earn grade 4; `docs/design/acceptance-evidence.md` §9 decision 2 (now five preparations) and `docs/PRD.md` R1.20h say so |
-| **J8** | blocker | **Fixed, re-review owed.** Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `quote_issue.acceptance_bar_grade` is resolved by the database at seal (the quote's bar, else `document_settings`, else 3) and a seal stating a different bar is refused, so lowering the bar after sending changes nothing sealed (Rule 6, `docs/RULES.md`; columns from `new-app/db/migrations/20260925120000_documents_core/migration.sql` untouched). The bar does not gate invoicing (D6) — a deposit is itself an invoice — and `acceptance_meets_bar()` records whether it is met. `document_settings` built, minimal (D7). `docs/design/acceptance-evidence.md` §4.3, `docs/PRD.md` R1.20f/g and `docs/design/domain-model.md` updated. **Not done:** the rest of `document_settings` (logo, header, colours, terms) |
+| **J6** | blocker | **Open — reopened by the adversarial re-review of 2026-10-01 (W1, W2, W4, W10, W13's pattern; appended at the end of this file).** Built so far: Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `acceptance_grade()` is the one definition: the highest grade among the kinds of evidence on the issue's accepted acceptance (D1), none once withdrawn (D3); a trigger refuses evidence on a decline or a withdrawn acceptance (D2, D3), serialised against the withdrawal by the per-issue lock; every accepted acceptance must have its first evidence row at COMMIT. `docs/design/acceptance-evidence.md` §4.2 and §7 (the "remove a row and the grade falls" proof replaced), `docs/PRD.md` R1.20f and `docs/design/domain-model.md` now point at the function. **Not done:** nothing confines who may write the third-party kinds — owed with R5's privilege model (J14) |
+| **J7** | blocker | **Open — reopened by the adversarial re-review of 2026-10-01 (W5, W6, W7, W9; appended at the end of this file).** Built so far: Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `acceptance_evidence_source_external_id_key`: unique (source, external_id) across all tenants where an id is present (D4), covering deposit notices as well as replies — the shape of `variation_issue_client_reference_key` (M18, `docs/MISTAKES.md`), cited in `new-app/db/migrations/20260926100000_variation_idempotency/migration.sql`'s lesson; a test reads the index from the catalogue so a per-tenant key cannot pass. The reply-address preparation was corrected, not built (D5): its premise was wrong — no column makes a sent email attributable — so the address is derived from the issue id once inbound mail exists and release-1 quotes never earn grade 4; `docs/design/acceptance-evidence.md` §9 decision 2 (now five preparations) and `docs/PRD.md` R1.20h say so |
+| **J8** | blocker | **Open — reopened by the adversarial re-review of 2026-10-01 (W3, W8, W11, W12, S1, S2; appended at the end of this file).** Built so far: Migration `20260927180000_acceptance_grade` (design `docs/design/acceptance-grade.md`, every recommendation approved by the owner 2026-10-01). Tested in the "J6 J7 J8" block of `new-app/db/test/documents-core.test.ts` and two races in `new-app/db/test/concurrency.pg.test.ts` (PostgreSQL 16); fourteen plants each turned them red, restored from a backup with `diff -q` identical. `quote_issue.acceptance_bar_grade` is resolved by the database at seal (the quote's bar, else `document_settings`, else 3) and a seal stating a different bar is refused, so lowering the bar after sending changes nothing sealed (Rule 6, `docs/RULES.md`; columns from `new-app/db/migrations/20260925120000_documents_core/migration.sql` untouched). The bar does not gate invoicing (D6) — a deposit is itself an invoice — and `acceptance_meets_bar()` records whether it is met. `document_settings` built, minimal (D7). `docs/design/acceptance-evidence.md` §4.3, `docs/PRD.md` R1.20f/g and `docs/design/domain-model.md` updated. **Not done:** the rest of `document_settings` (logo, header, colours, terms) |
 | **J9** | blocker | **Closed.** Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `3ceef3f`): the two corrected rows and this row's scope statement read as required; R9 had been independently checked by the batched re-review. R10 and R18 answered 2026-10-01: `docs/design/domain-model.md`'s `document_render` row and ADR `0024-acceptance-evidence.md`'s integrity row now say the render points at its issue and an acceptance at its own issue's render, which makes the J9 migration's "amended to say so" true (R10). R18: this row's "guarded by `tools/check_schema_citations.py`" below covers the COLUMN half — every uuid `*_id` reference has a key, now asserted from the catalogue by `new-app/db/test/reference-keys.test.ts` — and NOT the prose half: a table named in a document that no migration creates is a stated limit of the tool (design documents name planned tables), accepted with J1's closing on 2026-10-01. R9 fixed and independently checked (batched re-review, 2026-10-01). Migration `20260927150000_keys_cannot_rewrite_history`: `acceptance.document_render_id` is NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`, so an acceptance records the render of its own issue (owner's decision, 2026-09-30); both halves planted out and seen red in the R block of `new-app/db/test/documents-core.test.ts`. The same migration fixes R4 (the application cannot delete a tenant; the audit trail's tenant key is ON DELETE RESTRICT). The re-review of the seven had found an acceptance could bind the render of a different issue, or none (R9, blocker; reproduced by the author). Previously: `becd1dd`, migration `20260926150000_document_render`: the table exists and `acceptance.document_render_id` has a foreign key, correcting `20260925120000_documents_core`; `new-app/db/schema.prisma`, `docs/PRD.md`, `docs/design/acceptance-evidence.md` and `docs/adr/0024-acceptance-evidence.md` agree; guarded by `tools/check_schema_citations.py` |
 | **J10** | blocker | **Closed.** Reopened by K6 after `683a638` (migration `20260926140000_one_live_ceiling_per_quote`): its `LIMIT 1` guard was defeated by three revisions (K6), then by concurrency (N4) and by isolation level (P1). Fixed by `20260927100000_withdrawal_with_variations` (judge the live revision), `20260927110000_one_lock_per_quote` (a per-quote lock) and `20260927120000_lock_isolation_and_tenancy` (READ COMMITTED enforced), over `20260925120000_documents_core` and `20260926110000_withdrawal_preconditions`; tested in `new-app/db/test/documents-core.test.ts` (J10 block), `no-stuck-state.test.ts` (one live ceiling per quote, on the database's own ceilings) and `concurrency.pg.test.ts` (N4 a, b, c on real PostgreSQL, in CI); `docs/design/domain-model.md` and `docs/PRD.md` R1.15 and R1.22c amended; `docs/PRD-REVIEW-3.md` H5's row is history and left as written. **Independently checked:** the fifth re-review (2026-09-27) judged it closable — N4's three races pass and their plants are caught, P1 is refused on every path, and unscheduled stress found no quote with two live ceilings |
-| **J11** | major | **Closed.** Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `eb36261`): all seven items passed — the eight plants each matched their names and printed exactly the expected results, restored from a backup with `diff -q` identical; the fixture sweep matched; results appended at the end of this file. The defect was in `new-app/db/migrations/20260925120000_documents_core/migration.sql`: `issue_balance_open()` copies the issue's HEADER `total_minor` into `accepted_total_minor`, and nothing tied the header to its frozen lines; `new-app/db/schema.prisma` mirrors those columns and needs no change, since the rule lives in the database. Fixed by migration `20260927170000_issue_lines_add_up` (`1c97cbf`): `quote_issue_line_total_check` makes each frozen line's total its quantity × unit price rounded half away from zero at the cent, as an exact integer check (`div()`, not NUMERIC `/`, which rounded a 1e20 product a cent high and was caught by the test before commit); negative lines (discounts) round symmetrically (owner, 2026-10-01). Deferred constraint triggers (`quote_issue_subtotal_matches_lines`) refuse at COMMIT any issue whose `subtotal_minor` is not the sum of its lines — on the header's insert or subtotal change, and on any line insert, update or delete. With `quote_issue_total_check`, lines → subtotal → total → `accepted_total_minor` is held by the database. Tested in the J11 block of `new-app/db/test/documents-core.test.ts`. `docs/design/domain-model.md` §6.2a now says the balance copies the header total, and which steps hold. **Not done, stated in the migration:** tax (`tax_minor` against the rate and line treatments — owed as its own item with the GCT rules); the draft `quote_line` is not checked; nothing proves the frozen lines match the draft they were copied from |
+| **J11** | major | **Open — reopened by the adversarial re-review of 2026-10-01 (W13: the subtotal check is skipped when the tenant is cleared before COMMIT; appended at the end of this file).** Built so far: Independently checked 2026-10-01 by a mechanical closing check (Sonnet, at `eb36261`): all seven items passed — the eight plants each matched their names and printed exactly the expected results, restored from a backup with `diff -q` identical; the fixture sweep matched; results appended at the end of this file. The defect was in `new-app/db/migrations/20260925120000_documents_core/migration.sql`: `issue_balance_open()` copies the issue's HEADER `total_minor` into `accepted_total_minor`, and nothing tied the header to its frozen lines; `new-app/db/schema.prisma` mirrors those columns and needs no change, since the rule lives in the database. Fixed by migration `20260927170000_issue_lines_add_up` (`1c97cbf`): `quote_issue_line_total_check` makes each frozen line's total its quantity × unit price rounded half away from zero at the cent, as an exact integer check (`div()`, not NUMERIC `/`, which rounded a 1e20 product a cent high and was caught by the test before commit); negative lines (discounts) round symmetrically (owner, 2026-10-01). Deferred constraint triggers (`quote_issue_subtotal_matches_lines`) refuse at COMMIT any issue whose `subtotal_minor` is not the sum of its lines — on the header's insert or subtotal change, and on any line insert, update or delete. With `quote_issue_total_check`, lines → subtotal → total → `accepted_total_minor` is held by the database. Tested in the J11 block of `new-app/db/test/documents-core.test.ts`. `docs/design/domain-model.md` §6.2a now says the balance copies the header total, and which steps hold. **Not done, stated in the migration:** tax (`tax_minor` against the rate and line treatments — owed as its own item with the GCT rules); the draft `quote_line` is not checked; nothing proves the frozen lines match the draft they were copied from |
 | **J12** | major | **Closed.** Independently checked 2026-10-01 by the mechanical closing check (Sonnet, at `62e41cc`): V15-V18 confirmed by reading, and the writer-set sweep returned exactly the 15 expected lines, each a history note, Rule 21.10's own text, ADR 0025's decision of its day, or unrelated. Rule 21.10 in `docs/RULES.md` governs the class; `docs/design/domain-model.md` §6.2a points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 and the J12 block of `new-app/db/test/documents-core.test.ts`. Before that, V15-V18 fixed 2026-10-01: ADR 0025 says row security enforces that a write carries the flag, not a writer set (V15), and that the ISSUE is immutable, not the column (V16); the `new-app/db/test/documents-core.test.ts` title and comment now say what they execute (V16, V18); `docs/PRD.md` R1.24a states the acceptance path MUST open the row and cites N2 (V17); `docs/design/domain-model.md` says at most one row per issue, not per accepted issue (V18). The fourth re-review (2026-10-01) had found twins the last fix left: V15 (ADR 0025 "what enforces the writer set is row security"), V16 (major, "an immutable copy" in a test title and ADR 0025), V17 (PRD R1.24a's indicative "is created in the same transaction"), V18 ("no acceptance means no balance row").** Before that: U10-U13 fixed 2026-10-01: in `new-app/db/test/documents-core.test.ts` the "exactly one writer" describe, the "only the function sets" comment, the "somebody may forget" title and a fourth ("stays written-once", found by the sweep) now say what the tests execute; `docs/PRD.md` R1.24a ("unconditionally"), R1.15c ("written-once") and R1.24b (the ceiling reads the cached accepted total); ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2's "the writer set is enforced" and its heading, and `docs/adr/README.md`'s line. Before that, the third re-review (2026-10-01) found more sentences of Rule 21.10's kind, false by execution: three in `new-app/db/test/documents-core.test.ts` (U10, major), PRD R1.24a and R1.15c (U11, major), ADR 0025's "the decision stands" (U12) and R1.24b's "rather than trusting the cached figure" (U13).** Before that: T10 fixed 2026-10-01: all six sentences now say what is true or point at ADR 0025 decision 2 — `docs/PRD.md` R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, the `new-app/db/schema.prisma` totals comment, `new-app/db/test/policy-parity.test.ts` (which now states it does NOT check who sets the flag), ADR 0025's three un-built bullets marked as the decision of their day, and its misquote's tense — and a seventh found by the same sweep (ADR 0025 decision 1, "the function every writer calls"). Recorded and not edited, by Rule 6: `new-app/db/policies/002-documents-isolation.sql`, which policy-parity ties to a committed migration. Before that: the second batched re-review (2026-10-01) found six more sentences of Rule 21.10's kind (T10), four false by execution: PRD R1.24b's first sentence, `new-app/db/test/row-convention.test.ts`, a `new-app/db/schema.prisma` comment, `new-app/db/test/policy-parity.test.ts`, and ADR 0025's un-retracted bullets and its misquote. The eight sentences changed were clean.** Previously: S7 fixed 2026-10-01: the four sentences replaced by pointers to ADR 0025 decision 2 and the J12 test block, and four more of the same kind found by a sweep and fixed (`docs/PRD.md` R1.22b, ADR 0025's own "only", a `new-app/db/schema.prisma` field comment, and a test title). The batched re-review had found four sentences of the kind Rule 21.10 forbids still outside committed migrations (S7): `new-app/db/schema.prisma` on `issue_balance`, `docs/adr/README.md`'s ADR 0025 line, `docs/PRD.md` R1.24b, and the §6.3 "impossible transitions" list in `docs/design/domain-model.md`. The §6.2a deletion held.** Previously: R13 fixed with the owner's decisions of 2026-10-01: in `docs/design/domain-model.md` §6.2a the prose writer set is deleted (both paragraphs, "nothing else ever writes it", and the false "created unconditionally" opening), and the section points at ADR `0025-five-invariants-move-from-prose-to-code.md` decision 2 for the mechanism and its limits (R5, R7) and at the J12 block of `new-app/db/test/documents-core.test.ts` for what each insert moves; `docs/PRD-REVIEW-3.md` H2 row corrected for J4. `docs/RULES.md` Rule 21.10 added (a writer-set sentence cites its test or does not exist; no phrase guard, by the owner's decision). The R5 defect itself is recorded as owed in `docs/THREAT-MODEL.md` §4e, not fixed here. Lesson in `docs/MISTAKES.md` M39. Not changed, by Rule 6: the documents-core migration's comment that the writer set "cannot go stale" is false for the same reason. No code changed. The re-review of the seven had found J12's own fix put the writer set back into prose, false by execution (R13); the J12 test block itself is sound. Previously: `51a58c9`: the prose writer list removed from `docs/design/domain-model.md` rather than corrected a third time; which insert moves which column executed in the J12 block, over `20260925120000_documents_core`; `docs/PRD-REVIEW-3.md` H2 corrected. MISTAKES M23 |
 | **J13** | major | **Closed.** Independently checked by the third re-review (2026-10-01): following `new-app/CLAUDE.md`'s rule, S9's deadlock shapes A and D ran 6 of 6 clean on PostgreSQL 16 against 4 of 4 deadlocks for the controls, and the function bodies admit no cycle through a response-alone transaction; the earlier rounds had verified the migration `20260927160000_acceptance_responses`, its tests in `new-app/db/test/documents-core.test.ts`, `new-app/db/test/concurrency.pg.test.ts` and `new-app/db/test/no-stuck-state.test.ts`, and `docs/design/domain-model.md` §6.2 and §8, by race and plant. Design `docs/design/acceptance-responses.md`; `docs/PRD.md` R1.20. The one-row-per-issue key it replaced was created in `20260925120000_documents_core`. Changed AFTER the review, and so not independently checked: `docs/design/acceptance-evidence.md` §4.2's "One `acceptance` per issue" now reads one ACCEPTED row per issue, declines kept — the ambiguity S8 found in the domain model, found again when this row was closed. Before that: T11 fixed 2026-10-01: `new-app/CLAUDE.md` now says a client response is alone in its transaction, with no other money write on the same quote beside it, and to retry on 40P01 otherwise. Owes a mechanical closing check only. The second batched re-review (2026-10-01) had confirmed §6.2 and §8 by execution, but found the rule "one client response per transaction" did not prevent S9's shape D, which deadlocked 2 of 2 (T11). The first batched re-review (2026-10-01) found the fix holds for every part claimed, by race and plant. Its two documentation findings were fixed the same day — S8 in `docs/design/domain-model.md` §6.2 and §8, S9 as a third deadlock shape in `new-app/CLAUDE.md` (the J13 migration's comment saying "the two lists" is committed and stays, by Rule 6) — and owe only a mechanical closing check. The findings were: S8 (`docs/design/domain-model.md` §8 says a second response is refused) and S9 (the deadlock list in `new-app/CLAUDE.md` misses two pre-existing response shapes). Built to `docs/design/acceptance-responses.md` (option C plus A, owner 2026-09-27; per-issue lock, owner 2026-10-01). Migration `20260927160000_acceptance_responses`: the one-row-per-issue key becomes a partial unique index on accepted rows (declines unlimited, one acceptance ever); a trigger refuses a decline after an acceptance under a per-issue lock taken after the quote lock; only an accepted row can be withdrawn; `quote_issue_state()` gains `withdrawn` and an acceptance outranks an earlier decline. `new-app/db/schema.prisma` models responses as a list and says why the partial key is migration-only. Tests: the J13 block of `new-app/db/test/documents-core.test.ts` (7), the reversed "issued again" test now expects `withdrawn`, two races in `new-app/db/test/concurrency.pg.test.ts`, and `new-app/db/test/no-stuck-state.test.ts` now numbers every issue, adds declines, and judges every response and every state with its own oracle. Seven plants, each restored with diff -q. `docs/PRD.md` R1.20 and `docs/design/domain-model.md` §6.3 updated. Found and NOT fixed: a response is taken on a superseded or unnumbered issue (true before J13; recorded in the design §3a for the owner). Previously: a withdrawn issue read "issued" and could never be re-accepted; since K4 and L1 made withdrawal the wrong-document remedy, this was the common path (N3) |
 | **J14** | major | **Open — deferred by the owner (2026-10-01) to the privilege-model work scheduled for R5, and recorded as a launch blocker in `docs/THREAT-MODEL.md` §4f.** A session-flag policy was rejected because the application can set the flag itself (R5). Not started |
@@ -3846,3 +3846,235 @@ J9: closing check PASSED
 6 PASS: J11 row status exactly `**Fixed, re-review owed.**`; row says lines -> subtotal -> total -> accepted_total_minor held by database, tax owed with GCT rules. Domain-model paragraph: balance copies HEADER total_minor, "Tax is the step not held", owed with GCT rules. Line 310: "header `total_minor`".
    Note: the J11 row itself does not state (a) in its own words; it defers to domain-model 6.2a ("says the copied total is the header's"). Domain-model paragraph does.
 7 PASS: git status empty; no __pycache__ under tools.
+
+
+---
+
+<!-- The adversarial re-review of J6, J7, J8 (Opus, at ad4e7d4), copied verbatim on 2026-10-01, headings shifted one level; W13 appended by the builder. -->
+
+## Adversarial re-review of J6, J7, J8 (fix 009a1c6, HEAD ad4e7d4)
+
+Everything below marked CONFIRMED was executed on PostgreSQL 16.13 (throwaway databases `rr678`, with all
+migrations, and `rr678_pre`, with every migration except `20260927180000`), as `SET ROLE pryvis_app` with
+`app.tenant_id` set, unless stated. The probe scripts are in this directory (`p1.sql` to `p8.sql`,
+`deadlock.mjs`, `seed.sql`). Both databases were dropped afterwards. Repository files were changed only to plant
+defects, each time from a backup copy in this directory, restored, and proved identical with `diff -q`. Final
+`git status --short`: empty. The tree did not change under me (HEAD stayed `ad4e7d4`). The cluster-wide
+role `pryvis_app` is left in place on 55440, which the race suite also uses.
+
+Gates re-run: db suite with PG16 gives **198 passed** (as claimed). `turbo typecheck --force`: 5/5. The four
+checkers are clean, with 10 legacy disposition gaps. `npm run lint` runs 0 tasks; that predates this commit.
+
+### Findings
+
+#### W1 · major (guard weakness, no wrong grade): the evidence trigger can be skipped by the application role, so evidence on a DECLINE or a WITHDRAWN acceptance commits
+`new-app/db/migrations/20260927180000_acceptance_grade/migration.sql:194-198`. If the acceptance is not visible,
+the trigger does `IF NOT FOUND THEN RETURN NULL`. It is an AFTER ROW trigger, so it runs at end of statement.
+`RETURNING` runs per row before that, and it can clear `app.tenant_id`. The foreign key still passes because
+referential checks bypass row security. So no outcome check, no withdrawal check and no lock is taken.
+
+Broken claims: migration line 10-11, "A decline carries none, so 'a deposit against a decline' (J6) cannot be
+represented at all". Also PRD-REVIEW-4 J6 row, "a trigger refuses evidence on a decline or a withdrawn
+acceptance".
+
+Executed (p1.sql):
+```
+INSERT INTO acceptance_evidence (...) VALUES (..., <declined acceptance>, 'deposit_paid', 'wipay', 'BYP-0', now());
+ -> ERROR: evidence attaches only to an acceptance; response ... is a decline ... (finding J6)
+INSERT INTO acceptance_evidence (...) VALUES (..., <declined acceptance>, 'deposit_paid', 'wipay', 'BYP-1', now())
+  RETURNING set_config('app.tenant_id', '', false);
+ -> INSERT 0 1
+SELECT e.kind, e.external_id, a.outcome ... -> deposit_paid | BYP-1 | declined
+```
+The same on a withdrawn acceptance (p6.sql): `deposit_paid FLIP-W` committed, with `withdrawn = 1`.
+
+This also answers question 2: the deferred evidence-required check *can* be satisfied by a row the rules
+trigger would have refused. Insert the acceptance, withdraw it, then insert the evidence through the flip.
+
+The grade is not affected: `acceptance_grade()` filters `outcome = 'accepted'` and checks withdrawal first. In
+p1, the grade read NULL. So this is an invariant (and the J6 case itself) made representable, not a wrong
+figure. It needs no privilege beyond what the app role already has. The withdrawal guard does not have this
+weakness: it raises on an invisible acceptance instead of returning.
+
+#### W2 · minor (claim false; new 40P01 shape): the per-issue lock in the withdrawal guard creates a deadlock on ONE issue, and the wrong-document remedy is the victim
+`migration.sql:263-270` takes the issue lock, then `issue_balance_apply()`, which takes the balance row
+`FOR UPDATE`. Any transaction that already holds the balance row (invoice, void, credit note, variation) and then
+takes the issue lock (withdrawal, evidence, or a response) forms a cycle with a lone withdrawal.
+
+Broken claims: migration line 36-37, "nothing takes them the other way round, so no new deadlock shape". Also
+`new-app/CLAUDE.md:110`, "Three shapes can deadlock": none of the three is a single issue, and credit-then-withdraw
+without a seal is not listed.
+
+Executed (deadlock.mjs). T1 = credit note in full, then `issue_balance_apply`, then withdraw, as ONE transaction.
+T2 = a lone withdrawal of the same acceptance, started while T1 holds the balance row. Each run 3 of 3 times:
+```
+before the fix (rr678_pre): T1 ok, commit ok; T2 23505 duplicate key acceptance_withdrawal_acceptance_key
+after  the fix (rr678):     T1 40P01 deadlock detected, rolled back;
+                            T2 23514 "cannot withdraw this acceptance: 1 invoice(s) ... still have money billed"
+```
+So the remedy that used to succeed is rolled back, and the competing withdrawal is refused too. Nothing is done.
+
+Scenario B (T1 = variation, then deposit evidence in one transaction; T2 = lone withdrawal) gives
+`T1 40P01; T2 ok`. CLAUDE.md does tell the reader to record evidence alone, so B is covered by advice. A is not.
+Detected by PostgreSQL and nothing is left wrong, hence minor.
+
+#### W3 · major (documents; J8 asked for exactly this): §4.4 still says invoicing unlocks at "grade 2 or above", and §7 still says a bar-6 acceptance with no payment is "refused". The build does neither.
+- `docs/design/acceptance-evidence.md:129`: "The invoicing ceiling unlocks on operational acceptance (grade 2 or
+  above)."
+- `docs/design/acceptance-grade.md:98` (D6 option A): "Matches §4.4 and the built SQL".
+- `docs/design/acceptance-evidence.md:176` (§7, in the list this commit edited): "a quote requiring grade 6
+  marked accepted with no payment → refused".
+
+The J8 finding's resolution item 3 was to resolve §4.3 against §4.4. The design header says it amends §4.4, and
+§4.4 was not touched. Executed (p7.sql): an acceptance whose only evidence is `tenant_recorded` (grade 1) on a
+quote with bar 6, then invoice 90,000:
+```
+ grade | bar | meets | invoiced
+     1 |   6 | f     |    90000
+```
+So a grade-1 acceptance (witnessed by nobody) unlocks billing, contrary to §4.4. A bar-6 acceptance with no
+payment is accepted, contrary to §7, which is consistent with D6. The build follows D6 as the owner approved
+it. The text that describes it is wrong in two places, and D6's stated reason ("Matches §4.4") is false.
+
+#### W4 · minor (an undecided state the build silently decided): a SUPERSEDED issue keeps its grade, meets its bar, and still takes new evidence, including `deposit_paid`, while its ceiling is 0
+`migration.sql:295-327`. `acceptance_grade()` handles "withdrawn" and nothing else in `quote_issue_state()`. A new
+revision can be sealed over an accepted revision with no money moved (`quote_issue_one_live_ceiling`).
+
+Executed (p4.sql): bar 2. Seal rev 1, accept, seal rev 2. Then insert `deposit_paid` on rev 1's acceptance:
+**accepted**.
+```
+  r   |         state          | ceiling | grade | meets
+ rev1 | superseded             |       0 |     6 | t
+```
+The design (D2, D3) is silent on superseded, so this is not a breach of a decision. But the product would say
+"accepted to your standard, deposit paid" about a dead revision, and record a deposit against an acceptance
+whose ceiling is 0. D2's argument that "a deposit cannot be invoiced before an acceptance exists" does not hold
+for this row. The same applies to `sealed_awaiting_number`: graded, while the state says unnumbered.
+
+#### W5 · minor (permanent stuck grade): any kind may carry `(source, external_id)`, so a grade-1 row can consume a provider event's only slot, and the real webhook is refused for ever
+`migration.sql:145-151, 157-158`. Only `inbound_reply` and `deposit_paid` must have an id. Nothing stops
+`tenant_recorded` or `link_tap` from carrying one.
+
+Executed (p8.sql):
+```
+INSERT ... kind 'tenant_recorded', source 'wipay', external_id 'TX-9'  -> INSERT 0 1
+INSERT ... kind 'deposit_paid',    source 'wipay', external_id 'TX-9'  -> ERROR duplicate key acceptance_evidence_source_external_id_key
+acceptance_grade(...) -> 1          (bar 6: never met; the blocking row is append-only)
+INSERT ... kind 'link_tap', source 'wipay', external_id 'TX-10' -> INSERT 0 1
+```
+The same works across tenants. D4 admits that part, but only for ids learned before delivery. Inside one
+tenant, the contractor learning the transaction id from the client and noting it is ordinary behaviour.
+
+#### W6 · minor: the J7 key depends on the writer's spelling; `source` is free text, and an empty external id passes the "witnessed" check
+`migration.sql:139-151`. There is no CHECK on `source`, though the comment lists 'email', 'whatsapp', 'wipay' and
+'bank'. Executed (p2.sql), on one acceptance, all **accepted** after `('wipay','TX-5')`:
+`('WiPay','TX-5')`, `('wipay ','TX-5')`, `('wipay','tx-5')`, `('wipay',' TX-5')`, `('','TX-5')`. A first
+`('wipay','')` was also accepted as `deposit_paid`: the witnessed check is satisfied by an empty id, so the
+grade is 6. Refused: exact replay; `(NULL,'TX-5')` (pair check); a second `('wipay','')`.
+
+A provider retry through one handler re-sends the same bytes, so the J7 retry case itself is refused. The
+variants need two writers, or a normaliser, that disagree. Hence minor.
+
+#### W7 · minor (overclaim in a guard reason and the migration): provider ids are not all "unguessable", and the global key is an existence oracle across tenants
+`migration.sql:54-55` says "Provider ids are unguessable, so it reveals nothing practical".
+`new-app/db/test/tenant-isolation.test.ts:401-406` says a tenant "needs the id before it is delivered —
+unguessable".
+
+Executed (p3.sql), as tenant 2, which sees 0 evidence rows of tenant 1, in a savepoint so nothing is left:
+inserting `('bank','REF-100')` gives `duplicate key`, and `('bank','REF-101')` gives `INSERT 0 1`. Tenant 2
+learns that some other tenant holds bank reference REF-100. The migration itself lists 'bank', whose references
+are often short or sequential. An email Message-ID is chosen by the sender, not the provider. Executed (p2.sql):
+one email (`<one@client.example>`) recorded as the reply on issue A is refused on issue B of the same tenant.
+So "one id names one event in the world, so one row, ever" is false for a single email that accepts two
+quotes. This is not a challenge to D4. It is a report that the reason given for it does not hold for two of
+the four sources the migration names.
+
+#### W8 · minor (conditional): the migration cannot be applied to any database that already holds a sealed issue, and would leave existing acceptances ungraded
+`migration.sql:87`: `ALTER TABLE "quote_issue" ADD COLUMN "acceptance_bar_grade" INTEGER NOT NULL`, with no
+default and no backfill. Executed: `rr678_pre`, which holds 9 sealed issues and 9 accepted acceptances, applied
+with `--single-transaction`:
+`ERROR: column "acceptance_bar_grade" of relation "quote_issue" contains null values`.
+
+Nor is there an evidence backfill. An acceptance accepted before the migration would read state "accepted" but
+grade NULL ("not accepted"). This only matters if a non-empty database exists. I found no statement either way.
+
+#### W9 · minor (Rule 21.10): "release-1 quotes never earn grade 4" is enforced by nothing
+Stated at `migration.sql:50-51`, PRD R1.20h, and `acceptance-evidence.md` §9. Executed (p7.sql): an issue sealed
+today, accepted with an `inbound_reply ('email','<r1@x.example>')` row: `acceptance_grade = 4`. The sentence
+describes a future writer's behaviour as a property, with no test behind it.
+
+#### W10 · nit (guard gap): the lock order the migration calls "everywhere" is unguarded
+Planted: issue lock BEFORE quote lock, in both `acceptance_evidence_rules()` and
+`acceptance_withdrawal_guard()`. `concurrency.pg.test.ts` + `documents-core.test.ts` + `no-stuck-state.test.ts`:
+**145 passed, 0 failed**. Restored, and `diff -q` identical. I did not find a cycle that the reversed order
+creates with today's locks, so this is a nit.
+
+#### W11 · nit: the row-convention reason claims a narrower exemption than the guard grants
+`new-app/db/test/row-convention.test.ts:80`: "this exemption covers only the missing `deleted_at`". The
+exemption is per table (`.filter(([name]) => !(name in EXEMPT))`). Planted `ALTER TABLE document_settings DROP
+COLUMN version`: row-convention 8/8 green. Only money-convention's stale-entry test went red, by accident.
+Restored and identical.
+
+#### W12 · nit: documents
+- PRD-REVIEW-4 rows **J7** and **J8** each say "Tested in … two races in `concurrency.pg.test.ts`". Both
+  races test J6 (evidence against withdrawal) only.
+- J8's resolution item 2 names `domain-model.md` §6.1. §6.1 (lines 184-192) still lists the snapshot without
+  the bar. Only the `document_settings` and `acceptance_evidence` rows changed.
+- `policies/005-acceptance-grade.sql:14`: "the defaults it held are what an absent row means". This is false
+  when the row held 6 or 2. An absent row means 3.
+
+### Suspicions (reasoned, NOT executed)
+- S1. `schema.prisma` declares `QuoteIssue.acceptanceBarGrade Int` with no `@default`. A Prisma `create` would
+  therefore require it, so "A seal may omit it" (migration:25) would not hold for the ORM the application uses.
+  If so, the effect is benign: the app must state the bar, and a mismatch is refused. Not compiled.
+- S2. When a seal omits the bar, the database resolves it from the quote as committed at seal time. The app
+  renders the other snapshot fields (terms, lines) from its own earlier read. A quote edit that commits in
+  between gives a sealed issue whose bar and terms come from different quote versions. Only stating the bar
+  closes this, and that is optional in SQL. Not raced.
+
+### Attacked and found sound (with evidence)
+- **Grade combining (D1):** max over kinds. Planting "latest row" turned D1 red. A weaker later row did not
+  lower the grade.
+- **Withdrawn (D3):** grade NULL and `meets_bar` NULL. Evidence plus withdrawal in ONE statement (CTE): refused,
+  "has been withdrawn" (p6). Withdrawal and evidence racing on PG16: both races green in the full run.
+  Reversing either lock makes `waitsOnIssueLock` time out, by reading.
+- **Other issue's or tenant's acceptance:** tenant 2 with its own tenant id gives FK
+  `acceptance_evidence_acceptance_id_fkey`. With tenant 1's id: refused by row security (p6). Evidence has no
+  issue column, so it cannot be cross-issue.
+- **Deferred evidence-required check:** an autocommit acceptance with no evidence is refused at commit. The
+  RETURNING-flip on the acceptance insert only made it stricter: still "has no evidence" (p6). A savepointed
+  evidence row rolled back cannot satisfy it. There is no UPDATE path on `acceptance.outcome`. Planting the
+  trigger onto another table turned the two relevant tests red.
+- **Update or delete of evidence:** 0 rows. No policy.
+- **J7 exact replay, and NULL source:** refused (p2). Planting a per-tenant key turned the catalogue test red.
+- **Bar (J8):** the trigger order on `quote_issue` is `…one_live_ceiling_per_quote`, then `…resolve_bar`, then
+  `…subtotal_matches_lines`. So the bar is read after the exclusive quote lock. `UPDATE quote_issue SET
+  acceptance_bar_grade` gives `UPDATE 0`. Writing tenant 2's `document_settings` from tenant 1 is refused by
+  row security. Tenant 1's default of 6 does not leak: tenant 2's seal resolved 3. Sealing on another tenant's
+  quote is refused by `quote_issue_quote_id_fkey` (p5). The bar is not changeable after seal by any path I found.
+- **Fixtures (question 6):** I checked every `rejects`/`toMatch` in `documents-core`, `tenant-isolation` and
+  `concurrency.pg` near an acceptance insert. Each names a constraint or message that the evidence CTE cannot
+  produce. R9's evidence-less acceptance at line 1645 still fails on the named render FK, which fires before
+  the deferred check. I found no test that now passes for a different reason.
+- **Guard reasons:** policy-parity (`acceptance_evidence`), reference-keys (`external_id`) and money-convention
+  (BAR, VERSION) are accurate. For tenant-isolation see W7, and for row-convention see W11.
+- **Blast radius:** no consumer of these tables outside `new-app/db` (grep of api, web and packages).
+
+### Verdicts
+- J6: not closable — W1 (the J6 case itself is still representable by the app role), W2 (the claim of no new
+  deadlock is false, and CLAUDE.md lists three shapes where there are now four), W4 (superseded: owner decision
+  needed or state it).
+- J7: not closable — W5 (a grade-1 row can permanently block the provider event the key exists for), W6, W7
+  (the reason the global key is safe is false for 'bank' and 'email').
+- J8: not closable — W3 (§4.4 against the build and §7 against D6: the contradiction J8 asked to resolve is
+  still in the design), W8 (the migration fails on any non-empty database), W12 (domain-model §6.1 not
+  amended; races cited for J8 do not test it).
+
+### W13 · major — found by the builder while reading W1, executed 2026-10-01: J11's subtotal check is skipped the same way
+
+`quote_issue_subtotal_matches_lines()` in `new-app/db/migrations/20260927170000_issue_lines_add_up/migration.sql`
+skips an issue it cannot see (`CONTINUE WHEN NOT FOUND`). It runs at COMMIT, so a transaction that clears
+`app.tenant_id` (`set_config(..., false)`) after inserting a header hides the header from its own check.
+Executed on PostgreSQL 16 as `pryvis_app`: a header with `subtotal_minor` 999999 and no lines, inserted,
+then `SELECT set_config('app.tenant_id','',false)`, then `COMMIT` — committed; the same insert without the
+`set_config` was refused at COMMIT. Result: one sealed issue, subtotal 999999, zero lines. J11 reopened.
