@@ -592,6 +592,11 @@ brief first; 16.5's three exceptions stay Opus). The runner was proved on a thro
 is refused, a wrong expectation fails, a check that leaves a file behind fails, a brief with no checks is
 refused. **From the next launch, every brief goes through it.**
 
+**Design drafted 2026-10-01: the database privilege model** (`docs/design/privilege-model.md`) for R5, J14
+and §4g's deployment check — five decisions with options, awaiting the owner. Found while designing:
+`app_session` is outside row security like the credential tables, and its id IS the bearer credential, so a
+dump is a list of live logins — brought into J14's scope.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
