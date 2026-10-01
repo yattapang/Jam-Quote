@@ -398,6 +398,15 @@ escapes the closed list), U1-U6, U8, U9, U14 minor; none hides a defect today. *
 major (writer-set sentences in documents-core.test.ts and PRD R1.24a/R1.15c), U12, U13 minor. *Tier log:
 Opus right again; every J1 finding was a planted edge case, which no mechanical check would have tried.*
 
+**Built 2026-10-01:** J1's U1-U9, U14 (`7e48353`); J12's U10-U13 and two more (`7803990`).
+
+**Fourth re-review — J1 and J12 — launched 2026-10-01 on the owner's instruction ("proceed").** *Delegation
+(Rule 16.5), declared before launch: one `commit-reviewer` agent, **Opus**, for the same reasons as the
+third. The owner's change to the brief (2026-10-01): a NEW minor J1 finding is reported as a **candidate
+stated limit** for the owner to accept or reject, not as an automatic reopen; a major finding, a miss on a
+form the tool already claims to check, or an overclaim still reopens it — otherwise J1 cannot converge. No
+build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
