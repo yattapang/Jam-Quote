@@ -475,6 +475,12 @@ built minimal.
 restored by backup; two new races on PostgreSQL 16. Every acceptance fixture now records its first
 evidence row. **J6, J7, J8 now: Fixed, re-review owed.** Next: the independent check of the three.
 
+**Re-review — J6, J7, J8, adversarial — launched 2026-10-01 on the owner's instruction.** *Delegation
+(Rule 16.5), declared before launch: one `commit-reviewer` agent, **Opus**. These are new design, not
+corrections with a stated expected output, so the check must hunt for what the build gets wrong — bypasses
+executed, not reasoned about — which needs the strongest tier; a mechanical (Sonnet) closing check follows
+only if it finds nothing blocking. It reviews `009a1c6`; no build work, gate run or commit alongside it.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
