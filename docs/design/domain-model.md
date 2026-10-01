@@ -307,7 +307,7 @@ the row was created "unconditionally" and "cannot be forgotten"; neither was tru
 | Column | Kind |
 |---|---|
 | `issue_id` | identity |
-| `accepted_total_minor` | **derived copy** of the accepted issue's frozen total |
+| `accepted_total_minor` | **derived copy** of the accepted issue's header `total_minor` |
 | `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
 | `invoiced_total_minor` | **derived cache**, re-summed by `issue_balance_apply()` |
 
@@ -348,6 +348,15 @@ Issuing an invoice is one transaction: lock the row · re-sum from the rows rath
 cached figure · **refuse** if the new total would exceed `accepted_total + variations_total` · insert the
 invoice and update the balance. Re-summing inside the lock is what makes the cached columns a genuine
 cache rather than a second source of truth — the decision is never taken on the cached number alone.
+
+**Where that total comes from (finding J11).** `issue_balance_open()` copies the issue's HEADER
+`total_minor`; it does not read the lines. Until 2026-10-01 nothing tied the header to the frozen lines
+the client saw. Since `new-app/db/migrations/20260927170000_issue_lines_add_up/migration.sql`, the
+database holds every step but one: each line's `line_total_minor` is quantity × unit price rounded half
+away from zero at the cent (negative lines — discounts — round symmetrically); the issue's `subtotal_minor`
+is the sum of its lines, checked at COMMIT; and `total_minor` is `subtotal_minor + tax_minor`. **Tax is the
+step not held:** `tax_minor` against the rate and each line's treatment is owed as its own item with the
+GCT rules. The tests are the J11 block of `db/test/documents-core.test.ts`.
 
 `accepted_total_minor` is a **copy** of the accepted issue's frozen total. The issue is immutable, so the
 value it copies cannot change — which is what makes the copy safe here and would not make it safe

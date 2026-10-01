@@ -58,15 +58,28 @@ async function sql<T = Record<string, unknown>>(query: string, params: unknown[]
   return (await db.query<T>(query, params)).rows;
 }
 
+/** Since J11 an issue's subtotal must equal the sum of its frozen lines when the transaction commits,
+ * so every seal here carries one line whose total is the subtotal — in the SAME statement, because
+ * PGlite commits each statement on its own. The line is 1 × the subtotal, so its total is exact. */
+function withOneLine(insertIssue: string): string {
+  return `WITH h AS (${insertIssue} RETURNING id, tenant_id, subtotal_minor)
+    INSERT INTO quote_issue_line
+      (id, tenant_id, issue_id, section_title, description, position, quantity_thousandths,
+       unit_price_minor, line_total_minor, tax_treatment)
+    SELECT gen_random_uuid(), tenant_id, id, 'Works', 'Fence', 1, 1000, subtotal_minor, subtotal_minor,
+           'standard'
+      FROM h`;
+}
+
 /** Seals an issue for the given revision and returns its id. `total` is in minor units. */
 async function seal(revision: number, total: bigint, issueId = id()): Promise<string> {
   await sql(
-    `INSERT INTO quote_issue
+    withOneLine(`INSERT INTO quote_issue
        (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
         currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
         sealed_at, sealed_by_user_id, catalog_synced_at)
      VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
-             now(), $7, now())`,
+             now(), $7, now())`),
     [issueId, TENANT, QUOTE, revision, CLIENT, total.toString(), USER],
   );
   return issueId;
@@ -617,12 +630,12 @@ describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
     // tests — and would refuse a contractor's own 115,000 invoice on a 100,000 + 15% GCT job.
     const issue = id();
     await sql(
-      `INSERT INTO quote_issue
+      withOneLine(`INSERT INTO quote_issue
          (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
           currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
           sealed_at, sealed_by_user_id, catalog_synced_at)
        VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 1500, 100000, 15000,
-               115000, now(), $5, now())`,
+               115000, now(), $5, now())`),
       [issue, TENANT, QUOTE, CLIENT, USER],
     );
     await accept(issue);
@@ -646,12 +659,12 @@ describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
     await accept(jobX);
     const jobY = id();
     await sql(
-      `INSERT INTO quote_issue
+      withOneLine(`INSERT INTO quote_issue
          (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
           currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
           sealed_at, sealed_by_user_id, catalog_synced_at)
        VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Roof', 'itemised', 'JMD', 'Terms', 0, 100000, 0, 100000,
-               now(), $5, now())`,
+               now(), $5, now())`),
       [jobY, TENANT, otherQuote, CLIENT, USER],
     );
     await accept(jobY);
@@ -1884,5 +1897,141 @@ describe("J13 · decline then accept, one accepted row, and withdrawn is final",
     const acceptance = await accept(issue);
     await withdraw(acceptance);
     expect(await state(issue)).toBe("withdrawn");
+  });
+});
+
+// ===========================================================================
+// Finding J11, fixed by migration 20260927170000_issue_lines_add_up: a frozen line's total is quantity
+// times unit price rounded half away from zero at the cent, and an issue's subtotal is the sum of its
+// own lines, checked at COMMIT. Each refusal names the constraint or the trigger's message, so it cannot
+// pass on a different refusal.
+describe("J11 · an issue's lines add up to its subtotal, in the database", () => {
+  const HEADER = `INSERT INTO quote_issue
+       (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+        currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+        sealed_at, sealed_by_user_id, catalog_synced_at)
+     VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
+             now(), $7, now())`;
+  const LINE = `INSERT INTO quote_issue_line
+       (id, tenant_id, issue_id, section_title, description, position, quantity_thousandths,
+        unit_price_minor, line_total_minor, tax_treatment)
+     VALUES ($1, $2, $3, 'Works', 'Item', $4, $5, $6, $7, 'standard')`;
+  type Line = { qty: bigint; price: bigint; total: bigint };
+
+  /** Seals one issue with these lines and this subtotal, as ONE transaction: header first, then lines. */
+  async function sealWith(revision: number, subtotal: bigint, lines: Line[]): Promise<string> {
+    const issue = id();
+    await db.exec("BEGIN");
+    try {
+      await sql(HEADER, [issue, TENANT, QUOTE, revision, CLIENT, subtotal.toString(), USER]);
+      for (const [index, line] of lines.entries()) {
+        await sql(LINE, [id(), TENANT, issue, index + 1, line.qty.toString(), line.price.toString(),
+          line.total.toString()]);
+      }
+      await db.exec("COMMIT");
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      throw error;
+    }
+    return issue;
+  }
+
+  /** Half away from zero at the cent, computed here independently of the database's expression. */
+  function rounded(qty: bigint, price: bigint): bigint {
+    const product = qty * price;
+    const magnitude = product < 0n ? -product : product;
+    const cents = (magnitude * 2n + 1000n) / 2000n;
+    return product < 0n ? -cents : cents;
+  }
+
+  // [quantity in thousandths, unit price in minor units] — the halves are the cases that matter.
+  const CASES: Array<[bigint, bigint]> = [
+    [1000n, 12_345n], // 1 × 123.45: exact
+    [1500n, 333n], // 1.5 × 3.33 = 4.995 → 5.00
+    [1500n, -333n], // a discount: -4.995 → -5.00, not -4.99
+    [2500n, 1n], // 0.025 → 0.03: half away, not to even
+    [-2500n, 1n], // a negative quantity rounds the same way
+    [2499n, 1n], // 0.02499 → 0.02
+    [-2499n, 1n],
+    [1n, 500n], // 0.005 → 0.01
+    [1n, -500n], // -0.005 → -0.01
+    [1n, 499n], // 0.00499 → 0.00
+    [0n, 99_999n],
+    // The product overflows a BIGINT (about 1e20); the total does not. NUMERIC `/` got this one a cent
+    // high (its quotient is rounded to a size-picked scale); `div()` is exact.
+    [999_999_999n, 99_999_999_999n],
+    [999_999_999n, 99_999_999_500n], // an exact half, at that size
+    [999_999_999n, -99_999_999_500n],
+  ];
+
+  it("accepts every line whose total is quantity × price, half away from zero — discounts included", async () => {
+    for (const [index, [qty, price]] of CASES.entries()) {
+      const total = rounded(qty, price);
+      await expect(sealWith(index + 1, total, [{ qty, price, total }])).resolves.toBeTruthy();
+    }
+  });
+
+  it("REFUSES a line total that truncates, rounds to even, or rounds a discount toward zero", async () => {
+    const wrong: Line[] = [
+      { qty: 1500n, price: 333n, total: 499n }, // truncated
+      { qty: 2500n, price: 1n, total: 2n }, // banker's rounding
+      { qty: 1500n, price: -333n, total: -499n }, // a discount rounded toward zero
+      { qty: 1000n, price: 100n, total: -100n }, // the wrong sign
+      { qty: 1000n, price: 100n, total: 101n }, // one cent over
+    ];
+    for (const [index, line] of wrong.entries()) {
+      await expect(sealWith(index + 1, line.total, [line])).rejects.toThrow(/quote_issue_line_total_check/);
+    }
+  });
+
+  it("seals header and lines as one transaction, and a discount line counts against the subtotal", async () => {
+    // The check is deferred: the header goes in before any line, so a statement-time check refuses
+    // every seal. Two lines, one of them a 15.00 discount, sum to the 85.00 subtotal.
+    const issue = await sealWith(1, 8_500n, [
+      { qty: 1000n, price: 10_000n, total: 10_000n },
+      { qty: 1000n, price: -1_500n, total: -1_500n },
+    ]);
+    expect(await sql(`SELECT subtotal_minor FROM quote_issue WHERE id = $1`, [issue])).toEqual([
+      { subtotal_minor: 8_500 },
+    ]);
+  });
+
+  it("REFUSES a subtotal its lines do not sum to — over, under, or with no lines at all", async () => {
+    const line = { qty: 1000n, price: 10_000n, total: 10_000n };
+    await expect(sealWith(1, 10_001n, [line])).rejects.toThrow(/subtotal_minor 10001, but its lines sum to 10000/);
+    await expect(sealWith(1, 9_999n, [line])).rejects.toThrow(/subtotal_minor 9999, but its lines sum to 10000/);
+    await expect(sealWith(1, 100n, [])).rejects.toThrow(/subtotal_minor 100, but its lines sum to 0/);
+    // An issue of no lines and no subtotal is consistent, and allowed.
+    await expect(sealWith(1, 0n, [])).resolves.toBeTruthy();
+  });
+
+  it("REFUSES a line added to an issue already sealed, since it changes the sum", async () => {
+    const issue = await sealWith(1, 10_000n, [{ qty: 1000n, price: 10_000n, total: 10_000n }]);
+    await expect(sql(LINE, [id(), TENANT, issue, 2, "1000", "500", "500"])).rejects.toThrow(
+      /subtotal_minor 10000, but its lines sum to 10500/,
+    );
+    // A zero line changes nothing, and the rule is about the sum, so it stands.
+    await expect(sql(LINE, [id(), TENANT, issue, 3, "0", "500", "0"])).resolves.toBeTruthy();
+  });
+
+  it("REFUSES, even to the table owner, a line changed or removed so the sum no longer matches", async () => {
+    // The application role has no UPDATE or DELETE policy on lines; the owner, which bypasses row
+    // security, still meets the trigger.
+    const issue = await sealWith(1, 10_000n, [
+      { qty: 1000n, price: 6_000n, total: 6_000n },
+      { qty: 1000n, price: 4_000n, total: 4_000n },
+    ]);
+    await asSuperuser(db, async () => {
+      await expect(
+        sql(`UPDATE quote_issue_line SET unit_price_minor = 5000, line_total_minor = 5000
+             WHERE issue_id = $1 AND position = 1`, [issue]),
+      ).rejects.toThrow(/but its lines sum to 9000/);
+      await expect(
+        sql(`DELETE FROM quote_issue_line WHERE issue_id = $1 AND position = 2`, [issue]),
+      ).rejects.toThrow(/but its lines sum to 6000/);
+      await expect(
+        sql(`UPDATE quote_issue SET subtotal_minor = 9000, total_minor = 9000 WHERE id = $1`, [issue]),
+      ).rejects.toThrow(/subtotal_minor 9000, but its lines sum to 10000/);
+    });
   });
 });

@@ -447,6 +447,13 @@ quantity × unit price rounded HALF AWAY FROM ZERO at the cent, as an exact inte
 negative and round symmetrically. Tax consistency is NOT part of J11 — owed as its own item with the GCT
 rules.
 
+**Built 2026-10-01: J11** (migration `20260927170000_issue_lines_add_up`) — each frozen line's total
+is checked as quantity × unit price half away from zero, and an issue's subtotal as the sum of its lines,
+at COMMIT. Eight plants red, restored by backup. The test's 1e20 case caught a real defect before commit:
+NUMERIC `/` rounds its quotient, so the check uses `div()`. Every seal fixture now carries a matching line.
+**J11 now: Fixed, re-review owed.** Next: the independent closing check for J11, then the J6/J7/J8 design
+pass with options.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

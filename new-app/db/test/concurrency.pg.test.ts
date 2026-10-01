@@ -160,14 +160,27 @@ async function newQuote(): Promise<string> {
   return quote;
 }
 
+/** Since J11 an issue's subtotal must equal the sum of its frozen lines when the transaction commits,
+ * so every seal here carries one line whose total is the subtotal — in the SAME statement, because
+ * PGlite commits each statement on its own. The line is 1 × the subtotal, so its total is exact. */
+function withOneLine(insertIssue: string): string {
+  return `WITH h AS (${insertIssue} RETURNING id, tenant_id, subtotal_minor)
+    INSERT INTO quote_issue_line
+      (id, tenant_id, issue_id, section_title, description, position, quantity_thousandths,
+       unit_price_minor, line_total_minor, tax_treatment)
+    SELECT gen_random_uuid(), tenant_id, id, 'Works', 'Fence', 1, 1000, subtotal_minor, subtotal_minor,
+           'standard'
+      FROM h`;
+}
+
 function sealSql(issueId: string, quote: string, revision: number, total: number) {
   return {
-    text: `INSERT INTO quote_issue
+    text: withOneLine(`INSERT INTO quote_issue
              (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
               currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
               sealed_at, sealed_by_user_id, catalog_synced_at)
            VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
-                   now(), $7, now())`,
+                   now(), $7, now())`),
     values: [issueId, TENANT, quote, revision, CLIENT, total, USER],
   };
 }
