@@ -1,6 +1,6 @@
 # Design: the database privilege model (R5, J14, and the §4g deployment check)
 
-**Status: DRAFT — five decisions await the owner (§4). No code until they are answered.**
+**Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D5).**
 
 Date: 2026-10-01 · Answers `docs/THREAT-MODEL.md` §4e (R5), §4f (J14, a launch blocker) and §4g's owed
 deployment check · Delegation (Rule 16.5): Opus — the credential path and row-security policy text, two of

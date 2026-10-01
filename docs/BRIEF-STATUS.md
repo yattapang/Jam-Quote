@@ -597,6 +597,16 @@ and §4g's deployment check — five decisions with options, awaiting the owner.
 `app_session` is outside row security like the credential tables, and its id IS the bearer credential, so a
 dump is a list of live logins — brought into J14's scope.
 
+**Owner's decisions, 2026-10-01 (privilege model):** every recommendation accepted — D1 the credential tables
+reached only through narrow `SECURITY DEFINER` door functions; D2 session secrets stored as hashes; D3 roles and
+grants in the migrations; D4 the API checks its own role at start-up, and CI checks it too; D5 the rate limiter
+stays writable, staff capabilities become read-only to the application.
+
+**Build — the privilege model, started 2026-10-01.** *Delegation (Rule 16.5), declared before starting: built
+in-session at **Opus** — the credential path and row-security policy text are two of 16.5's three named
+exceptions, and the work is one ordered protocol (roles, then grants, then functions, then the code that calls
+them) that Rule 16.6 says is not delegated in pieces.*
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
