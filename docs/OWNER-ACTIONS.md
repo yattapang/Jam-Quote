@@ -49,10 +49,10 @@ so they start now.
 | OA4 | **Name the second staff member**, or confirm the single-operator fallback for now | Staff MFA and separated approvals (B7, a launch blocker; PRD §9 item 5, R1.34-R1.35) | Open |
 | OA5 | **Confirm how you want to review code** — recommended: a pull request per build step, which you approve or ask about | The first code since planning (B1). The planning audit records that you do not yet review diffs (`docs/PLANNING-AUDIT.md` §3) | Open |
 | OA6 | **Create the accounts for the services chosen in A5** — storage, malware scanning, error tracking, uptime — in the business's name, with payment details | Files and scanning (B5), monitoring (B3). Each service is recommended, with its cost, in design A5 | Open |
-| OA7 | **Ask WiPay four questions** (exact wording in the batch): can small Jamaican businesses each open their own merchant account, and what does onboarding ask of them; is there a partner or referral sign-up; is there a server-to-server transaction query; are recurring payments offered | Design A10 is written to work either way; the answers choose the branch before D3 and D6 are built (PRD §9 item 1b; ADR 0029 E2) | Open — **long lead** |
+| OA7 | **Ask WiPay four questions** (exact wording in the batch): can small Jamaican businesses each open their own merchant account, and what does onboarding ask of them; is there a partner or referral sign-up; is there a server-to-server transaction query; are recurring payments offered | Design A10 is written to work either way; the answers choose the branch before D3 and D6 are built (PRD §9 item 1b; ADR 0029 E2) | **Moved** to the later WiPay batch, before H7 (ADR 0034) |
 | OA8 | **Apply for Pryvis's own WiPay merchant account** (identity checks) — **held** until Stripe answers OA20; done only if Stripe does not work out (ADR 0033) | Tenants paying Pryvis by card (D6; ADR 0030 decision 7) | Held |
-| OA9 | **Engage an accountant** and send them the questions in `docs/design/tax-and-documents.md` §6 (seven, with the design), **plus ADR 0033's**: Canadian GST/HST on subscriptions sold to Jamaican contractors, Jamaican tax on a service bought from a foreign company, and income tax on the arrangement between the Canadian and Jamaican businesses | Their answers can change invoicing (D2), so they are wanted before it is built; the review is a launch gate (F2; PRD §9 item 8) | Open — **long lead** |
-| OA10 | **Engage an attorney** and send them the questions: the Data Protection Act 2020 (roles, registration, breach notice, transfers, retention); whether our e-signature clears Jamaica's bar; the terms and privacy notice, including the aggregate-data consent clause; whether anything in the payments flow is regulated; **and ADR 0033's**: the terms with the Canadian company as the seller of subscriptions, the agreement between the Canadian and Jamaican businesses, and Stripe as a processor | The e-signature answer can change the accept flow (C5); sign-off is a launch gate (F2; PRD §9 item 6, ADR 0027 D14) | Open — **long lead** |
+| OA9 | **Engage an accountant** and send them the questions in `docs/design/tax-and-documents.md` §6 (seven, with the design), **plus ADR 0033's**: Canadian GST/HST on subscriptions sold to Jamaican contractors, Jamaican tax on a service bought from a foreign company, and income tax on the arrangement between the Canadian and Jamaican businesses; **and the structure under consideration**: Solvnow (Canadian) owning the business, with Pryvis a Jamaican company handling customers locally | Their answers can change invoicing (D2), so they are wanted before it is built; the review is a launch gate (F2; PRD §9 item 8) | Open — **long lead** |
+| OA10 | **Engage an attorney** and send them the questions: the Data Protection Act 2020 (roles, registration, breach notice, transfers, retention); whether our e-signature clears Jamaica's bar; the terms and privacy notice, including the aggregate-data consent clause; whether anything in the payments flow is regulated; **and ADR 0033's**: the terms with the Canadian company as the seller of subscriptions, the agreement between the Canadian and Jamaican businesses, and Stripe as a processor; **and the structure under consideration**: Solvnow owning the business and the Pryvis name, with Pryvis a Jamaican company handling customers locally — which company is the data controller under Jamaica's Data Protection Act and Canada's privacy law | The e-signature answer can change the accept flow (C5); sign-off is a launch gate (F2; PRD §9 item 6, ADR 0027 D14) | Open — **long lead** |
 
 | OA20 | **Describe the business to Stripe in writing and keep its approval** (wording in the batch): the Canadian company sells subscriptions to software run by a related Jamaican business, to contractors in Jamaica | ADR 0033 condition 1; decides OA8 and D6 | Open — **long lead** |
 | OA21 | **Open a Stripe account for the Canadian company and use test mode only** — no live activation until A10 is approved and OA20 is answered. Put the test keys in the environment's secret settings (steps in the batch), never in the chat | The test-mode experiment of ADR 0033 (A10) | Open |
@@ -70,7 +70,7 @@ so they start now.
 
 | # | Action | Why, and the step that needs it | Status |
 |---|---|---|---|
-| OA15 | **WiPay test credentials** for staging — a test tenant merchant account and Pryvis's own (steps in the batch) | Payment links and our server's confirmation (D3); card upgrades (D6) | Open |
+| OA15 | ~~WiPay test credentials for staging~~ **Moved** to the later WiPay batch, before H7 (ADR 0034). Stripe's test mode is OA21 | — | Moved |
 
 ## Batch 4 — before the web launch (sent when phases D and E are signed off)
 
@@ -85,6 +85,7 @@ so they start now.
 
 Written when their phases come near:
 
+- **WiPay**, if card links for contractors' clients go ahead (H7): OA7's questions and OA15's test credentials;
 - **WhatsApp Business** (I3);
 - **Trinidad and Tobago's** payment provider and data-protection advice (J2, J3);
 - **your confirmation to retire `original-app/`** (K1).
@@ -95,5 +96,6 @@ Written when their phases come near:
 
 | Date | Batch or action | What happened |
 |---|---|---|
+| 2026-10-02 | OA7, OA15 | Moved to the later WiPay batch: WiPay card links move to release 2 (ADR 0034) |
 | 2026-10-02 | OA8, OA9, OA10, OA20, OA21 | Stripe for subscriptions (ADR 0033): OA8 held; ADR 0033's questions added to OA9 and OA10; OA20-OA21 added to batch 1 |
 | 2026-10-02 | — | File created from `docs/PRD.md` §9, `docs/BUILD-PLAN.md`, `docs/PLANNING-AUDIT.md` and the A1 and A2 designs. No batch sent yet |

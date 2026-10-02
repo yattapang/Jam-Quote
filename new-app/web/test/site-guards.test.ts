@@ -266,7 +266,6 @@ describe("nothing untrue", () => {
       "Invoices and payment recording",
       "Staged deposit and progress invoicing",
       "Payment reminders and an overdue list",
-      "Card payment links",
       "Export your data as CSV, any time",
       "Up to 3 users",
     ]);
@@ -352,6 +351,8 @@ describe("nothing untrue", () => {
       [/change orders?/i, "signed change orders (R2)"],
       [/supplier price comparison/i, "supplier price comparison (R3)"],
       [/accountant export/i, "accountant exports"],
+      // ADR 0034: card payment links for contractors' clients moved to release 2 (most clients pay cash or by transfer).
+      [/card payment link/i, "card payment links (R2, ADR 0034)"],
       [/no signal|offline|without (a )?signal/i, "offline capture (the mobile app, ADR 0028)"],
     ];
     const marked = /coming in release (\d)/i;

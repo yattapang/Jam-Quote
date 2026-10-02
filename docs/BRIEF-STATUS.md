@@ -929,6 +929,16 @@ and OA10. Nothing built.
 the canadian company the seller"), paying the Jamaican business under an agreement between the companies. ADR 0033
 and OA20 updated: Stripe is told the full structure when the account opens, and its approval is kept on file.
 
+**Owner's decisions, 2026-10-02 (ADR 0034): cash and bank transfer first.** Most clients pay contractors in cash or by
+transfer, so **WiPay card links move to release 2** (H7; grade 6 evidence waits with them), and **invoices carry the
+contractor's bank details at launch** (new R1.29a), frozen at issue, with a change protected by re-authentication, an
+audit entry and an email to every user. Stripe for subscriptions also serves contractors outside Jamaica. The site's
+copy now marks card links "coming in release 2", and its guard refuses an unmarked claim — proved by two planted
+defects (the tier line, the pricing sentence), each restored and shown identical with `diff -q`. TIERS, the register,
+the build plan (D3, H7) and the owner actions (OA7, OA15 moved to a later batch) updated. **Under consideration, not
+decided:** the owner is open to the Canadian company (Solvnow) owning the business, with Pryvis registered as a
+Jamaican company that handles customers locally — added to the attorney's and accountant's questions (OA9, OA10).
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

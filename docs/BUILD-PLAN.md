@@ -104,7 +104,7 @@ WiPay's answers and merchant account, the accountant, the attorney) is sent when
 - [ ] D1 · Recorded variations (W6a)
 - [ ] D2 · Invoicing (W7) — deposit, progress and final; tax per invoice; credit notes; payments and
   over-payments; reminders and "do not remind"
-- [ ] D3 · The tenant's WiPay connection in their profile, payment links, and our server's confirmation
+- [ ] D3 · Bank-transfer details on invoices and the share page, with the protected change (R1.29a, ADR 0034); the WiPay connection moved to H7
 - [ ] D4 · The reconciliation job
 - [ ] D5 · Tiers and entitlements — the free meter, blocked seals, three Pro users
 - [ ] D6 · Subscriptions (W9) — card upgrade through Pryvis's WiPay account, manual payments, lapse
@@ -144,6 +144,7 @@ WiPay's answers and merchant account, the accountant, the attorney) is sent when
 - [ ] H4 · Retention tracking
 - [ ] H5 · Signed-copy upload
 - [ ] H6 · In-app support threads; the chatbot, phase 2 (search over help articles — no model sees what is typed)
+- [ ] H7 · The tenant's WiPay connection in their profile, card payment links, our server's confirmation, and grade 6 evidence (R1.29, ADR 0034)
 
 ## Phase I — Release 3: the Business tier
 

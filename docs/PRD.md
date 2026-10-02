@@ -417,7 +417,8 @@ R1.41, R1.42.
 - **R1.20i** **The grade measures who witnessed the acceptance, never how convincing the artefact looks.**
   A signed page looks like strong evidence, which is precisely why the first version of the ladder ranked
   it above the one grade with an uncontrolled third party in the chain.
-- **R1.20d** A **paid deposit is recorded as corroboration** of acceptance, linked to the issue. A client
+- **R1.20d** *(Note 2026-10-02, ADR 0034: with WiPay links moved to release 2, no provider confirms a deposit in
+  release 1, so grade 6 is not available until H7; a recorded deposit is grade 1.)* A **paid deposit is recorded as corroboration** of acceptance, linked to the issue. A client
   who pays 40% has behaved in a way no typed name matches, and R1.23 already builds the deposit. **Only a
   payment a provider confirms is `deposit_paid`, grade 6 — in R1, a WiPay payment that **our server has
   confirmed with WiPay directly**, by a server-to-server query whose answer is recorded as the evidence,
@@ -556,7 +557,8 @@ R1.41, R1.42.
 - **R1.28** Overdue reminders and a digest, through the single outbound-message path. Each reminder to a
   client carries an opt-out (R1.21c); an invoice marked "do not remind" (R1.25a) is skipped; reminders
   stop when the tenant's subscription lapses (R1.37c).
-- **R1.29** WiPay card payment links (Pro), **paid into the tenant's own WiPay merchant account** (ADR
+- **R1.29** **Moved to release 2 (ADR 0034, owner 2026-10-02: most clients pay cash or by bank transfer; build
+  step H7).** WiPay card payment links (Pro), **paid into the tenant's own WiPay merchant account** (ADR
   0027 D3, finding B9). The client pays the contractor directly; **Pryvis never holds client money** — we
   create the link with the tenant's credentials, and **an invoice is marked paid through WiPay only after
   our server confirms the transaction with WiPay** (R1.20d, ADR 0029 E2): the callback is signed with the
@@ -566,6 +568,13 @@ R1.41, R1.42.
   are, ADR 0021) — a register row and a threat-model row are owed (Rule 18; `docs/THREAT-MODEL.md`). Owed
   before W7 is built: confirm WiPay offers merchant accounts to small Jamaican businesses, what its
   onboarding asks of them, and **whether it offers a transaction-status query** (§9).
+
+- **R1.29a** **Bank-transfer details on invoices (ADR 0034).** The tenant saves the bank name, branch, account name,
+  account number and account type; an invoice and its share page show them under "Pay by bank transfer", with the
+  invoice number as the reference to quote. They are frozen on the invoice at issue. Changing them needs a recent
+  sign-in (and the second factor where the user has one), is audited, and is announced by email to every user of
+  the tenant with the last four digits only — a changed account number is how a client's payment is diverted. Pryvis
+  never moves or confirms the money; a transfer is a payment the tenant records (R1.26).
 
 ### W9 · Subscribe — how we get paid
 - **R1.30** Self-service sign-up on the website, free tier, no card (ADR 0015).
@@ -810,7 +819,7 @@ D1) · signed-copy upload (R1.20c) · in-app support threads (R1.38) · staff im
 series that reset (R1.14) · the Business tier (roles, approvals, crews, consolidated reporting) ·
 server-side WhatsApp Business sending · the material price index · an accountant-formatted export (R1.43's
 CSV export is in) · the admin-curated regulatory feed (**dropped**, brief §5a) · multi-country beyond
-Jamaica · a client portal (ADR 0022) · any second product.
+Jamaica · a client portal (ADR 0022) · card payment links for tenants' clients (R1.29, ADR 0034) · any second product.
 
 ## 8a. Open questions the owner must answer — not decided here
 

@@ -164,7 +164,7 @@ export const site = {
     description: "Start free. Quoting is free; you pay when Pryvis starts helping you get paid.",
     heading: "Start free",
     intro:
-      "Quoting is free, for as long as you want it. You pay when Pryvis starts helping you get paid — invoicing, payment recording and card payment links. Final prices in Jamaican dollars are being set now.",
+      "Quoting is free, for as long as you want it. You pay when Pryvis starts helping you get paid — invoicing and payment recording, with card payment links coming in release 2. Final prices in Jamaican dollars are being set now.",
     tiers: [
       {
         name: "Free",
@@ -201,7 +201,7 @@ export const site = {
           "Invoices and payment recording",
           "Staged deposit and progress invoicing",
           "Payment reminders and an overdue list",
-          "Card payment links",
+          "Card payment links (coming in release 2)",
           "Works with no signal — price and capture a job offline (coming with the mobile app)",
           "Export your data as CSV, any time",
           "Up to 3 users",

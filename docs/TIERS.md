@@ -42,7 +42,8 @@ country. What each tier *includes* is the design.
 | Job recipes (price a job once, reuse it) | **create one** | unlimited | unlimited |
 | Invoices and payment recording | — | ✓ | ✓ |
 | Payment reminders and overdue digest | — | ✓ | ✓ |
-| Card payment links (WiPay) | — | ✓ | ✓ |
+| Card payment links (WiPay) — **release 2** (ADR 0034) | — | ✓ | ✓ |
+| Bank-transfer details on invoices (ADR 0034) | ✓ | ✓ | ✓ |
 | Project costing and job profit | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Retention tracking | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Accountant exports (CSV) | — | ✓ *(release 2)* | ✓ *(release 2)* |
