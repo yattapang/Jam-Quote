@@ -1193,3 +1193,404 @@ ADR 0025 decision 5, the domain model and THREAT-MODEL §4b to match ADR 0015, a
 guard (or a composite foreign key from `app_credential (user_id, email)` to `app_user (id, email)`) a
 precondition of the sign-up work.
 
+
+---
+
+## Re-read of the amended PRD
+
+**Reviewer:** independent review agent (Opus class), 2026-10-02, at HEAD `9ac17c6` (branch
+`claude/admiring-fermat-41btub`). **Did not write** any of the work under review. Brief:
+`docs/briefs/2026-10-02-prd-review-5-reread.md`; before anything was changed,
+`python3 tools/run_brief.py docs/briefs/2026-10-02-prd-review-5-reread.md` printed
+`Brief docs/briefs/2026-10-02-prd-review-5-reread.md at HEAD 9ac17c6: 5 of 5 expectations hold.`
+Under review: commits `c000c78`, `9c4d86c` and `34122ba`, and every document they changed.
+
+Rules applied: Rule 0, 1.9, 1.10, 11, 13, 14, 15, 18, 20, 21.1, 21.2, 21.4, 24.6.
+
+**Findings are numbered C1, C2, … and appended below as they were found** (Rule 1.10). The session was
+interrupted once by a usage limit; the coordinator confirmed the tree clean and HEAD unchanged before work
+resumed, and every plant before the interruption had already been restored and shown identical with
+`diff -q`.
+
+### Summary for the owner
+
+**Approvability: approve after named changes.** The amendments reached most of B1-B28 in the PRD itself,
+and nothing found here needs a new product decision from scratch. But one amendment created a new hole in
+the money/evidence model (C1: once each tenant uses its own WiPay account, the tenant holds the secret that
+"verifies" a WiPay callback, so grade 6 and "paid" can be forged by the party they bind). The tax-exclusive
+ceiling (D7) also landed in R1.9 and nowhere else (C2). And four fixes reached the PRD and left their twins
+standing in the approved domain model and the threat model, which the builder reads first (C3). C1-C6 should be
+in before approval. C7-C10 can follow, but C7 has to be done before the site guard is cited as closing B4.
+
+**Count:** 10 new findings — 0 blocker · 6 major · 4 minor. Of these, C1-C6 were created or exposed by
+the amendments, and C7 and C8 are weaknesses in the two guards the amendments added. Each finding below says
+whether it was executed (CONFIRMED) or reasoned (PLAUSIBLE).
+
+### Per-finding verdicts, B1-B28
+
+| # | Verdict | Why |
+|---|---|---|
+| B1 | **Closable** | N4 and N10 now state what exists and what is owed (`docs/PRD.md` §6). |
+| B2 | **Closable** | R1.32a now agrees with R1.32b-c; ADR 0023 decision 1 has a dated note. |
+| B3 | **Closable** | Header cites ADR 0006; §12 cites 0005/0006 and says the rule pack is owed in the rebuild. |
+| B4 | **Closable with a stated limit** | The copy is corrected, and R1.43 builds the export. But R1.40b says the guard "checks every string", and it does not: four over-claims planted together all pass (C7). |
+| B5 | **Not closable** | The PRD is amended. But the domain model §8 sync table, which B5 named, still has offline directory creates, a line merge and offline variations (C3). Web-first also left offline sentences unmarked (C5). |
+| B6 | **Closable with a stated limit** | D5 landed. The seat count is "about 3" in one place and "up to three" in another. What happens to the extra members on a lapse is undefined (C6), and the domain model §8 still has a role check (C3). |
+| B7 | **Closable with a stated limit** | R1.37a-f are present and hinge on WiPay, as stated. The lapse rule says nothing about seats (C6). |
+| B8 | **Closable with a stated limit** | R1.44, R1.45 and §9 item 6 are present, and legal readings are labelled unverified by design. The chatbot added under D9 collides with Rule 15/N8 and the register (C4). |
+| B9 | **Closable with a stated limit** | R1.29 is per-tenant and R1.26 records over-payments. But the "credit kept on the client" and "refund recorded" that R1.26 relies on are entities nobody has designed (C2), and per-tenant keys create C1. |
+| B10 | **Open, consistently, with one gap** | The header, R1.9, §9 item 8 and §12 all say the GCT design is owed. But R1.24, R1.22b, R1.24b, the domain model §6.2a and ADR 0025 still describe the tax-inclusive ceiling with no pointer to D7, and R1.9's list of questions omits variations and the net/gross comparison (C2). |
+| B11 | **Closable** | §10 and R1.42 are repaired. The web-launch walkthrough's instrument is C5. |
+| B12 | **Closable** | All four files carry a "Superseded for the rebuild" banner, and the PRD header names them. |
+| B13 | **Not closable** | R1.19 and R1.21a are right. But `docs/THREAT-MODEL.md` §4a, which B13 named, still has the row "The pre-rendered share page (R1.21a) is served without the API answering" (line 155) (C3). |
+| B14 | **Closable** | §3, §4 and §8 corrected; the index heads §5. |
+| B15 | **Closable with a stated limit** | W10 is present; the console's design is owed, as stated. |
+| B16 | **Closable with a stated limit** | R1.18, R1.21b and R1.21c are present. R1.21c's per-tier daily cap has no value, so it is not yet testable (the same class as B25). |
+| B17 | **Closable** | N11 has thresholds and an instrument. |
+| B18 | **Closable with a stated limit** | R1.20 and the design are amended. The features page still tells every prospect that the client "confirms with a code sent to them" (C9). |
+| B19 | **Closable** | §11 has a watcher and trigger on each item; the owner approved the numbers (34122ba). |
+| B20 | **Closable with a stated limit** | The migration holds, and planting the old CHECK makes 2 of the 3 tests fail. But the test names only the two words it replaced (C8). |
+| B21 | **Closable with a stated limit** | R1.20d is right in principle. Under D3, a "verified WiPay callback" is verified with the tenant's own key (C1), so the rule needs a verification the tenant cannot forge before W7. |
+| B22 | **Closable** | §9 items 6-10 are present. |
+| B23 | **Not closable** | R1.18d and R1.18f are amended. But the domain model §8 (lines 506-511) and the threat model §4a (line 153) still say revocation wipes the store "when it next connects", and the threat model still prefers "a local store with a maximum age" (C3). |
+| B24 | **Closable** | All three twins corrected with dated notes (register §1 and §6 item 4, ADR 0023 Consequences, domain model `client_payment` row, BRIEF-STATUS §19 row). |
+| B25 | **Closable** | Values stated; the 30-day expiry was approved by the owner (34122ba). |
+| B26 | **Closable** | R1.20c moved to R2; R1.25a and R1.38 present. |
+| B27 | **Closable** | Status block rewritten; BRIEF-STATUS item 3 and the domain model header corrected. |
+| B28 | **Closable** | R1.30b-c and the four documents now name `app_credential.email` and make the equality guard a precondition. |
+
+### Findings
+
+## C1 · With each tenant on its own WiPay account (D3), the secret that "verifies" a WiPay callback belongs to the tenant, so the tenant can forge the grade-6 deposit and the "paid" state that R1.20d says only a provider can produce — severity: major
+
+**Where:** `docs/PRD.md` (R1.20d, R1.29, R1.20i), `docs/adr/0027-prd-review-5-decisions.md` (D3),
+`docs/adr/0028-web-first-then-mobile.md` (decision 3), `docs/design/acceptance-evidence.md` §4.2 (grade 6 row),
+`original-app/apps/api/src/payments/wipay.service.ts`, `docs/THREAT-MODEL.md`
+
+**The claims under attack.** R1.20d: "Only a payment a provider confirms — in R1, a verified WiPay callback
+(R1.29) — is `deposit_paid`, grade 6". R1.29: "we create the link with the tenant's credentials and verify
+WiPay's callback, which is what makes a deposit grade 6". R1.20i: "The grade measures who witnessed the
+acceptance".
+
+**Why it does not hold.** The only WiPay integration on record verifies a callback as
+`md5(transaction_id + total + API key)`, and its own comment says "The API key is the ONLY secret in that
+recipe" (`wipay.service.ts:126-153`). Under D3 the API key is the **tenant's**: they hold it, and they
+paste it into their Pryvis settings (ADR 0028 decision 3). So the party that grade 6 is meant to bind can
+compute a valid callback for its own invoice. Executed against that recipe, from a scratch script with a
+synthetic key (nothing committed):
+
+```
+$ node forge.mjs      # verify() is verifyCallback's logic; the key is the one the tenant holds
+forged callback verifies: true
+```
+
+**CONFIRMED** for the recipe on record. **PLAUSIBLE** for WiPay's live API: the old code says the recipe
+"must be confirmed against the current WiPay JM API docs", and I could not reach WiPay. The consequence is
+J5's doctrine (B21) one rung up again: a tenant-made artefact is graded 6, and an invoice can read "paid" with
+no money moved. Before D3 the key was ours, so this was not possible; the amendment created it. Neither the
+threat model nor R1.29 has a row for the case where the tenant holds the verification key. R1.29 says only
+that the credentials are "a secret held as one".
+
+**Recommendation.** Before W7 is built, R1.20d should require a confirmation the tenant cannot produce. For
+example, a server-to-server transaction-status query to WiPay made by us, with the result recorded as the
+evidence, never the callback body alone. If WiPay offers no such query, grade 6 must not be awarded from a
+per-tenant account, and R1.20d should say so. Add a threat-model row for tenant-held payment credentials:
+storage, the forgery above, and what a database compromise yields. This is a question for WiPay, not a new
+owner decision.
+
+## C2 · The tax-exclusive ceiling (D7) is written into R1.9 alone; R1.24, R1.22b, R1.24b, the domain model and ADR 0025 still define the ceiling as the tax-inclusive accepted total, and R1.9's list of questions for the GCT design omits the two that decide the arithmetic — severity: major
+
+**Where:** `docs/PRD.md` (R1.9, R1.22a, R1.22b, R1.24, R1.24b, R1.26, §4 line 139),
+`docs/design/domain-model.md` §6.2a and its `invoice` row, `docs/design/scope-reduction.md:55`,
+`docs/adr/0027-prd-review-5-decisions.md` (D7),
+`new-app/db/migrations/20260925120000_documents_core/migration.sql:607` and
+`20260927130000_balance_open_takes_lock/migration.sql:47`
+
+**The claims under attack.** R1.9: "the invoicing ceiling is **tax-exclusive** — accepted subtotal plus
+recorded variations". R1.24, "the most important arithmetic invariant": the invoiced figure may never exceed
+its "**accepted total** plus recorded variations". R1.22b: "the ceiling is `accepted_total +
+variations_total`". R1.24b: "`accepted_total_minor` is a copy of the accepted issue's frozen **total**".
+
+**Why it does not hold.** These are two definitions of one invariant, and the built code follows the
+second: `issue_balance_open()` copies `q."total_minor"`, and `quote_issue` has a CHECK that `total_minor =
+subtotal_minor + tax_minor`. R1.9 admits the code is tax-inclusive. R1.24, R1.22b and R1.24b carry no forward
+note, though the domain model §6.2a and `scope-reduction.md:55` both restate "the accepted total". Repeating
+the ceiling in prose in two places is the defect G1 and H1 found twice before. A builder of W7 reading R1.24
+alone builds the old ceiling.
+
+More substantive: R1.9 lists what the GCT design must answer (a deposit's tax, registration, tax-invoice
+content, credit notes). It does not ask the two questions D7 itself creates:
+
+1. **Are variations net or gross?** R1.22a prices a variation's lines "the same way a quote is", and quote
+   lines carry a tax treatment. Under a tax-exclusive ceiling a variation's total has to be net, or the
+   ceiling mixes bases.
+2. **Is the invoiced figure compared with the ceiling net or gross?** `issue_balance_apply()` sums
+   `invoice.amount_minor`, which has no tax split. Under D7 that sum has to be the net part. Otherwise every
+   GCT-registered tenant's final invoice is refused for the amount of its own tax.
+
+Also unowned: R1.26 resolves an over-payment by "a refund recorded, or a credit kept on the client". Neither a
+refund nor a client credit balance is an entity in the PRD or the domain model, and the PRD does not say
+whether a kept credit can settle another invoice.
+
+Pre-existing and stale beside it: §4 line 139 says a variation "re-derives the accepted total", while R1.22b
+says no variation moves it.
+
+**Recommendation.** Before approval, add one dated line under R1.24 and R1.22b ("tax-exclusive from the GCT
+design, ADR 0027 D7; until that migration the built ceiling is tax-inclusive") and the same note in the domain
+model §6.2a. Add questions (1) and (2) and the over-payment entities to R1.9's list, owed with the GCT
+design. Correct line 139.
+
+## C3 · Four fixes reached the PRD and left their twins in the approved domain model and the threat model — offline creates and line merge (B5), wipe on revocation (B23), the pre-rendered share page (B13), and the role re-check (B6) — severity: major
+
+**Where:** `docs/design/domain-model.md` §8 (sync table, lines 484-495; lines 502-511; line 561-563),
+`docs/THREAT-MODEL.md` §4a (lines 153 and 155), `docs/PRD.md` (R1.4, R1.12, R1.18f, R1.18e, R1.21a, R1.22f)
+
+**The claims under attack.** The disposition rows for B5, B6, B13 and B23 read "Fixed". B5's and B23's
+findings named the domain model §8 and THREAT-MODEL §4a in their **Where** lines, and B13's named
+THREAT-MODEL §4a. The PRD header calls the domain model "Approved".
+
+**Why it does not hold.** `git show --stat c000c78` touched `domain-model.md` in three places (header,
+`user` row, `client_payment` row) and THREAT-MODEL only in §4b and §6. So:
+
+- Domain model §8 table: Directory offline "**read, and create new**"; `quote` draft "**full edit** — **Merge
+  by line**, with a review step"; `variation` offline "**create**". This contradicts R1.4, R1.12, R1.22f and
+  ADR 0027 D1. It is the sync engine B5 says was taken out of release 1.
+- Domain model lines 506-511 and THREAT-MODEL line 153: sign-out "revokes the session … and the local store
+  is wiped **when it next connects**". THREAT-MODEL adds that the working mitigation is "a local store with a
+  **maximum age**". R1.18f(a) now pushes before clearing, and R1.18d forbids any automatic destruction. This
+  is the B23 data-loss path, still written as the design.
+- THREAT-MODEL line 155: "**The pre-rendered share page** (R1.21a) is served without the API answering".
+  R1.21a now says nothing is pre-rendered.
+- Domain model lines 561-563: re-check that the user is "in a **role** that still permits sealing". R1.18e
+  says R1 has no roles.
+
+CONFIRMED by reading the files at HEAD (line numbers above).
+
+**Recommendation.** Before approval, amend the four places with dated notes pointing at ADR 0027 D1, D5 and
+D12 and at R1.21a (Rule 1.9). Then B5, B13 and B23 can be re-checked for Closed.
+
+## C4 · The support chatbot (D9, R1.38) sends what a signed-in person types to the Claude API, so "none is ever sent to a model" cannot be met, and the register and privacy notice still say the product never uses Claude at runtime — severity: major
+
+**Where:** `docs/PRD.md` (R1.38, N8), `docs/RULES.md` Rule 15, `docs/SERVICE-REGISTER.md` §2 (Anthropic row),
+`docs/THREAT-MODEL.md` (line 54, line 142), `new-app/web/content/legal.ts` (processors, lines 55-62),
+`docs/TIERS.md:59`, `docs/adr/0027-prd-review-5-decisions.md` (D9)
+
+**The claims under attack.** R1.38: the chatbot "**sees no tenant or client data** — none is ever sent to a
+model (Rule 15, N8)". The register's Anthropic row: "Holds personal data: **Never**"; "**nothing in the
+product depends on it at runtime**". The privacy notice lists four processors: Neon, Vercel, Resend and
+WiPay.
+
+**Why it does not hold.** A chatbot's input is free text typed by a tenant. A contractor asking "why didn't
+my quote to <client name> at <address> send?" has sent client personal data to the model, and the chatbot
+cannot prevent that by construction. R1.38 names no redaction step, and no test could show "none is ever
+sent". Rule 15 and N8 are absolute ("ever"). The THREAT-MODEL line 142 itself grades the existing control as
+"**PROCESS** — a discipline, not yet a technical control", and that was written for developer use, not for a
+public input box. Meanwhile three documents were left saying the product does not use Claude at runtime. The
+register row is Rule 18's sub-processor record, and the privacy notice is the public list of processors. A
+chatbot in production with neither updated is "a defect, not a paperwork oversight" (Rule 18).
+
+CONFIRMED by reading the files at HEAD. That users will type personal data is judgement.
+
+**Recommendation.** Before approval, choose and state one (a decision for the owner, with options below):
+(a) the chatbot input is redacted before sending, and R1.38 names the redaction and its test, with Rule 15's
+wording kept; (b) R1.38 says plainly that a person's own question is sent to Anthropic, Rule 15 and N8 are
+amended through Rule 23 for that case, and the register, privacy notice and threat model gain the row; or
+(c) the chatbot leaves R1. **Recommended (judgement): (c)** for the web launch. Email support is decided and
+enough, and the chatbot's budget is not set anyway (§9 item 10).
+
+## C5 · ADR 0028 (web app first, online) left release-1 sentences that assume offline at the first launch, and created an undefined case at the free limit — severity: major
+
+**Where:** `docs/PRD.md` (§4 lines 69-71, R1.4, R1.8, R1.18 marker, R1.18c, R1.18g-j, R1.32, R1.32a-b),
+`docs/adr/0028-web-first-then-mobile.md`, `new-app/web/content/site.ts`
+
+**The claims under attack.** §4: "every requirement marked **[mobile]** below applies from its launch" (so
+everything unmarked applies at web launch). The R1.18 marker: "on the web app a seal is made online and
+**numbered at once**".
+
+**Why it does not hold.** Six markers exist (`grep -c "\[mobile" docs/PRD.md` → 6). Unmarked and wrong at
+web launch:
+
+1. **R1.4**: "Everything in W1 is **readable offline**". It is unmarked. ADR 0028's rejected alternative is
+   exactly an offline-capable web app, so R1.4 demands at web launch what the owner rejected.
+2. **R1.8**: the requirement is now "online in the web app at web launch", but the instrument still names
+   only "**the network — aeroplane mode**" and "app cold-started". A web-launch walkthrough in aeroplane mode
+   fails by definition, and the web run has no named network or device state. This is G10's "naming three of
+   four" again, which R1.8's own text calls "how a hope … survives its own fix".
+3. **§4 lines 69-71**: "So release 1 cannot quietly be online-only — that would make the site an over-claim".
+   It still quotes the site's Pro line as "**Offline use on your phone**", which the site has not said since F5
+   (`grep "Offline use on your phone" new-app/web/content/site.ts` → no match). The first launch is now
+   online-only, and that is the owner's decision.
+4. **The free limit at web launch is undefined.** "Numbered at once" means a Free tenant's fourth job of
+   the month is refused at numbering, online. R1.32 still justifies metering at numbering because "sealing
+   happens offline". R1.32a-b describe the refused seal as a sync event that waits in a list. And R1.18d,
+   which keeps such a seal from being destroyed, is now mobile-only. On the web it is not stated whether the
+   fourth job is refused before sealing or sealed and blocked, or what survives. §10's demand signal is "a
+   fourth job refused", so the measure that tests the bet has no defined event at web launch.
+5. **R1.18c and R1.18g-j are mobile-only**, but Pro has about three members on the web. The schema already
+   refuses a second seal of one revision (`quote_issue_quote_revision_key` on (tenant_id, quote_id,
+   revision), `20260926180000_tenant_composite_keys/migration.sql:180`). The PRD no longer says what the
+   second member sees, or whether their priced snapshot is kept as a `rejected_seal`.
+
+CONFIRMED by reading and the greps shown.
+
+**Recommendation.** Before approval: mark R1.4 [mobile] (the web app reads online); give R1.8 a web
+variant with all four parameters; rewrite §4's opening paragraph to ADR 0028; and state the web-launch
+behaviour at the free limit and on a second member's seal. Recommended (judgement): the seal is kept and
+blocked exactly as on mobile, so one rule serves both.
+
+## C6 · D5 gives Pro "about three" users and D4's lapse rule drops a tenant to Free's one, and nothing says what happens to the other members — the seat number itself is stated three ways — severity: major
+
+**Where:** `docs/PRD.md` (§7 Users row, R1.18c, R1.18e, R1.37c-d), `docs/TIERS.md:52`,
+`new-app/web/content/site.ts` (Pro "Up to 3 users"), `docs/adr/0027-prd-review-5-decisions.md` (D4, D5)
+
+**The claims under attack.** R1.37c: "**everything already created stays readable**". §7: Users — Free 1,
+Pro "**about 3**". R1.18c: "Pro has **up to three**". Site: "**Up to 3 users**".
+
+**Why it does not hold.** A lapsed Pro tenant with three members is on Free, which has one user. R1.37c-d
+cover data, reminders, links and the meter, but not members. Undefined: which member keeps access (the
+owner?); whether the others can still sign in and read the history R1.37c promises; and, from the mobile
+launch, what R1.18e's "the user is still an active member" re-check does to the unsynced seals on a
+deactivated member's phone. Refusing them destroys nothing (R1.18d), but a refusal for membership is not one
+of the refusal kinds R1.18e or the domain model define. And "about 3" cannot be held as entitlement data
+(Rule 14 needs a number). The PRD's two sentences and the site disagree on whether it is approximate.
+
+CONFIRMED by reading.
+
+**Recommendation.** Before approval, decide the number (recommended: exactly 3, matching the site). Add to
+R1.37c what lapse does to members beyond one. Recommended (judgement): every member keeps read access and
+can record payments on invoiced money, nothing new is created, and no seal is refused for the lapse itself.
+
+## C7 · R1.40b's site guard does not check "every string": four over-claims planted at once all pass, through four separate gaps — severity: major (guard weakness; no current over-claim found on the site)
+
+**Where:** `new-app/web/test/site-guards.test.ts` (tests "sells nothing the current release does not
+deliver" and "says nothing on any page that the current release does not deliver"),
+`new-app/web/content/site.ts`, `docs/PRD.md` (R1.40b), this file's B4 disposition row
+
+**The claims under attack.** R1.40b: "every string in the site's copy and its legal text is checked against
+the phrases for undelivered features, so the next scope change cannot silently make **any page** untrue".
+B4's row: the guard "walks every string in the site and legal copy (planted: caught)".
+
+**Evidence, executed.** `site.ts` was copied to a backup outside the repository and four lines were planted
+together:
+
+1. Pro `includes`: `"Roles and approvals — who may send or discount (coming with the mobile app)"`. This is a
+   release-3 feature, but the tier test `continue`s on the mobile marker **before** it checks the
+   release number or the delivered set (`if (markedMobile.test(line)) continue;`, added in `9c4d86c`). So any
+   line wearing that marker passes, whatever release it is from.
+2. Pro `theLine`: `"Pro tracks retention and shows your job profit on every job."`. The site-wide walk
+   returns at `path === "pricing.tiers"`, so every tier's `who` and `theLine` is skipped, and the tier test
+   reads `theLine` only for a whole-tier marker.
+3. `home.points`: `"Works with no signal: price and seal a job offline today."`. The `undelivered` list has
+   no offline phrase, though ADR 0028 decision 2 makes the offline claim the one the site must hold back
+   until the mobile app.
+4. Features "Invoices" body: `"…hold and release retention today, and see at a glance who is late. Coming in
+   release 2: change orders."`. Any "coming in release N" anywhere in a string exempts every phrase in that
+   string.
+
+```
+$ npx vitest run test/site-guards.test.ts     # with all four planted
+      Tests  12 passed (12)
+# restored: cp backup → diff -q identical
+```
+
+Control, to show the detector works where it looks: with only `"Coming in release 2: "` removed from the home
+point about job profit, the run gave `× nothing untrue > says nothing on any page that the current release does
+not deliver`, `Tests 1 failed | 11 passed (12)`; restored and shown identical with `diff -q`.
+
+**Severity.** This is a guard weakness. The current copy carries none of the four, as far as I read it. But
+R1.40b and B4's row claim coverage the guard does not have (Rule 21.1).
+
+**Recommendation.** Narrow R1.40b's claim to what the guard checks, or close the four gaps: check the mobile
+marker only for lines in an explicit mobile-delivered set; walk `who` and `theLine`; add offline/no-signal
+phrases; and require the marker to qualify the matched phrase rather than appear anywhere in the string. Then
+re-plant all four.
+
+## C8 · The B20 test pins the two words it replaced: a CHECK that admits any other reset value passes it; and "the year in the prefix" does not give the number B20 described — severity: minor
+
+**Where:** `new-app/db/test/documents-core.test.ts` ("B20" block),
+`new-app/db/migrations/20260928010000_number_series_never_resets/migration.sql`, `docs/PRD.md` (R1.14),
+`new-app/db/migrations/20260927220000_privilege_model/migration.sql:73`
+
+**The claim under attack.** R1.14: "the schema accepts only `never`", tested in the B20 block, "planted:
+caught".
+
+**Evidence, executed.** Restoring the old CHECK (`IN ('never','yearly','monthly')`) makes the block fail
+(`Tests 2 failed | 1 passed | 137 skipped (140)`), so the plant claim holds. But planting
+`CHECK ("reset_rule" NOT IN ('yearly', 'monthly'))`, which admits `'quarterly'` or any other string, gives
+`Tests 3 passed | 137 skipped (140)`. Both plants were made from a backup outside the repository and restored,
+and `diff -q` showed them identical. The test asserts the text of the defect, not its shape ("only `never`").
+
+**PLAUSIBLE, not executed:** the workaround produces neither "INV-2027-0001" nor safety. There is one series
+per kind (`number_series_tenant_kind_key`), so changing the prefix to "INV-2027-" continues the count
+(INV-2027-0143). The application role holds UPDATE on every table by default
+(`privilege_model/migration.sql:73`) and nothing freezes `next_number`, so a tenant who also sets the start
+back to 1 to get "-0001" reproduces B20's refusal on the next allocation (`issue_number_series_number_key`).
+R1.14 does not say whether the prefix and start are editable after the first number.
+
+**Recommendation.** Add a case asserting an arbitrary value such as `'quarterly'` is refused. In R1.14, say
+the year-in-prefix continues the count, and that the start cannot move below the last allocated number
+(owed with the allocation code).
+
+## C9 · The features page tells every prospect their client "confirms with a code sent to them"; under the channel-aware bar (D6) a WhatsApp-only client gets no code in release 1 — severity: minor
+
+**Where:** `new-app/web/content/site.ts` (features, "Your client accepts on their phone"), `docs/PRD.md`
+(R1.20, R1.20b), `docs/RULES.md` Rule 20
+
+**The claim under attack.** "Send a link by WhatsApp or email. Your client sees a branded quote, **confirms
+with a code sent to them**, and accepts or declines."
+
+**Why it does not hold.** R1.20b: release 1 sends codes only by email, and D6 makes the default for a
+WhatsApp-only client grade 2 (a tapped link, no code). The sentence pairs WhatsApp with a code that release 1
+cannot send there. It is small, but it is public copy and Rule 20 applies to it. The guard cannot see it
+(C7). CONFIRMED by reading.
+
+**Recommendation.** "…confirms with a code sent to their email, where they have one, and accepts or
+declines." This is a public-copy edit for the owner to approve.
+
+## C10 · The service register was not updated for D2 and D9: Expo/EAS is recorded for Android only, no app-store accounts appear, and the Anthropic row denies runtime use — severity: minor
+
+**Where:** `docs/SERVICE-REGISTER.md` §2 (Expo / EAS row, Anthropic row), `docs/PRD.md` (§4 table, §9 item
+9, R1.38), `docs/adr/0027-prd-review-5-decisions.md` (D2, D9), `docs/RULES.md` Rule 18
+
+**The claim under attack.** ADR 0027 "Affects: … `docs/SERVICE-REGISTER.md`"; D2: "React Native with Expo,
+on **Android and iOS**".
+
+**Why it does not hold.** The Expo row reads "Builds and ships the React Native **Android** app". There is
+no row for the Apple or Google developer accounts that §9 item 9 makes a launch dependency. The Anthropic row
+is covered in C4. The register's only changes in `c000c78` were §1, §6 item 4 and §6 item 5. CONFIRMED by
+reading. The mobile app is not built, so this is a record to correct before the mobile launch, not a running
+service missing from the register yet.
+
+**Recommendation.** Amend the Expo row to Android and iOS and add the two store accounts, in the same change
+as C4's decision.
+
+### Decisions only the owner can make
+
+| # | Decision | Options | Recommendation (judgement) |
+|---|---|---|---|
+| E1 | The support chatbot and Rule 15 (C4) | (a) redact input and keep Rule 15 · (b) amend Rule 15/N8, register Anthropic as a processor, update the privacy notice · (c) chatbot out of R1 | **(c)** for the web launch; email support is already decided |
+| E2 | What grade 6 rests on under per-tenant WiPay (C1) | (a) a server-to-server status query we make, if WiPay offers one · (b) no grade 6 from per-tenant accounts in R1 | **(a)** if WiPay offers it, otherwise **(b)**; ask WiPay in the same conversation §9 item 1b already requires |
+| E3 | Pro seats and lapse (C6) | exactly 3 · "about 3" with a stated hard cap; on lapse: members keep read and collect access · only the owner keeps access | **Exactly 3**; every member keeps read and collect access on lapse |
+| E4 | The fourth Free job on the web (C5) | sealed and blocked, as on mobile · refused before sealing | **Sealed and blocked**, one rule for both |
+
+### What this re-read did not examine (Rule 21.4)
+
+- **WiPay's live API.** C1 rests on the recipe in the old application's code, which says it must be
+  confirmed against WiPay's docs. I could not reach WiPay.
+- **Jamaican law and GCT rules**: not verified, as before.
+- **The full gate.** I ran only the two tests the brief names, each with plants: the B20 block in
+  `new-app/db` (PGlite) and `site-guards.test.ts` in `new-app/web`. I did not run `npm run typecheck`, the
+  full `npm test`, lint, `next build`, the four checkers, or the real-PostgreSQL race suite. The brief's
+  runner ran all five expectations green at the start.
+- **Documents read in full:** the PRD, ADR 0027, ADR 0028, the brief, `site.ts`, and both guards. **Read in
+  part or by search:** this file's B-findings (all read), `TIERS.md`, ADRs 0022, 0023, 0025, the domain
+  model §4, §6.2-§6.2a and §8, THREAT-MODEL §4a, §4b and §6, SERVICE-REGISTER §1, §2, §5 and §6, `legal.ts`,
+  `RULES.md` 10-15 and 18-20, the B20 migration, the documents-core migration, and the privilege-model
+  grants. **Not read:** ADRs 0024 and 0026 beyond searches; `acceptance-responses.md`, `staff-mfa.md`,
+  `privilege-model.md`; `MISTAKES.md`; the diffs to `ARCHITECTURE.md`, `MILESTONES.md`, `PRICING.md` and
+  `ROADMAP.md` beyond their banners.
+- **R1.43-R1.49 and N11** were read for consistency, not attacked one by one for testability, except
+  R1.21c's cap (noted under B16).
+
+Every plant was made from a backup in my scratch directory, restored from it, and shown identical with
+`diff -q`. The WiPay script ran from the scratch directory. Nothing else in the repository was written.

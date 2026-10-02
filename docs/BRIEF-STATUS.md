@@ -709,6 +709,12 @@ accepts that marker (planted: an unmarked line is caught).
 commit-reviewer at **Opus** — product judgement over the plan of record, adversarial against the amendments
 themselves.* Brief `docs/briefs/2026-10-02-prd-review-5-reread.md`; `tools/run_brief.py` ran it at `34122ba`:
 5 of 5 expectations hold. Findings C1 onward, appended to `docs/PRD-REVIEW-5.md`.
+**Reported 2026-10-02 (after one interruption at a usage limit, resumed):** approve after named changes. B1-B28:
+14 closable, 11 closable with a stated limit, B5/B13/B23 not closable (twins left in the domain model and
+THREAT-MODEL §4a), B10 open as intended. New: C1-C10 (0 blocker, 6 major, 4 minor) — chiefly C1 (with per-tenant
+WiPay the tenant holds the callback key, so it can forge grade 6 and "paid"; the builder confirmed the old
+application's hash uses the account's own key) and C4 (the chatbot cannot meet Rule 15 as written). Four owner
+decisions raised (E1-E4).
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
