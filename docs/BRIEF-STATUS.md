@@ -872,6 +872,12 @@ revisited with I3. OA12 gains the `support@` alias.
 **Approved by the owner, 2026-10-02:** every recommendation SF1-SF8 and the chatbot route, including SF6's promise of
 one working day and SF7's 24 months. Next: the independent read, brief `docs/briefs/2026-10-02-support-design-read.md`.
 
+**Launched 2026-10-02: independent read of the support and feedback design.** *Delegation (Rule 16.5), declared before
+launch: commit-reviewer at **Opus** — a privacy boundary (what reaches a model, what staff may see) is judgement-class,
+and the owner relies on our judgement.* Brief `docs/briefs/2026-10-02-support-design-read.md`, run by
+`tools/run_brief.py` at HEAD `2696f0b`: 3 of 3 expectations hold. Findings SR1 onward, and agree/disagree on SF1-SF8 and
+§4, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
