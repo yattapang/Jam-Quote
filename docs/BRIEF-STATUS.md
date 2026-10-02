@@ -821,6 +821,11 @@ One owner action: a DNS record for `api.pryvis.com`.
 expert and rely on our judgement. So the independent read is briefed to challenge each recommendation as a second
 expert opinion, not only to find gaps. Brief `docs/briefs/2026-10-02-api-layer-read.md`.
 
+**Launched 2026-10-02: independent read of the API layer design.** *Delegation (Rule 16.5), declared before launch:
+commit-reviewer at **Opus** — security architecture is judgement-class, and the owner relies on our judgement.* Brief
+`docs/briefs/2026-10-02-api-layer-read.md`, run by `tools/run_brief.py` at HEAD `a67bb60`: 3 of 3 expectations hold.
+Findings AL1 onward, and agree/disagree on AP1-AP11, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
