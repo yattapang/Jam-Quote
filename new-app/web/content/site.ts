@@ -139,7 +139,7 @@ export const site = {
       // "I am covered", and the owner's position is that a typed name alone is not legal in a dispute.
       // What release 1 builds is a code-verified signature, so the copy can describe the mechanism
       // without claiming what it proves — that is the attorney's answer, not ours.
-      body: "Send a link by WhatsApp or email. Your client sees a branded quote, confirms with a code sent to them, and accepts or declines. No app to install and no account to create.",
+      body: "Send a link by WhatsApp or email. Your client sees a branded quote, confirms with a code sent to their email where they have one, and accepts or declines. No app to install and no account to create.",
       },
       {
         title: "Invoices and what you are owed",
@@ -148,7 +148,7 @@ export const site = {
       {
         // Release 2 (PRD §8; review 5 finding B4): marked in both strings, because the guard reads each
         // string on its own.
-        title: "Did the job make money? (coming in release 2)",
+        title: "Coming in release 2: did the job make money?",
         body: "Coming in release 2: put purchases and labour against the job as they happen and compare them with what you quoted. The answer is usually interesting and occasionally uncomfortable.",
       },
       {
@@ -156,7 +156,7 @@ export const site = {
         body: "Quoting happens on a site, standing up, in sunlight, on mobile data. That is what this is designed for, not a desk.",
       },
     ] satisfies readonly Feature[],
-    next: "Coming in release 2: a number at the gate with no signal, change orders as their own signed documents, retention tracking, and seeing whether a job made money. Supplier price comparison follows with the Business tier.",
+    next: "Coming in release 2: a number at the gate with no signal, change orders as their own signed documents, retention tracking, and seeing whether a job made money; supplier price comparison follows in release 3, with the Business tier.",
   },
 
   pricing: {

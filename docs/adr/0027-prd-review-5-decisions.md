@@ -8,6 +8,8 @@
   marketing site's copy, `docs/THREAT-MODEL.md`, `docs/SERVICE-REGISTER.md`. The PRD amendments are owed
   and tracked against review 5's findings.
 - **Delegation (Rule 16.5):** Opus — product decisions over the plan of record.
+- **Amended by:** ADR 0028 (D2's timing: web first) and ADR 0029 (D3: a payment is trusted only when our server
+  confirms it with WiPay; D5: exactly 3 users; D9: no chatbot at the web launch).
 
 ## Context
 

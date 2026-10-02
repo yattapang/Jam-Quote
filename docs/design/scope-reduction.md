@@ -53,7 +53,7 @@ title — **there is no way to reduce scope below what is invoiced**:
 **The invoiced figure the ceiling is compared with becomes net of credit notes.** For each issue: the sum,
 over invoices that are not voided, of the invoice's amount less the credit notes against it. The ceiling
 itself — `issue_ceiling_minor()` — does not change: it is still the accepted total plus recorded
-variations, and nothing here raises it.
+variations, and nothing here raises it. *(Tax basis, 2026-10-02 — ADR 0027 D7, finding C2: once the GCT design lands, the ceiling and every term compared with it are net of tax; until that migration, the built ceiling is tax-inclusive.)*
 
 **The remedy is one transaction:** credit the excess against an invoice, then record the negative
 variation. In the example: a credit note of 10,000, then the −20,000 variation — invoiced 80,000, ceiling

@@ -2518,7 +2518,10 @@ describe("B20 · a number series never resets in release 1", () => {
   // The schema used to accept 'yearly' and 'monthly' and then refuse the first reset, because one series
   // per kind and (series, number) uniqueness leave no room for a second 1 (PRD review 5, B20; ADR 0027
   // D11). Only 'never' is accepted now; the year goes in the prefix.
-  it.each(["yearly", "monthly"])("refuses a series whose reset rule is %s", async (rule) => {
+  // "quarterly" and "" are not values anybody proposed: they are here so the test asserts the rule's shape
+  // ("only 'never'") rather than the two words it replaced — a CHECK of NOT IN ('yearly','monthly') passed
+  // the first version of this test (finding C8).
+  it.each(["yearly", "monthly", "quarterly", ""])("refuses a series whose reset rule is %j", async (rule) => {
     await expect(
       sql(
         `INSERT INTO number_series (id, tenant_id, document_kind, prefix, reset_rule, updated_at)

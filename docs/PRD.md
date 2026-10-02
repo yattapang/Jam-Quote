@@ -66,9 +66,12 @@ The eight steps the domain model is built from. Each becomes a workflow with acc
 
 ### The call: what "on the spot" has to mean in release 1
 
-The marketing site's own title is *"price the job while you are standing there"*, and its Pro tier
-lists **"Offline use on your phone"**. So release 1 cannot quietly be online-only — that would make
-the site an over-claim, which Rule 20 forbids and a guard already enforces on the copy.
+The marketing site's own title is *"price the job while you are standing there"*, and offline capture is
+the owner's own requirement (M13). **The owner has decided that release 1's first launch is an online web
+app, with offline sealing arriving in the mobile app that follows it** (ADR 0028), so until then the site
+marks its offline line "coming with the mobile app" — a site that sold offline use on day one would be the
+over-claim Rule 20 forbids. (Until 2026-10-02 this paragraph argued release 1 could not be online-only, citing
+a site line, "Offline use on your phone", that F5 had already removed — finding C5.)
 
 But a full offline sync engine is the single highest-risk component in the old application: unreviewed,
 untested at its seam, and the audit's top quiet-corruption risk. Building it first would put the
@@ -136,7 +139,8 @@ commonest event in construction — the client adds a gate — was unrepresentab
 
 Split by cost, which is where the original reasoning was right:
 
-- **In R1: a priced variation against an accepted issue**, which re-derives the accepted total. Cheap,
+- **In R1: a priced variation against an accepted issue**, which re-derives the ceiling (not the accepted
+  total, which no variation moves — R1.22b; corrected 2026-10-02, finding C2). Cheap,
   and it is what R1.24 needs in order to mean anything.
 - **In R2: the client-signable change-order flow** — variation acceptance with its own record and PDF.
   That is the expensive half, and it is W5 reused.
@@ -162,7 +166,8 @@ R1.41, R1.42.
 - **R1.2** A material's cost is a *current* price and is expected to change. **Nothing issued ever
   reads it live** (§7 of the domain model).
 - **R1.3** A client book, soft-deleted only: a client named on an issued quote can never vanish from it.
-- **R1.4** Everything in W1 is **readable** offline. Creating and editing it needs a connection in R1;
+- **R1.4** **[mobile]** Everything in W1 is **readable** offline in the mobile app; the web app reads it
+  online (ADR 0028, finding C5). Creating and editing it needs a connection in R1;
   offline creates are R2 (ADR 0027 D1).
 
 ### W2 · Recipes — the differentiator
@@ -184,7 +189,9 @@ R1.41, R1.42.
   carries, not the fastest one to hand;
   **the state** — signed in, catalog synced, app cold-started and the recipe never opened this session, so
   no warm cache flatters the number;
-  **the network** — aeroplane mode;
+  **the network** — aeroplane mode for the mobile app; **for the web app at web launch, Chrome's built-in "Fast 3G"
+  throttling preset**, with its exact values written into each run record, in the phone's own browser,
+  signed in, the page loaded fresh with no cache (finding C5);
   **what counts** — every wait the app imposes; not time the user spends thinking or typing.
   Run per release and recorded. Naming three of four and calling it measured is how "a hope in the grammar
   of a requirement" survives its own fix.
@@ -192,10 +199,13 @@ R1.41, R1.42.
   **Decided (ADR 0027 D7, finding B10):** the invoicing ceiling is **tax-exclusive** — accepted subtotal plus
   recorded variations — and GCT is computed **per invoice** at the rate in force when it is issued, so a
   rate change after acceptance cannot push a final invoice over the ceiling. **Owed before W3 or W7 is
-  built:** a GCT design, approved by the owner, answering what tax a deposit or progress invoice carries,
+  built:** a GCT design, approved by the owner, answering **whether a variation's total is net or gross**,
+  **whether the invoiced figure compared with the ceiling is net or gross** (it must be net, or a registered
+  tenant's final invoice is refused for its own tax — finding C2), what tax a deposit or progress invoice carries,
   what "registration respected" does to a non-registered tenant's lines, what a tax invoice must show (the
-  supplier's TRN and the GCT amount separately, on our current reading), and what a credit note does to tax
-  — with a migration giving `invoice` and `credit_note` tax fields and `tenant` its GCT registration and
+  supplier's TRN and the GCT amount separately, on our current reading), what a credit note does to tax, and **the refund and client-credit records** an
+  over-payment resolves into (R1.26), including whether a kept credit can settle another invoice (finding
+  C2) — with a migration giving `invoice` and `credit_note` tax fields and `tenant` its GCT registration and
   TRN. It is checked against Tax Administration Jamaica's published guidance now and **reviewed by an
   accountant before launch** (§9). The ceiling as built is tax-inclusive (`total_minor`), so the design
   changes the most important invariant; it is a migration, not a sentence.
@@ -217,7 +227,9 @@ R1.41, R1.42.
   failure this product cannot afford.
 - **R1.14** Numbers come from a per-tenant, per-document-kind series with a prefix and a start,
   allocated atomically into an insert-only `issue_number` row. **A series never resets in R1** (ADR 0027
-  D11, finding B20): a tenant who wants the year in the number puts it in the prefix ("INV-2027-"), and
+  D11, finding B20): a tenant who wants the year in the number puts it in the prefix ("INV-2027-") —
+  **the count continues** (INV-2027-0143, not -0001), and **the start can never be moved below the last
+  number allocated** (owed with the allocation code, finding C8) — and
   the schema accepts only `never` (migration `20260928010000_number_series_never_resets`) — it used to store
   `yearly` and then refuse the first reset. **Gapless per series in R1**, and a number is never reused.
   Gaplessness is a claim about allocation code not yet written; it is proved the way R1.24c proves the
@@ -260,8 +272,11 @@ R1.41, R1.42.
   server's. Default validity **30 days** (approved by the owner, 2026-10-02), set per tenant and per
   quote. **An expired issue cannot be
   accepted**; the tenant extends it by issuing the next revision (finding B25).
-- **R1.18** **[mobile — R1.18 to R1.18j apply from the mobile app's launch; on the web app a seal is made
-  online and numbered at once, ADR 0028]** **Sealing works with no network** and the snapshot is held in a durable outbox that survives
+- **R1.18** **[mobile — R1.18, R1.18a, R1.18b, R1.18d's offline outbox, R1.18e and R1.18f apply from the
+  mobile app's launch. On the web app a seal is made online and numbered at once unless the free limit
+  blocks it; R1.18c, R1.18g-j and R1.32a-c apply on the web too — a second member's seal of a revision
+  already sealed is kept as a rejected seal, and a blocked seal is kept, exactly as on the phone (ADR 0029
+  E4, finding C5)]** **Sealing works with no network** and the snapshot is held in a durable outbox that survives
   the app closing, shows what is pending, and is encrypted at rest on the device (R1.18f). **Numbering
   happens at sync; delivery never happens on its own** (ADR 0027 D10, finding B16): at sync the issue is
   numbered and becomes **ready to send**, and the contractor taps send — by email, or by sharing to
@@ -274,7 +289,7 @@ R1.41, R1.42.
 - **R1.18c** **Sealing claims the quote (G4).** Two devices holding the same draft can both seal it —
   neither push conflicts, because each is an append — which would give one job two issued identities.
   So the server enforces **one sealed issue per (quote, revision)**, and the second device is refused
-  and told who sealed this job — another member of the tenant (Pro has up to three, ADR 0027 D5) or
+  and told who sealed this job — another member of the tenant (Pro has exactly three, ADR 0029 E3) or
   another of the same person's devices. A revision cannot be created offline.
 - **R1.18g** **A refused seal is kept as a `rejected_seal`, not as an issue awaiting renumbering (H7).**
   "Offered as a revision" was impossible three ways: renumbering is an UPDATE on a sealed document;
@@ -391,7 +406,11 @@ R1.41, R1.42.
   it above the one grade with an uncontrolled third party in the chain.
 - **R1.20d** A **paid deposit is recorded as corroboration** of acceptance, linked to the issue. A client
   who pays 40% has behaved in a way no typed name matches, and R1.23 already builds the deposit. **Only a
-  payment a provider confirms — in R1, a verified WiPay callback (R1.29) — is `deposit_paid`, grade 6. A
+  payment a provider confirms is `deposit_paid`, grade 6 — in R1, a WiPay payment that **our server has
+  confirmed with WiPay directly**, by a server-to-server query whose answer is recorded as the evidence,
+  never the callback body alone (ADR 0029 E2, finding C1). The callback is signed with the tenant's own WiPay
+  key, which the tenant holds, so on its own it proves nothing the tenant could not forge. If WiPay offers
+  no such query, a payment through a tenant's own account is `tenant_recorded`, grade 1. A
   deposit the tenant records by hand (R1.26) is `tenant_recorded`, grade 1, and the UI says "recorded by
   you"** (finding B21; R1.20i's test applied one rung up). The schema accepts any non-null external id, so
   the writing code is what holds this, and its test is a planted hand-recorded deposit that must not grade
@@ -441,7 +460,9 @@ R1.41, R1.42.
 - **R1.22b** Recording one **re-derives the ceiling** for that issue — not the accepted total, which no
   variation moves (R1.24b). The distinction matters and getting it wrong was finding H3: the
   ceiling is `accepted_total + variations_total`, and a variation moves the second term. Variations are
-  immutable once recorded; a mistake is corrected by another variation.
+  immutable once recorded; a mistake is corrected by another variation. **Tax basis (ADR 0027 D7, finding
+  C2):** once the GCT design lands, the ceiling and every term in it — the accepted figure, variations and the
+  invoiced total — are **net of tax**; until that migration, the built ceiling is tax-inclusive.
 - **R1.22c** Revising an accepted issue **once money has moved on it** — any invoice or variation — is
   refused; the path is a variation, or for a wrong document, withdrawal first (R1.15b). An accepted issue
   with nothing against it may be revised, and its ceiling falls to 0 (R1.15). What is impossible is
@@ -461,7 +482,8 @@ R1.41, R1.42.
 - **R1.24** The invoiced figure against an accepted issue may never exceed its **accepted total plus
   recorded variations** (R1.22b). **This is the most important arithmetic invariant in the product.**
   What counts as invoiced is defined once, in `issue_balance_apply()`, and not restated here (ADR 0025):
-  since J4 a credit note lowers it (`docs/design/scope-reduction.md`).
+  since J4 a credit note lowers it (`docs/design/scope-reduction.md`). **Tax-exclusive once the GCT design
+  lands** (R1.9, ADR 0027 D7); until that migration the built ceiling is tax-inclusive (finding C2).
 - **R1.24d** **"Recorded", not "accepted", and the weakness is stated rather than hidden (G1).** In
   release 1 a variation has no client signature, so recording one **does** let the contractor raise their
   own invoiceable ceiling. R1.24 therefore protects against *mistake and drift*, not against a contractor
@@ -522,11 +544,14 @@ R1.41, R1.42.
   stop when the tenant's subscription lapses (R1.37c).
 - **R1.29** WiPay card payment links (Pro), **paid into the tenant's own WiPay merchant account** (ADR
   0027 D3, finding B9). The client pays the contractor directly; **Pryvis never holds client money** — we
-  create the link with the tenant's credentials and verify WiPay's callback, which is what makes a deposit
-  grade 6 (R1.20d). The feature is available once the tenant connects their account, **in their Pryvis
+  create the link with the tenant's credentials, and **an invoice is marked paid through WiPay only after
+  our server confirms the transaction with WiPay** (R1.20d, ADR 0029 E2): the callback is signed with the
+  tenant's own key, so it alone could be forged by the tenant (finding C1). The feature is available once the tenant connects their account, **in their Pryvis
   account settings**; **Pryvis's own WiPay account takes only subscription payments to us** (ADR 0028); each tenant's
-  credentials are a secret held as one (a register row is owed, Rule 18). Owed before W7 is built: confirm
-  WiPay offers merchant accounts to small Jamaican businesses, and what its onboarding asks of them (§9).
+  credentials are a secret, **encrypted at rest with a key that is never in the database** (as TOTP secrets
+  are, ADR 0021) — a register row and a threat-model row are owed (Rule 18; `docs/THREAT-MODEL.md`). Owed
+  before W7 is built: confirm WiPay offers merchant accounts to small Jamaican businesses, what its
+  onboarding asks of them, and **whether it offers a transaction-status query** (§9).
 
 ### W9 · Subscribe — how we get paid
 - **R1.30** Self-service sign-up on the website, free tier, no card (ADR 0015).
@@ -574,12 +599,16 @@ R1.41, R1.42.
 - **R1.32** Free tier limit: **3 distinct jobs *numbered* per calendar month** (ADR 0023) — Jamaica's
   month, `America/Jamaica` (ADR 0007 decision 4, finding B25) — enforced
   server-side. **The meter counts distinct QUOTES, not numbers allocated** (finding H20): a revision is a new
-  issue taking a new number from the same series, so counting numbers would charge for revisions. Not counted on sealing — sealing happens offline and metering it would mean trusting a
-  client-side count or refusing work already done at a client's gate. Not counted on sending. **Revisions
+  issue taking a new number from the same series, so counting numbers would charge for revisions. Not counted on sealing — on the phone sealing happens offline, and metering it would mean trusting a
+  client-side count or refusing work already done at a client's gate. **On the web app the same rule
+  holds** (ADR 0029 E4): a fourth job in the month is sealed and **held blocked**, kept and listed exactly as
+  R1.32a-c describe, never refused before sealing and never lost — so §10's "a fourth job refused" is the
+  same event on both. Not counted on sending. **Revisions
   and declines are free**: charging for a revision meters care, and billing for a declined quote teaches
   contractors to quote less.
 - **R1.32a** **The cross-month case has a test and a message.** A contractor who seals four jobs offline on
-  a Sunday gets three numbered and one refused when they sync, in the month of *syncing*. The refused
+  a Sunday gets three numbered and one refused when they sync, in the month of *syncing* (on the web app, the
+  fourth is blocked at the moment it is sealed). The refused
   snapshot is **kept, never destroyed**, and the message explains what happened rather than reporting a
   sync error. Upgrading lifts the limit; the tenant then numbers each blocked seal (R1.32b). (This said
   "upgrading releases it", the opposite of R1.32c eleven lines on — finding B2; H12's closure had left it.)
@@ -595,7 +624,7 @@ R1.41, R1.42.
   dissolve: **the tenant numbers it, in whatever order they choose, against the month they do it in
   (ADR 0023), and the tenant decides.**
 - **R1.32c** A blocked seal **does not expire** (R1.18d already forbids deleting an unsynced or unnumbered
-  seal), and upgrading lifts the limit rather than releasing the seals — because releasing them would be
+  seal; on the web a blocked seal is held on the server under the same rule), and upgrading lifts the limit rather than releasing the seals — because releasing them would be
   numbering on the tenant's behalf, which R1.32b just refused to do.
 - **R1.33** Manual payment: the tenant uploads a deposit receipt with amount, date, bank and reference.
   Status *submitted*.
@@ -620,7 +649,9 @@ R1.41, R1.42.
   created stays readable**; **money already invoiced can still be collected** — payments recorded and open
   links paid; **reminders stop**; nothing new that is Pro can be created; and **export always works**
   (R1.43). Withholding a client's money owed to the contractor would be the "locked out of their own
-  history" outcome `TIERS.md` §2a warns of. Whether a lapsed tenant may still price with recipes beyond
+  history" outcome `TIERS.md` §2a warns of. **Every member keeps access** (ADR 0029 E3, finding C6): all
+  three can still sign in, read everything and record payments on money already invoiced; only creating
+  new work follows Free's limits; and **no seal is refused because of the lapse itself**. Whether a lapsed tenant may still price with recipes beyond
   Free's one is owed with the prices.
 - **R1.37d** A tenant who lapses mid-month is on Free's limit for the rest of that month, counting the jobs
   already numbered in it.
@@ -631,12 +662,12 @@ R1.41, R1.42.
   KYC'd to the owner's business (§9 item 1b).
 
 ### Cross-cutting
-- **R1.38** **Support in R1 is email, plus a chatbot** (ADR 0027 D9; in-app threads move to R2, finding
-  B26). The chatbot answers **only from our own help content** and **sees no tenant or client data** — none
-  is ever sent to a model (Rule 15, N8) — and hands the person to email for anything about their account.
-  It needs the help content to exist and the Claude budget to be set (§9); if the budget is not set before
-  launch, the chatbot follows R1 rather than delaying it. Staff access to a tenant's data is
-  capability-gated and audited (W10).
+- **R1.38** **Support in R1 is email** (ADR 0029 E1; in-app threads move to R2, finding B26). **No chatbot
+  at the web launch:** a chatbot's input is whatever a person types, which may name a client or an address,
+  and Rule 15 forbids sending tenant or client personal data to a model (finding C4). The chatbot remains the
+  owner's goal and is designed in the support-model options paper the original brief requires (§15), which
+  settles Rule 15 before anything is built. Staff access to a tenant's data is capability-gated and audited
+  (W10).
 - **R1.39** Every significant action is audited, atomically with the change it describes (ADR 0020).
 - **R1.40** A tenant can read their own audit trail — what we did to their account, not only what they
   did.
@@ -709,7 +740,7 @@ R1 ships **Free and Pro only**. Business is R3, and until then the site must not
 | Data export (R1.43) — also after a lapse | ✓ | ✓ |
 | Offline **sealing** (the core promise — every tier, ADR 0023; **with the mobile app**, ADR 0028) | ✓, and a seal past the monthly limit waits to be numbered rather than being lost (R1.32b) | ✓ |
 | Offline **issuing** (numbered at the gate) | — (R2) | — (R2, the Pro line when it lands) |
-| Users | 1 | **about 3**, no roles (ADR 0027 D5) |
+| Users | 1 | **exactly 3**, no roles (ADR 0029 E3) |
 
 **Open, and blocking the paid tier:** the **prices** are not set. The site shows no number by deliberate
 choice, and `new-app/web/test/site-guards.test.ts` enforces that much — it asserts no tier displays a
@@ -725,10 +756,13 @@ and R1.43 builds the export.
 
 - **R1.40a — the site says only what the current release delivers.** An undelivered feature is marked as
   coming, or absent. (The owner chose marking, for the tier lists.)
-- **R1.40b — a guard asserts it across the whole site**, not only the tier lists: every string in the
-  site's copy and its legal text is checked against the phrases for undelivered features, so the next scope
-  change cannot silently make any page untrue. It ships with a planted defect proving it fires (Rule 21.2).
-  (It read only the tier lists until finding B4.)
+- **R1.40b — a guard asserts it across the whole site**, not only the tier lists: every tier line must be
+  delivered, marked for a later release, or one of the named mobile-app lines; and every other string in the
+  site's copy and legal text — tier headings included — is read sentence by sentence for the phrases naming
+  undelivered features (offline capture among them), each passing only if **its own sentence** marks it
+  as coming later. **What it does not catch:** a claim worded in a way the phrase list does not name. It
+  ships with planted defects proving it fires (Rule 21.2). (It read only the tier lists until finding B4,
+  and four gaps were closed after finding C7.)
 
 ### The entity with a deadline — named because leaving it out was the finding (F13)
 - **R1.42** **§10's measures are instrumented in release 1, or they are not measures.** The signals need
@@ -833,8 +867,9 @@ Added by review 5 (B8, B22) and the owner's decisions (ADR 0027):
 9. **App-store developer accounts** for Android and iOS in the business's name, with their own
    verification lead times (ADR 0027 D2) — needed for the mobile app's launch, not the web launch (ADR
    0028).
-10. **A monthly spend limit for the support chatbot** (R1.38, ADR 0027 D9). The owner holds a Claude
-   developer account (ADR 0028); the limit is still to be set.
+10. **A monthly spend limit for Claude** — for maintenance now, and for the support chatbot once it is
+   designed (R1.38, ADR 0029 E1). The owner holds a Claude developer account (ADR 0028); the limit is still
+   to be set.
 
 ## 10. How we will know it worked
 

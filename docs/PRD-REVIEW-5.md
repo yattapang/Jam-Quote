@@ -22,7 +22,7 @@ the findings are on disk.
 | **B2** | major | **Fixed, re-review owed.** R1.32a's "upgrading releases it" removed; ADR 0023 decision 1 amended with a dated note. |
 | **B3** | minor | **Fixed, re-review owed.** Header cites ADR 0006; §12 cites ADR 0005/0006 and says the rule pack is owed in the rebuild. |
 | **B4** | blocker | **Fixed, re-review owed.** Site copy corrected (features, home, about, pricing intro, "coming next"); export built into R1 as R1.43; a new guard in `new-app/web/test/site-guards.test.ts` walks every string in the site and legal copy (planted: caught); §7 rewritten as current state. |
-| **B5** | blocker | **Fixed, re-review owed.** Owner's decision ADR 0027 D1 (seal-only offline) and D2 (React Native/Expo): §4, R1.4, R1.12, R1.18a, R1.22f-g, §8, §12 amended. |
+| **B5** | blocker | **Fixed, re-review owed.** ADR 0027 D1 (seal-only offline) and D2 (React Native/Expo), then ADR 0028 (web first, online; offline with the mobile app): §4, R1.4, R1.12, R1.18a, R1.22f-g, §8, §12 amended; the domain model §8 table and THREAT-MODEL §4a amended after the re-read (C3, C5). |
 | **B6** | major | **Fixed, re-review owed.** ADR 0027 D5: Pro has about three users, no roles; §7, `docs/TIERS.md` and R1.18c/e amended; the role clause applies from R3. |
 | **B7** | blocker | **Fixed, re-review owed.** ADR 0027 D4: W9 gains R1.37a (card upgrade, if WiPay supports it for our account), R1.37b (term and renewal), R1.37c (lapse), R1.37d-e. |
 | **B8** | major | **Fixed, re-review owed.** PRD R1.44 (data requests, redaction), R1.45 (breach response), §9 item 6 (attorney before launch, ADR 0027 D14); THREAT-MODEL §6 and the register's "normal and lawful" corrected. The legal readings themselves stay open until the attorney. |
@@ -30,7 +30,7 @@ the findings are on disk.
 | **B10** | blocker | **Open — decided, design owed.** ADR 0027 D7: tax-exclusive ceiling, GCT per invoice; R1.9 states what the GCT design must answer, and that it is owed before W3/W7 with an accountant's review before launch. |
 | **B11** | major | **Fixed, re-review owed.** §10 and R1.42 amended: Pro-only invoice signal, "active" defined, 30-day conversion window, three new signals, the 100% row replaced, a minimum cohort. |
 | **B12** | major | **Fixed, re-review owed.** `docs/ROADMAP.md`, `docs/MILESTONES.md`, `docs/PRICING.md`, `docs/ARCHITECTURE.md` marked superseded for the rebuild; the PRD header names them. |
-| **B13** | major | **Fixed, re-review owed.** R1.21a: at launch the API serves the share page and checks expiry and revocation on every view; nothing is pre-rendered at the edge; R1.19 states the link lifetime. |
+| **B13** | major | **Fixed, re-review owed.** R1.21a: at launch the API serves the share page and checks expiry and revocation on every view; nothing is pre-rendered at the edge; R1.19 states the link lifetime; THREAT-MODEL §4a's share-page row rewritten after the re-read (C3). |
 | **B14** | minor | **Fixed, re-review owed.** §3, §4 and §8 say recorded variations are R1 and signed change orders R2; an index of requirement numbers heads §5. |
 | **B15** | major | **Fixed, re-review owed.** W10 added (R1.46-R1.49): capabilities, no impersonation in R1 (ADR 0027 D9), a platform audit trail, the console's screens. The console's own design is still owed. |
 | **B16** | major | **Fixed, re-review owed.** ADR 0027 D10: nothing is sent at sync, the contractor taps send (R1.18, R1.21); R1.21b delivery outcomes and bounces; R1.21c opt-out and per-tier message caps. |
@@ -40,12 +40,22 @@ the findings are on disk.
 | **B20** | major | **Fixed, re-review owed.** ADR 0027 D11: migration `20260928010000_number_series_never_resets` accepts only 'never' (tested in `new-app/db/test/documents-core.test.ts`, "B20"; planted: caught); R1.14 amended and names the gaplessness test owed. |
 | **B21** | major | **Fixed, re-review owed.** R1.20d: only a provider-confirmed payment is grade 6; a hand-recorded deposit is grade 1; §7 says grade 6 needs Pro; the acceptance designs amended. |
 | **B22** | major | **Fixed, re-review owed.** §9 items 6-10 added: attorney, paid host, accountant, app-store accounts, the Claude budget. |
-| **B23** | major | **Fixed, re-review owed.** ADR 0027 D12: R1.18f separates an ordinary revocation (sign in, push first) from "this device is lost"; R1.18d widened to any automatic process. |
+| **B23** | major | **Fixed, re-review owed.** ADR 0027 D12: R1.18f separates an ordinary revocation (sign in, push first) from "this device is lost"; R1.18d widened to any automatic process; the domain model §8 and THREAT-MODEL §4a amended after the re-read (C3). |
 | **B24** | minor | **Fixed, re-review owed.** `docs/SERVICE-REGISTER.md` §1 and §6 item 4, `docs/BRIEF-STATUS.md`'s §19 row, ADR 0023's Consequences and the domain model's `client_payment` row corrected. |
 | **B25** | minor | **Fixed, re-review owed.** Values stated: R1.18b 3 days, R1.18d no limit for unsynced seals, R1.19 link lifetime, R1.17 expiry and its effect (30-day default approved by the owner), R1.24e mechanism, R1.32 Jamaica's month, R1.37e grace period. |
 | **B26** | minor | **Fixed, re-review owed.** ADR 0027 D13: R1.20c moved to R2; R1.25a retention billed net and "do not remind"; support is email plus a chatbot (R1.38, D9). |
 | **B27** | minor | **Fixed, re-review owed.** PRD status block rewritten; `docs/BRIEF-STATUS.md` item 3 marked superseded; the domain model's header corrected. |
 | **B28** | major | **Fixed, re-review owed.** R1.30b-c corrected and the equality guard made a precondition of sign-up; ADR 0022, ADR 0025 decision 5, the domain model's `user` row and THREAT-MODEL §4b corrected to match ADR 0015. |
+| **C1** | major | **Fixed, re-review owed.** ADR 0029 E2: R1.20d and R1.29 trust a per-tenant WiPay payment only after our server confirms it with WiPay; otherwise grade 1. Tenant credentials encrypted with a key outside the database; THREAT-MODEL §4.6 row and register rows added; whether WiPay offers the query is in §9. |
+| **C2** | major | **Fixed, re-review owed.** Tax-basis notes under R1.22b, R1.24, §4, the domain model §6.2a and `docs/design/scope-reduction.md`; R1.9's GCT list gains net/gross for variations and the invoiced figure, and the refund and client-credit records. |
+| **C3** | major | **Fixed, re-review owed.** The domain model §8 (offline table, wipe, role re-check) and THREAT-MODEL §4a (sign-out row, share-page row) amended to ADR 0027 D1/D12, ADR 0028 and R1.21a. |
+| **C4** | major | **Fixed, re-review owed.** ADR 0029 E1: no chatbot at the web launch; R1.38 is email; the chatbot goes to the support-model options paper (brief §15). TIERS and §9 item 10 amended; the register's Anthropic row stays "no runtime use". |
+| **C5** | major | **Fixed, re-review owed.** §4's opening rewritten to ADR 0028; R1.4 marked [mobile]; R1.8 names the web launch's network; ADR 0029 E4: a fourth Free job is sealed and blocked on the web as on the phone, and a second member's seal is kept as a rejected seal (R1.18 marker, R1.32, R1.32a-c). |
+| **C6** | major | **Fixed, re-review owed.** ADR 0029 E3: exactly 3 users (§7, R1.18c, `docs/TIERS.md`); R1.37c: every member keeps access on lapse and no seal is refused for the lapse itself. |
+| **C7** | major | **Fixed, re-review owed.** `new-app/web/test/site-guards.test.ts`: a mobile marker only on listed mobile lines; tier `who` and `theLine` walked; offline phrases added; a marker exempts only its own sentence. The reviewer's four plants re-planted one at a time: all caught. R1.40b states what it does not catch. |
+| **C8** | minor | **Fixed, re-review owed.** The B20 test refuses "quarterly" and the empty string too (the reviewer's NOT IN plant: caught); R1.14 says the count continues and the start cannot go below the last number. |
+| **C9** | minor | **Fixed, re-review owed.** The features page says the code goes to the client's email, where they have one. |
+| **C10** | minor | **Fixed, re-review owed.** `docs/SERVICE-REGISTER.md`: Expo/EAS for Android and iOS; Google Play and Apple developer rows; a row for each tenant's WiPay account; a secrets row for tenant WiPay credentials. |
 
 ## Summary for the owner (written after the findings below)
 

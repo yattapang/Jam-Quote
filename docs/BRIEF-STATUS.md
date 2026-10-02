@@ -716,6 +716,14 @@ WiPay the tenant holds the callback key, so it can forge grade 6 and "paid"; the
 application's hash uses the account's own key) and C4 (the chatbot cannot meet Rule 15 as written). Four owner
 decisions raised (E1-E4).
 
+**Owner's decisions, 2026-10-02 (ADR 0029):** E1 no chatbot at the web launch (support is email; the chatbot
+waits for the support options paper); E2 a per-tenant WiPay payment counts as third-party evidence only once
+our server confirms it with WiPay, else grade 1; E3 Pro has exactly 3 users, who keep access on lapse; E4 a
+blocked seal is kept on web and mobile alike. **C1-C10 fixed** (rows in review 5's disposition table): PRD,
+domain model §8 and §6.2a, scope-reduction design, THREAT-MODEL §4a and §4.6, TIERS, the acceptance design,
+the register, ADR 0027's pointer; the site guard's four gaps closed (the reviewer's four plants, each caught),
+the B20 test widened (the NOT IN plant, caught), one sentence of site copy.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

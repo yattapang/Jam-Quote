@@ -270,6 +270,12 @@ describe("nothing untrue", () => {
       "Export your data as CSV, any time",
       "Up to 3 users",
     ]);
+    // What the MOBILE app delivers, after the web launch (ADR 0028). A line may carry "(coming with the mobile
+    // app)" only if it is listed here: until finding C7 any line wearing that marker passed, whatever release
+    // it really belonged to — a release-3 feature marked "coming with the mobile app" sailed through.
+    const deliveredWithMobile = new Set([
+      "Works with no signal — price and capture a job offline (coming with the mobile app)",
+    ]);
 
     // Two markers, because they read differently to a person. A LINE carries a parenthesised
     // "(coming in release N)"; a WHOLE TIER says it in its own sentence, where parentheses would be
@@ -294,7 +300,10 @@ describe("nothing untrue", () => {
         continue;
       }
       for (const line of tier.includes) {
-        if (markedMobile.test(line)) continue;
+        if (markedMobile.test(line)) {
+          if (!deliveredWithMobile.has(line)) unmarked.push(`${tier.name}: ${line} (not a mobile-app feature)`);
+          continue;
+        }
         const match = markedLine.exec(line);
         if (match) {
           // A "coming" marker must name a LATER release. "Coming in release 1" while we are
@@ -323,7 +332,14 @@ describe("nothing untrue", () => {
     // money", the pricing intro "job costing" — all release 2 — and the terms promised an export release 1
     // did not build. So this walks EVERY string in the site's copy and its legal text, except the tier
     // lists (checked above, with their own markers), and refuses a phrase naming an undelivered feature
-    // unless the same string marks it "coming in release N" for a later release.
+    // unless the same SENTENCE marks it "coming in release N" for a later release.
+    //
+    // TIGHTENED 2026-10-02 (finding C7: four over-claims planted at once all passed). Now: the tier lists'
+    // `who` and `theLine` are walked too — only their `includes` lines are left to the test above; offline
+    // and no-signal claims are looked for, and pass only when their sentence says "coming with the mobile
+    // app" or names a later release (ADR 0028); and a marker exempts only the sentence it is in, so "…hold
+    // and release retention today. Coming in release 2: change orders." no longer passes on the strength of
+    // the second sentence.
     //
     // WHAT THIS DOES NOT PROVE: that the copy is otherwise true — only these phrases are looked for, and a
     // claim worded another way passes. The list below is the plan's §8 exclusions in the site's words;
@@ -336,12 +352,14 @@ describe("nothing untrue", () => {
       [/change orders?/i, "signed change orders (R2)"],
       [/supplier price comparison/i, "supplier price comparison (R3)"],
       [/accountant export/i, "accountant exports"],
+      [/no signal|offline|without (a )?signal/i, "offline capture (the mobile app, ADR 0028)"],
     ];
     const marked = /coming in release (\d)/i;
+    const markedMobile = /coming with the mobile app/i;
 
     const strings: string[] = [];
     const walk = (value: unknown, path: string) => {
-      if (path === "pricing.tiers") return;
+      if (/^pricing\.tiers\[\d+\]\.includes$/.test(path)) return;
       if (typeof value === "string") strings.push(value);
       else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
       else if (value && typeof value === "object") {
@@ -356,11 +374,15 @@ describe("nothing untrue", () => {
 
     const claims: string[] = [];
     for (const text of strings) {
-      for (const [phrase, what] of undelivered) {
-        if (!phrase.test(text)) continue;
-        const mark = marked.exec(text);
-        if (mark && Number(mark[1]) > RELEASE) continue;
-        claims.push(`${what}: "${text.slice(0, 90)}"`);
+      // A sentence ends at . ! or ? followed by a space; a marker counts only inside its own sentence.
+      for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+        for (const [phrase, what] of undelivered) {
+          if (!phrase.test(sentence)) continue;
+          const mark = marked.exec(sentence);
+          if (mark && Number(mark[1]) > RELEASE) continue;
+          if (what.startsWith("offline") && markedMobile.test(sentence)) continue;
+          claims.push(`${what}: "${sentence.slice(0, 90)}"`);
+        }
       }
     }
     expect(claims, "these strings sell something the current release does not deliver (Rule 20)").toEqual([]);

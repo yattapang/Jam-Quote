@@ -48,7 +48,7 @@ country. What each tier *includes* is the design.
 | Accountant exports (CSV) | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Offline **sealing** — price and capture a job with no signal (with the mobile app, which follows the web launch — ADR 0028) | ✓ | ✓ | ✓ |
 | Offline **issuing** — a number at the gate (release 2) | — | ✓ | ✓ |
-| Users on the account | 1 | about 3, no roles (ADR 0027 D5) | up to 10, then per seat |
+| Users on the account | 1 | exactly 3, no roles (ADR 0029 E3) | up to 10, then per seat |
 | Roles and approvals (who may send or discount) | — | — | ✓ |
 | Multi-crew assignment and crew cost rates | — | — | ✓ |
 | Consolidated reporting across projects | — | — | ✓ |
@@ -56,7 +56,7 @@ country. What each tier *includes* is the design.
 | Custom document branding (logo, colours, terms) | logo | logo + colours | full, plus per-client terms |
 | WhatsApp Business sending (templated, receipts) | — | — | ✓ |
 | API access and integrations | — | — | ✓ |
-| Support | email, and a help chatbot that sees no account data (ADR 0027 D9) | email, and the chatbot | priority |
+| Support | email (a chatbot is the owner's goal, designed later — ADR 0029 E1) | email | priority |
 
 **A tick with *(release 2)* means the tier will include it and release 1 does not** (finding H15). The
 site marks the same three the same way, and `new-app/web/test/site-guards.test.ts` fails if the site ever

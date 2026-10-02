@@ -88,7 +88,7 @@ like strong evidence, and that is exactly why it was mis-ranked.
 | 3 | One-time code to a stored or typed channel | the channel holder — *if the channel is genuine* | Yes, by email |
 | 4 | The client's **own reply**, by email or WhatsApp | Google / Meta | **No — see §6** |
 | ~~5~~ | **Retired 2026-09-26 (J5).** Was "a signed document returned and uploaded", witnessed by "the client's hand" | — | — |
-| 6 | **Deposit paid** — **confirmed by a provider** (a verified WiPay callback in R1); a deposit the tenant records by hand is grade 1 (*amended 2026-10-02, PRD review 5 finding B21*) | WiPay (or, once integrated, the bank) | Yes, with Pro |
+| 6 | **Deposit paid** — **confirmed by a provider**: in R1, a WiPay payment our server has confirmed with WiPay server to server, never the callback alone, because the tenant holds the key that signs it (*ADR 0029 E2, finding C1*); a deposit the tenant records by hand is grade 1 (*finding B21*) | WiPay (or, once integrated, the bank) | Yes, with Pro, if WiPay offers the confirmation query |
 
 **Why grade 5 was wrong, and why its number is tombstoned rather than reused.** A signed document
 *uploaded by the tenant* comes from the tenant's device, with the tenant's credentials, and no third party

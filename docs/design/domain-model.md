@@ -271,6 +271,8 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
+*(Tax basis, 2026-10-02 — ADR 0027 D7, finding C2: once the GCT design lands, the ceiling and every term compared with it are net of tax; until that migration, the built ceiling is tax-inclusive.)*
+
 **The invariant:** the invoiced figure against an accepted issue may never exceed the accepted total, plus
 **recorded** variations. What counts as invoiced — which invoices, and what credit notes and voids do to
 them — is defined once, in `issue_balance_apply()`, and deliberately not restated here (ADR 0025); J4
@@ -481,6 +483,12 @@ records its own bypass gets reconciled.
 Brief §13 asks for conflict rules per entity. One table, because a general rule would be wrong
 somewhere expensive.
 
+*Amended 2026-10-02 (ADR 0027 D1, ADR 0028; finding C3).* **Release 1's offline is seal-only, and it arrives
+with the mobile app, after an online web launch.** In release 1 the directory is read-only offline, a draft
+is edited on one device at a time (a stale push is refused, never merged), and variations are recorded
+online. The "create", "full edit / merge by line" and offline-variation cells below describe **release 2**,
+where the rest of the sync engine lands.
+
 | Entity | Offline | On conflict |
 |---|---|---|
 | Directory (materials, rates, clients, recipes) | read, and create new | **Server wins** on fields; local creations always push. |
@@ -509,6 +517,10 @@ cannot touch. What it does: revokes the session, so the device can no longer syn
 store is wiped **when it next connects**. Until then the tenant's catalog, client book and sealed documents
 are on that phone. The mitigation that actually works is expiry, and the honest statement is in
 `THREAT-MODEL.md` §4a rather than a claim here that we can wipe a phone we cannot reach.
+*Amended 2026-10-02 (ADR 0027 D12, PRD R1.18d and R1.18f; findings B23, C3):* only a sign-out that marks the
+device **lost** wipes it on reconnection. An ordinary revocation — an expired session, a password change —
+asks the user to sign in again and **pushes the outbox first**; and no automatic process, expiry included,
+may destroy an unsynced seal. The "expiry" above applies to cached reads only.
 
 **Two devices sealing one quote is the hazard the row-level answer hides (G4).** Delroy's phone and his
 foreman's tablet both hold the draft; both go offline; both seal. Neither push conflicts — each is an
@@ -559,8 +571,8 @@ snapshot that has never reached the server — a retention limit that can destro
 financial document is not a retention limit, it is data loss on a timer.
 
 **What a seal must be re-checked against at sync**, because sealing offline means none of it was checkable
-at the time: the tenant is not suspended · the user is still active, still a member, and in a role that
-still permits sealing · the client has not been deleted · the entitlement still permits it (ADR 0023 meters
+at the time: the tenant is not suspended · the user is still active and still a member (release 1 has no roles —
+every member may seal; a role check joins when roles arrive in release 3, PRD R1.18e, finding C3) · the client has not been deleted · the entitlement still permits it (ADR 0023 meters
 at *numbering*, so the month is the month it syncs) · and no colleague has already sealed that revision.
 Each refusal is explained to the user in terms of what happened, not as a sync error. A seal refused because
 its client was deleted becomes a `rejected_seal` with that reason; the tenant restores the client and
