@@ -781,6 +781,8 @@ nine decisions (T1-T9) with recommendations, for the owner. Found while research
 work is exempt from GCT but installations and painting are not, so tax is per line; many small contractors are below
 the J$15m registration threshold; and clients may withhold a 2% contractors levy or 3% on specified services, which the
 design treats as settlement, not a shortfall. Also found in the schema: invoices and credit notes carry no number.
+**Approved by the owner, 2026-10-02:** every recommendation T1-T9. Next under the checklist: an independent read of
+the design, then a closing check, then the owner's sign-off ticks A1.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

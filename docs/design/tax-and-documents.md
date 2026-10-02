@@ -1,7 +1,8 @@
 # Design: tax (GCT in Jamaica) and documents — rates, names, invoices, credits and numbers
 
-**Status: DRAFT — for the owner's approval.** Build plan step A1 (`docs/BUILD-PLAN.md`). Nothing here is built
-until the owner approves it (brief §3, Rule 1.1).
+**Status: APPROVED by the owner, 2026-10-02 — every recommendation, T1-T9.** Build plan step A1
+(`docs/BUILD-PLAN.md`); the independent read and closing check are owed before the step is ticked. Nothing here is
+built until its build steps (B6, C3, C4, D1-D2) begin.
 
 Date: 2026-10-02 · **Implements the direction of** ADR 0027 D7 (a tax-exclusive ceiling), ADR 0030 decision 1 (tax
 per invoice, tenant-entered rates, the tax's name per country), ADR 0031 (a revision keeps its quote's number), ADR
