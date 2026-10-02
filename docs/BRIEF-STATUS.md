@@ -784,6 +784,10 @@ design treats as settlement, not a shortfall. Also found in the schema: invoices
 **Approved by the owner, 2026-10-02:** every recommendation T1-T9. Next under the checklist: an independent read of
 the design, then a closing check, then the owner's sign-off ticks A1.
 
+**Launched 2026-10-02: independent read of the tax and documents design.** *Delegation (Rule 16.5), declared before
+launch: commit-reviewer at **Opus** — money arithmetic and the ceiling are named judgement-class.* Brief
+`docs/briefs/2026-10-02-tax-design-read.md`. Findings TD1 onward, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
