@@ -802,6 +802,10 @@ A1 covers the amendments. Next: the closing check (Sonnet), `docs/briefs/2026-10
 before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9): every item names the text to read; the read's
 findings are reproduced in the brief.* Brief `docs/briefs/2026-10-02-tax-design-closing-check.md`, run by
 `tools/run_brief.py` at HEAD `e61c3f2`: 6 of 6 expectations hold.
+**Reported 2026-10-02: closable.** 6 of 6 expectations hold at `b666ee6`; TD1-TD15 each answered, with the
+worked figures of TD1, TD2 and TD12 re-done by hand and matching. One imprecision noted and corrected: the design's
+§8 cited a domain-model pointer as §6.2; it sits under §6.2a. **A1 now awaits only the owner's sign-off** (checklist
+item 7), which also approves the amendments — chiefly T6's credit that may target tax codes.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

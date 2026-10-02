@@ -527,5 +527,5 @@ named changes". The read named 15 findings: one blocker, ten major and four mino
 | TD11 · registration mid-job; out of scope; precedence over time | major | T2 |
 | TD12 · credit-note tax drifts by rounding | minor | T6, cumulative reversal |
 | TD13 · the guard's scope | minor | T1, the tax-name guard |
-| TD14 · other documents without a pointer; T4 restated "invoiced" | minor | T4 now refers to `issue_balance_apply()`. Pointers added in PRD R1.9, R1.14, R1.24 and §12; domain model §6.1a, §6.2, §6.2a, §6.3 and §7; ADR 0030 decision 1 |
+| TD14 · other documents without a pointer; T4 restated "invoiced" | minor | T4 now refers to `issue_balance_apply()`. Pointers added in PRD R1.9, R1.14, R1.24 and §12; domain model §6.1a, §6.2a (three places), §6.3 and §7; ADR 0030 decision 1 |
 | TD15 · day boundary; backdated rates; added codes' warning; staff overrides after D2 | minor | T5 step 3; T2; §7 |

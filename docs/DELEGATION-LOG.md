@@ -39,6 +39,7 @@ that states the tier's reason and the outcome together.
 | 2026-10-02 | Closing check of the re-read's fixes (C1-C10), brief `docs/briefs/2026-10-02-prd-reread-closing-check.md`, HEAD `c3cfe9f` | general-purpose, Sonnet | Mechanical: four plants and read items, every expected output written | Passed: 10 of 10, C1-C10 all hold; closable | — |
 | 2026-10-02 | Independent read of the planning baseline audit, brief `docs/briefs/2026-10-02-planning-audit-read.md`, HEAD `fd10219` | general-purpose, Sonnet | Mechanical: every claim names its file | No row false in substance; PA1-PA9 (coverage gaps and imprecisions), all corrected | — |
 | 2026-10-02 | Independent read of the tax and documents design (A1), brief `docs/briefs/2026-10-02-tax-design-read.md`, HEAD `8448b17` | commit-reviewer, Opus | Money arithmetic and the ceiling: judgement-class (Rule 16.5) | TD1-TD15 (1 blocker, 10 major, 4 minor); "not yet … sound after the named changes"; all answered in the design's §8 | — |
+| 2026-10-02 | Closing check of the tax design's answers to TD1-TD15, brief `docs/briefs/2026-10-02-tax-design-closing-check.md`, HEAD `b666ee6` | general-purpose, Sonnet | Mechanical: every item names its text; arithmetic worked by hand | 6 of 6 expectations hold; TD1-TD15 all answered; closable. One imprecision (a pointer cited as §6.2 sits under §6.2a), corrected | — |
 
 **What the log shows so far.** Two escalations, both *brief incomplete*, both on one check (J4's), and both
 fixed by the brief rather than the tier — the evidence Rule 16.9 rests on. Every Sonnet closing check since
