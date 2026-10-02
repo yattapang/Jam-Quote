@@ -25,7 +25,7 @@ schema that looked finished and was wrong in the one place that is hardest to mi
 email account for each.**
 
 So `app_user.email` stays **globally unique**, and that uniqueness is not a limitation to work
-around — it is the **enforcement mechanism** for the owner's rule. One address, one user, one tenant;
+around — it is the **enforcement mechanism** for the owner's rule. *Corrected 2026-10-02 (PRD review 5, finding B28): the index on `app_user.email` is per tenant (`app_user_tenant_id_email_key`); the global one is on `app_credential.email` (`app_credential_email_key`, ADR 0015 decision 2). The guarantee holds only if registration inserts the user and its credential in one transaction with the same address, and the guard that the two emails stay equal is a precondition of building sign-up (PRD R1.30c).* One address, one user, one tenant;
 a second business requires a second address, and the database says so rather than a policy document.
 
 This **withdraws** a correction the domain model proposed. I had written that email must become

@@ -80,7 +80,7 @@ Each has a recommendation, marked **(rec)**, and the reason.
 amended below — not A.** A was approved on the reason "provider ids are unguessable", which is false for
 bank references and for email Message-IDs, which the sender chooses: the global key let one tenant probe
 whether another holds a bank reference. A retried webhook comes back to the tenant it was first
-attributed to, so `(tenant, source, external_id)` still stops every replay. Built by
+attributed to, so `(tenant, source, external_id)` still stops every replay. *(Note, 2026-10-02, PRD review 5 finding B21: release 1 has no bank integration, so a bank reference the tenant types is **not** `deposit_paid` evidence — a hand-recorded deposit is `tenant_recorded`, grade 1; only a provider-confirmed payment is grade 6. The key above still governs whatever provider ids arrive.)* Built by
 `new-app/db/migrations/20260927190000_rereview_fixes/migration.sql`. The table below is kept as decided
 at the time.
 

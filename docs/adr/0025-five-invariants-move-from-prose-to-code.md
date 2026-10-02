@@ -195,7 +195,7 @@ enforcement. Both cannot be true, and no entity held a pending claim (H8).
 - **The user row is inserted at verification**, not at registration. So `app_user.email` keeps its global
   unique index untouched, and **"first to verify wins" becomes a database guarantee** rather than
   application logic: the loser's insert violates the index and is answered with the same
-  non-enumerating message as any duplicate.
+  non-enumerating message as any duplicate. *Corrected 2026-10-02 (PRD review 5, finding B28): the index on `app_user.email` is per tenant (`app_user_tenant_id_email_key`); the global one is on `app_credential.email` (`app_credential_email_key`, ADR 0015 decision 2). The guarantee holds only if registration inserts the user and its credential in one transaction with the same address, and the guard that the two emails stay equal is a precondition of building sign-up (PRD R1.30c).*
 - Claims expire in 72 hours and expired ones are deleted, so the table cannot become a shadow user list.
 
 **Why this is better than the alternatives:** it changes no existing index, it needs no "pending" state

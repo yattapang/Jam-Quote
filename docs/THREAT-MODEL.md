@@ -167,7 +167,7 @@ responsibility, and the terms should say so rather than implying we can protect 
 |---|---|---|
 | **An email bomb aimed at a known tenant.** A duplicate registration deliberately does not reveal the address is taken and **mails the existing owner instead** (Rule 14) — so anyone who knows a tenant's address can make us send them a hundred messages | Nothing is built yet, and the PRD's own list of registration bounds had silently dropped the per-address limit while presenting itself as exhaustive | A rate limit **per address** as well as per IP (PRD R1.30d). The non-enumerating response is right and it is exactly what creates this, which is why the two must ship together |
 | **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message |
-| **Squatting on a competitor's address** to lock them out | The unique index is on `app_user.email`, and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
+| **Squatting on a competitor's address** to lock them out | The global unique index is on `app_credential.email` — the one on `app_user.email` is per tenant (corrected 2026-10-02, finding B28) — and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
 | **CGNAT makes an IP bound useless or harmful** | Jamaican mobile networks put tens of thousands of subscribers behind one address | The IP limit is on *attempts* and deliberately loose; the real defences are verification and the free tier's own cost ceiling. **No device fingerprinting** — it was proposed and removed as a tracking technology nobody had weighed |
 
 **What this section does not cover:** a determined attacker with many real mailboxes. They can create many
@@ -314,8 +314,10 @@ function in another schema, would need its own (Z3).
 - **Denial of service at network scale.** Application limits cannot address it, and nothing sits
   upstream.
 - **Regulatory analysis.** Jamaica's Data Protection Act and Trinidad & Tobago's equivalent bear on
-  §4.6 and A9. This model notes that data leaves the country; it is not legal advice, and a
-  compliance review is owed before the second country.
+  §4.6 and A9. This model notes that data leaves the country; it is not legal advice. **Jamaica is the
+  first country, so the review is owed before launch, not before the second country** (corrected
+  2026-10-02, finding B8): public information now, labelled unverified, and the attorney before full launch
+  (PRD §9 item 6, R1.44-R1.45; ADR 0027 D14).
 - **`original-app/`.** Frozen. Its risks are in the audit, and the only mitigation is replacing it.
 - **Quantitative likelihood.** Every "status" here is evidence-based; the ordering in §5 is
   judgement, and the owner may reasonably order it differently.

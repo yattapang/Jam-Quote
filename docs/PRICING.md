@@ -1,5 +1,11 @@
 # Pricing & Supplier Scraping Spec
 
+> **Superseded for the rebuild (2026-10-02, PRD review 5 finding B12).** This document describes the earlier
+> application in `original-app/`. For `new-app/`, the plan of record is `docs/PRD.md`, with
+> `docs/BRIEF-STATUS.md` for where the work stands; where they disagree with this file, they win. Kept as
+> history, not as instructions.
+
+
 Material prices for Jamaican suppliers are not available via a public real-time
 API, so JamQuote maintains its own price index fed from several sources. "Real
 time" ships first as scan-and-confirm and scheduled scrapes, not a live feed.

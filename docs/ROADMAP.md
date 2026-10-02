@@ -1,5 +1,11 @@
 # JamQuote — Roadmap & Resume State
 
+> **Superseded for the rebuild (2026-10-02, PRD review 5 finding B12).** This document describes the earlier
+> application in `original-app/`. For `new-app/`, the plan of record is `docs/PRD.md`, with
+> `docs/BRIEF-STATUS.md` for where the work stands; where they disagree with this file, they win. Kept as
+> history, not as instructions.
+
+
 Updated 2026-07-30. Single source of truth for picking work back up cheaply
 after a usage-limit pause. Read this first on resume.
 

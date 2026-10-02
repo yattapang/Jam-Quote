@@ -1,6 +1,6 @@
 # Design: the domain model
 
-**Status: APPROVED by the owner 2026-09-25 · independent review OUTSTANDING (Rule 1.10).** Approval
+**Status: APPROVED by the owner 2026-09-25 · reviewed alongside the PRD in reviews 1-5 (`docs/PRD-REVIEW.md` … `docs/PRD-REVIEW-5.md`), whose disposition tables say what remains open (*header corrected 2026-10-02, finding B27*).** Approval
 answers "is this what I want"; it does not answer "will this do what it says". Both are required
 before code is built from a plan, and the second gate was added to the rules the same day this was
 approved — so schema work waits on the review, which runs alongside the PRD's
@@ -101,7 +101,7 @@ These are settled by work already landed, and are stated here so no entity re-li
 | Entity | Purpose | Key invariants |
 |---|---|---|
 | `tenant` | The contracting business. | Country and trading currency set at creation and not casually changed. Suspension is a field, not a deletion. |
-| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally**, which is what enforces the owner's rule that a second business needs a second address (11a). A user row is inserted at **verification**, never at registration — see `registration_claim` below. |
+| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally** — through `app_credential.email`, whose index is global; `app_user`'s own is per tenant, so the two must be inserted together with the same address (corrected 2026-10-02, finding B28) — which is what enforces the owner's rule that a second business needs a second address (11a). A user row is inserted at **verification**, never at registration — see `registration_claim` below. |
 | `registration_claim` | A pending registration: an address, a hashed token, an expiry. **Not a user** (ADR 0025 decision 5). | Deliberately **not unique on the address**, so two people may attempt the same one; and not tenant-scoped, because it exists before any tenant does. This is what makes the row above possible: the claim holds nothing, verification inserts the user, and the unique index decides — so **"first to verify wins" is a database guarantee rather than application logic** (finding H8). Claims expire in 72 hours and are deleted, so the table cannot become a shadow user list. |
 | `membership_role` | What a user may do inside the tenant. | At least one active owner at all times; the last owner cannot be demoted or deactivated. |
 | `platform_capability` | What one of **our** staff may do. | Every grant has a granter (least privilege is only real with an author). Holding one requires a confirmed second factor (ADR 0021). |
@@ -255,7 +255,7 @@ evidence the tenant can fabricate — the grade measures who witnessed the accep
 the artefact looks (finding J5). Grade 5 is retired and its number is not reused. |
 | `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The invoiced figure may never exceed the ceiling. Both are defined once, in SQL — `issue_balance_apply()` and `issue_ceiling_minor()` — and this is the single most important arithmetic invariant in the product. |
 | `invoice_line` | Either a share of the issue (percentage or amount) or a named extra. | Frozen at issue, like the quote. |
-| `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | Never exceeds the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments, retention and credits. |
+| `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | May exceed the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments and credits (retention is not an input in release 1, PRD R1.25; *corrected 2026-10-02, finding B24*). A payment above the balance is recorded as an over-payment, not refused (PRD R1.26, finding B9). |
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
 | `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. Lowers the invoiced figure the ceiling is compared with, so it is also how scope is reduced below what is billed (J4, `docs/design/scope-reduction.md`). Its bounds are enforced in `issue_balance_enforce()`, not restated here. |
 

@@ -66,6 +66,9 @@ the work was picked up on an already-finished feature.
    path to revenue.
    Invoicing stays in R1 because it **is** the Pro line: a release with no invoicing has nothing
    anybody pays for. Variations move to R2 because they only bite after a job is won and changed.
+   *Superseded (marked 2026-10-02, PRD review 5 finding B27): review 1 overturned both — R1 **seals**
+   offline (F1; ADR 0027 D1 now limits offline in R1 to cached reads, one-device drafts and sealing), and
+   recorded variations are in R1 (F3, W6a). The PRD is the current statement.*
    *Delegation (Rule 16.5): Opus — product decisions.*
    Previously unblocked 2026-09-25 — both questions answered (ADR 0022): one person may hold
    several businesses with a different email each, so global email uniqueness *enforces* that rule and
@@ -680,6 +683,17 @@ information for now, labelled unverified, with an attorney before full launch (F
 D7 likewise: tax-exclusive, checked against Tax Administration Jamaica's public guidance, an accountant before
 launch. Next: the PRD amended against B1-B28, then an independent re-read before approval.
 
+**PRD amended 2026-10-02 against B1-B28** (disposition table at the top of `docs/PRD-REVIEW-5.md`: 27 Fixed,
+re-review owed; B10 open, decided, its GCT design owed before W3/W7). New in the PRD: W10 staff operations
+(R1.46-R1.49), card upgrade, term and lapse (R1.37a-f), data export (R1.43), data requests and breach response
+(R1.44-R1.45), delivery outcomes and message caps (R1.21b-c), retention billed net (R1.25a), N11 accessibility,
+§9 items 6-10, §11 re-ranked (numeric triggers proposed, for the owner to confirm). Code: migration
+`20260928010000_number_series_never_resets` (B20, planted: caught); the website's copy corrected and a guard
+over every string of it (B4, planted: caught). Other documents corrected: ADR 0022, 0023, 0025, THREAT-MODEL
+§4b and §6, the register, TIERS, the domain model, both acceptance designs, and the four old-application plans
+marked superseded. Gate: db 270 (PostgreSQL required), api 191, web 12, typecheck, four checkers; the site
+builds. Next: an independent re-read of the amended PRD before the owner approves it (Rule 1.10, 24.6).
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
@@ -775,7 +789,7 @@ Everything built so far — tenancy with leak tests, authentication, the schema,
 | Payment approval staffing at launch | ❌ Rule 13 has a single-operator exception, but the actual headcount is unanswered |
 | Payment and billing providers | ✅ WiPay; platform billing to confirm |
 | Hosting region and data residency | ❌ Relevant: data currently leaves Jamaica (`SERVICE-REGISTER.md` §6) |
-| Free-tier providers and the paid trigger | 🟡 Recorded in the service register; **the ADR Rule 10 requires is owed** |
+| Free-tier providers and the paid trigger | ✅ Decided by ADR 0026 (paid and always on at launch); *corrected 2026-10-02, finding B24* |
 | Data to migrate | ✅ None — no live tenants |
 | Claude API budget cap | ❌ |
 

@@ -1,5 +1,11 @@
 # JamQuote — Architecture & Build Spec
 
+> **Superseded for the rebuild (2026-10-02, PRD review 5 finding B12).** This document describes the earlier
+> application in `original-app/`. For `new-app/`, the plan of record is `docs/PRD.md`, with
+> `docs/BRIEF-STATUS.md` for where the work stands; where they disagree with this file, they win. Kept as
+> history, not as instructions.
+
+
 > This is the contract every build agent follows. When code and this doc disagree, fix the code or raise it — do not silently diverge.
 
 ## 1. Monorepo layout

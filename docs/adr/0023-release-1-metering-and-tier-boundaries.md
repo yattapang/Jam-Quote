@@ -35,7 +35,10 @@ quote less — the opposite of what the product is for.
 the next counts in the month it was **numbered**. A contractor who seals four jobs on a Sunday with no
 signal has three numbered and one refused when they sync. That is the correct behaviour — the free limit
 is a limit — but the app must explain it at the moment it happens rather than appearing to lose work.
-The sealed snapshot is not destroyed; it waits, and upgrading releases it.
+The sealed snapshot is not destroyed; it waits, and upgrading releases it. *Amended 2026-10-02 (PRD
+review 5, finding B2): upgrading lifts the limit and the tenant then numbers each blocked seal — nothing
+numbers one automatically (PRD R1.32b-c, finding H12). "Releases it" was overturned when H12 closed and left
+standing here.*
 
 ### 2. Offline **sealing** is on every tier. Offline **issuing** (release 2) is Pro
 
@@ -87,7 +90,9 @@ UI states what it recorded, which is true, and not what it proves, which is unkn
   the kind of boundary that is obvious once written down and invisible otherwise.
 - The free tier is now genuinely usable at a gate, which raises the cost of abuse: one free account per
   verified address with a bound on addresses per device (R1.30c) is what stops three-jobs-a-month from
-  becoming unlimited via new accounts. These two decisions lean on each other.
+  becoming unlimited via new accounts. These two decisions lean on each other. *Amended 2026-10-02 (finding
+  B24): there is no bound per device — Rule 14 and PRD R1.30d removed it, with device fingerprinting
+  (G11, H14). What stops abuse is email verification and the cost ceiling of three numbered jobs a month.*
 
 ## What this does not settle
 

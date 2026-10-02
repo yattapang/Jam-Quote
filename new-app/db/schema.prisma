@@ -534,6 +534,7 @@ model NumberSeries {
 
   /// Allocated under a row lock, which is the shape ADR 0025 decision 2 copies for the balance.
   nextNumber BigInt @default(1) @map("next_number")
+  /// Only "never" in release 1: a reset was unrepresentable (finding B20, ADR 0027 D11).
   resetRule  String @default("never") @map("reset_rule")
 
   issueNumbers IssueNumber[]

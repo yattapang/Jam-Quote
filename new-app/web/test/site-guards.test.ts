@@ -268,6 +268,8 @@ describe("nothing untrue", () => {
       "Staged deposit and progress invoicing",
       "Payment reminders and an overdue list",
       "Card payment links",
+      "Export your data as CSV, any time",
+      "Up to 3 users",
     ]);
 
     // Two markers, because they read differently to a person. A LINE carries a parenthesised
@@ -309,6 +311,56 @@ describe("nothing untrue", () => {
       "these tier lines are neither in the delivered set for this release nor marked with the " +
         "release they land in, so the page claims something the PRD says is absent (Rule 20)",
     ).toEqual([]);
+  });
+
+  it("says nothing on any page that the current release does not deliver", () => {
+    // WHY THIS EXISTS (PRD R1.40b, review 5 finding B4). The tier guard above read only the pricing
+    // page's tier lists, and the same claims sat unmarked one page over: the features page sold "hold and
+    // release retention" and "Did the job make money?", the home page "whether the job actually made
+    // money", the pricing intro "job costing" — all release 2 — and the terms promised an export release 1
+    // did not build. So this walks EVERY string in the site's copy and its legal text, except the tier
+    // lists (checked above, with their own markers), and refuses a phrase naming an undelivered feature
+    // unless the same string marks it "coming in release N" for a later release.
+    //
+    // WHAT THIS DOES NOT PROVE: that the copy is otherwise true — only these phrases are looked for, and a
+    // claim worded another way passes. The list below is the plan's §8 exclusions in the site's words;
+    // a new exclusion must be added here by hand, as `delivered` must above.
+    const RELEASE = 1;
+    const undelivered: [RegExp, string][] = [
+      [/hold and release retention|retention tracking|retention and job/i, "retention tracking (R2)"],
+      [/job profit|made money|make money|made anything/i, "job result (R2)"],
+      [/job costing|project costing/i, "job costing (R2)"],
+      [/change orders?/i, "signed change orders (R2)"],
+      [/supplier price comparison/i, "supplier price comparison (R3)"],
+      [/accountant export/i, "accountant exports"],
+    ];
+    const marked = /coming in release (\d)/i;
+
+    const strings: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (path === "pricing.tiers") return;
+      if (typeof value === "string") strings.push(value);
+      else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      else if (value && typeof value === "object") {
+        for (const [key, v] of Object.entries(value)) walk(v, path ? `${path}.${key}` : key);
+      }
+    };
+    walk(site, "");
+    walk(privacyContent, "privacy");
+    walk(termsContent, "terms");
+    // An empty walk would pass while checking nothing.
+    expect(strings.length).toBeGreaterThan(50);
+
+    const claims: string[] = [];
+    for (const text of strings) {
+      for (const [phrase, what] of undelivered) {
+        if (!phrase.test(text)) continue;
+        const mark = marked.exec(text);
+        if (mark && Number(mark[1]) > RELEASE) continue;
+        claims.push(`${what}: "${text.slice(0, 90)}"`);
+      }
+    }
+    expect(claims, "these strings sell something the current release does not deliver (Rule 20)").toEqual([]);
   });
 
   it("shows a price only where a price has been decided", () => {

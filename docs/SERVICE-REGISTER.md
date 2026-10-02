@@ -41,8 +41,9 @@ is a defect, not a paperwork oversight.
 worked around, it is a launch blocker: a contractor tapping a share link and waiting 40 seconds
 concludes the product is broken. The keep-warm workflow is a prototype-phase patch, and GitHub
 disables scheduled workflows after 60 days of repository inactivity, so it is not a control we
-can rely on. **The paid-tier trigger is the first paying tenant**, and it is owed its own ADR
-(Rule 10).
+can rely on. **The paid-tier trigger is decided: ADR 0026** — a paid, always-on API is a launch
+requirement, and until then the share page wakes the API when it opens (§4a). *Corrected 2026-10-02
+(finding B24): this said the trigger was the first paying tenant and owed its own ADR.*
 
 **The public site adds no service.** It is static pages in our own application on the same Vercel
 project: no site builder, no CMS, no form service, no analytics, no font host (Rule 20). The only
@@ -191,8 +192,11 @@ Stated plainly, per Rule 17:
    backup nobody has restored is a belief, not a backup (Rule 5).
 3. **Two providers can break a deploy from their own dashboards**, outside version control —
    Vercel's Root Directory and every environment variable above.
-4. **Free tiers are load-bearing.** The API sleeps, and the mitigation is a scheduled workflow
-   that GitHub switches off after 60 idle days.
+4. **Free tiers are load-bearing until launch.** The API sleeps; the share page wakes it when opened,
+   and at launch the API is paid and always on (ADR 0026). The scheduled workflow does not keep it warm
+   (*corrected 2026-10-02, finding B24*).
 5. **Personal data leaves Jamaica.** Neon, Resend and Vercel all process tenant and customer
-   data outside the country. That is normal and lawful, but it is a fact tenants may ask about,
-   and this table is the answer.
+   data outside the country. Whether the Data Protection Act, 2020 permits that, and on what basis, is
+   read now from the Act's public text and **settled by the attorney before launch** (PRD §9 item 6; ADR
+   0027 D14). It is a fact tenants may ask about, and this table is the answer. (*"That is normal and
+   lawful" removed 2026-10-02, finding B8: a legal conclusion nobody had reached.*)

@@ -2513,3 +2513,26 @@ describe("Y · a temporary table cannot stand in for a real one", () => {
     ).rejects.toThrow(/is sealed_awaiting_number; it takes no evidence/);
   });
 });
+
+describe("B20 · a number series never resets in release 1", () => {
+  // The schema used to accept 'yearly' and 'monthly' and then refuse the first reset, because one series
+  // per kind and (series, number) uniqueness leave no room for a second 1 (PRD review 5, B20; ADR 0027
+  // D11). Only 'never' is accepted now; the year goes in the prefix.
+  it.each(["yearly", "monthly"])("refuses a series whose reset rule is %s", async (rule) => {
+    await expect(
+      sql(
+        `INSERT INTO number_series (id, tenant_id, document_kind, prefix, reset_rule, updated_at)
+         VALUES ($1, $2, 'invoice', 'INV-', $3, now())`,
+        [id(), TENANT, rule],
+      ),
+    ).rejects.toThrow(/number_series_reset_rule_check/);
+  });
+
+  it("accepts a series that never resets, with the year in its prefix", async () => {
+    await sql(
+      `INSERT INTO number_series (id, tenant_id, document_kind, prefix, reset_rule, updated_at)
+       VALUES ($1, $2, 'invoice', 'INV-2027-', 'never', now())`,
+      [id(), TENANT],
+    );
+  });
+});

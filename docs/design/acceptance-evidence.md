@@ -88,7 +88,7 @@ like strong evidence, and that is exactly why it was mis-ranked.
 | 3 | One-time code to a stored or typed channel | the channel holder — *if the channel is genuine* | Yes, by email |
 | 4 | The client's **own reply**, by email or WhatsApp | Google / Meta | **No — see §6** |
 | ~~5~~ | **Retired 2026-09-26 (J5).** Was "a signed document returned and uploaded", witnessed by "the client's hand" | — | — |
-| 6 | **Deposit paid** | the bank or WiPay | Yes |
+| 6 | **Deposit paid** — **confirmed by a provider** (a verified WiPay callback in R1); a deposit the tenant records by hand is grade 1 (*amended 2026-10-02, PRD review 5 finding B21*) | WiPay (or, once integrated, the bank) | Yes, with Pro |
 
 **Why grade 5 was wrong, and why its number is tombstoned rather than reused.** A signed document
 *uploaded by the tenant* comes from the tenant's device, with the tenant's credentials, and no third party
@@ -209,7 +209,10 @@ Each by planting the defect it exists to catch:
 ## 9. The owner's decisions, 2026-09-26
 
 **1. The default bar is grade 3** — a one-time code to a stored or typed channel. Available in release 1,
-and the tenant remains free to require a deposit on any quote.
+and the tenant remains free to require a deposit on any quote. *Amended 2026-10-02 (ADR 0027 D6, PRD
+review 5 finding B18): the default is **channel-aware** — grade 3 where the client has an email address at
+seal, grade 2 where they have only WhatsApp — because release 1 sends codes only by email, so a grade-3
+default could never be met for a WhatsApp-only client. The tenant may set a fixed bar instead.*
 
 **2. Grade 4 (the client's own reply) is bought after growth, and release 1 prepares for it.** Deferred
 deliberately, so "prepare" has to mean something specific rather than a good intention. It means exactly
