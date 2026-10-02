@@ -905,6 +905,9 @@ go to the platform trail only. Next: a scoped re-check (Sonnet), `docs/briefs/20
 **Launched 2026-10-02: re-check of SR5.** *Delegation (Rule 16.5), declared before launch: general-purpose at
 **Sonnet** — mechanical (Rule 16.9).* Brief `docs/briefs/2026-10-02-support-design-recheck.md`, run by
 `tools/run_brief.py` at HEAD `3abc05e`: 4 of 4 expectations hold.
+**Reported 2026-10-02: SR5 closable**, so SR1-SR15 are closed as a set. The re-check noted that the A3 ADR's statement of
+the change is promised for sign-off, not yet written; it is written with the sign-off. **A3 now awaits only the owner's
+sign-off** (checklist item 7), which also approves the amendments.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
