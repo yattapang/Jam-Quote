@@ -702,6 +702,9 @@ Claude developer account (the chatbot's spend limit is still to be set). PRD, TI
 amended; the site's "Works with no signal" line is marked "(coming with the mobile app)", and the tier guard
 accepts that marker (planted: an unmarked line is caught).
 
+**Owner approved, 2026-10-02:** the proposed numbers (30-day default quote validity; §11's free-limit trigger of
+15%/60% and conversion trigger of 5%), and the independent re-read of the amended PRD.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

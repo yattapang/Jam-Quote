@@ -36,13 +36,13 @@ the findings are on disk.
 | **B16** | major | **Fixed, re-review owed.** ADR 0027 D10: nothing is sent at sync, the contractor taps send (R1.18, R1.21); R1.21b delivery outcomes and bounces; R1.21c opt-out and per-tier message caps. |
 | **B17** | minor | **Fixed, re-review owed.** N11 added: WCAG 2.2 AA for the share page, text scaling and touch targets for the sealing path. |
 | **B18** | major | **Fixed, re-review owed.** ADR 0027 D6: the default bar is channel-aware (R1.20); `docs/design/acceptance-evidence.md` decision 1 amended. |
-| **B19** | major | **Fixed, re-review owed.** §11 re-ranked with a watcher and trigger on each; the numeric triggers are marked as proposals for the owner; risks 4 and 5 moved out. |
+| **B19** | major | **Fixed, re-review owed.** §11 re-ranked with a watcher and trigger on each; the numeric triggers approved by the owner 2026-10-02; risks 4 and 5 moved out. |
 | **B20** | major | **Fixed, re-review owed.** ADR 0027 D11: migration `20260928010000_number_series_never_resets` accepts only 'never' (tested in `new-app/db/test/documents-core.test.ts`, "B20"; planted: caught); R1.14 amended and names the gaplessness test owed. |
 | **B21** | major | **Fixed, re-review owed.** R1.20d: only a provider-confirmed payment is grade 6; a hand-recorded deposit is grade 1; §7 says grade 6 needs Pro; the acceptance designs amended. |
 | **B22** | major | **Fixed, re-review owed.** §9 items 6-10 added: attorney, paid host, accountant, app-store accounts, the Claude budget. |
 | **B23** | major | **Fixed, re-review owed.** ADR 0027 D12: R1.18f separates an ordinary revocation (sign in, push first) from "this device is lost"; R1.18d widened to any automatic process. |
 | **B24** | minor | **Fixed, re-review owed.** `docs/SERVICE-REGISTER.md` §1 and §6 item 4, `docs/BRIEF-STATUS.md`'s §19 row, ADR 0023's Consequences and the domain model's `client_payment` row corrected. |
-| **B25** | minor | **Fixed, re-review owed.** Values stated: R1.18b 3 days, R1.18d no limit for unsynced seals, R1.19 link lifetime, R1.17 expiry and its effect (default proposed), R1.24e mechanism, R1.32 Jamaica's month, R1.37e grace period. |
+| **B25** | minor | **Fixed, re-review owed.** Values stated: R1.18b 3 days, R1.18d no limit for unsynced seals, R1.19 link lifetime, R1.17 expiry and its effect (30-day default approved by the owner), R1.24e mechanism, R1.32 Jamaica's month, R1.37e grace period. |
 | **B26** | minor | **Fixed, re-review owed.** ADR 0027 D13: R1.20c moved to R2; R1.25a retention billed net and "do not remind"; support is email plus a chatbot (R1.38, D9). |
 | **B27** | minor | **Fixed, re-review owed.** PRD status block rewritten; `docs/BRIEF-STATUS.md` item 3 marked superseded; the domain model's header corrected. |
 | **B28** | major | **Fixed, re-review owed.** R1.30b-c corrected and the equality guard made a precondition of sign-up; ADR 0022, ADR 0025 decision 5, the domain model's `user` row and THREAT-MODEL §4b corrected to match ADR 0015. |

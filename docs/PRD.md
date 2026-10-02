@@ -257,8 +257,8 @@ R1.41, R1.42.
   twice, differently). **The hash is verified whenever a stored PDF is re-served**, or it is evidence
   nobody ever checks.
 - **R1.17** Quote expiry, evaluated on the **jurisdiction's** day boundary (`America/Jamaica`), not the
-  server's. Default validity **30 days** (a proposed default for the owner to confirm), set per tenant and
-  per quote. **An expired issue cannot be
+  server's. Default validity **30 days** (approved by the owner, 2026-10-02), set per tenant and per
+  quote. **An expired issue cannot be
   accepted**; the tenant extends it by issuing the next revision (finding B25).
 - **R1.18** **[mobile — R1.18 to R1.18j apply from the mobile app's launch; on the web app a seal is made
   online and numbered at once, ADR 0028]** **Sealing works with no network** and the snapshot is held in a durable outbox that survives
@@ -857,7 +857,7 @@ by a whole target (finding B11).
 ## 11. Risks, ranked
 
 Each with who watches it and what makes it act (finding B19, 2026-10-02). "The builder" is whoever leads
-the build. **The numeric triggers in items 6 and 7 are proposals for the owner to confirm**, not decisions.
+the build. The numeric triggers in items 6 and 7 were approved by the owner on 2026-10-02.
 
 1. **The attorney's answer changes the design.** Legal readings are public information until the attorney
    reviews them before launch (ADR 0027 D14), and ADR 0023 decision 4 says a "no" on the e-signature is a
