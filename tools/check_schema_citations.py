@@ -108,6 +108,7 @@ EVIDENCE_DOCS = {
     "docs/PRD-REVIEW-2.md": "The same.",
     "docs/PRD-REVIEW-3.md": "The same.",
     "docs/PRD-REVIEW-4.md": "The same, and it is the review that reported J1 and J9.",
+    "docs/PRD-REVIEW-5.md": "The same: a review register, which quotes the documents it found wrong.",
     "docs/MISTAKES.md": "The ledger records the phantom name as the lesson (M14, H16).",
     "docs/RULES-ENFORCEMENT-AUDIT.md": "Cites the phantom as the evidence for this very guard.",
 }

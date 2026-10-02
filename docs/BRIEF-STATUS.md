@@ -666,6 +666,12 @@ remains the launch blocker. Next: PRD review 5 (the owner's request, 2026-10-02)
 judgement over the whole plan of record, adversarial; a cheaper tier would check text, not whether the plan
 holds.* Brief `docs/briefs/2026-10-02-prd-review-5.md`; `tools/run_brief.py` ran it at `7a62aa5`: 3 of 3
 expectations hold. Findings B1 onward, written by the reviewer to a new review file, not committed by it.
+**Reported 2026-10-02:** `docs/PRD-REVIEW-5.md`, 28 findings (5 blocker, 16 major, 7 minor). **Recommendation: do
+not approve yet** — five blockers on charging, tax, collecting and keeping what release 1 promises (B4, B5, B7,
+B9, B10), each needing an owner decision; 14 decisions listed (D1-D14) with recommendations. Four earlier
+closures found not to hold fully (H12, H17, F4, H8); B28 (the `app_user.email` unique index is per tenant, not
+global as five documents say) confirmed by the builder against `20260924120000_row_identity_and_versioning`.
+The review file is registered with both citation tools. Next: the owner's decisions, then the PRD amended.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
