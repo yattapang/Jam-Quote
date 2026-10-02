@@ -21,6 +21,11 @@
    freezes the rate it used. The design states how a rate that differs from the country's default is shown
    to the tenant, so a typing mistake cannot silently mis-tax a client. Checked against Tax Administration
    Jamaica's public guidance now; an accountant before launch.
+   **Owner's requirement, 2026-10-02: the tax's name is per country, too.** Jamaica's is "GCT"; other
+   jurisdictions call theirs something else (Trinidad and Tobago's is VAT). The tax's name — and its short
+   label, the registration number's name (TRN in Jamaica) and the wording a tax invoice must carry — is
+   **data in each country's rule pack**, never a word in code, screens or document templates. The design adds
+   a guard that fails if "GCT" appears in product code or copy outside Jamaica's rule-pack data.
 2. **API layer.** REST with an OpenAPI contract generated from the code and a contract test in CI; web
    sessions in a secure, HttpOnly cookie with a CSRF token (the mobile app later sends the same session
    secret in a header); one error format (RFC 9457 problem details) that leaks nothing internal; an

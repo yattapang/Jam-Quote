@@ -209,7 +209,9 @@ R1.41, R1.42.
   supplier's TRN and the GCT amount separately, on our current reading), what a credit note does to tax, and **the refund and client-credit records** an
   over-payment resolves into (R1.26), including whether a kept credit can settle another invoice (finding
   C2) — with a migration giving `invoice` and `credit_note` tax fields and `tenant` its GCT registration and
-  TRN. **Tenants may enter their own GCT or tax rates for their country** (owner, ADR 0030): the platform
+  TRN. **The tax's name is per country** (owner, ADR 0030): "GCT" in Jamaica, another name elsewhere (VAT in
+  Trinidad and Tobago) — held, with the registration number's name and the invoice wording, in each country's
+  rule pack, never written into code or screens. **Tenants may enter their own GCT or tax rates for their country** (owner, ADR 0030): the platform
   supplies each country's defaults, a tenant may set or add rates for their own documents, and every issued
   document freezes the rate it used. It is checked against Tax Administration Jamaica's published guidance now and **reviewed by an
   accountant before launch** (§9). The ceiling as built is tax-inclusive (`total_minor`), so the design
