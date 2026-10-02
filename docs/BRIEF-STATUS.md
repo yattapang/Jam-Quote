@@ -858,6 +858,18 @@ sent complete when its stage is reached, with long-lead items (WiPay, the accoun
 placed in the earliest batch their answers could affect. Batch 1 is sent when A3-A12 are signed off. Pointers in the
 PRD (§9), the build plan and the root `CLAUDE.md`. Next: design A3, support and feedback.
 
+**Design drafted 2026-10-02: support and feedback** (`docs/design/support-and-feedback.md`, build plan A3) — brief
+§15's options paper, eight decisions (SF1-SF8) with costs, for the owner. Recommended: a small ticket built into
+Pryvis rather than a hosted helpdesk (the deciding issue is that support messages carry tenants' clients' data, which
+a helpdesk would hold outside our isolation and audit), with `info@`/`support@` as one mailbox (provider chosen in A5:
+Zoho Mail free, or Google Workspace about US$7 a user a month); a help centre in our own site with in-browser search
+that sends nothing; "report a problem" with an unticked consent box for technical details only; a promise of one
+working day; tickets kept 24 months after closing; weekly triage into **redacted** issues behind a guard that refuses
+emails, phones, TRNs and the ticket's client names — the input to A4's maintenance task list. The chatbot in three
+phases: none at launch; release 2 answers from our help articles by search, no model; a live assistant only after a
+Rule 15 amendment, the attorney and a redactor, at about US$20-40 per thousand conversations. WhatsApp support line
+revisited with I3. OA12 gains the `support@` alias.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

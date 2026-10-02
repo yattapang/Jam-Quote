@@ -59,7 +59,7 @@ so they start now.
 | # | Action | Why, and the step that needs it | Status |
 |---|---|---|---|
 | OA11 | **The sending domain at GoDaddy:** SPF, DKIM and DMARC records for the email provider (exact values in the batch) | Quotes and codes are sent by email (C1); unauthenticated mail lands in spam silently (PRD §9 item 1a) | Open |
-| OA12 | **Make `info@pryvis.com` receive mail** | The site's contact point, and the support inbox (C1, E1; PRD §9 item 1) | Open |
+| OA12 | **Make `info@pryvis.com` receive mail**, with `support@pryvis.com` as an alias of the same mailbox (`docs/design/support-and-feedback.md` SF2) | The site's contact point, and the support inbox (C1, E1; PRD §9 item 1) | Open |
 | OA13 | **Prices and the billing term** for each tier | Sign-up shows the plans (C2); tiers and subscriptions (D5, D6; PRD §9 item 2) | Open |
 | OA14 | **Approve the wording of the aggregate-data consent clause** (drafted by us, sent to the attorney under OA10) | It must exist before the first tenant signs up (brief §5a; C2; PRD §9 item 4) | Open |
 
