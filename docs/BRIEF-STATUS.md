@@ -896,6 +896,11 @@ check (Sonnet), `docs/briefs/2026-10-02-support-design-closing-check.md`.
 before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9): every item names the text to read; the read's
 report is reproduced in the brief.* Brief `docs/briefs/2026-10-02-support-design-closing-check.md`, run by
 `tools/run_brief.py` at HEAD `8743d00`: 5 of 5 expectations hold.
+**Reported 2026-10-02: not closable — 14 of 15 answered.** The gap was SR5: SF5 now records tier and version
+without consent, which changes ADR 0030 decision 4 (it put them behind consent), and the design did not say so. Fixed:
+SF5 states the change and that the design governs; ADR 0030 decision 4 carries a dated note; Rule 25.3 already reads
+this way and is unchanged. The check's one residue on SR8 is fixed too: staff actions on an unconfirmed inbox ticket
+go to the platform trail only. Next: a scoped re-check (Sonnet), `docs/briefs/2026-10-02-support-design-recheck.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

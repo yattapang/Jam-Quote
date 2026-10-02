@@ -45,6 +45,9 @@
    page — never personal data — tagged bug, feature, question or billing; error tracking linked to each report;
    a weekly triage that turns reports into **redacted** issues, so Claude-assisted maintenance stays within
    Rule 15; response time, resolution time and the commonest issues measured.
+   *(Note 2026-10-02, finding SR5: `docs/design/support-and-feedback.md` SF5 records the tier and app version on every
+   report without asking — neither is personal data, and Rule 25.3 requires both on every piece of feedback — and
+   keeps only the page and error references behind consent. The design governs.)*
 5. **Environments and operations.** Keep the current providers and make them proper: the web app and site on
    Vercel, the rebuilt API on Render (paid and always on at launch, ADR 0026) defined in a versioned blueprint,
    Neon Postgres with branches for development and staging — three environments. Hosting region US-East,

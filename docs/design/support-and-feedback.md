@@ -168,6 +168,9 @@ ticket, reply, set the status and the triage outcome. Each read and each change 
   Pryvis staff on your account" (`new-app/web/content/legal.ts`);
 - in the **platform audit trail** (R1.48).
 
+A ticket still in the support inbox belongs to no tenant yet, so staff reads and changes to it are recorded in the
+platform trail only. Once a tenant confirms it, later actions are recorded in both.
+
 **An audit entry about a ticket carries only the ticket's reference and category, never its subject or message**
 *(SR7)*, because audit entries outlive the ticket by years (ADR 0020).
 
@@ -245,6 +248,15 @@ Both are recorded in the support inbox with their own category, so they are trac
 
 Neither is personal data. Rule 25.3 requires every piece of feedback to be linked to both, and SF6's per-tier measures
 need them.
+
+**This changes ADR 0030 decision 4** *(SR5)*. That decision put "the app version, tier and page" behind consent. This
+design keeps only the page and the error references behind consent, and records tier and version always. The two
+conflict, so this design governs:
+- ADR 0030 carries a dated note pointing here;
+- the ADR that records this design at sign-off states the change.
+
+Rule 25.3 already reads this way — every piece of feedback is linked to the version and tier, and only the
+"non-sensitive context" of a report needs consent — so the rule is unchanged.
 
 **Attached only with consent** — a checkbox, unticked by default, because consent is an act, not a default (brief
 §15). The wording matches exactly what is attached *(SR10)*:
