@@ -746,6 +746,12 @@ approval.**
 planning baseline audit against the original brief (`docs/DEVELOPMENT-BRIEF.md`), then the six designs of ADR
 0030 — GCT first. Nothing is built until each design is approved.
 
+**Planning baseline audit written, 2026-10-02** (`docs/PLANNING-AUDIT.md`): every owner requirement and brief
+recommendation mapped to rule, decision, design and build. Verdict: mostly in place and followed; three drifts
+for the owner — D-1 revision numbering contradicts brief §10, D-2 owner requirement 7 has no rule, D-3 Rules 6,
+11 and 12 overtaken by ADR 0027 — twelve designs owed (listed), and stale headers to correct. The builder's own
+audit, so an independent read is recommended before the designs start.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
