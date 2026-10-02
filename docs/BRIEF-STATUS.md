@@ -705,6 +705,11 @@ accepts that marker (planted: an unmarked line is caught).
 **Owner approved, 2026-10-02:** the proposed numbers (30-day default quote validity; §11's free-limit trigger of
 15%/60% and conversion trigger of 5%), and the independent re-read of the amended PRD.
 
+**Launched 2026-10-02: re-read of the amended PRD.** *Delegation (Rule 16.5), declared before launch:
+commit-reviewer at **Opus** — product judgement over the plan of record, adversarial against the amendments
+themselves.* Brief `docs/briefs/2026-10-02-prd-review-5-reread.md`; `tools/run_brief.py` ran it at `34122ba`:
+5 of 5 expectations hold. Findings C1 onward, appended to `docs/PRD-REVIEW-5.md`.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
