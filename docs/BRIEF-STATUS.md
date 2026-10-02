@@ -809,6 +809,15 @@ item 7), which also approves the amendments — chiefly T6's credit that may tar
 **Signed off by the owner, 2026-10-02: "Yes, A1 is fully approved"** — the design and its amendments. A1 is ticked in
 `docs/BUILD-PLAN.md` with its evidence line. Next: design A2, the API layer.
 
+**Design drafted 2026-10-02: the API layer** (`docs/design/api-layer.md`, build plan A2) — eleven decisions (AP1-AP11)
+with recommendations, for the owner: the API at `api.pryvis.com` so the session cookie is first-party; a `__Host-`
+cookie, SameSite=Strict, with a CSRF token and an Origin check; one Zod schema per route for validation, responses,
+client types and OpenAPI, with a contract test against the live route inventory; RFC 9457 errors that echo nothing;
+idempotency records written in the same transaction as the work; start-up that refuses to run unsafe (configuration,
+the least-privilege check, lock and statement timeouts); logs by route template with nothing personal; a job table in
+our own PostgreSQL whose rows carry their tenant; server-made, tenant-scoped storage keys and 5-minute signed URLs.
+One owner action: a DNS record for `api.pryvis.com`.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
