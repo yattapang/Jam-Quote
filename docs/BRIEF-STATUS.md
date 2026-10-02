@@ -902,6 +902,10 @@ SF5 states the change and that the design governs; ADR 0030 decision 4 carries a
 this way and is unchanged. The check's one residue on SR8 is fixed too: staff actions on an unconfirmed inbox ticket
 go to the platform trail only. Next: a scoped re-check (Sonnet), `docs/briefs/2026-10-02-support-design-recheck.md`.
 
+**Launched 2026-10-02: re-check of SR5.** *Delegation (Rule 16.5), declared before launch: general-purpose at
+**Sonnet** — mechanical (Rule 16.9).* Brief `docs/briefs/2026-10-02-support-design-recheck.md`, run by
+`tools/run_brief.py` at HEAD `3abc05e`: 4 of 4 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
