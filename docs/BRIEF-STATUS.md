@@ -825,6 +825,20 @@ expert opinion, not only to find gaps. Brief `docs/briefs/2026-10-02-api-layer-r
 commit-reviewer at **Opus** — security architecture is judgement-class, and the owner relies on our judgement.* Brief
 `docs/briefs/2026-10-02-api-layer-read.md`, run by `tools/run_brief.py` at HEAD `a67bb60`: 3 of 3 expectations hold.
 Findings AL1 onward, and agree/disagree on AP1-AP11, in its reply.
+**Reported 2026-10-02: AL1-AL18**, verdict "sound to build from after the named changes"; tree left clean. The reader
+agreed with all eleven recommendations in direction and named where the text did not work, confirming the worst by
+running them on a scratch PostgreSQL cluster and Nest app outside the repository: the idempotency key's unique index
+let null-user duplicates through on share routes (AL1); the job worker could claim nothing under row-level security,
+and clean-up silently deleted nothing (AL6); the time limits did not bound an idle transaction holding the money lock
+(AL5); strict validation did not reach nested fields (AL11); login CSRF (AL9); and the share page sharing the API's
+origin (AL10). **Answered the same day in the design** (its §7 maps each finding): a non-null principal and a full
+fingerprint; one creating request is one transaction, owned by the interceptor; `ON CONFLICT DO NOTHING`, first in
+the lock order; an idle-transaction timeout and explicit Prisma limits, every resulting code mapped; a claim door and
+leases for jobs; refusals mapped by constraint name; exceptions logged by shape, never text; the Origin check on
+every unsafe request, JSON only; **the share page on its own host, `share.pryvis.com` — a second DNS record for the
+owner**; strict at every depth with a whitelist of wire kinds; a runtime route inventory; signed provider callbacks
+as a route kind, tenant resolved before the signature is checked (R1.29). Next: the closing check (Sonnet),
+`docs/briefs/2026-10-02-api-layer-closing-check.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
