@@ -661,6 +661,12 @@ brief.* Brief `docs/briefs/2026-10-02-privilege-model-closing-check.md`; `tools/
 closed, its wiring into start-up owed with the bootstrap. **Review 4 now: all 16 findings Closed.** Staff MFA
 remains the launch blocker. Next: PRD review 5 (the owner's request, 2026-10-02).
 
+**Launched 2026-10-02: PRD review 5** — adversarial, with recommendations, before the owner approves the PRD
+(the owner's request). *Delegation (Rule 16.5), declared before launch: commit-reviewer at **Opus** — product
+judgement over the whole plan of record, adversarial; a cheaper tier would check text, not whether the plan
+holds.* Brief `docs/briefs/2026-10-02-prd-review-5.md`; `tools/run_brief.py` ran it at `7a62aa5`: 3 of 3
+expectations hold. Findings B1 onward, written by the reviewer to a new review file, not committed by it.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
