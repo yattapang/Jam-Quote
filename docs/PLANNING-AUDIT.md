@@ -12,7 +12,7 @@ by itself.** Where the plan is followed, nothing is proposed. Where it is not, t
 
 **Method and its limits (Rule 21.4).** Each row was checked against the files named in it, by reading or by
 a command, on 2026-10-02 at HEAD `50d1235`. It is the builder's audit of the builder's work, so it is **not an
-independent check** (Rule 24.6); an independent read of it is recommended before the six designs start (§8).
+independent check** (Rule 24.6); an independent read of it is recommended before the designs start (§8). *("The six designs" are ADR 0030's; §7's list is longer — it contains those six and the other designs the PRD needs, finding PA1.)*
 Legal and tax statements are not verified here.
 
 ---
@@ -64,7 +64,7 @@ recorded decision (ADR 0025), not an accident.
 
 | Agreement | Followed? |
 |---|---|
-| Design before code — a gate | **Breached three times, each recorded:** Foundations ahead of Phase 1, the site without a design (both in `BRIEF-STATUS.md`), and the documents data layer before the PRD was approved — the owner's decision (ADR 0025). Since then every built thing has a design. From here, **each workflow needs its own approved design** (PRD header) |
+| Design before code — a gate | **Breached twice, as recorded in `BRIEF-STATUS.md`:** Foundations ahead of Phase 1, and the site without a design. **A third departure** — the documents data layer built before the PRD was approved — is recorded in the PRD's header; ADR 0025 records the owner's decision to move five invariants into a migration, not a decision to build ahead of the PRD (corrected after finding PA8). Whether every later built thing had its design first was not checked here. From here, **each workflow needs its own approved design** (PRD header) |
 | Audit before rebuild | Followed (`PHASE-0-AUDIT.md`) |
 | Small, reviewable changes | Mostly; the review-fix commits have been large |
 | Tests first or alongside | Followed — and stricter: every control is proved by a planted defect |
@@ -80,8 +80,8 @@ recorded decision (ADR 0025), not an accident.
 | 7 | PostgreSQL, `tenant_id`, row security, migrations only | Built |
 | 7 | Client-generated UUIDs, `updated_at`, versions | Built (ADR 0019) |
 | 7 | Mobile framework chosen by offline capability, as an ADR | ADR 0027 D2 (React Native/Expo), timing ADR 0028 |
-| 7 | Portable tech; config not code; files out of the database; object storage from day one; backups from day one; free-tier ADR with a trigger | Portable and config-driven: yes. Object storage: **unchosen** (ADR 0030 → Cloudflare R2). Backups: **untested**. Trigger: ADR 0026 |
-| 8 | Money in minor units; tax rules, formats and wording as data per jurisdiction; UTC; i18n from the first screen; payment-provider abstraction; data protection reviewed early | Money: built. **Tax as data: owed** (the rule pack is owed in the rebuild; the GCT design, ADR 0030, now includes tenant-entered rates). UTC and i18n: in Rule 3, nothing of the UI built yet. **Payments abstraction: owed** (API layer). Data protection: public information now, attorney before launch (ADR 0027 D14) |
+| 7 | Portable tech; config not code; files out of the database; object storage from day one; backups from day one; free-tier ADR with a trigger | Portable and config-driven: yes. Object storage: **unchosen** (ADR 0030 → Cloudflare R2). Backups: **untested**. Trigger: **partly** — ADR 0026 makes the API host paid at launch, but Rule 10's ADR needs a concrete threshold and the paid equivalent for every free-tier piece, the database and storage included; that is owed with design 4 (finding PA7) |
+| 8 | Money in minor units; tax rules, formats and wording as data per jurisdiction; UTC; i18n from the first screen; payment-provider abstraction; data protection reviewed early | Money: built. **Tax as data: owed** (the rule pack is owed in the rebuild; the GCT design, ADR 0030, now includes tenant-entered rates). UTC and i18n: in Rule 3, nothing of the UI built yet. **Payments abstraction: owed** — a brief recommendation (§8, §14) not yet placed in any decision; proposed for design 10, payments (finding PA5). Data protection: public information now, attorney before launch (ADR 0027 D14) |
 | 9 | Plans and entitlements as data, one service, separate from billing, covering message costs | Decided (Rule 14, ADR 0007, PRD R1.31, R1.21c); `core/entitlements` **owed** |
 | 10 | Immutable snapshots, revisions, audit log, soft deletes; per-tenant document settings; numbering with prefix, start and **reset rule**; **"the assigned number … never changes on revision"** | Snapshots, revisions, audit log, soft deletes: built. Reset rule: **removed for R1 by the owner** (ADR 0027 D11). Revision numbering: **drift D-1** |
 | 11 | Isolation in layers; staff access logged; minimisation; encryption; export and deletion; terms, privacy, DPA reviewed by a lawyer; OWASP; MFA; secrets; dependency scanning; tested restores; breach plan; mobile encryption and remote sign-out | Isolation, MFA service, secret and dependency scanning: built. Export (R1.43), data requests (R1.44), breach plan (R1.45): required, not built. Lawyer: before launch (ADR 0027 D14). Tested restores: **owed** |
@@ -90,8 +90,8 @@ recorded decision (ADR 0025), not an accident.
 | 14 | Separation of duties; receipt upload; bank-statement verification; single-operator exception | PRD R1.33-R1.37, W10; design owed |
 | 15 | **Present support options with costs before deciding**; bot rules; feedback-to-maintenance loop | Direction set (ADR 0030); **the options paper and the feedback design are owed** (D-2) |
 | 16 | PR-based automation; least privilege; budgets and caps; runbooks; structured logs; no personal data to the API | PR-based and Rule 15: in place as practice. Runbooks, logs, error tracking, spend cap: **owed** |
-| 17 | CI/CD with dev, staging, production; infrastructure as code; unit, integration, e2e and contract tests; observability; tested restores | CI: built (`.github/workflows/verify.yml`). Environments, IaC, e2e, contract tests, observability, restores: **owed** (environments and operations design) |
-| 17a | The public site; terms and privacy approved | Built and guarded; terms and privacy are drafts until the attorney |
+| 17 | CI/CD with dev, staging, production; infrastructure as code; unit, integration, e2e and contract tests; observability; tested restores | CI: built (`.github/workflows/verify.yml`). Environments, IaC, e2e, observability, restores: **owed** (environments and operations design). **Contract tests: partly** — CI already fails when the checked-in wire contract drifts from the API's `@wire` types (`.github/workflows/verify.yml`, `new-app/packages/contract/`); the OpenAPI contract and its test are owed with design 2 (finding PA6) |
+| 17a | The public site; terms and privacy approved | Built and guarded; terms and privacy are drafts until the attorney — **including the aggregate-data consent clause brief §5a requires before the first sign-up** (finding PA2) |
 
 ## 5. Drift — where we have departed from the brief or our own rules
 
@@ -141,21 +141,26 @@ nothing in it is built before then.
 
 | # | Design | Unblocks | Includes |
 |---|---|---|---|
-| 1 | **GCT and documents** | W3, W4, W7 | Tax per invoice, tenant-entered rates per country, TRN, credit notes, refunds and client credits; **numbering (D-1)**; the rule pack for Jamaica |
-| 2 | **API layer** | Everything with a screen | OpenAPI, cookie sessions and CSRF, errors, idempotency, validation, start-up wiring, the payments abstraction |
+| 1 | **GCT and documents** | W3, W4, W7 | Tax per invoice, tenant-entered rates per country, TRN, credit notes, refunds and client credits; whether a variation's total and the invoiced figure are net or gross; what a non-registered tenant's lines carry; **numbering (D-1, ADR 0031)**; the rule pack for Jamaica (PRD R1.9; finding PA3) |
+| 2 | **API layer** | Everything with a screen | OpenAPI and its contract test, cookie sessions and CSRF, errors, idempotency, validation, start-up wiring (ADR 0030 decision 2); tenant context carried by background jobs and every storage path, signed URL and cache key tenant-scoped (brief §11) |
 | 3 | **Support and feedback** | R1.38, owner requirement 7 | The options paper with costs (brief §15), the chatbot under Rule 15, the feedback loop, the new rule (D-2) |
-| 4 | **Environments and operations** | Launch | Three environments, the blueprint, region, backups and restore drills, observability, runbooks, the Claude spend cap |
-| 5 | **The register completed** | R1.36, R1.13, uploads | R2, ClamAV, Sentry, uptime, inbox — each with "why this one" and privacy-notice lines |
-| 6 | **Outbound messaging** | W4 delivery, W5, R1.28 | One service, channels, delivery status and bounces, opt-out, message caps |
-| 7 | **Document settings and the PDF** | W4, owner requirement 10 | Logo, header, colours, terms; the shared layout; the render and its hash |
+| 4 | **Environments and operations** | Launch | Three environments, the blueprint, region, backups and restore drills, observability with no personal data in logs, runbooks, the Claude spend cap; **Rule 10's trigger with thresholds and paid equivalents for every free-tier piece** (PA7); connection pooling and cold-start tolerance; feature flags, staged rollouts and rollback; dependency updates as automated pull requests; the model tiers of Rule 15 (brief §§7, 16) |
+| 5 | **The register completed** | R1.16, R1.16a, R1.33, R1.36 — logos, rendered PDFs and receipts need storage (PRD §9 item 1d; corrected from "R1.13", finding PA4) | R2, ClamAV, Sentry, uptime, inbox — each with "why this one" and privacy-notice lines; the rows for tenants' encrypted WiPay credentials in the register and the threat model (PRD R1.29); upload security — type, size, scanning, duplicates (brief §14) |
+| 6 | **Outbound messaging** | W4 delivery, W5, R1.28 | One service, channels, delivery status and bounces, opt-out, message caps; always the issued snapshot, as a PDF or an expiring link; per-tenant sender name and reply-to; channel rules per country (brief §§8, 12) |
+| 7 | **Document settings and the PDF** | W4, owner requirement 10 | Logo, header, colours, terms; the shared layout and its presets; the render and its hash; the original application's branding cross-checked (brief §10) |
 | 8 | **Sign-up and verification** | W9, the first slice (brief §18 step 2) | Registration, the equality guard (PRD R1.30c), duplicate handling |
 | 9 | **Share page and accept flow** | W5 | The always-on page, codes, the channel-aware bar |
-| 10 | **Payments and the staff console** | W7, W9, W10, owner requirement 5 | Manual approval, card upgrade, per-tenant WiPay with server confirmation, the console's screens, the platform audit trail |
+| 10 | **Payments and the staff console** | W7, W9, W10, owner requirement 5 | Manual approval, card upgrade, per-tenant WiPay with server confirmation (and WiPay's answer on a transaction-status query), **the payments abstraction** (brief §8, §14; PA5), the email-receipt fallback, the console's screens, the platform audit trail |
 | 11 | **Each workflow's screens** (W1-W10) | Each workflow | What the user sees and does — the PRD says what must be possible, not what it looks like |
-| 12 | **The mobile app and sync** | The mobile launch | Seal-only offline, the outbox, revocation, the keystore — after the web launch |
+| 12 | **The mobile app and sync** | The mobile launch | Seal-only offline, the outbox, revocation, the keystore — after the web launch; the logo and settings available offline; clock differences; tests under poor networks (brief §§10, 13) |
+| 13 | **Data rights and the tenant's audit trail** (added after finding PA3) | Launch | Data export (R1.43), a person's requests about their data (R1.44), the written breach response (R1.45), and the tenant-readable audit trail (R1.40) |
+| 14 | **The nightly reconciliation job** (added after finding PA3) | W7 | R1.24e: the hold the invoicing path reads, its clearing by staff with a recorded reason, the alert |
 
-Owner dependencies that do not need a design but block launch are in PRD §9 (WiPay's answers, the sending
-domain, prices, the attorney, the accountant, app-store accounts, the second staff member, the Claude cap).
+Owner dependencies that do not need a design but block launch are in PRD §9: `info@pryvis.com` receiving mail;
+the sending domain; WiPay's answers; the malware scanner and object storage (designs 5); prices; approved legal
+wording; **the aggregate-data consent clause in the terms — which blocks registration, not only launch** (brief
+§5a: it "cannot be retro-fitted", so it must exist before the first tenant signs up; finding PA2); the second
+staff member; the attorney; a paid host for the API; the accountant; app-store accounts; the Claude cap.
 
 ## 8. Recommended next steps
 
@@ -166,3 +171,23 @@ domain, prices, the attorney, the accountant, app-store accounts, the second sta
 4. **An independent read of this audit** (Sonnet, mechanical: every row's file checked) before the designs
    start, because this is the builder auditing the builder.
 5. **The designs, in §7's order**, each approved before anything in it is built.
+
+## 9. After the independent read (2026-10-02)
+
+An independent read (Sonnet, brief `docs/briefs/2026-10-02-planning-audit-read.md`, at `fd10219`) found no row of
+§2 false in substance, and nine gaps or imprecisions, PA1-PA9, all corrected above:
+
+- **PA1:** "the six designs" are ADR 0030's; §7's list is the full set.
+- **PA2:** the aggregate-data consent clause (brief §5a) was missing from the dependencies; it blocks registration.
+- **PA3:** data export, data requests, the breach response and the tenant's audit trail (R1.40, R1.43-R1.45) and the
+  reconciliation job (R1.24e) had no design — designs 13 and 14 added; design 1 and 5's contents completed.
+- **PA4:** design 5 unblocks R1.16, R1.16a, R1.33 and R1.36, not R1.13.
+- **PA5:** the payments abstraction is a brief recommendation not yet decided anywhere; placed in design 10.
+- **PA6:** CI already checks the wire contract for drift; the OpenAPI contract test is what is owed.
+- **PA7:** ADR 0026 covers the API host only; Rule 10's full trigger is owed with design 4.
+- **PA8:** "breached three times, each recorded" overstated; corrected in §3.
+- **PA9:** the brief items without a row — free-tier limits (pooling, cold starts), messaging rules per country,
+  offline logo and settings, cross-checking the original branding, tenant-scoped storage, cache and logs, no
+  personal data in logs, the issued snapshot as PDF or link, per-tenant sender and reply-to, clock differences and
+  poor networks, upload security and the email fallback, support response times (Rule 25.3), feature flags and
+  rollback, automated dependency updates, model tiers — are now each placed in a design in §7.

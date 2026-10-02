@@ -761,6 +761,9 @@ line corrected.
 **Launched 2026-10-02: independent read of the planning baseline audit.** *Delegation (Rule 16.5), declared before
 launch: general-purpose at **Sonnet** (Rule 16.9) — mechanical: every claim names its file.* Brief
 `docs/briefs/2026-10-02-planning-audit-read.md`. Findings PA1 onward.
+**Reported 2026-10-02:** no row of the audit false in substance; PA1-PA9 corrected in `docs/PLANNING-AUDIT.md` (§9). The
+owed list is now **fourteen designs** — data rights (R1.40, R1.43-R1.45) and the reconciliation job (R1.24e) added — and the
+aggregate-data consent clause (brief §5a) is listed as blocking registration. **Next: design 1, GCT and documents.**
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
