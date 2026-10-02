@@ -673,6 +673,13 @@ closures found not to hold fully (H12, H17, F4, H8); B28 (the `app_user.email` u
 global as five documents say) confirmed by the builder against `20260924120000_row_identity_and_versioning`.
 The review file is registered with both citation tools. Next: the owner's decisions, then the PRD amended.
 
+**Owner's decisions, 2026-10-02 (PRD review 5):** every recommendation D1-D14 accepted, recorded in ADR 0027,
+with D2 chosen as **React Native with Expo**, and two adjustments: **D9** adds a support chatbot "if possible"
+(help content only, no tenant data — Rule 15 — within the undecided Claude budget); **D14** uses public legal
+information for now, labelled unverified, with an attorney before full launch (F15 becomes a launch gate).
+D7 likewise: tax-exclusive, checked against Tax Administration Jamaica's public guidance, an accountant before
+launch. Next: the PRD amended against B1-B28, then an independent re-read before approval.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
