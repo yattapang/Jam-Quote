@@ -1,7 +1,9 @@
 # Design: the API layer — contract, sessions, errors, idempotency, validation, start-up, jobs and storage
 
-**Status: DRAFT, for the owner's approval.** Build plan step A2 (`docs/BUILD-PLAN.md`). After approval: an
-independent read, a closing check, then the owner's sign-off ticks A2. Nothing here is built until step B2 (and
+**Status: APPROVED by the owner, 2026-10-02 — every recommendation, AP1-AP11** ("Approved. I am not an expert on
+API and therefore require your expert judgment on this part"). Because the owner relies on our judgement here, the
+independent read is asked to challenge each recommendation, not only to find gaps. Build plan step A2 (`docs/BUILD-PLAN.md`). Next: an independent read,
+a closing check, then the owner's sign-off ticks A2. Nothing here is built until step B2 (and
 B5 for storage) begins.
 
 Date: 2026-10-02 · **Implements the direction of** ADR 0030 decision 2 (REST, a generated OpenAPI contract with a

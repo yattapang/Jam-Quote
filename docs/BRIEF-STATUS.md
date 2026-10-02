@@ -817,6 +817,9 @@ idempotency records written in the same transaction as the work; start-up that r
 the least-privilege check, lock and statement timeouts); logs by route template with nothing personal; a job table in
 our own PostgreSQL whose rows carry their tenant; server-made, tenant-scoped storage keys and 5-minute signed URLs.
 One owner action: a DNS record for `api.pryvis.com`.
+**Approved by the owner, 2026-10-02:** every recommendation AP1-AP11, with the owner's note that they are not an API
+expert and rely on our judgement. So the independent read is briefed to challenge each recommendation as a second
+expert opinion, not only to find gaps. Brief `docs/briefs/2026-10-02-api-layer-read.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
