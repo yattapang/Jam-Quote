@@ -918,6 +918,17 @@ trigger, and the three approval gates for Claude maintenance with their interfac
 A3's redacted-issue task list (SF8). Done so far: A1, A2, A3 (3 of 62 steps). No owner batch has been sent; batch 1
 is due when A3-A12 are signed off (`docs/OWNER-ACTIONS.md`).
 
+**Owner's direction, 2026-10-02: Stripe for subscriptions** (ADR 0033). Stripe, through the owner's Canadian company,
+is the candidate for tenants' subscription payments to Pryvis only; tenants' clients still pay tenants directly (WiPay
+or another local provider). WiPay stays the fallback: A10 makes payments provider-neutral, so reverting is
+configuration. Conditional on Stripe confirming in writing that the Canadian account may take these payments (its
+agreement expects the account holder to be the seller), and on the accountant and attorney. Testing in Stripe's test
+mode only, after A10 sets what it must prove. OA8 held; OA20-OA21 added to batch 1; ADR 0033's questions added to OA9
+and OA10. Nothing built.
+**The owner then decided: the Canadian company is the seller of the subscriptions** ("If that is the case I would make
+the canadian company the seller"), paying the Jamaican business under an agreement between the companies. ADR 0033
+and OA20 updated: Stripe is told the full structure when the account opens, and its approval is kept on file.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

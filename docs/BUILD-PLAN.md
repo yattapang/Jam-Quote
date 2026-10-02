@@ -58,7 +58,7 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
 - [ ] A8 · Sign-up and verification
 - [ ] A9 · The share page and the accept flow
 - [ ] A10 · Payments, the payments abstraction, the tenant's WiPay connection in their profile, and the staff
-  console
+  console — provider-neutral, with **Stripe as the candidate for subscriptions and WiPay the fallback** (ADR 0033), and the test-mode experiment
 - [ ] A11 · Data rights (export, requests, the breach response) and the tenant's audit trail
 - [ ] A12 · The nightly reconciliation job
 - [ ] A13 · Each workflow's screens — written just before that workflow is built, so this item is ticked per

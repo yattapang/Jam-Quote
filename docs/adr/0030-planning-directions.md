@@ -68,7 +68,9 @@
 7. **WiPay, as the owner restated it (2026-10-02).** Each tenant connects **their own** WiPay merchant account in
    the Payments section of their Pryvis account profile, and their clients pay them directly. The WiPay account
    itself is opened with WiPay (its identity checks); if WiPay offers a partner sign-up, the profile starts it.
-   **Pryvis's own WiPay account takes only tenants' payments to Pryvis.**
+   **Pryvis's own WiPay account takes only tenants' payments to Pryvis.** *(Note 2026-10-02: ADR 0033 makes Stripe,
+   through the owner's Canadian company, the candidate for those subscription payments, on conditions; this sentence
+   stands as the fallback until they are met.)*
 
 ## Consequences
 
