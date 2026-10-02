@@ -844,6 +844,10 @@ as a route kind, tenant resolved before the signature is checked (R1.29). Next: 
 declared before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9): every item names the text to read;
 the read's report is reproduced in the brief.* Brief `docs/briefs/2026-10-02-api-layer-closing-check.md`, run by
 `tools/run_brief.py` at HEAD `665c26e`: 5 of 5 expectations hold.
+**Reported 2026-10-02: closable.** 5 of 5 expectations hold at `941b399`; AL1-AL18 each answered with its quoted
+sentence, and every "disagree" or "amended" line of the reader's AP1-AP11 opinion adopted. **A2 now awaits only the
+owner's sign-off** (checklist item 7), which also approves the amendments — chiefly the share page on its own host,
+`share.pryvis.com`, a second DNS record.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
