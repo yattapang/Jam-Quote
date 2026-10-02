@@ -840,6 +840,9 @@ to catch.
 
 ## 9. Dependencies on the owner
 
+*(Pointer 2026-10-02: when each of these is asked for, and in which batch, is scheduled in `docs/OWNER-ACTIONS.md`,
+at the owner's request — complete batches at each stage, never one at a time.)*
+
 R1 cannot launch without these, and none of them are engineering:
 
 1. **`info@pryvis.com` receiving mail.** The site's only call to action is broken without it.

@@ -848,6 +848,15 @@ the read's report is reproduced in the brief.* Brief `docs/briefs/2026-10-02-api
 sentence, and every "disagree" or "amended" line of the reader's AP1-AP11 opinion adopted. **A2 now awaits only the
 owner's sign-off** (checklist item 7), which also approves the amendments — chiefly the share page on its own host,
 `share.pryvis.com`, a second DNS record.
+**Signed off by the owner, 2026-10-02: "A2 agreed"** — the design and its amendments. A2 is ticked in
+`docs/BUILD-PLAN.md` with its evidence line.
+
+**Owner actions, scheduled (owner's request, 2026-10-02):** "keep a log of all the actions required on my part and when
+we are at the stage when they are needed, send me the complete requests … methodically and not ad hoc". Now
+`docs/OWNER-ACTIONS.md`: OA1-OA19 in four batches keyed to the build plan's phases. Each batch is a committed file,
+sent complete when its stage is reached, with long-lead items (WiPay, the accountant, the attorney, the app stores)
+placed in the earliest batch their answers could affect. Batch 1 is sent when A3-A12 are signed off. Pointers in the
+PRD (§9), the build plan and the root `CLAUDE.md`. Next: design A3, support and feedback.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

@@ -23,6 +23,8 @@ history.
 4. `docs/BRIEF-STATUS.md` — where the work stands and the owner's latest decisions; `docs/BUILD-PLAN.md` —
    the build order, with the checklist a step must meet before it is ticked.
 5. `docs/PRD-REVIEW-5.md` and `docs/PRD-REVIEW-4.md` — the disposition tables at the top: the open review findings.
+6. `docs/OWNER-ACTIONS.md` — every action only the owner can take, sent in complete batches when their stage is
+   reached, never one at a time (the owner's instruction, 2026-10-02). A new one goes into the next unsent batch.
 
 ## The gate, before every commit
 

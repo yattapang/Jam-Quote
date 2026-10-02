@@ -3,9 +3,9 @@
 **Status: APPROVED by the owner, 2026-10-02 — every recommendation, AP1-AP11** ("Approved. I am not an expert on
 API and therefore require your expert judgment on this part"). **Amended the same day** to answer its independent
 read (findings AL1-AL18, §7), which also gave its own opinion on every recommendation: it agreed with the direction
-of all eleven and named where the text did not work. The amendments are approved with the step's sign-off. One adds
+of all eleven and named where the text did not work. **The owner signed off the step, amendments included, on 2026-10-02** ("A2 agreed"); A2 is ticked in the build plan. One adds
 an owner action: the share page gets its own host, `share.pryvis.com` (AL10). Build plan step A2
-(`docs/BUILD-PLAN.md`). The closing check is owed before the step is ticked. Nothing here is built until step B2
+(`docs/BUILD-PLAN.md`). Nothing here is built until step B2
 (and B5 for storage) begins.
 
 Date: 2026-10-02 · **Implements the direction of** ADR 0030 decision 2 (REST, a generated OpenAPI contract with a

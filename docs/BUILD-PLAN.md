@@ -45,8 +45,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
 
 - [x] A1 · Tax (GCT in Jamaica) and documents, `docs/design/tax-and-documents.md` — per-country tax names, labels and rates; tax per invoice; TRN; credit notes, refunds and client credits; revision numbering ("Q-0042 rev 2", ADR 0031); the rule pack
   Done: 2026-10-02 · commit `136ee7c` · review `docs/briefs/2026-10-02-tax-design-read.md` · closing `docs/briefs/2026-10-02-tax-design-closing-check.md` · owner: approved 2026-10-02
-- [ ] A2 · API layer — OpenAPI and its contract test, cookie sessions and CSRF, errors, idempotency,
-  validation, start-up wiring, tenant context in jobs and storage
+- [x] A2 · API layer, `docs/design/api-layer.md` — OpenAPI and its contract test, cookie sessions and CSRF, errors, idempotency, validation, start-up wiring, tenant context in jobs and storage
+  Done: 2026-10-02 · commit `97f0263` · review `docs/briefs/2026-10-02-api-layer-read.md` · closing `docs/briefs/2026-10-02-api-layer-closing-check.md` · owner: approved 2026-10-02
 - [ ] A3 · Support and feedback — the options paper with costs (brief §15), the chatbot under Rule 15, the
   feedback loop (Rule 25)
 - [ ] A4 · Environments and operations — three environments, backups and restore drills, monitoring,
@@ -64,11 +64,10 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
 - [ ] A13 · Each workflow's screens — written just before that workflow is built, so this item is ticked per
   workflow in phases C and D
 
-**Owner actions in parallel** (PRD §9): WiPay's answers (per-tenant accounts, partner sign-up, a
-server-to-server transaction check, recurring payments) · the sending domain at GoDaddy and the `info@`
-mailbox · prices and the billing term · the terms, including **the aggregate-data consent clause, which must
-exist before the first sign-up** · the attorney · the accountant · the second staff member · the Claude spend
-cap · approval of the paid host.
+**Owner actions** are scheduled in `docs/OWNER-ACTIONS.md` (owner's request, 2026-10-02): each is sent once, as part
+of a complete batch, when its stage is reached — never ad hoc. **Batch 1** (the paid host, the two DNS records, the
+Claude spend limit, the second staff member, how code is reviewed, the A5 service accounts, and the long-lead items:
+WiPay's answers and merchant account, the accountant, the attorney) is sent when A3-A12 are signed off.
 
 ## Phase B — Platform foundation (after A2, A4, A5)
 
@@ -87,6 +86,8 @@ cap · approval of the paid host.
 
 ## Phase C — The first end-to-end slice (brief §18 step 2)
 
+*Owner batch 2 (`docs/OWNER-ACTIONS.md`) is sent when phase B is signed off.*
+
 *Website → sign up → verify email → price a quote → send it → the client accepts.*
 
 - [ ] C1 · Email messaging, with delivery status and bounces
@@ -97,6 +98,8 @@ cap · approval of the paid host.
 - [ ] C6 · The slice reviewed end to end, and demonstrated to the owner
 
 ## Phase D — Getting paid: the Pro line (brief §18 step 3)
+
+*Owner batch 3 is sent when phase C is signed off.*
 
 - [ ] D1 · Recorded variations (W6a)
 - [ ] D2 · Invoicing (W7) — deposit, progress and final; tax per invoice; credit notes; payments and
@@ -118,6 +121,8 @@ cap · approval of the paid host.
 - [ ] E6 · The site's final copy; terms and privacy approved after the attorney
 
 ## Phase F — The web launch
+
+*Owner batch 4 is sent when phases D and E are signed off.*
 
 - [ ] F1 · A full adversarial security pass; the threat model brought up to date
 - [ ] F2 · The attorney's sign-off and the accountant's tax review
