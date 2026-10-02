@@ -742,6 +742,10 @@ none of its rows was parsed (M42) — fixed with per-review letters, and review 
 bare Closed row planted on B3 passes the old tool and fails the new. **The PRD is ready for the owner's
 approval.**
 
+**PRD APPROVED by the owner, 2026-10-02.** It is the plan of record for release 1. Next, in the agreed order: the
+planning baseline audit against the original brief (`docs/DEVELOPMENT-BRIEF.md`), then the six designs of ADR
+0030 — GCT first. Nothing is built until each design is approved.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

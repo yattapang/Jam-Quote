@@ -1,15 +1,17 @@
 # Product Requirements: Pryvis, release 1
 
-**Status: Proposed — awaiting the owner's approval.** Two gates stand between this document and code,
+**Status: APPROVED by the owner, 2026-10-02.** Two gates stood between this document and code,
 and they ask different questions (Rule 1.10):
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | **Outstanding — ready for the owner's decision.** Review 5 recommended not approving yet; the owner's decisions are ADRs 0027-0030 (2026-10-02); the amended document was re-read independently (approve after named changes), the changes were made, and a closing check confirmed them |
+| **Owner approval** | Is this what you want built? | **Given 2026-10-02.** Review 5 recommended not approving yet; the owner's decisions are ADRs 0027-0030; the amended document was re-read independently (approve after named changes), the changes were made, a closing check confirmed them, and the owner approved |
 | **Independent review** | Will this do what it says? | **Five rounds run:** [`PRD-REVIEW.md`](PRD-REVIEW.md), [`PRD-REVIEW-2.md`](PRD-REVIEW-2.md), [`PRD-REVIEW-3.md`](PRD-REVIEW-3.md), [`PRD-REVIEW-4.md`](PRD-REVIEW-4.md) (the code; all closed), [`PRD-REVIEW-5.md`](PRD-REVIEW-5.md) (B1-B28 and the re-read's C1-C10: **all Closed after independent
 checks on 2026-10-02, except B10, open on purpose until the GCT design**). Each file's disposition table says which findings remain open |
 
-An open finding blocks building the part it concerns, not the whole plan. **The documents layer is already
+**Approval is not permission to build everything at once.** Each workflow still needs its own approved
+design before code (brief §3, Rule 1.1), and six planning designs are owed first (ADR 0030). An open finding
+— today only B10, the GCT design — blocks building the part it concerns, not the whole plan. **The documents layer is already
 built** — the owner moved five invariants into code under ADR 0025 (2026-09-25), and the migrations from
 `20260925120000_documents_core` on implement W4, W5 and W7's data layer — so approving this document also
 ratifies that schema, including the parts it amends (B10: no tax on invoices yet; B20: number resets).

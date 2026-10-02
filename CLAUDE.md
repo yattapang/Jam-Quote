@@ -21,7 +21,7 @@ history.
 2. `docs/MISTAKES.md` — the ledger of what went wrong and what now prevents it.
 3. `new-app/CLAUDE.md` — the codebase.
 4. `docs/BRIEF-STATUS.md` — where the work stands and the owner's latest decisions.
-5. `docs/PRD-REVIEW-4.md` — the disposition table at the top: the open review findings.
+5. `docs/PRD-REVIEW-5.md` and `docs/PRD-REVIEW-4.md` — the disposition tables at the top: the open review findings.
 
 ## The gate, before every commit
 
