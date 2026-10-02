@@ -5,8 +5,9 @@ and they ask different questions (Rule 1.10):
 
 | Gate | Question | State |
 |---|---|---|
-| **Owner approval** | Is this what you want built? | **Outstanding.** Review 5 recommended not approving yet; the owner's decisions on it are ADR 0027 (2026-10-02), and this document is amended to match |
-| **Independent review** | Will this do what it says? | **Five rounds run:** [`PRD-REVIEW.md`](PRD-REVIEW.md), [`PRD-REVIEW-2.md`](PRD-REVIEW-2.md), [`PRD-REVIEW-3.md`](PRD-REVIEW-3.md), [`PRD-REVIEW-4.md`](PRD-REVIEW-4.md) (the code; all closed), [`PRD-REVIEW-5.md`](PRD-REVIEW-5.md) (B1-B28, being answered by this amendment). Each file's disposition table says which findings remain open |
+| **Owner approval** | Is this what you want built? | **Outstanding — ready for the owner's decision.** Review 5 recommended not approving yet; the owner's decisions are ADRs 0027-0030 (2026-10-02); the amended document was re-read independently (approve after named changes), the changes were made, and a closing check confirmed them |
+| **Independent review** | Will this do what it says? | **Five rounds run:** [`PRD-REVIEW.md`](PRD-REVIEW.md), [`PRD-REVIEW-2.md`](PRD-REVIEW-2.md), [`PRD-REVIEW-3.md`](PRD-REVIEW-3.md), [`PRD-REVIEW-4.md`](PRD-REVIEW-4.md) (the code; all closed), [`PRD-REVIEW-5.md`](PRD-REVIEW-5.md) (B1-B28 and the re-read's C1-C10: **all Closed after independent
+checks on 2026-10-02, except B10, open on purpose until the GCT design**). Each file's disposition table says which findings remain open |
 
 An open finding blocks building the part it concerns, not the whole plan. **The documents layer is already
 built** — the owner moved five invariants into code under ADR 0025 (2026-09-25), and the migrations from

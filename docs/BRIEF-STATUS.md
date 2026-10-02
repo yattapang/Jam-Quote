@@ -735,6 +735,12 @@ then the six designs.
 launch: general-purpose at **Sonnet** (Rule 16.9) — mechanical: four plants and the read items written in the
 brief.* Brief `docs/briefs/2026-10-02-prd-reread-closing-check.md`; `tools/run_brief.py` ran it at `e4d5d63`:
 10 of 10 expectations hold.
+**Passed 2026-10-02:** 10 of 10 at `c3cfe9f`, C1-C10 all hold, tree clean. **Review 5: B1-B28 and C1-C10 Closed**
+(37 rows, each citing its finding's scope), **B10 open** until the GCT design. Found by the builder while
+closing: `tools/check_dispositions.py` read only finding letters F-J, so review 5 was listed and counted but
+none of its rows was parsed (M42) — fixed with per-review letters, and review 5 under the shape checks; a
+bare Closed row planted on B3 passes the old tool and fails the new. **The PRD is ready for the owner's
+approval.**
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

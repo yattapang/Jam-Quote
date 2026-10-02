@@ -801,3 +801,22 @@ PUBLIC (`new-app/db/migrations/20260927210000_pin_search_path/migration.sql`); `
 fails on an unpinned function; the attacks are executed tests, each layer proved without the other; the
 production role's provisioning rule is `docs/THREAT-MODEL.md` §4g. The lesson: **a check in the database is
 only as good as the names it resolves — review what a function reads, and also how it finds it.**
+
+### M42 · A review was added to the disposition checker's list, and the checker could not read a single row of it
+`Repeat of:` M20, M24, M38 — a guard reporting more coverage than it has.
+
+When PRD review 5 was recorded (2026-10-02), the builder added `docs/PRD-REVIEW-5.md` to
+`tools/check_dispositions.py`'s list of reviews, and the tool began printing "checked across 5 review files".
+But its finding and row patterns were hard-coded to the letters F, G, H and J, and review 5's findings are B
+and C: not one heading or row of the new review was parsed. Found by the builder before the first B or C
+closure, while computing each finding's scope. Executed: a planted "**Closed.** Fixed." row on B3, citing
+nothing, passed the old checker (59 closed, "every Closed disposition cites every document") and fails the
+new one.
+
+**Cost:** none realised — no review-5 finding had been marked Closed. Had one been, it would have passed
+unchecked, which is exactly the overclaim the tool exists to stop.
+
+**Prevented by:** each review now names its finding letters (`REVIEW_LETTERS`), and a review whose headings do
+not parse with them fails the run instead of being counted; review 5 is under the heading and status-wording
+checks too. The lesson, again: **adding a file to a guard's list is not the same as the guard reading it —
+plant a defect in the new file before trusting the count.**

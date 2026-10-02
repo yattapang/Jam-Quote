@@ -63,10 +63,31 @@ REVIEWS = ("docs/PRD-REVIEW.md", "docs/PRD-REVIEW-2.md", "docs/PRD-REVIEW-3.md",
            "docs/PRD-REVIEW-5.md")
 # Files a "Where:" line may name. Anything else on that line is prose, not scope.
 KNOWN = re.compile(r"(PRD\.md|domain-model\.md|TIERS\.md|SERVICE-REGISTER\.md|RULES\.md|THREAT-MODEL\.md|PHASE-0-AUDIT\.md|site\.ts|site-guards\.test\.ts)")
-FINDING = re.compile(r"^## ([FGHJ]\d+) · (.+?) — severity: (\w+)", re.M)
+# The finding letters each review uses. Until 2026-10-02 the letters F, G, H and J were hard-coded, so review
+# 5 — findings B and C — was listed in REVIEWS, counted in "checked across 5 review files", and had none of its
+# rows or headings parsed at all: a Closed B row would have passed unchecked (found by the builder before the
+# first B or C closure; Rule 21.1, the shape of M20, M24 and M38). Each review now names its own letters.
+REVIEW_LETTERS = {
+    "docs/PRD-REVIEW.md": "FGHJ",
+    "docs/PRD-REVIEW-2.md": "FGHJ",
+    "docs/PRD-REVIEW-3.md": "FGHJ",
+    "docs/PRD-REVIEW-4.md": "FGHJ",
+    "docs/PRD-REVIEW-5.md": "BC",
+}
+
+
+def finding_pattern(letters: str) -> re.Pattern[str]:
+    return re.compile(r"^## ([" + letters + r"]\d+) · (.+?) — severity: (\w+)", re.M)
+
+
+def row_pattern(letters: str) -> re.Pattern[str]:
+    # A disposition row: | **F1** | blocker | text |
+    return re.compile(r"^\|\s*\*\*([" + letters + r"]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M)
+
+
+FINDING = finding_pattern("FGHJ")
 WHERE = re.compile(r"^\*\*Where:\*\* (.+?)(?=\n\*\*|\n\n)", re.M | re.S)
-# A disposition row: | **F1** | blocker | text |
-ROW = re.compile(r"^\|\s*\*\*([FGHJ]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M)
+ROW = row_pattern("FGHJ")
 # Review 4 names its scope as full backticked PATHS — migrations, tests, tools — which KNOWN, a list of
 # document names written for reviews 1-3, cannot see. Adding review 4 to REVIEWS without this would have
 # given each J finding a scope of only the documents KNOWN happens to list: a guard checking less than it
@@ -84,7 +105,7 @@ ROW = re.compile(r"^\|\s*\*\*([FGHJ]\d+)\*\*\s*\|[^|]*\|\s*(.+?)\s*\|\s*$", re.M
 # SILENTLY — the shape M38 records, which planting a gap with review 3 left out showed on 2026-10-01.
 WIDE_SCOPE = set(REVIEWS)
 # The status-wording and heading checks (Q6), separately: review 4 onward only (see the docstring).
-SHAPE_SCOPE = {"docs/PRD-REVIEW-4.md"}
+SHAPE_SCOPE = {"docs/PRD-REVIEW-4.md", "docs/PRD-REVIEW-5.md"}
 BACKTICKED_PATH = re.compile(r"`([^`\s]+/[^`\s]+\.[a-z]+)`")
 
 
@@ -103,7 +124,8 @@ ANY_FINDING_HEADING = re.compile(r"^## ([A-Z]\d+)\b", re.M)
 ANY_FINDING_ROW = re.compile(r"^\|\s*\**([A-Z]\d+)\**\s*\|", re.M)
 
 
-def shape_failures(review: str, text: str, scopes: dict[str, set[str]]) -> list[str]:
+def shape_failures(review: str, text: str, scopes: dict[str, set[str]],
+                   row: re.Pattern[str] = ROW, letters: str = "A-Z") -> list[str]:
     """For WIDE_SCOPE reviews: every finding parses with a scope, and every row has a known status."""
     problems = []
     parsed = set(scopes)
@@ -115,9 +137,12 @@ def shape_failures(review: str, text: str, scopes: dict[str, set[str]]) -> list[
     # The FIRST row per id is the disposition. Review 4 also carries the reviewer's summary table,
     # whose rows share the same shape; judging the last occurrence checked that table instead.
     rows: dict[str, str] = {}
-    for row_id, disposition in ROW.findall(text):
+    for row_id, disposition in row.findall(text):
         rows.setdefault(row_id, disposition)
-    for row_id in ANY_FINDING_ROW.findall(text):
+    # Only rows whose id uses this review's letters: review 5 also has decision tables (D1-D14, E1-E4) that
+    # are not dispositions.
+    any_row = re.compile(r"^\|\s*\**([" + letters + r"]\d+)\**\s*\|", re.M)
+    for row_id in any_row.findall(text):
         if row_id not in rows:
             problems.append(f"{review}: the row for {row_id} does not parse (bold id, three columns)")
     for row_id, disposition in rows.items():
@@ -137,10 +162,10 @@ def path_key(path: str) -> str:
 CLAIMS_CLOSED = re.compile(r"\*\*(?:Closed|Re-?closed|Reopened[^*]{0,160}?clos)", re.I)
 
 
-def scope_of_findings(text: str) -> dict[str, set[str]]:
+def scope_of_findings(text: str, finding: re.Pattern[str] = FINDING) -> dict[str, set[str]]:
     """Every finding's id mapped to the set of files its Where line names."""
     scopes: dict[str, set[str]] = {}
-    positions = [(m.start(), m.group(1)) for m in FINDING.finditer(text)]
+    positions = [(m.start(), m.group(1)) for m in finding.finditer(text)]
     for index, (start, finding_id) in enumerate(positions):
         end = positions[index + 1][0] if index + 1 < len(positions) else len(text)
         body = text[start:end]
@@ -162,13 +187,19 @@ def main() -> int:
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
-        scopes = scope_of_findings(text)
+        letters = REVIEW_LETTERS[review]
+        row = row_pattern(letters)
+        scopes = scope_of_findings(text, finding_pattern(letters))
+        if not scopes:
+            # A review with no parsable finding would be "checked" while nothing in it is read.
+            failures += 1
+            print(f"{review}: no finding headings parse with the letters {letters}")
         if review in SHAPE_SCOPE:
-            for problem in shape_failures(review, text, scopes):
+            for problem in shape_failures(review, text, scopes, row, letters):
                 failures += 1
                 print(problem)
 
-        for finding_id, disposition in ROW.findall(text):
+        for finding_id, disposition in row.findall(text):
             if not CLAIMS_CLOSED.search(disposition):
                 continue  # Only "Closed" carries the burden.
             checked += 1
