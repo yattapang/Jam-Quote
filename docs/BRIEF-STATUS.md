@@ -869,6 +869,8 @@ emails, phones, TRNs and the ticket's client names — the input to A4's mainten
 phases: none at launch; release 2 answers from our help articles by search, no model; a live assistant only after a
 Rule 15 amendment, the attorney and a redactor, at about US$20-40 per thousand conversations. WhatsApp support line
 revisited with I3. OA12 gains the `support@` alias.
+**Approved by the owner, 2026-10-02:** every recommendation SF1-SF8 and the chatbot route, including SF6's promise of
+one working day and SF7's 24 months. Next: the independent read, brief `docs/briefs/2026-10-02-support-design-read.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

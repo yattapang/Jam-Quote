@@ -1,6 +1,7 @@
 # Design: support and feedback — channels, tickets, the help centre, the chatbot path, and the feedback loop
 
-**Status: DRAFT, for the owner's approval.** Build plan step A3 (`docs/BUILD-PLAN.md`). After approval: an
+**Status: APPROVED by the owner, 2026-10-02 — every recommendation, SF1-SF8, and the chatbot route of §4** ("Approved").
+Build plan step A3 (`docs/BUILD-PLAN.md`). Next: an
 independent read, a closing check, then the owner's sign-off ticks A3, and an ADR records the support decision
 (brief §15 asks for one). Nothing here is built until steps E1 and E2 begin (and H6 for the chatbot's second phase).
 
