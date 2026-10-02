@@ -212,7 +212,7 @@ does, so this needs a SQL-injection-class defect in our code, which would be wor
 role and take the lock inside a `SECURITY DEFINER` function that re-checks visibility — after confirming
 the managed PostgreSQL provider permits revoking from `pg_catalog`.
 
-## 4e. The balance-write flag was not a secret (added 2026-10-01, R5; built 2026-10-01, closing check owed)
+## 4e. The balance-write flag was not a secret (added 2026-10-01, R5; CLOSED 2026-10-02)
 
 `issue_balance` — the row that holds each accepted issue's ceiling and invoiced total — was written only
 under a row-security policy that required the transaction-local setting `pryvis.balance_write`.
@@ -227,9 +227,10 @@ with INSERT and UPDATE; the write policies require `current_user = 'pryvis_balan
 and the flag is gone. Evidence: `new-app/db/test/documents-core.test.ts` block 2 (R5's exact attack, flag
 set, now "permission denied"; and no live function reads the flag), the policy predicate in
 `new-app/db/test/policy-parity.test.ts`, and the 22 races on real PostgreSQL unchanged. Each proved with a
-planted defect. **Not Closed** until the independent closing check (Rule 24.6).
+planted defect. **Closed 2026-10-02** after an adversarial review (AA1-AA7, fixed) and a mechanical closing
+check (Rule 24.6; `docs/PRD-REVIEW-4.md`, end of file).
 
-## 4f. The credential tables had no row-level security (added 2026-10-01, J14; a LAUNCH BLOCKER; built 2026-10-01, closing check owed)
+## 4f. The credential tables had no row-level security (added 2026-10-01, J14; CLOSED 2026-10-02, with an accepted limit)
 
 `app_credential` (password hashes), `mfa_totp`, `mfa_recovery_code` (second-factor material) and
 `registration_claim` (single-use registration tokens) have no row-level security, because they are read
@@ -256,7 +257,8 @@ take on trust. Hardening the doors was weighed and rejected, because one open pa
 verified) would remain. The control is upstream instead: no SQL the API sends is built at run time —
 `new-app/api/src/core/architecture/sql-is-static.test.ts` fails on any statement that is not a fixed
 string. What the doors remove is the bulk read.
-**Not Closed** until the independent closing check (Rule 24.6), and the launch blocker stands until then.
+**Closed 2026-10-02** after the adversarial review and the closing check (Rule 24.6); no longer a launch
+blocker. The accepted limit above stands.
 
 ## 4g. Temporary tables and the search path (added 2026-10-01, findings Y1, Y2, Y7; fixed, with a provisioning rule owed)
 

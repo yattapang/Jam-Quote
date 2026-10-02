@@ -1,7 +1,7 @@
 # Design: the database privilege model (R5, J14, and the §4g deployment check)
 
 **Status: APPROVED by the owner 2026-10-01 — every recommendation (option A throughout, D1-D5). BUILT
-2026-10-01 (§8); adversarial review and closing check owed (Rule 24.6).**
+2026-10-01 (§8); adversarial review (AA1-AA7, fixed) and closing check passed 2026-10-02 — R5 and J14 Closed.**
 
 Date: 2026-10-01 · Answers `docs/THREAT-MODEL.md` §4e (R5), §4f (J14, a launch blocker) and §4g's owed
 deployment check · Delegation (Rule 16.5): Opus — the credential path and row-security policy text, two of

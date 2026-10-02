@@ -656,6 +656,10 @@ typecheck, four checkers. Next: the closing check (Sonnet).
 general-purpose at **Sonnet** (Rule 16.9) — mechanical: every step, plant and expected output is written in the
 brief.* Brief `docs/briefs/2026-10-02-privilege-model-closing-check.md`; `tools/run_brief.py` ran it at `1cebc69`:
 11 of 11 expectations hold, five plants included.
+**Passed 2026-10-02:** 11 of 11 at `0ed552d`, every read item holds, tree left clean. **R5 and J14 are Closed**
+(review 4's J14 row; THREAT-MODEL §4e, §4f); J14 is no longer a launch blocker; the §4g check is built and
+closed, its wiring into start-up owed with the bootstrap. **Review 4 now: all 16 findings Closed.** Staff MFA
+remains the launch blocker. Next: PRD review 5 (the owner's request, 2026-10-02).
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
