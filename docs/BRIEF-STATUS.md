@@ -652,6 +652,11 @@ is now a test (15), and 15 more plants against the new controls were caught (one
 plant was incomplete — a table's row type shares its owner — and was re-planted). Gate: db 267, api 191,
 typecheck, four checkers. Next: the closing check (Sonnet).
 
+**Launched 2026-10-02: closing check of the privilege model.** *Delegation (Rule 16.5), declared before launch:
+general-purpose at **Sonnet** (Rule 16.9) — mechanical: every step, plant and expected output is written in the
+brief.* Brief `docs/briefs/2026-10-02-privilege-model-closing-check.md`; `tools/run_brief.py` ran it at `1cebc69`:
+11 of 11 expectations hold, five plants included.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
