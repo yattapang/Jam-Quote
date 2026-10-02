@@ -776,6 +776,12 @@ tenants' payments to Pryvis (ADR 0030 decision 7); and **Rule 15 amended** — C
 an administrator's recorded approval at three gates (start, merge, deploy) through an interface built for it, with
 the brief's dated note (Rule 23.5). Next: design 1, Tax (GCT in Jamaica) and documents.
 
+**Design drafted 2026-10-02: Tax (GCT in Jamaica) and documents** (`docs/design/tax-and-documents.md`, build plan A1) —
+nine decisions (T1-T9) with recommendations, for the owner. Found while researching (public sources, unverified): building
+work is exempt from GCT but installations and painting are not, so tax is per line; many small contractors are below
+the J$15m registration threshold; and clients may withhold a 2% contractors levy or 3% on specified services, which the
+design treats as settlement, not a shortfall. Also found in the schema: invoices and credit notes carry no number.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
