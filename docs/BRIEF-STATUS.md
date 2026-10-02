@@ -798,6 +798,11 @@ gross figure, including test N6, whose intent flips. Pointers added in the PRD (
 model and ADR 0030 (TD14). One approved rule changes — T6's credit may now target codes — so the owner's sign-off of
 A1 covers the amendments. Next: the closing check (Sonnet), `docs/briefs/2026-10-02-tax-design-closing-check.md`.
 
+**Launched 2026-10-02: closing check of the tax design's answers to TD1-TD15.** *Delegation (Rule 16.5), declared
+before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9): every item names the text to read; the read's
+findings are reproduced in the brief.* Brief `docs/briefs/2026-10-02-tax-design-closing-check.md`, run by
+`tools/run_brief.py` at HEAD `e61c3f2`: 6 of 6 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
