@@ -208,6 +208,9 @@ official number offline, and separating them dissolves the contradiction.
 | **Number** | Allocate from the tenant's series: unique, gapless, answerable to an accountant | **Yes**, or a device lease (deferred) |
 | **Deliver** | Render the PDF, mint the share link, send it | Yes |
 
+*(Pointer 2026-10-02, finding TD14: `docs/design/tax-and-documents.md` T9 replaces `issue_number` with a per-quote number row and a
+per-issue numbering row, keeping this section's argument — no UPDATE on `quote_issue`.)*
+
 **`issue_number` is its own insert-only table** — one row per issue, carrying the series, the number
 and `allocated_at`. This is the load-bearing choice. A nullable `number` column on `quote_issue`,
 filled in later, would mean an UPDATE on a sealed financial document, and this section's whole argument
@@ -271,7 +274,7 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
-*(Tax basis, 2026-10-02 — ADR 0027 D7, finding C2: once the GCT design lands, the ceiling and every term compared with it are net of tax; until that migration, the built ceiling is tax-inclusive.)*
+*(Tax basis, 2026-10-02 — ADR 0027 D7, finding C2: once the GCT design lands, the ceiling and every term compared with it are net of tax; until that migration, the built ceiling is tax-inclusive. The design is `docs/design/tax-and-documents.md` T4, which also holds the ceiling per tax code — finding TD14.)*
 
 **The invariant:** the invoiced figure against an accepted issue may never exceed the accepted total, plus
 **recorded** variations. What counts as invoiced — which invoices, and what credit notes and voids do to
@@ -311,7 +314,7 @@ the row was created "unconditionally" and "cannot be forgotten"; neither was tru
 | Column | Kind |
 |---|---|
 | `issue_id` | identity |
-| `accepted_total_minor` | **derived copy** of the accepted issue's header `total_minor` |
+| `accepted_total_minor` | **derived copy** of the accepted issue's header `total_minor` (net `subtotal_minor` once the tax design is built: `docs/design/tax-and-documents.md` T4) |
 | `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
 | `invoiced_total_minor` | **derived cache**, re-summed by `issue_balance_apply()` |
 
@@ -358,7 +361,8 @@ cache rather than a second source of truth — the decision is never taken on th
 the client saw. Since `new-app/db/migrations/20260927170000_issue_lines_add_up/migration.sql`, the
 database holds every step but one: each line's `line_total_minor` is quantity × unit price rounded half
 away from zero at the cent (negative lines — discounts — round symmetrically); the issue's `subtotal_minor`
-is the sum of its lines, checked at COMMIT; and `total_minor` is `subtotal_minor + tax_minor`. **Tax is the
+is the sum of its lines, checked at COMMIT; and `total_minor` is `subtotal_minor + tax_minor`. *(Pointer 2026-10-02, finding TD14: the owed tax check is taken up by
+`docs/design/tax-and-documents.md` T5, "the quote's tax is an estimate".)* **Tax is the
 step not held:** `tax_minor` against the rate and each line's treatment is owed as its own item with the
 GCT rules. The tests are the J11 block of `db/test/documents-core.test.ts`.
 
@@ -393,7 +397,7 @@ paragraphs to disagree about.
 
 | State | Is true when |
 |---|---|
-| `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered |
+| `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered (the per-issue numbering row once the tax design is built: `docs/design/tax-and-documents.md` T9) |
 | `issued` | an `issue_number` row exists |
 | `withdrawn` | the issue's one accepted row has a withdrawal — final for this issue; the remedy is the next revision (J13) |
 | `accepted` | an `acceptance` row exists with outcome `accepted` and no withdrawal |
@@ -494,7 +498,7 @@ where the rest of the sync engine lands.
 | Directory (materials, rates, clients, recipes) | read, and create new | **Server wins** on fields; local creations always push. |
 | `quote` draft + lines | full edit | **Merge by line**, with a review step when both sides changed one line. Never silently discard a line. |
 | `quote_issue` | **seal** (no number yet) | Append-only, so the ROW never conflicts — but two devices can seal the same quote, which is not a row conflict and is handled below (G4) |
-| `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series |
+| `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series. Replaced by the per-quote number and per-issue numbering rows (`docs/design/tax-and-documents.md` T9) |
 | `variation` | create | Append-only; the ceiling is re-summed under the lock at sync (§6.2a), never computed on the device. A replay is refused by `client_reference`, not merged |
 | `issue_balance` | **no** — server-side only, and never synced | It is a derived cache behind a lock. A device that could write it could defeat the lock |
 | `acceptance` | **no** — the client signs online (ADR 0024) | Never merged. Declines are all kept; the first ACCEPTANCE wins and a second is refused; a decline after an acceptance is refused (J13, finding S8) |

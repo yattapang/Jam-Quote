@@ -15,7 +15,10 @@
    rounding; the ceiling is net (ADR 0027 D7). The tenant records its GCT registration and TRN; an
    unregistered tenant charges none and its documents say so; a tax invoice shows the TRN and the GCT
    separately; a credit note reverses tax proportionally; refund and client-credit records resolve an
-   over-payment. Rates are **data with effective dates**, per country (the rule pack, ADR 0005).
+   over-payment. *(Note 2026-10-02, finding TD2: "the final invoice absorbs rounding" is made exact by the design,
+   `docs/design/tax-and-documents.md` T5 — every invoice's bases are split by largest remainder and add up exactly, so nothing is left
+   for a final invoice to absorb; tax is rounded per invoice per code, and the tax due is the sum actually
+   charged. A credit note may also target tax codes when it goes with a scope change, T6.)* Rates are **data with effective dates**, per country (the rule pack, ADR 0005).
    **Owner's note: tenants may enter their own GCT or tax rates for their country.** The platform provides
    each country's default rates; a tenant may set or add rates for their own documents; every issued document
    freezes the rate it used. The design states how a rate that differs from the country's default is shown

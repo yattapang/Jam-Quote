@@ -787,6 +787,16 @@ the design, then a closing check, then the owner's sign-off ticks A1.
 **Launched 2026-10-02: independent read of the tax and documents design.** *Delegation (Rule 16.5), declared before
 launch: commit-reviewer at **Opus** — money arithmetic and the ceiling are named judgement-class.* Brief
 `docs/briefs/2026-10-02-tax-design-read.md`. Findings TD1 onward, in its reply.
+**Reported 2026-10-02: TD1-TD15**, verdict "not yet … sound after the named changes"; tree left clean. The blocker
+(TD1): a variation that moves the job's tax mix after earlier invoices made a code's remaining base negative — a
+negative "Tax Invoice", or tax over-charged after a J4 credit. **Answered the same day in the design** (its §8 maps
+each finding): the ceiling also holds **per tax code**; an invoice is split by each code's *remaining* base, by
+largest remainder, so every invoice adds up exactly and none can be negative; a credit that goes with a scope change
+targets codes; credit-note tax is reversed cumulatively; the money-received invariants and a per-client lock; the
+numbering rows and the lock order (quote, client, series); the guard's exact scope (Rule 3); every reader of the old
+gross figure, including test N6, whose intent flips. Pointers added in the PRD (R1.9, R1.14, R1.24, §12), the domain
+model and ADR 0030 (TD14). One approved rule changes — T6's credit may now target codes — so the owner's sign-off of
+A1 covers the amendments. Next: the closing check (Sonnet), `docs/briefs/2026-10-02-tax-design-closing-check.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

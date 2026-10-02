@@ -199,6 +199,8 @@ R1.41, R1.42.
   Run per release and recorded. Naming three of four and calling it measured is how "a hope in the grammar
   of a requirement" survives its own fix.
 - **R1.9** Per-line GCT treatment, markup and discount, with the tenant's GCT registration respected.
+  *(Pointer 2026-10-02, finding TD14: the design is `docs/design/tax-and-documents.md`, approved by the owner and amended after its
+  independent read; it answers the list below.)*
   **Decided (ADR 0027 D7, finding B10):** the invoicing ceiling is **tax-exclusive** — accepted subtotal plus
   recorded variations — and GCT is computed **per invoice** at the rate in force when it is issued, so a
   rate change after acceptance cannot push a final invoice over the ceiling. **Owed before W3 or W7 is
@@ -234,7 +236,8 @@ R1.41, R1.42.
   failure this product cannot afford.
 - **R1.14** Numbers come from a per-tenant, per-document-kind series with a prefix and a start,
   allocated atomically into an insert-only `issue_number` row — **once per quote**; its revisions carry it
-  (ADR 0031). **A series never resets in R1** (ADR 0027
+  (ADR 0031). *(Pointer 2026-10-02, finding TD14: `docs/design/tax-and-documents.md` T9 replaces this with a per-quote number row and a
+  per-issue numbering row, and gives invoices and credit notes their own series.)* **A series never resets in R1** (ADR 0027
   D11, finding B20): a tenant who wants the year in the number puts it in the prefix ("INV-2027-") —
   **the count continues** (INV-2027-0143, not -0001), and **the start can never be moved below the last
   number allocated** (owed with the allocation code, finding C8) — and
@@ -493,7 +496,8 @@ R1.41, R1.42.
   recorded variations** (R1.22b). **This is the most important arithmetic invariant in the product.**
   What counts as invoiced is defined once, in `issue_balance_apply()`, and not restated here (ADR 0025):
   since J4 a credit note lowers it (`docs/design/scope-reduction.md`). **Tax-exclusive once the GCT design
-  lands** (R1.9, ADR 0027 D7); until that migration the built ceiling is tax-inclusive (finding C2).
+  lands** (R1.9, ADR 0027 D7); until that migration the built ceiling is tax-inclusive (finding C2). *(Pointer
+  2026-10-02, finding TD14: `docs/design/tax-and-documents.md` T4 says what changes, including the ceiling per tax code.)*
 - **R1.24d** **"Recorded", not "accepted", and the weakness is stated rather than hidden (G1).** In
   release 1 a variation has no client signature, so recording one **does** let the contractor raise their
   own invoiceable ceiling. R1.24 therefore protects against *mistake and drift*, not against a contractor
@@ -943,7 +947,8 @@ at launch (§9 item 7); number allocation under offline issuing cannot occur in 
   **launched after the web app** (ADR 0028). This
   said R1's scope was "achievable either way"; it was not, because R1.18f needs the device's keystore and
   lock (finding B5).
-- **The GCT design** (R1.9) — owed before W3 and W7 are built.
+- **The GCT design** (R1.9) — owed before W3 and W7 are built. *(Pointer 2026-10-02, finding TD14: written —
+  `docs/design/tax-and-documents.md`, approved by the owner; its closing check and the accountant's review (§9 item 8) remain.)*
 - **Trinidad and Tobago**, or any second country. Country selection is ADR 0006 and rules as data ADR 0005;
   the rule-pack foundation exists in the old application and is **owed in the rebuild** (finding B3).
   Switching a second country on is a later decision with its own tax and timezone work.
