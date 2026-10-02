@@ -731,6 +731,11 @@ for their country**. Each becomes a design for approval before building. Agreed 
 re-read's fixes, then the owner's PRD approval, then the planning baseline audit against the original brief,
 then the six designs.
 
+**Launched 2026-10-02: closing check of the re-read's fixes (C1-C10).** *Delegation (Rule 16.5), declared before
+launch: general-purpose at **Sonnet** (Rule 16.9) — mechanical: four plants and the read items written in the
+brief.* Brief `docs/briefs/2026-10-02-prd-reread-closing-check.md`; `tools/run_brief.py` ran it at `e4d5d63`:
+10 of 10 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
