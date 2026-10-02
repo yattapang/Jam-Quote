@@ -877,6 +877,20 @@ launch: commit-reviewer at **Opus** — a privacy boundary (what reaches a model
 and the owner relies on our judgement.* Brief `docs/briefs/2026-10-02-support-design-read.md`, run by
 `tools/run_brief.py` at HEAD `2696f0b`: 3 of 3 expectations hold. Findings SR1 onward, and agree/disagree on SF1-SF8 and
 §4, in its reply.
+**Reported 2026-10-02: SR1-SR15**, verdict "sound after the named changes"; tree left clean. The reader agreed with
+SF1-SF4, SF6 and the chatbot's phases, and disagreed in part with SF5, SF7 and SF8's guard. Confirmed by running it: a
+common static-site search library (Pagefind) fetches index parts chosen by the word typed, so "nothing is sent" was
+false for it. Other majors: phase 3's trigger relied on data phase 2 must never record; the redaction guard was not
+buildable as written and issues would have lived forever in git; email-created tickets could be linked to the wrong
+tenant on a forged From line; tier and version were behind consent, against Rule 25.3; data requests and abuse reports
+would have got the fixed client reply; copies outside the ticket had no retention; staff access had no doors.
+**Answered the same day in the design** (its §10 maps each finding): MiniSearch with "no network request of any
+kind"; a server-side guard against fixed and rule-pack patterns, the user, the tenant's client book through a
+match-only door and copied text, with its limits stated and the administrator's start approval behind it; issues in
+A4's database, deletable; a support inbox and confirmation by the tenant before an email joins an account; tier and
+version always; every copy with its own retention; doors for staff, recorded in the tenant's own trail; phase 3's cost
+re-estimated with conversation history (US$33-66 per thousand). Pointers in PRD R1.43 and R1.44. Next: the closing
+check (Sonnet), `docs/briefs/2026-10-02-support-design-closing-check.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

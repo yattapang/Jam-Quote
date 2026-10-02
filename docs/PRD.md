@@ -689,14 +689,16 @@ R1.41, R1.42.
 - **R1.43** **Data export, on every tier and after a lapse** (ADR 0027 D8, finding B4): the tenant
   downloads their quotes and issues, invoices, credit notes, payments, clients and catalogue as CSV, and
   each issued document's PDF. The terms and the pricing page already promise it; a lapse (R1.37c) and a
-  person's request for their data (R1.44) both rest on it.
+  person's request for their data (R1.44) both rest on it. *(Pointer 2026-10-02, finding SR7: the export also
+  includes the tenant's support tickets — `docs/design/support-and-feedback.md` SF7.)*
 - **R1.44** **A person's request about their data can be carried out** (finding B8). Staff can export what
   we hold about one of a tenant's clients, and **redact a client's personal fields while leaving the
   financial record intact**. Whether the records the product keeps permanently — the client book (R1.3), a
   rejected seal (R1.18j), the audit trail (ADR 0020), an acceptance's IP address and user agent (R1.20) —
   may be kept against an erasure request is read now from the public text of the **Data Protection Act,
   2020**, labelled **unverified**, and **settled by the attorney before launch** (§9, ADR 0027 D14). As
-  processor of the tenants' client data, our terms carry a processing clause.
+  processor of the tenants' client data, our terms carry a processing clause. *(Pointer 2026-10-02, finding SR7:
+  a client's redaction also reaches support tickets that name them — `docs/design/support-and-feedback.md` SF7.)*
 - **R1.45** **A written breach response**, including notifying the Information Commissioner within the
   period the Act sets (on our current, unverified reading of it) and telling the people affected, as the
   draft privacy notice promises. Rule 5 already requires the plan; this makes it a release-1 deliverable.
