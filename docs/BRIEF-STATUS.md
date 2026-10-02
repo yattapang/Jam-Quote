@@ -752,6 +752,12 @@ for the owner — D-1 revision numbering contradicts brief §10, D-2 owner requi
 11 and 12 overtaken by ADR 0027 — twelve designs owed (listed), and stale headers to correct. The builder's own
 audit, so an independent read is recommended before the designs start.
 
+**Owner's decisions on the audit, 2026-10-02:** D-1 — a revision keeps its quote's number (ADR 0031); rule changes
+approved — **Rule 25** (customer service and feedback) added and **Rules 6, 11, 12** aligned with ADR 0027 and 0031
+through Rule 23, with three dated notes in the brief (Rule 23.5; the owner chose notes only); the wider brief
+edits **not approved**; the independent read of the audit **approved**. Stale design headers and the CLAUDE.md MFA
+line corrected.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

@@ -10,7 +10,8 @@ from the product, 16.5 the declared delegation decision, 16.6 what the agents go
 service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
 coverage**, **22 a scripted edit is verified mechanically** (2026-09-24) ·
 **23 changing a rule changes everything that cites it**, **24 every mistake is answered with a
-mechanism** (2026-09-25).
+mechanism** (2026-09-25) · 6 numbering, 11 sends, 12 offline retention amended, **25 customer service and
+feedback** added (2026-10-02).
 
 **How this file is changed.** Rule 23. In short: explicit numbers, append never insert, tombstone a
 retirement, and `tools/check_rules.py` fails the build when a rule's text or number changes until the
@@ -267,8 +268,10 @@ the product.
 - **Issued documents are immutable snapshots:** prices, tax rates, currency, wording and the
   assigned number freeze at issue.
 - **Revisions are versions,** not edits to an issued document.
-- **Numbering** is per-tenant, configurable (prefix, start, reset rule) and assigned
-  atomically, so two documents issued at the same moment neither collide nor skip.
+- **Numbering** is per-tenant, configurable (prefix, start) and assigned atomically, so two
+  documents issued at the same moment neither collide nor skip. *Amended 2026-10-02 (ADR 0027 D11,
+  ADR 0031): in release 1 a series never resets — the year goes in the prefix — and a revision keeps
+  its quote's number with a revision suffix.*
 - **Audit log** for significant actions; **soft deletes** where history matters.
 - **Versioned migrations only.** An applied migration is never edited; a correction is a new
   migration. No manual schema changes.
@@ -328,14 +331,19 @@ does not prove.
 One outbound messaging service with pluggable channels; the rest of the application never
 calls a channel directly. The document sent is always the issued snapshot. Delivery status is
 recorded; sends are idempotent and retried; consent, opt-out and per-country rules are
-respected; message costs are modelled in entitlements; messages requested offline are queued.
+respected; message costs are modelled in entitlements. **Nothing is sent on the user's behalf
+without their act:** a send the user taps while offline is queued and goes when the device syncs, but
+a document becoming ready — numbered at sync — never sends itself. *Amended 2026-10-02 (ADR 0027 D10):
+this said "messages requested offline are queued", which read as sending a quote whenever the phone
+next found signal.*
 
 ## 12. Offline (mobile)
 
 A local database and a sync engine with an outbox; client-generated UUIDs so retries cannot
 duplicate; **explicit conflict rules per entity**; encrypted local storage, remote sign-out
-and a retention limit; sync status visible in the UI; tested under poor and interrupted
-networks. What works offline, and whether a document may be issued offline, are ADR decisions.
+and a retention limit **for cached reads — never for an unsynced document**, which no automatic
+process may destroy, and which an ordinary sign-out pushes before clearing; sync status visible in the
+UI; tested under poor and interrupted networks. *Amended 2026-10-02 (ADR 0027 D12; PRD R1.18d, R1.18f).* What works offline, and whether a document may be issued offline, are ADR decisions.
 
 ## 13. Payments and activation controls (owner requirement)
 
@@ -956,3 +964,22 @@ edit was *correct*. Only the re-review does that, which is why both halves exist
 mechanism good. And it depends on defects being *found* — which is Rule 9's independent review and
 Rule 21.2's plants, not this.
 
+## 25. Customer service and feedback (owner requirement; added 2026-10-02)
+
+The owner's requirement 7 (brief §2, §15) had no rule until the planning baseline audit found the gap
+(`docs/PLANNING-AUDIT.md`, D-2).
+
+**25.1 Support is built into the product, and every channel is chosen with its options and costs on
+record** (brief §15) before it is built — an ADR, not a default.
+
+**25.2 Any support bot** is tenant-scoped and never shows another tenant's data; always offers a human;
+never approves a payment or changes an account's status on its own; and keeps no unredacted logs.
+**No tenant or client personal data reaches a model through it** (Rule 15): a bot that answers from our own
+help content by search meets this by construction; one that sends what a person types to a model needs Rule
+15 amended by the owner first (ADR 0029 E1, ADR 0030 decision 3).
+
+**25.3 Feedback feeds maintenance.** Every piece of feedback is tagged (bug, feature, question, billing) and
+linked to the app version and tier; a "report a problem" path attaches non-sensitive context only with the
+user's consent; feedback is triaged on a fixed cadence into **redacted** issues, so Claude-assisted
+maintenance never receives personal data; error tracking is linked to reports; response time, resolution
+time and the commonest issues are measured.

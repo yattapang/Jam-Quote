@@ -193,9 +193,11 @@ Not built yet, and each is honest work owed rather than a detail:
 - **MFA — and for staff it is a launch blocker, not an improvement** (Rule 5.1). Our own
   employees and administrators must have a second factor, a 20-character password minimum, named
   individual accounts, short sessions with re-authentication before impersonation or a price
-  change, and same-day offboarding. None of it is built. The admin console that can impersonate a
-  tenant currently has a password and nothing else. A factor check belongs in the resolver's
-  step 4.
+  change, and same-day offboarding. **The second-factor service is built** (`api/src/core/auth/mfa.ts`,
+  ADR 0021) and the resolver refuses a capability-holder without a confirmed factor; what ADR 0021
+  lists as owed — and the staff console itself (PRD W10) — is not built, and staff MFA stays a launch
+  blocker until it is. Release 1 has no impersonation (ADR 0029). *(Corrected 2026-10-02: this said
+  "None of it is built".)*
 - **Rate-limit housekeeping.** `rate_limit_bucket` grows until old rows are deleted. An absent
   bucket is a full one, so nothing breaks — but the table needs a periodic sweep.
 - A guard asserting `app_user.email` and `app_credential.email` stay equal.

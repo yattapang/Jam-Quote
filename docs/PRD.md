@@ -231,7 +231,8 @@ R1.41, R1.42.
   attached. It never blocks sealing — refusing to price a job because the catalog is old is the one
   failure this product cannot afford.
 - **R1.14** Numbers come from a per-tenant, per-document-kind series with a prefix and a start,
-  allocated atomically into an insert-only `issue_number` row. **A series never resets in R1** (ADR 0027
+  allocated atomically into an insert-only `issue_number` row — **once per quote**; its revisions carry it
+  (ADR 0031). **A series never resets in R1** (ADR 0027
   D11, finding B20): a tenant who wants the year in the number puts it in the prefix ("INV-2027-") —
   **the count continues** (INV-2027-0143, not -0001), and **the start can never be moved below the last
   number allocated** (owed with the allocation code, finding C8) — and
@@ -239,7 +240,9 @@ R1.41, R1.42.
   `yearly` and then refuse the first reset. **Gapless per series in R1**, and a number is never reused.
   Gaplessness is a claim about allocation code not yet written; it is proved the way R1.24c proves the
   ceiling, by a planted concurrent-allocation defect.
-- **R1.15** A revision is a **new issue** at the next revision number; the previous one is marked
+- **R1.15** A revision is a **new issue** at the next revision number, **carrying its quote's number with a
+  revision suffix** — Q-0042, then "Q-0042 rev 2" (ADR 0031: the number never changes on revision, as the
+  original brief requires; the numbering design changes how `issue_number` is allocated); the previous one is marked
   superseded and remains readable exactly as sent. **An accepted issue may be superseded only while
   nothing financial hangs off it** — no invoice and no variation — and its ceiling then falls to 0
   (J10, K6; `quote_issue_one_live_ceiling()`). Once money has moved, the path is a variation (R1.22c),
@@ -604,7 +607,8 @@ R1.41, R1.42.
 - **R1.32** Free tier limit: **3 distinct jobs *numbered* per calendar month** (ADR 0023) — Jamaica's
   month, `America/Jamaica` (ADR 0007 decision 4, finding B25) — enforced
   server-side. **The meter counts distinct QUOTES, not numbers allocated** (finding H20): a revision is a new
-  issue taking a new number from the same series, so counting numbers would charge for revisions. Not counted on sealing — on the phone sealing happens offline, and metering it would mean trusting a
+  issue, and counting issues would charge for revisions (since ADR 0031 a revision also keeps its quote's
+  number, so the meter and the number now agree). Not counted on sealing — on the phone sealing happens offline, and metering it would mean trusting a
   client-side count or refusing work already done at a client's gate. **On the web app the same rule
   holds** (ADR 0029 E4): a fourth job in the month is sealed and **held blocked**, kept and listed exactly as
   R1.32a-c describe, never refused before sealing and never lost — so §10's "a fourth job refused" is the

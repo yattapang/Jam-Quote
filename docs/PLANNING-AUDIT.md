@@ -17,6 +17,20 @@ Legal and tax statements are not verified here.
 
 ---
 
+## 0. Resolved since this audit was written (2026-10-02, same day)
+
+- **D-1 decided by the owner:** a revision keeps its quote's number with a suffix (ADR 0031); PRD R1.14, R1.15
+  and R1.32 amended.
+- **D-2 resolved:** Rule 25, "Customer service and feedback", added through Rule 23.
+- **D-3 resolved:** Rules 6, 11 and 12 amended to match ADR 0027 D10-D12 and ADR 0031, through Rule 23 (the
+  citations of each reviewed), with the three dated notes Rule 23.5 requires in the brief.
+- **The stale headers corrected:** the audit-log and row-identity designs, and `new-app/CLAUDE.md`'s MFA line.
+- **Not approved by the owner:** the wider brief edits (brief §11's exemption count, §13 and §19's answers) —
+  left as written; this audit records where they are stale.
+- **Approved:** an independent read of this audit, before the designs start.
+
+The sections below are the audit as written; §0 says what has changed since.
+
 ## 1. The verdict in one paragraph
 
 **The planning is mostly in place and mostly followed, with three real drifts and a set of owed designs.**

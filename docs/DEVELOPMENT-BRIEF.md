@@ -212,7 +212,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 
 **Recommendation**
 - Store this as a **per-tenant document settings record**: logo (uploaded, stored per tenant, section 11), header/company details, colour scheme (a small fixed set of fields, e.g. primary and accent colour, not free-form CSS), and numbering configuration.
-- **Numbering scheme:** let each tenant define a prefix, a starting number, and a reset rule (never, yearly, monthly), and generate the next number **atomically per tenant** so two quotes issued at the same moment never collide or skip. The assigned number is fixed as part of the immutable snapshot above and never changes on revision.
+- **Numbering scheme:** let each tenant define a prefix, a starting number, and a reset rule (never, yearly, monthly), and generate the next number **atomically per tenant** so two quotes issued at the same moment never collide or skip. The assigned number is fixed as part of the immutable snapshot above and never changes on revision. *(Note 2026-10-02, Rule 23.5: in release 1 a series never resets — the year goes in the prefix — ADR 0027 D11, Rule 6; and a revision keeps its quote's number with a suffix, ADR 0031.)*
 - The document template is a **shared layout** that reads these settings; tenants configure data and pick from a small set of presets, not arbitrary custom layouts — this keeps PDFs consistent, testable, and fast to generate, while still feeling tenant-branded. A bigger step (uploading a fully custom template) can be a later, higher-tier feature, and is not required for launch.
 - These settings belong in the domain model and target schema from Phase 1, and the offline sync design (section 13) needs to account for the logo and settings being available for offline PDF generation.
 - Since this affects what the document actually looks like, cross-check it against the feature inventory and live website in Phase 0: if the original application already supports branding, numbering, or colour customization, that behaviour is part of what gets audited and carried forward or improved, not just newly invented.
@@ -265,7 +265,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 - Record delivery status (queued, sent, delivered, failed, viewed where available) against the quote or invoice. Include retries and idempotency, so nothing is sent twice.
 - Respect consent and opt-out, and per-country messaging rules.
 - Model message costs in the tier entitlements (section 9).
-- Messages requested while offline are queued and sent when connectivity returns (section 13).
+- Messages requested while offline are queued and sent when connectivity returns (section 13). *(Note 2026-10-02, Rule 23.5: only a send the user tapped is queued; a document never sends itself when it becomes ready at sync — ADR 0027 D10, Rule 11.)*
 
 ## 13. Mobile offline operation
 
@@ -281,7 +281,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
   - How official quote numbers are assigned without duplicates (for example number blocks per device, or numbering assigned at sync).
   - How prices are frozen when issuing offline, based on the last-synced catalog with its timestamp.
   - How tier entitlements are checked offline (for example a grace period).
-- Encrypt local data, support remote sign-out, and limit how long offline data is retained.
+- Encrypt local data, support remote sign-out, and limit how long offline data is retained. *(Note 2026-10-02, Rule 23.5: the limit applies to cached reads only — an unsynced document is never destroyed by any automatic process, and an ordinary sign-out pushes it first — ADR 0027 D12, Rule 12.)*
 - Show sync status clearly in the UI. Handle clock differences between device and server.
 - Test under poor and interrupted network conditions.
 - Web is online-only unless the owner decides otherwise.

@@ -76,7 +76,7 @@
     },
     "6": {
       "title": "Data integrity",
-      "hash": "c625f0b2ff348ce4"
+      "hash": "654581b030be9a1c"
     },
     "7": {
       "title": "One rule, one place",
@@ -96,11 +96,11 @@
     },
     "11": {
       "title": "Communications",
-      "hash": "b355b8ccde00df2e"
+      "hash": "08bc71aa4f453b37"
     },
     "12": {
       "title": "Offline (mobile)",
-      "hash": "acb22f9573fcf168"
+      "hash": "04c8e2cb60dc86d7"
     },
     "13": {
       "title": "Payments and activation controls (owner requirement)",
@@ -281,6 +281,22 @@
     "24.6": {
       "title": "A finding is not \"closed\" until the claim cites every document the finding named \u2014 and a fix is\nnot proved until someone else has checked it (added 2026-09-25)",
       "hash": "6f3d0ffe6752582b"
+    },
+    "25": {
+      "title": "Customer service and feedback (owner requirement; added 2026-10-02)",
+      "hash": "3f8e20f064fb18d0"
+    },
+    "25.1": {
+      "title": "Support is built into the product, and every channel is chosen with its options and costs on\nrecord",
+      "hash": "ed7f850418877649"
+    },
+    "25.2": {
+      "title": "Any support bot",
+      "hash": "8b0aec6e475e0c8d"
+    },
+    "25.3": {
+      "title": "Feedback feeds maintenance",
+      "hash": "1c9aaee42dbd1815"
     }
   }
 }
