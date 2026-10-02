@@ -892,6 +892,11 @@ version always; every copy with its own retention; doors for staff, recorded in 
 re-estimated with conversation history (US$33-66 per thousand). Pointers in PRD R1.43 and R1.44. Next: the closing
 check (Sonnet), `docs/briefs/2026-10-02-support-design-closing-check.md`.
 
+**Launched 2026-10-02: closing check of the support design's answers to SR1-SR15.** *Delegation (Rule 16.5), declared
+before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9): every item names the text to read; the read's
+report is reproduced in the brief.* Brief `docs/briefs/2026-10-02-support-design-closing-check.md`, run by
+`tools/run_brief.py` at HEAD `8743d00`: 5 of 5 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
