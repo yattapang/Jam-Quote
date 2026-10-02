@@ -3,8 +3,7 @@
 **Status: APPROVED by the owner, 2026-10-02 — every recommendation, SF1-SF8, and the chatbot route of §4**
 ("Approved"). **Amended the same day** to answer its independent read (findings SR1-SR15, §10). The reader agreed
 with SF1-SF4, SF6 and the phases of §4, and disagreed in part with SF5, SF7 and SF8's guard; each disagreement is
-adopted. The amendments are approved with the step's sign-off. Build plan step A3 (`docs/BUILD-PLAN.md`). The closing
-check is owed before the step is ticked; at sign-off an ADR records the support decision (brief §15 asks for one).
+adopted. **The owner signed off the step, amendments included, on 2026-10-02**; A3 is ticked in the build plan, and ADR 0032 records the decision. Build plan step A3 (`docs/BUILD-PLAN.md`).
 Nothing here is built until steps E1 and E2 begin (and H6 for the chatbot's second phase).
 
 Date: 2026-10-02 · **This is the options paper brief §15 requires** — options with pros, cons, cost and a

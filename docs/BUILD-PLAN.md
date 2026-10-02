@@ -47,8 +47,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
   Done: 2026-10-02 · commit `136ee7c` · review `docs/briefs/2026-10-02-tax-design-read.md` · closing `docs/briefs/2026-10-02-tax-design-closing-check.md` · owner: approved 2026-10-02
 - [x] A2 · API layer, `docs/design/api-layer.md` — OpenAPI and its contract test, cookie sessions and CSRF, errors, idempotency, validation, start-up wiring, tenant context in jobs and storage
   Done: 2026-10-02 · commit `97f0263` · review `docs/briefs/2026-10-02-api-layer-read.md` · closing `docs/briefs/2026-10-02-api-layer-closing-check.md` · owner: approved 2026-10-02
-- [ ] A3 · Support and feedback — the options paper with costs (brief §15), the chatbot under Rule 15, the
-  feedback loop (Rule 25)
+- [x] A3 · Support and feedback, `docs/design/support-and-feedback.md` and ADR 0032 — the options paper with costs (brief §15), the chatbot under Rule 15, the feedback loop (Rule 25)
+  Done: 2026-10-02 · commit `fa933ff` · review `docs/briefs/2026-10-02-support-design-read.md` · closing `docs/briefs/2026-10-02-support-design-recheck.md` · owner: approved 2026-10-02
 - [ ] A4 · Environments and operations — three environments, backups and restore drills, monitoring,
   runbooks, Rule 10's full trigger, **the three approval gates for Claude maintenance and their interface**
   (Rule 15)

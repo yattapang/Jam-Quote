@@ -908,6 +908,15 @@ go to the platform trail only. Next: a scoped re-check (Sonnet), `docs/briefs/20
 **Reported 2026-10-02: SR5 closable**, so SR1-SR15 are closed as a set. The re-check noted that the A3 ADR's statement of
 the change is promised for sign-off, not yet written; it is written with the sign-off. **A3 now awaits only the owner's
 sign-off** (checklist item 7), which also approves the amendments.
+**Signed off by the owner, 2026-10-02: "A3 approved as done."** A3 is ticked in `docs/BUILD-PLAN.md` with its evidence
+line (closing evidence: the SR5 re-check, which closed SR1-SR15 as a set); **ADR 0032** records the support model, as
+brief §15 requires, including the change to ADR 0030 decision 4.
+
+**Paused 2026-10-02 at the owner's request** (weekly session limit near). **Where to resume:** design **A4**,
+environments and operations — three environments, backups and restore drills, monitoring, runbooks, Rule 10's
+trigger, and the three approval gates for Claude maintenance with their interface (Rule 15), which must also hold
+A3's redacted-issue task list (SF8). Done so far: A1, A2, A3 (3 of 62 steps). No owner batch has been sent; batch 1
+is due when A3-A12 are signed off (`docs/OWNER-ACTIONS.md`).
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
