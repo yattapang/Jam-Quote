@@ -46,7 +46,7 @@ country. What each tier *includes* is the design.
 | Project costing and job profit | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Retention tracking | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Accountant exports (CSV) | — | ✓ *(release 2)* | ✓ *(release 2)* |
-| Offline **sealing** — price and capture a job with no signal | ✓ | ✓ | ✓ |
+| Offline **sealing** — price and capture a job with no signal (with the mobile app, which follows the web launch — ADR 0028) | ✓ | ✓ | ✓ |
 | Offline **issuing** — a number at the gate (release 2) | — | ✓ | ✓ |
 | Users on the account | 1 | about 3, no roles (ADR 0027 D5) | up to 10, then per seat |
 | Roles and approvals (who may send or discount) | — | — | ✓ |

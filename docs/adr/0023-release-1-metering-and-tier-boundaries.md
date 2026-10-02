@@ -42,6 +42,9 @@ standing here.*
 
 ### 2. Offline **sealing** is on every tier. Offline **issuing** (release 2) is Pro
 
+*Timing amended 2026-10-02 (ADR 0028): release 1 launches as an online web app, and offline sealing arrives
+with the mobile app that follows it. The decision below is unchanged in substance.*
+
 `TIERS.md` put "offline mobile use" on Pro, `PRD.md` §7 gave offline pricing to Free, and the site listed
 offline under Pro. Three documents, three answers (F8).
 

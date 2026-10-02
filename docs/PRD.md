@@ -86,7 +86,11 @@ M13. Separating the acts dissolves it:
 | **Number** | Allocate from the tenant's series: unique, gapless, answerable to an accountant | **Yes** in R1; from a device lease in R2 |
 | **Deliver** | Render the PDF, mint the share link, send it | Yes |
 
-- **R1 seals offline, and that is all it does offline (ADR 0027 D1, finding B5).** The catalog, labour
+**Release 1 ships in two steps (ADR 0028, 2026-10-02):** first the **web app, used online**, then the
+**mobile app**, which brings offline sealing. At web launch all three acts happen online; what follows
+describes the mobile app, and every requirement marked **[mobile]** below applies from its launch.
+
+- **The mobile app seals offline, and that is all it does offline (ADR 0027 D1, finding B5).** The catalog, labour
   rates, equipment, recipes, clients and tax settings are cached for reading. With no signal Delroy opens
   a job, expands a recipe, changes the length, sees the total, and **seals** it — an immutable snapshot
   written on the device and held in a durable outbox until it syncs. No data is lost and nothing is
@@ -102,18 +106,19 @@ M13. Separating the acts dissolves it:
   issued financial rows.
 
 What Delroy experiences at the gate is unchanged: the total is on screen in front of the client. The
-site promises *price* the job while standing there, not *send* it from there.
+site promises *price* the job while standing there, not *send* it from there — and until the mobile app
+ships, it says that pricing needs a connection (ADR 0028).
 
 **Stated plainly:** server allocation is strictly gapless; leases burn numbers and create gaps. R2's
 offline issuing is a trade-down on the property an accountant cares about, worth buying only if
-contractors actually hit the wall — which R1 will tell us.
+contractors actually hit the wall — which the mobile app will tell us.
 
 ### What each release contains
 
 | | R1 — "Price it and get paid" | R2 — "Change orders and offline" | R3 — "A firm, not a person" |
 |---|---|---|---|
 | **Goal** | A solo contractor can run a whole job through the product and we can charge for it | The workflows that break when the job changes or the signal drops | The Business tier earns its price |
-| **In** | W1, W2, W3, W4, W5, W6a, W7, W9, W10 · Free and Pro tiers · Jamaica · the website for sign-up and the client's share page · a **React Native (Expo) app** on Android and iOS (ADR 0027 D2) · offline: cached reads, one-device drafts, sealing | W6 client-signed change orders · W8 job result and costing · offline creates, offline variations and multi-device draft merge · offline issuing with number leases · retention tracking · signed-copy upload (R1.20c) · in-app support threads | Roles and approvals · crews and crew cost rates · consolidated reporting · WhatsApp Business sending · API access |
+| **In** | W1, W2, W3, W4, W5, W6a, W7, W9, W10 · Free and Pro tiers · Jamaica · the website for sign-up and the client's share page · **first, the web app, online** (ADR 0028) · **then the React Native (Expo) app** on Android and iOS (ADR 0027 D2), launched when the web app is ready, bringing offline: cached reads, one-device drafts, sealing | W6 client-signed change orders · W8 job result and costing · offline creates, offline variations and multi-device draft merge · offline issuing with number leases · retention tracking · signed-copy upload (R1.20c) · in-app support threads | Roles and approvals · crews and crew cost rates · consolidated reporting · WhatsApp Business sending · API access |
 | **Out** | Anything in R2/R3; the Business tier; WhatsApp Business sending (click-to-chat only); the price index; staff impersonation | Business-tier features | — |
 
 **Why invoicing (W7) is in R1 and not R2:** invoicing *is* the Pro line (`TIERS.md`). A release with no
@@ -170,8 +175,9 @@ R1.41, R1.42.
   for. One is enough to price the same job twice and feel the value, not enough to run a business on.
 
 ### W3 · Price a job — the moment that matters
-- **R1.8** From a client and a recipe, produce a priced draft in **under 60 seconds of interaction**,
-  with no signal, on a mid-range Android phone. **Measured, or it is not a requirement (F2, tightened for G10):** the
+- **R1.8** From a client and a recipe, produce a priced draft in **under 60 seconds of interaction** on a
+  mid-range Android phone — **online in the web app at web launch, and with no signal in the mobile app
+  [mobile]** (ADR 0028). **Measured, or it is not a requirement (F2, tightened for G10):** the
   instrument is a scripted walkthrough of the fence-at-the-gate task, timed from first tap to the total
   appearing, with **all four parameters named rather than gestured at**:
   **the device** — a Samsung Galaxy A15 or equivalent (8-core, 4 GB), the phone this market actually
@@ -195,7 +201,7 @@ R1.41, R1.42.
   changes the most important invariant; it is a migration, not a sentence.
 - **R1.10** Sections, so a quote reads the way a contractor talks about the job.
 - **R1.11** Two detail levels for the client: a summary, or fully itemised.
-- **R1.12** A draft is editable, versioned, and survives the app being closed with no signal. **One
+- **R1.12** A draft is editable, versioned, and survives the app being closed — with no signal **[mobile]**. **One
   device edits a draft at a time in R1:** a draft pushed from a device holding a stale version is refused,
   never merged — a three-way merge is R2's (ADR 0027 D1, finding B5).
 
@@ -254,7 +260,8 @@ R1.41, R1.42.
   server's. Default validity **30 days** (a proposed default for the owner to confirm), set per tenant and
   per quote. **An expired issue cannot be
   accepted**; the tenant extends it by issuing the next revision (finding B25).
-- **R1.18** **Sealing works with no network** and the snapshot is held in a durable outbox that survives
+- **R1.18** **[mobile — R1.18 to R1.18j apply from the mobile app's launch; on the web app a seal is made
+  online and numbered at once, ADR 0028]** **Sealing works with no network** and the snapshot is held in a durable outbox that survives
   the app closing, shows what is pending, and is encrypted at rest on the device (R1.18f). **Numbering
   happens at sync; delivery never happens on its own** (ADR 0027 D10, finding B16): at sync the issue is
   numbered and becomes **ready to send**, and the contractor taps send — by email, or by sharing to
@@ -516,7 +523,8 @@ R1.41, R1.42.
 - **R1.29** WiPay card payment links (Pro), **paid into the tenant's own WiPay merchant account** (ADR
   0027 D3, finding B9). The client pays the contractor directly; **Pryvis never holds client money** — we
   create the link with the tenant's credentials and verify WiPay's callback, which is what makes a deposit
-  grade 6 (R1.20d). The feature is available once the tenant connects their account; each tenant's
+  grade 6 (R1.20d). The feature is available once the tenant connects their account, **in their Pryvis
+  account settings**; **Pryvis's own WiPay account takes only subscription payments to us** (ADR 0028); each tenant's
   credentials are a secret held as one (a register row is owed, Rule 18). Owed before W7 is built: confirm
   WiPay offers merchant accounts to small Jamaican businesses, and what its onboarding asks of them (§9).
 
@@ -616,7 +624,7 @@ R1.41, R1.42.
   Free's one is owed with the prices.
 - **R1.37d** A tenant who lapses mid-month is on Free's limit for the rest of that month, counting the jobs
   already numbered in it.
-- **R1.37e** **The phone caches entitlements with a 7-day grace period** (domain model §8; finding B25), so
+- **R1.37e** **[mobile]** **The phone caches entitlements with a 7-day grace period** (domain model §8; finding B25), so
   a seal made offline is not refused for a lapse the device has not heard about; the numbering at sync
   (R1.32) is what is metered, on the server.
 - **R1.37f** WiPay for our own subscriptions is a different account from any tenant's (R1.29): ours,
@@ -678,7 +686,7 @@ a stated gap can be closed, an implied test cannot.
 | **N2** | Money: integer minor units, 64-bit, ceiling ~999,999,999.99 JMD, no float anywhere | ADR 0011. The old app capped at $21,474,836.47 |
 | **N3** | Quote and invoice documents are immutable once issued | Brief §10. `quote_issue`, `issue_number`, `acceptance`, `variation` and `document_render` have **no UPDATE path**. `issue_balance` **is** updated and is deliberately not a document — it is a derived cache behind a lock (domain model §6.2a), and saying "no table is ever updated" would have been false (G15) |
 | **N4** | Works on a mid-range Android phone, on mobile data, legible in sunlight, one-handed | The primary user is standing up outdoors. **Instrument:** the R1.8 walkthrough on the named device covers speed; one-handedness is N11's touch-target and reach values. **A contrast check on the design tokens is owed** (finding B1: this row said one existed; none does) — built with the app's first screen, since the only tokens today are the website's. **Sunlight legibility has no automated test** — it is judged by taking the phone outside, and that is a person's job, recorded per release |
-| **N5** | Priced draft producible with **no network**; the app states its sync status plainly | §4's resolution of the "on the spot" promise. **Instrument:** the R1.8 walkthrough runs in aeroplane mode, so N5 fails if R1.8 fails; the outbox's pending count is asserted by a test that seals offline and inspects it before any sync |
+| **N5** | **[mobile]** Priced draft producible with **no network**; the app states its sync status plainly | §4's resolution of the "on the spot" promise. **Instrument:** the R1.8 walkthrough runs in aeroplane mode, so N5 fails if R1.8 fails; the outbox's pending count is asserted by a test that seals offline and inspects it before any sync |
 | **N6** | Staff MFA mandatory; tenant MFA available | Rule 5.1, ADR 0021 |
 | **N7** | No personal data or secrets in logs; uploads private and scanned | Rule 5 |
 | **N8** | No tenant or client personal data, and no secrets, ever sent to the Claude API — redacted or synthetic only | Rule 15 |
@@ -699,7 +707,7 @@ R1 ships **Free and Pro only**. Business is R3, and until then the site must not
 | Invoices, payments, reminders, WiPay | — | ✓ |
 | Acceptance evidence up to grade 6 (a provider-confirmed deposit needs an invoice, R1.20d) | up to 3 | up to 6 |
 | Data export (R1.43) — also after a lapse | ✓ | ✓ |
-| Offline **sealing** (the core promise — every tier, ADR 0023) | ✓, and a seal past the monthly limit waits to be numbered rather than being lost (R1.32b) | ✓ |
+| Offline **sealing** (the core promise — every tier, ADR 0023; **with the mobile app**, ADR 0028) | ✓, and a seal past the monthly limit waits to be numbered rather than being lost (R1.32b) | ✓ |
 | Offline **issuing** (numbered at the gate) | — (R2) | — (R2, the Pro line when it lands) |
 | Users | 1 | **about 3**, no roles (ADR 0027 D5) |
 
@@ -807,8 +815,9 @@ R1 cannot launch without these, and none of them are engineering:
    the price index is the most defensible asset in the business and consent cannot be retro-fitted, so
    the clause must exist before the first tenant signs up (brief §5a).
 5. **A second staff account before the first is relied on** — there is deliberately no self-service way
-   to remove a second factor (ADR 0021), and separation of duties needs two people (R1.34). Who that person
-   is remains the owner's answer.
+   to remove a second factor (ADR 0021), and separation of duties needs two people (R1.34). **The person
+   is not yet named (ADR 0028)**; until then the single-operator exception (R1.35) is the recorded
+   fallback.
 
 Added by review 5 (B8, B22) and the owner's decisions (ADR 0027):
 
@@ -822,8 +831,10 @@ Added by review 5 (B8, B22) and the owner's decisions (ADR 0027):
    application on a free plan; the rebuilt API has none. A recurring cost the owner approves.
 8. **An accountant's review of the GCT design before launch** (R1.9, ADR 0027 D7).
 9. **App-store developer accounts** for Android and iOS in the business's name, with their own
-   verification lead times (ADR 0027 D2).
-10. **The Claude budget**, which the support chatbot needs (R1.38, ADR 0027 D9).
+   verification lead times (ADR 0027 D2) — needed for the mobile app's launch, not the web launch (ADR
+   0028).
+10. **A monthly spend limit for the support chatbot** (R1.38, ADR 0027 D9). The owner holds a Claude
+   developer account (ADR 0028); the limit is still to be set.
 
 ## 10. How we will know it worked
 
@@ -832,12 +843,12 @@ Measured, not felt. Each needs instrumentation that is itself part of R1.
 | Signal | Target for R1 | Why this one |
 |---|---|---|
 | A new tenant **sends their first quote** (the clock stops at send, R1.18) | within 30 minutes of sign-up | If set-up defeats them, nothing else matters. ("Without support" was dropped: no row can know about an email to support, finding B11) |
-| Priced draft from recipe, offline | **under 60 seconds** of interaction | This is the product's whole claim |
+| Priced draft from recipe — online on the web app; offline from the mobile app's launch (ADR 0028) | **under 60 seconds** of interaction | This is the product's whole claim |
 | Free tenants who **hit the free limit** (a fourth job refused) | ≥ 30% of active Free tenants by month two — **active** means at least one job numbered in the month | This is the demand signal. The earlier version of this row asked for "≥ 4 quotes/month", which the free limit of 3 makes impossible — the server refuses the fourth (F9) |
 | **Pro tenants'** accepted quotes that become an invoice | ≥ 70% | Tests whether W7 is where they actually work. Free cannot invoice, so counting Free measured the tier mix (B11) |
 | Free → Pro conversion | ≥ 10% of tenants **who hit the free limit**, within 30 days of first hitting it | The denominator must be tenants showing demand. "Tenants issuing ≥ 4/month" was the already-converted population, so the rate was uncomputable (F9) |
 | Single-operator exceptions on manual payments | counted, each reviewed | 100% approval by a second person is guaranteed by construction (R1.34), so it could only ever read 100%; the exceptions are what can move (B11) |
-| Seals made offline, and their seal-to-number delay | observed, no target | §4 defers offline issuing until contractors hit the wall; this is how R1 tells us (B11) |
+| Seals made offline, and their seal-to-number delay — from the mobile app's launch | observed, no target | §4 defers offline issuing until contractors hit the wall; this is how R1 tells us (B11) |
 | Share links opened against acceptances; codes sent against codes entered | observed, no target | The failure H17 predicted — an abandoned acceptance that looks like a client ignoring the quote — is otherwise invisible (B11) |
 
 **Below about 30 active tenants, these figures are read as qualitative** — one tenant moves a percentage
@@ -855,9 +866,11 @@ the build. **The numeric triggers in items 6 and 7 are proposals for the owner t
 2. **WiPay: the account model or onboarding does not fit.** Per-tenant accounts (R1.29) and card upgrades
    (R1.37a) both depend on what WiPay offers. *Watch:* owner. *Trigger:* WiPay's answer before W7 is built;
    if per-tenant accounts are not available, R1.29 returns to the owner as a decision.
-3. **The offline scope grows back.** §4 keeps the sync engine out of R1 and the requirements had drifted
-   it back once (B5). *Watch:* the builder. *Trigger:* any R1 requirement that writes offline other than a
-   seal goes back to the owner.
+3. **The offline scope grows back, or the promise waits too long.** §4 keeps the sync engine out of the
+   money release and the requirements had drifted it back once (B5); and with the web app first (ADR 0028),
+   a contractor with no signal cannot seal until the mobile app ships. *Watch:* the builder, and the owner
+   for timing. *Trigger:* any requirement that writes offline other than a seal goes back to the owner; and
+   the mobile app is scheduled once the web app is ready.
 4. **Data protection.** No legal analysis yet exists for the first country (B8). *Watch:* owner.
    *Trigger:* the attorney's review (risk 1); R1.44 and R1.45 built before launch.
 5. **Staffing.** R1.34 needs two staff for every manual activation. *Watch:* owner. *Trigger:* the second
@@ -880,7 +893,8 @@ at launch (§9 item 7); number allocation under offline issuing cannot occur in 
 - **Screen-by-screen UI.** Each workflow needs a design before code (Rule 1.1); this says what must be
   possible, not what it looks like.
 - **Migrating data from the old application.** Recorded in the audit's §5; depends on the schema.
-- **The native mobile app's shape** — **decided 2026-10-02: React Native with Expo** (ADR 0027 D2). This
+- **The native mobile app's shape** — **decided 2026-10-02: React Native with Expo** (ADR 0027 D2),
+  **launched after the web app** (ADR 0028). This
   said R1's scope was "achievable either way"; it was not, because R1.18f needs the device's keystore and
   lock (finding B5).
 - **The GCT design** (R1.9) — owed before W3 and W7 are built.

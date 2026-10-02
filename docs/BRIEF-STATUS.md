@@ -694,6 +694,14 @@ over every string of it (B4, planted: caught). Other documents corrected: ADR 00
 marked superseded. Gate: db 270 (PostgreSQL required), api 191, web 12, typecheck, four checkers; the site
 builds. Next: an independent re-read of the amended PRD before the owner approves it (Rule 1.10, 24.6).
 
+**Owner's decisions, 2026-10-02 (ADR 0028):** release 1 launches as an **online web app**; the React Native app,
+with offline sealing, follows once the web app is ready (the owner chose "online at web launch" over a PWA);
+each tenant connects **their own** WiPay account in their account settings and Pryvis's account takes only
+subscriptions; the second staff member is not yet named (R1.35's exception is the fallback); the owner holds a
+Claude developer account (the chatbot's spend limit is still to be set). PRD, TIERS, ADR 0023 and the site
+amended; the site's "Works with no signal" line is marked "(coming with the mobile app)", and the tier guard
+accepts that marker (planted: an unmarked line is caught).
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

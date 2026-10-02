@@ -260,7 +260,6 @@ describe("nothing untrue", () => {
       "Share by WhatsApp or email, client accepts online",
       "Client list",
       "One reusable job recipe",
-      "Works with no signal — price and capture a job offline",
       "1 user",
       "Unlimited quotes",
       "Unlimited reusable job recipes",
@@ -278,6 +277,9 @@ describe("nothing untrue", () => {
     // lines — it was right that they were unmarked and wrong about where to look, which is a better
     // failure than the reverse.
     const markedLine = /\(coming in release (\d)\)/;
+    // Release 1 ships the web app first and the mobile app after it (ADR 0028), so a line the mobile app
+    // delivers is marked "(coming with the mobile app)" — a later delivery than the web launch.
+    const markedMobile = /\(coming with the mobile app\)/;
     const markedTier = /coming in release (\d)/i;
     const unmarked: string[] = [];
 
@@ -292,6 +294,7 @@ describe("nothing untrue", () => {
         continue;
       }
       for (const line of tier.includes) {
+        if (markedMobile.test(line)) continue;
         const match = markedLine.exec(line);
         if (match) {
           // A "coming" marker must name a LATER release. "Coming in release 1" while we are
