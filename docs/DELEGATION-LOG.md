@@ -32,6 +32,7 @@ that states the tier's reason and the outcome together.
 | 2026-10-01 | Fourth re-review, scoped to the Y fixes | commit-reviewer, Opus | Both protection layers attacked, ceiling races re-run | All five closable; Z1-Z5 stated as limits | — |
 | 2026-10-01 | Closing check: J2, J6, J7, J8, J11 | general-purpose, Sonnet | Mechanical: 26 plants against each rule's current definition, in four chunks | All seven items passed; 26 of 26 caught | — |
 | 2026-10-01 | Closing check: H17, H19, H20 | general-purpose, Sonnet | Documents only: phrases present or gone | Passed; one stale sentence noted and fixed | — |
+| 2026-10-02 | Adversarial review of the privilege model (R5, J14, §4g), brief `docs/briefs/2026-10-01-privilege-model-review.md`, HEAD `01c3cdc` | commit-reviewer, Opus | Credential path and policy text (16.5 exceptions); bypasses executed | AA1-AA7; R5 closable with limits, J14's guard and §4g's check not closable | — |
 
 **What the log shows so far.** Two escalations, both *brief incomplete*, both on one check (J4's), and both
 fixed by the brief rather than the tier — the evidence Rule 16.9 rests on. Every Sonnet closing check since
