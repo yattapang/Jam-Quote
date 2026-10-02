@@ -806,6 +806,8 @@ findings are reproduced in the brief.* Brief `docs/briefs/2026-10-02-tax-design-
 worked figures of TD1, TD2 and TD12 re-done by hand and matching. One imprecision noted and corrected: the design's
 §8 cited a domain-model pointer as §6.2; it sits under §6.2a. **A1 now awaits only the owner's sign-off** (checklist
 item 7), which also approves the amendments — chiefly T6's credit that may target tax codes.
+**Signed off by the owner, 2026-10-02: "Yes, A1 is fully approved"** — the design and its amendments. A1 is ticked in
+`docs/BUILD-PLAN.md` with its evidence line. Next: design A2, the API layer.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

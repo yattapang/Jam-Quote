@@ -43,8 +43,8 @@ or whose briefs are not files in the repository.
 
 The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
 
-- [ ] A1 · Tax (GCT in Jamaica) and documents — per-country tax names, labels and rates; tax per invoice; TRN;
-  credit notes, refunds and client credits; revision numbering ("Q-0042 rev 2", ADR 0031); the rule pack
+- [x] A1 · Tax (GCT in Jamaica) and documents, `docs/design/tax-and-documents.md` — per-country tax names, labels and rates; tax per invoice; TRN; credit notes, refunds and client credits; revision numbering ("Q-0042 rev 2", ADR 0031); the rule pack
+  Done: 2026-10-02 · commit `136ee7c` · review `docs/briefs/2026-10-02-tax-design-read.md` · closing `docs/briefs/2026-10-02-tax-design-closing-check.md` · owner: approved 2026-10-02
 - [ ] A2 · API layer — OpenAPI and its contract test, cookie sessions and CSRF, errors, idempotency,
   validation, start-up wiring, tenant context in jobs and storage
 - [ ] A3 · Support and feedback — the options paper with costs (brief §15), the chatbot under Rule 15, the

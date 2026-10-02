@@ -2,8 +2,8 @@
 
 **Status: APPROVED by the owner, 2026-10-02 — every recommendation, T1-T9.** **Amended the same day** to answer
 its independent read (findings TD1-TD15, §8). The amendments make T4-T9 precise; one changes an approved rule
-(T6: a credit note may now target tax codes, TD1). They are approved with the step's sign-off. Build plan step A1
-(`docs/BUILD-PLAN.md`). The closing check is owed before the step is ticked. Nothing here is built until its
+(T6: a credit note may now target tax codes, TD1). **The owner signed off the step, amendments included, on 2026-10-02**; A1 is ticked in the build plan. Build plan step A1
+(`docs/BUILD-PLAN.md`). Nothing here is built until its
 build steps (B6, C3, C4, D1-D2) begin.
 
 Date: 2026-10-02 · **Implements the direction of** ADR 0027 D7 (a tax-exclusive ceiling), ADR 0030 decision 1 (tax
