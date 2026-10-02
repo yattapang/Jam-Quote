@@ -724,6 +724,13 @@ domain model §8 and §6.2a, scope-reduction design, THREAT-MODEL §4a and §4.6
 the register, ADR 0027's pointer; the site guard's four gaps closed (the reviewer's four plants, each caught),
 the B20 test widened (the NOT IN plant, caught), one sentence of site copy.
 
+**Owner's decisions, 2026-10-02 (ADR 0030):** the recommended direction for the six outstanding planning items
+accepted — GCT, API layer, support model with the chatbot under Rule 15, feedback loop, environments and
+operations, completing the register — with the owner's note that **tenants may enter their own GCT or tax rates
+for their country**. Each becomes a design for approval before building. Agreed order: the closing check of the
+re-read's fixes, then the owner's PRD approval, then the planning baseline audit against the original brief,
+then the six designs.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
