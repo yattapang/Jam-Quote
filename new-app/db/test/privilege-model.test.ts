@@ -172,38 +172,52 @@ describe("the application role cannot reach the credential tables (J14)", () => 
   });
 });
 
-describe("no table outside row security is reachable unless named (guard)", () => {
-  it("finds every table without row security either unreachable or named with a reason", async () => {
+describe("nothing outside row security is reachable unless named (guard)", () => {
+  // Every relation that can return rows — table, partitioned table, view, materialized view, foreign
+  // table — in every schema but the system ones, and column grants as well as table grants. Until
+  // 2026-10-02 this read plain tables in `public` by table grant only, and a view over a credential
+  // table passed it (finding AA2); a column grant passed the runtime check (AA1).
+  it("finds every such relation unreachable, row-secured, a security_invoker view, or named with a reason", async () => {
     const rows = (
-      await db.query<{ name: string; reachable: boolean }>(`
-        SELECT c.relname AS name,
-               has_table_privilege(current_user, c.oid,
-                                   'SELECT, INSERT, UPDATE, DELETE, TRUNCATE') AS reachable
+      await db.query<{ name: string; reachable: boolean; covered: boolean }>(`
+        SELECT n.nspname || '.' || c.relname AS name,
+               (has_table_privilege(current_user, c.oid, 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE')
+                OR has_any_column_privilege(current_user, c.oid, 'SELECT, INSERT, UPDATE')) AS reachable,
+               CASE WHEN c.relkind IN ('r', 'p') THEN c.relrowsecurity
+                    WHEN c.relkind = 'v' THEN EXISTS (
+                      SELECT 1 FROM unnest(COALESCE(c.reloptions, ARRAY[]::text[])) o
+                       WHERE lower(o) IN ('security_invoker=true', 'security_invoker=on',
+                                          'security_invoker=1', 'security_invoker=yes'))
+                    ELSE false END AS covered
           FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-         WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-         ORDER BY c.relname`)
+         WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema' AND c.relkind IN ('r', 'p', 'v', 'm', 'f')
+         ORDER BY 1`)
     ).rows;
+    const outside = rows.filter((r) => !r.covered);
     // The credential tables are outside row security by design; an empty read cannot pass.
-    expect(rows.map((r) => r.name)).toEqual(expect.arrayContaining(CREDENTIAL_TABLES));
-    const unnamed = rows
-      .filter((r) => r.reachable && !(r.name in REACHABLE_WITHOUT_ROW_SECURITY))
+    expect(outside.map((r) => r.name)).toEqual(
+      expect.arrayContaining(CREDENTIAL_TABLES.map((t) => `public.${t}`)),
+    );
+    const unnamed = outside
+      .filter((r) => r.reachable && !(r.name.replace(/^public\./, "") in REACHABLE_WITHOUT_ROW_SECURITY))
       .map((r) => r.name);
     expect(unnamed, `reachable outside row security, with no reason: ${unnamed.join(", ")}`).toEqual([]);
     const stale = Object.keys(REACHABLE_WITHOUT_ROW_SECURITY).filter(
-      (name) => !rows.some((r) => r.name === name && r.reachable),
+      (name) => !outside.some((r) => r.name === `public.${name}` && r.reachable),
     );
     expect(stale, `named but not reachable outside row security: ${stale.join(", ")}`).toEqual([]);
   });
 });
 
 describe("the SECURITY DEFINER functions are the named ones, owned by the named roles (guard)", () => {
-  it("finds exactly the seventeen, each with its owner", async () => {
+  it("finds exactly the seventeen, in any schema, each with its owner", async () => {
     const found = (
       await db.query<{ name: string; owner: string }>(`
         SELECT p.oid::regprocedure::text AS name, pg_get_userbyid(p.proowner) AS owner
           FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE n.nspname = 'public' AND p.prosecdef`)
+         WHERE n.nspname NOT LIKE 'pg\\_%' AND n.nspname <> 'information_schema' AND p.prosecdef`)
     ).rows;
+    // Every schema but the system ones: a definer function in another schema passed this (AA2).
     const actual = Object.fromEntries(found.map((f) => [f.name.replace(/, /g, ","), f.owner]));
     expect(actual).toEqual(DEFINERS);
   });
@@ -307,10 +321,10 @@ describe("least_privilege_violations() (D4)", () => {
       // Membership inherits the owning role's grants, so its reach is named too.
       ["is a member of pryvis_auth", "can reach app_credential directly", "can reach app_session directly",
        "can reach mfa_totp directly", "can reach mfa_recovery_code directly",
-       "can reach registration_claim directly", "owns objects in schema public"]],
+       "can reach registration_claim directly", "owns database objects"]],
     ["membership of pryvis_balance", `GRANT pryvis_balance TO ${APP_ROLE}`,
       `REVOKE pryvis_balance FROM ${APP_ROLE}`, ["is a member of pryvis_balance", "can write issue_balance directly",
-       "owns objects in schema public"]],
+       "owns database objects"]],
     ["a direct grant on a credential table", `GRANT SELECT ON app_credential TO ${APP_ROLE}`,
       `REVOKE SELECT ON app_credential FROM ${APP_ROLE}`, ["can reach app_credential directly"]],
     ["a write grant on issue_balance", `GRANT UPDATE ON issue_balance TO ${APP_ROLE}`,
@@ -321,19 +335,66 @@ describe("least_privilege_violations() (D4)", () => {
     ["CREATE on schema public", `GRANT CREATE ON SCHEMA public TO ${APP_ROLE}`,
       `REVOKE CREATE ON SCHEMA public FROM ${APP_ROLE}`, ["may create objects in schema public"]],
     ["ownership of a business table", `ALTER TABLE rate_limit_bucket OWNER TO ${APP_ROLE}`,
-      "ALTER TABLE rate_limit_bucket OWNER TO CURRENT_USER", ["owns objects in schema public"]],
+      "ALTER TABLE rate_limit_bucket OWNER TO CURRENT_USER",
+      ["owns database objects", "can truncate or add triggers to public.rate_limit_bucket"]],
+    // The review's bypasses (AA1-AA5, 2026-10-02), each one the check used to call clean.
+    ["AA1 · a column UPDATE grant on a credential table", `GRANT UPDATE (password_hash) ON app_credential TO ${APP_ROLE}`,
+      `REVOKE UPDATE (password_hash) ON app_credential FROM ${APP_ROLE}`, ["can reach app_credential directly"]],
+    ["AA1 · a column SELECT grant on a credential table", `GRANT SELECT (user_id) ON app_session TO ${APP_ROLE}`,
+      `REVOKE SELECT (user_id) ON app_session FROM ${APP_ROLE}`, ["can reach app_session directly"]],
+    ["AA1 · REFERENCES on a credential table", `GRANT REFERENCES ON mfa_totp TO ${APP_ROLE}`,
+      `REVOKE REFERENCES ON mfa_totp FROM ${APP_ROLE}`, ["can reach mfa_totp directly"]],
+    ["AA1 · TRUNCATE on issue_balance", `GRANT TRUNCATE ON issue_balance TO ${APP_ROLE}`,
+      `REVOKE TRUNCATE ON issue_balance FROM ${APP_ROLE}`,
+      ["can write issue_balance directly", "can truncate or add triggers to public.issue_balance"]],
+    ["AA1 · a column UPDATE grant on platform_capability", `GRANT UPDATE (capability) ON platform_capability TO ${APP_ROLE}`,
+      `REVOKE UPDATE (capability) ON platform_capability FROM ${APP_ROLE}`, ["can write platform_capability directly"]],
+    ["AA1 · TRIGGER on a business table", `GRANT TRIGGER ON invoice TO ${APP_ROLE}`,
+      `REVOKE TRIGGER ON invoice FROM ${APP_ROLE}`, ["can truncate or add triggers to public.invoice"]],
+    ["AA2 · a view over a credential table (granted by default privileges)",
+      "CREATE VIEW credential_directory AS SELECT email, password_hash FROM app_credential",
+      "DROP VIEW credential_directory", ["can reach public.credential_directory outside row security"]],
+    ["AA2 · a materialized view", `CREATE MATERIALIZED VIEW credential_copy AS SELECT email FROM app_credential;
+      GRANT SELECT ON credential_copy TO ${APP_ROLE}`,
+      "DROP MATERIALIZED VIEW credential_copy", ["can reach public.credential_copy outside row security"]],
+    ["AA2 · a definer function in another schema", `CREATE SCHEMA aa_other; GRANT USAGE ON SCHEMA aa_other TO ${APP_ROLE};
+      CREATE FUNCTION aa_other.dump() RETURNS bigint LANGUAGE sql SECURITY DEFINER
+        AS 'SELECT count(*) FROM public.app_credential'`,
+      "DROP SCHEMA aa_other CASCADE", ["can use schema aa_other", "can execute definer function aa_other.dump()"]],
+    ["AA3 · REPLICATION", `ALTER ROLE ${APP_ROLE} REPLICATION`, `ALTER ROLE ${APP_ROLE} NOREPLICATION`,
+      ["may connect for replication"]],
+    ["AA3 · a predefined role that runs programs on the server", `GRANT pg_execute_server_program TO ${APP_ROLE}`,
+      `REVOKE pg_execute_server_program FROM ${APP_ROLE}`, ["is a member of pg_execute_server_program"]],
+    ["AA3 · CREATE on the database", `DO $$BEGIN EXECUTE format('GRANT CREATE ON DATABASE %I TO pryvis_app', current_database()); END$$`, `DO $$BEGIN EXECUTE format('REVOKE CREATE ON DATABASE %I FROM pryvis_app', current_database()); END$$`, ["may create schemas"]],
+    ["AA4 · SET-only membership of a role that owns a credential table",
+      `CREATE ROLE aa_migrator NOLOGIN; ALTER TABLE app_credential OWNER TO aa_migrator;
+      GRANT aa_migrator TO ${APP_ROLE} WITH INHERIT FALSE, SET TRUE`,
+      `REVOKE aa_migrator FROM ${APP_ROLE}; ALTER TABLE app_credential OWNER TO CURRENT_USER; DROP ROLE aa_migrator`,
+      ["owns database objects"]],
+    ["AA5 · a schema the role owns", `CREATE SCHEMA aa_mine AUTHORIZATION ${APP_ROLE}`, "DROP SCHEMA aa_mine CASCADE",
+      ["owns schema aa_mine", "may create objects in schema aa_mine", "can use schema aa_mine"]],
   ];
   for (const [what, plant, unplant, expected] of PLANTS) {
     it(`names ${what}`, async () => {
       await asOwner(() => db.exec(plant));
       try {
-        expect(await violations()).toEqual(expected);
+        // Order is the function's, not the point: compare as sets.
+        expect([...(await violations())].sort()).toEqual([...expected].sort());
       } finally {
         await asOwner(() => db.exec(unplant));
       }
       expect(await violations()).toEqual([]);
     });
   }
+
+  it("calls a security_invoker view clean: it runs as the caller, under row security", async () => {
+    await asOwner(() => db.exec("CREATE VIEW tenant_names WITH (security_invoker = true) AS SELECT id, name FROM tenant"));
+    try {
+      expect(await violations()).toEqual([]);
+    } finally {
+      await asOwner(() => db.exec("DROP VIEW tenant_names"));
+    }
+  });
 
   it("names a role that is not a member of pryvis_app at all", async () => {
     await asOwner(() => db.exec("CREATE ROLE pryvis_stranger NOLOGIN"));

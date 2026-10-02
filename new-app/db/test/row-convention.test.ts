@@ -86,8 +86,8 @@ const EXEMPT: Record<string, string> = {
     "issued.",
   issue_balance:
     "A derived cache behind a lock (ADR 0025 decision 2), rebuildable from the rows it summarises. " +
-    "Its writes are meant to go through the balance functions, which take the lock (the flag they " +
-    "set is not a secret — R5, finding T10), so a version column would guard the wrong writer; " +
+    "Its writes go only through the balance functions, which take the lock and are the only " +
+    "writers the grants allow (R5, privilege model), so a version column would guard the wrong writer; " +
     "the lock inside `issue_balance_apply()` is the real control. Never " +
     "deleted, because a FOR UPDATE on a missing row takes no lock — which was finding G2.",
 

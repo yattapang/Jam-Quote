@@ -45,8 +45,10 @@ export class OverPrivilegedRoleError extends Error {
 
 /** Resolves when the connected role is least-privileged; throws {@link OverPrivilegedRoleError} otherwise. */
 export async function assertLeastPrivilege(db: LeastPrivilegeQueryable): Promise<void> {
+  // Schema-qualified: unqualified, a role owning a schema earlier on its search path (`"$user"`) could
+  // answer with its own function of the same name that returns nothing (finding AA5).
   const rows = await db.$queryRawUnsafe<{ violations: string[] | null }>(
-    "SELECT least_privilege_violations() AS violations",
+    "SELECT public.least_privilege_violations() AS violations",
   );
   // A missing row or a NULL is not "no violations": it means the check did not run, and a check that did
   // not run must not let the API start.

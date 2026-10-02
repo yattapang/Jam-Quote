@@ -145,6 +145,9 @@ through `tools/run_brief.py` (Rule 16.7).
 
 - It does not make an injection defect harmless. A defect in the ordinary path still reads and writes the
   calling tenant's business rows under row security, and can look up one credential by a known email.
+  Through the write doors it can impersonate a user whose id it knows, second factor included — executed
+  by the review (2026-10-02) and accepted by the owner as a limit, with the injection guard
+  `new-app/api/src/core/architecture/sql-is-static.test.ts` as the control (§8).
 - It does not cover the staff console's own privileges or staff MFA (still a launch blocker), only the
   table that records capabilities.
 - It does not protect against the database owner or a superuser, which bypass every policy.
@@ -165,6 +168,12 @@ the design left open:
   Its doors come with sign-up.
 - The parser-based guard of ADR 0025 decision 2 is withdrawn: the database refuses the write whatever
   module sends it.
+- **After the adversarial review (2026-10-02, AA1-AA7):** `least_privilege_violations()` rebuilt by
+  `20260928000000_least_privilege_complete` (column grants, TRUNCATE and TRIGGER, views and every relation
+  kind outside row security, REPLICATION and the predefined roles, SET-only ownership, schemas); the API's
+  call schema-qualified; the guards read every relation kind and schema; the policy check compares whole
+  expressions; and the injection guard added, the condition of the owner's accepting the write-door limit
+  in §7.
 
 Tests: `new-app/db/test/privilege-model.test.ts`, `new-app/db/test/documents-core.test.ts` block 2,
 `new-app/db/test/policy-parity.test.ts`, `new-app/db/test/concurrency.pg.test.ts` ("§4g") and

@@ -636,6 +636,22 @@ exceptions, and the work is adversarial (bypasses executed, not reasoned about).
 `docs/briefs/2026-10-01-privilege-model-review.md`; `tools/run_brief.py` ran it at `6324860`: 8 of 8 expectations
 hold. Scope: `4f385fa`, `6ac5cd2`. Findings will be numbered AA1 onward. Then the closing check (Sonnet).
 
+**Review reported 2026-10-02: AA1-AA7** (recorded at the end of `docs/PRD-REVIEW-4.md`; tree left clean). R5's
+fix and J14's tables held; the deployment check called clean several over-privileged roles (column grants,
+TRUNCATE, REPLICATION, predefined roles, SET-only ownership, an owned schema), and the guards missed views and
+definer functions outside `public`. **Owner's decision, 2026-10-02:** the write-door limit (an injection that
+knows a user id can impersonate that user, second factor included) is ACCEPTED, with an injection guard as the
+control — after the builder withdrew its first recommendation (harden three doors), because marking a session
+verified would have stayed open: the database cannot check a TOTP code.
+**Fixed 2026-10-02:** migration `20260928000000_least_privilege_complete` rebuilds the check (AA1, AA3, AA4,
+AA5); the API calls it schema-qualified (AA5); the guards in `db/test/privilege-model.test.ts` read every
+relation kind and schema (AA2); `db/test/policy-parity.test.ts` compares whole expressions (AA6); AA7's
+sentences corrected; `api/src/core/architecture/sql-is-static.test.ts` added — it found one interpolated
+statement, in the rate limiter (a constant fragment, written out in full). Every bypass the review executed
+is now a test (15), and 15 more plants against the new controls were caught (one first missed because the
+plant was incomplete — a table's row type shares its owner — and was re-planted). Gate: db 267, api 191,
+typecheck, four checkers. Next: the closing check (Sonnet).
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

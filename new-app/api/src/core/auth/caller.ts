@@ -75,7 +75,11 @@ export interface CallerResolver {
 }
 
 /**
- * A claimed session: its id, and the version it was issued at.
+ * A claimed session: its secret, and the version it was issued at.
+ *
+ * `sessionId` is the SECRET the client holds (named before the privilege model, 2026-10-01), not the
+ * row's id: the database stores only its SHA-256 and is asked by that hash
+ * (`session-token.ts`, design D2). Treat it like a password — never log it.
  *
  * The version is what makes invalidation possible. Bumping the stored version on a
  * user — on password change, on sign-out-everywhere, on a suspected compromise —

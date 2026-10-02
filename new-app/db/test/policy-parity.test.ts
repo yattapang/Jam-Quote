@@ -212,11 +212,13 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
        * is wrong; and its write policies carry an extra predicate, so the "canonical expression for
        * ALL commands" rule is wrong too.
        *
-       * The value is the predicate that must appear in every write policy. Asserting it is the
-       * point: it turns "every write policy demands the flag" from a sentence into a property this
-       * guard checks. It does NOT check that only a function sets the flag — nothing does, and the
-       * application can set it itself (R5; finding T10 corrected the claim that it did). Without it, someone could drop the flag condition and leave a
-       * table that reads as function-guarded and is not.
+       * The value is the predicate every write policy must carry, beside the tenant expression and
+       * nothing else (whole-expression equality since finding AA6). Asserting it is the point: it
+       * turns "only the balance functions' owner may write" from a sentence into a property this
+       * guard checks. The application cannot satisfy it — inside a SECURITY DEFINER function
+       * `current_user` is the owner — and it holds no write grant either, so the policy is the second
+       * lock (the flag it replaced could be set by anyone, R5). Without the check, someone could drop
+       * or widen the condition and leave a table that reads as function-guarded and is not.
        */
       /**
        * Tables whose FACTS are frozen but which carry one field a tenant sets later, so they need
@@ -250,12 +252,16 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
         app_session:
           "Read before any tenant is known, because it is what establishes app.tenant_id. " +
           "A policy requiring a tenant would make it unreadable exactly when it is needed. " +
-          "Thin by design (ids, a version, timestamps) and every read after it — including " +
-          "the user's own role — happens under RLS with the tenant this row supplied.",
+          "The application cannot read it at all: only the door functions owned by pryvis_auth " +
+          "can, one row by the hash of the client's secret, which is all it stores of it " +
+          "(privilege model D1, D2). Every read after it happens under RLS with the tenant " +
+          "this row supplied.",
         app_credential:
           "The other half of the authentication bootstrap: sign-in must find a user BY EMAIL " +
-          "before any tenant is known, and app_user is behind RLS. Keeping the hash here also " +
-          "means app_user, the row every module reads, carries no password at all.",
+          "before any tenant is known, and app_user is behind RLS. The application cannot read " +
+          "it: sign-in asks the door function credential_for_email for one row (privilege model " +
+          "D1). Keeping the hash here also means app_user, the row every module reads, carries " +
+          "no password at all.",
         rate_limit_bucket:
           "Consulted before anyone is identified, which is its purpose. Holds no tenant data " +
           "and no personal data: keys are an action plus an IP or a hashed email.",
@@ -372,10 +378,13 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
                 `${table}.${read.polname} USING is not the canonical tenant expression — got ${read.using_expr}`,
               );
             }
-            // THE POINT OF THIS BRANCH: every write policy must carry the guard predicate as well
-            // as the tenant expression. A write policy without it is a table that reads as
-            // function-guarded and is not.
+            // THE POINT OF THIS BRANCH: every write policy must be EXACTLY the tenant expression AND
+            // the guard predicate. Until 2026-10-02 this asked only that the text CONTAIN both, so
+            // `… AND (current_user = 'pryvis_balance' OR current_user = 'pryvis_app')` passed it and
+            // opened the table to the application again (finding AA6). Whole-expression equality, in
+            // the form pg_get_expr prints it.
             const predicate = FUNCTION_GUARDED[table]!;
+            const guarded = normalise(`(${expected} AND (${predicate}))`);
             for (const cmd of ["a", "w"] as const) {
               const policy = byCommand.get(cmd);
               if (!policy) continue;
@@ -384,16 +393,10 @@ describe("every table is either tenant-protected or exempt with a reason", () =>
                 ["WITH CHECK", policy.check_expr],
               ] as const) {
                 if (expr === null) continue;
-                if (!normalise(expr).includes(normalise(expected))) {
+                if (normalise(expr) !== guarded) {
                   unprotected.push(
-                    `${table}.${policy.polname} ${label} does not contain the canonical tenant ` +
-                      `expression — got ${expr}`,
-                  );
-                }
-                if (!normalise(expr).includes(normalise(predicate))) {
-                  unprotected.push(
-                    `${table}.${policy.polname} ${label} does not require the role that owns the ` +
-                      `balance functions, so another writer could pass it — got ${expr}`,
+                    `${table}.${policy.polname} ${label} is not exactly the tenant expression AND the ` +
+                      `role that owns the balance functions, so another writer could pass it — got ${expr}`,
                   );
                 }
               }

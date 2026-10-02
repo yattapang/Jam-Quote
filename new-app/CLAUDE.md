@@ -161,9 +161,10 @@ The migrations create three NOLOGIN roles and every grant — the test harness g
 - `pryvis_app` — the ordinary role every request runs as. Ordinary access to every table, except: **no
   privilege at all** on the credential tables (`app_credential`, `app_session`, `mfa_totp`,
   `mfa_recovery_code`, `registration_claim`), and SELECT only on `issue_balance` and
-  `platform_capability`. A new table gets its grants by default — so **a new secret table must be revoked
-  explicitly**; `db/test/privilege-model.test.ts` fails on any table outside row security the application
-  can reach that it does not name.
+  `platform_capability`. A new table **or view** gets its grants by default — so **a new secret table must
+  be revoked explicitly, and a new view must be `WITH (security_invoker = true)`** (a view otherwise runs
+  as its owner, outside row security: finding AA2). `db/test/privilege-model.test.ts` fails on any
+  relation in any schema the application can reach outside row security that it does not name.
 - `pryvis_auth` — owns the **door functions** (`credential_for_email`, `session_create`,
   `session_resolve`, `mfa_*`, …), `SECURITY DEFINER`, each reading or writing one row by its key. Auth
   code calls these; it never writes SQL against a credential table.
@@ -175,6 +176,11 @@ SHA-256 (`api/src/core/auth/session-token.ts`). `least_privilege_violations()` d
 and `api/src/core/auth/least-privilege.ts` refuses to start on any violation — **not yet called by
 anything**, because there is no bootstrap. In tests, writing a credential table directly needs `RESET
 ROLE` first (the owner), as the fixtures in `api/src/core/auth/*.test.ts` do.
+
+**SQL is always a fixed string.** Values go only as `$n` parameters; never build a statement with
+`${…}`, `+` or a variable — `api/src/core/architecture/sql-is-static.test.ts` fails the build on it. This
+is the control the privilege model leans on: an injection in our server can still impersonate a user
+through the write doors (an accepted limit, `docs/THREAT-MODEL.md` §4f).
 
 Not built yet, and each is honest work owed rather than a detail:
 

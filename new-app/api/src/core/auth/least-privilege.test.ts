@@ -63,6 +63,25 @@ describe("assertLeastPrivilege", () => {
     }
   });
 
+  it("cannot be answered by a same-named function in a schema the role owns (AA5)", async () => {
+    // On the default search path ("$user", public) the role's own schema comes first. An unqualified
+    // call found the impostor, which said "nothing wrong"; the qualified one reaches the real check.
+    await db.exec(`CREATE SCHEMA ${APP_ROLE} AUTHORIZATION ${APP_ROLE}`);
+    await db.exec(`CREATE FUNCTION ${APP_ROLE}.least_privilege_violations() RETURNS text[]
+                     LANGUAGE sql AS 'SELECT ARRAY[]::text[]'`);
+    await db.exec(`SET ROLE ${APP_ROLE}`);
+    try {
+      await db.exec(`SET search_path = "$user", public`);
+      const impostor = await db.query<{ v: string[] }>("SELECT least_privilege_violations() AS v");
+      expect(impostor.rows[0]?.v).toEqual([]);
+      await expect(assertLeastPrivilege(adapt(db))).rejects.toThrow(/owns schema pryvis_app/);
+    } finally {
+      await db.exec("RESET search_path");
+      await db.exec("RESET ROLE");
+      await db.exec(`DROP SCHEMA ${APP_ROLE} CASCADE`);
+    }
+  });
+
   it("refuses when the check gives no answer, rather than reading silence as a pass", async () => {
     for (const rows of [[], [{ violations: null }]]) {
       const silent: LeastPrivilegeQueryable = {

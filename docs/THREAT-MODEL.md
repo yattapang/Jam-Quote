@@ -247,8 +247,15 @@ guard that any table outside row security reachable by the application is named 
 `rate_limit_bucket` and `platform_capability`); a guard on every `SECURITY DEFINER` function and its owner;
 one row per key; no resolution by the secret or the row id — each proved with a planted defect.
 
-**What it does not do:** a door that WRITES (creating a session, rehashing a password) can still be called
-by an injection with a user id it knows, because sign-in must. What the doors remove is the bulk read.
+**What it does not do — a limit the owner accepted on 2026-10-02.** A door that WRITES can still be called
+by an injection with a user id it knows, because sign-in must call it. The review executed the consequence
+(AA, "inherent to the doors"): such an injection can plant and spend a recovery code for that user, or mint
+a session and mark it verified — so **it can impersonate any user, second factor included**. The database
+cannot prevent that: the TOTP key is never in it, so "this session passed its factor" is a write it must
+take on trust. Hardening the doors was weighed and rejected, because one open path (marking a session
+verified) would remain. The control is upstream instead: no SQL the API sends is built at run time —
+`new-app/api/src/core/architecture/sql-is-static.test.ts` fails on any statement that is not a fixed
+string. What the doors remove is the bulk read.
 **Not Closed** until the independent closing check (Rule 24.6), and the launch blocker stands until then.
 
 ## 4g. Temporary tables and the search path (added 2026-10-01, findings Y1, Y2, Y7; fixed, with a provisioning rule owed)
@@ -265,10 +272,15 @@ and TEMPORARY on the database is revoked from PUBLIC, executed on a real databas
 
 **The deployment check (built 2026-10-01, design D4).** The production application role is created
 outside the migrations, so **it must not be granted TEMPORARY**. `least_privilege_violations()` (migration
-`20260927220000_privilege_model`) names it, with superuser, BYPASSRLS, CREATEROLE, CREATEDB, membership of
-an owning role, any direct reach into the credential tables or write to `issue_balance` or
-`platform_capability`, and (migration `20260927230000_least_privilege_creates`) CREATE on schema public
-or ownership of anything in it; `new-app/api/src/core/auth/least-privilege.ts` refuses to start on any of them. The
+`20260927220000_privilege_model`, rebuilt by `20260928000000_least_privilege_complete` after the review's
+AA1-AA5) names it, with: superuser, BYPASSRLS, CREATEROLE, CREATEDB, REPLICATION; CREATE on or ownership of
+the database; membership in any form (SET-only included) of an owning role or a predefined `pg_*` role;
+ownership of, CREATE on, or use of any schema but `public`; ownership of any relation, function or type;
+any table or column privilege on the credential tables; any write, TRUNCATE or TRIGGER on `issue_balance`
+or `platform_capability`; any relation it can reach outside row security (views that are not
+`security_invoker`, materialized and foreign tables included) beyond the two named in design D5; TRUNCATE
+or TRIGGER on anything; and EXECUTE on a definer function not owned by `pryvis_auth` or `pryvis_balance`.
+`new-app/api/src/core/auth/least-privilege.ts` calls it schema-qualified and refuses to start on any of them. The
 TEMPORARY line is planted on real PostgreSQL in `new-app/db/test/concurrency.pg.test.ts` ("§4g"), the rest
 in `new-app/db/test/privilege-model.test.ts`. **Still owed:** nothing calls the start-up check yet, because
 there is no application bootstrap; wiring it in is owed with that module. The pin on every function is the
