@@ -232,6 +232,13 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_schema_citations.py
 
+      # The owner's built-in checklist (2026-10-02): a step of docs/BUILD-PLAN.md is ticked only with its
+      # evidence — the date, a commit that exists, the review and closing-check briefs as files, and the owner's
+      # approval. Proved by planting a bare tick and a tick citing a commit and a brief that do not exist.
+      - name: Build-plan ticks carry their evidence
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_build_plan.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

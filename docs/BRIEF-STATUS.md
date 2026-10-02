@@ -765,6 +765,17 @@ launch: general-purpose at **Sonnet** (Rule 16.9) — mechanical: every claim na
 owed list is now **fourteen designs** — data rights (R1.40, R1.43-R1.45) and the reconciliation job (R1.24e) added — and the
 aggregate-data consent clause (brief §5a) is listed as blocking registration. **Next: design 1, GCT and documents.**
 
+**Owner, 2026-10-02:** the tax's name is per country, held in the rule pack (ADR 0030; PRD R1.9). **The build plan
+is approved and committed: `docs/BUILD-PLAN.md`** is the one place the build order lives — phases A (planning) to K
+(retiring `original-app/`), 62 steps — **with the owner's built-in checklist**: a step is ticked only when its design is
+approved, it is built with planted defects, the gate is green, it is reviewed and closed independently, recorded, and
+signed off by the owner, and `tools/check_build_plan.py` (in CI) refuses a tick without that evidence (planted: a bare
+tick and a tick with a false commit and brief, both caught). Also confirmed by the owner: each tenant connects its own
+WiPay account in its profile (opened with WiPay; a partner sign-up if WiPay offers one), Pryvis's account takes only
+tenants' payments to Pryvis (ADR 0030 decision 7); and **Rule 15 amended** — Claude maintenance runs nothing without
+an administrator's recorded approval at three gates (start, merge, deploy) through an interface built for it, with
+the brief's dated note (Rule 23.5). Next: design 1, Tax (GCT in Jamaica) and documents.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

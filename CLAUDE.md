@@ -20,14 +20,15 @@ history.
 1. `docs/RULES.md` — the rules; cite the ones that apply before starting (Rule 0).
 2. `docs/MISTAKES.md` — the ledger of what went wrong and what now prevents it.
 3. `new-app/CLAUDE.md` — the codebase.
-4. `docs/BRIEF-STATUS.md` — where the work stands and the owner's latest decisions.
+4. `docs/BRIEF-STATUS.md` — where the work stands and the owner's latest decisions; `docs/BUILD-PLAN.md` —
+   the build order, with the checklist a step must meet before it is ticked.
 5. `docs/PRD-REVIEW-5.md` and `docs/PRD-REVIEW-4.md` — the disposition tables at the top: the open review findings.
 
 ## The gate, before every commit
 
 From `new-app/`: `npm run typecheck && npm test` (workspace root, never one package). Then from the
-repository root, the four checkers in `tools/` — `check_rules.py`, `check_dispositions.py`,
-`check_citations.py`, `check_schema_citations.py`. Read the counts, not the exit codes. The race suite needs
+repository root, the five checkers in `tools/` — `check_rules.py`, `check_dispositions.py`,
+`check_citations.py`, `check_schema_citations.py`, `check_build_plan.py`. Read the counts, not the exit codes. The race suite needs
 real PostgreSQL via `PRYVIS_PG_URL` (see `new-app/CLAUDE.md`).
 
 ## Non-negotiables (details in `docs/RULES.md`)

@@ -46,7 +46,9 @@
    Vercel, the rebuilt API on Render (paid and always on at launch, ADR 0026) defined in a versioned blueprint,
    Neon Postgres with branches for development and staging — three environments. Hosting region US-East,
    nearest Jamaica (data residency to the attorney). Nightly backups to object storage with a monthly restore
-   drill; error tracking; an uptime check; runbooks for deploy, rollback, restore, key rotation and staff
+   drill; error tracking; an uptime check; **Claude-assisted maintenance gated at start, merge and deploy by an
+   administrator's recorded approval, through an interface built for it (owner, 2026-10-02; Rule 15)**;
+   runbooks for deploy, rollback, restore, key rotation and staff
    offboarding; the existing dependency and secret scanning; a Claude spend cap with alerts; Claude's changes
    only as pull requests a human approves (brief §16).
 6. **The register, completed.** Private file storage: Cloudflare R2. Malware scanning: ClamAV in our own
@@ -55,7 +57,12 @@
    monitor (Better Stack or UptimeRobot). Support inbox: Google Workspace or Zoho Mail. The rebuilt API's host:
    Render, paid. App stores for the mobile launch. Each recorded with "why this one" (Rule 18), and a
    privacy-notice line wherever it holds personal data. WiPay is asked whether it offers a server-to-server
-   transaction check (ADR 0029 E2).
+   transaction check (ADR 0029 E2), and whether it offers a partner sign-up a tenant can start from their
+   Pryvis profile.
+7. **WiPay, as the owner restated it (2026-10-02).** Each tenant connects **their own** WiPay merchant account in
+   the Payments section of their Pryvis account profile, and their clients pay them directly. The WiPay account
+   itself is opened with WiPay (its identity checks); if WiPay offers a partner sign-up, the profile starts it.
+   **Pryvis's own WiPay account takes only tenants' payments to Pryvis.**
 
 ## Consequences
 

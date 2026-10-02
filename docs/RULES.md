@@ -10,8 +10,8 @@ from the product, 16.5 the declared delegation decision, 16.6 what the agents go
 service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
 coverage**, **22 a scripted edit is verified mechanically** (2026-09-24) ·
 **23 changing a rule changes everything that cites it**, **24 every mistake is answered with a
-mechanism** (2026-09-25) · 6 numbering, 11 sends, 12 offline retention amended, **25 customer service and
-feedback** added (2026-10-02).
+mechanism** (2026-09-25) · 6 numbering, 11 sends, 12 offline retention, 15 the three approval gates amended, **25 customer
+service and feedback** added (2026-10-02).
 
 **How this file is changed.** Rule 23. In short: explicit numbers, append never insert, tombstone a
 retirement, and `tools/check_rules.py` fails the build when a rule's text or number changes until the
@@ -408,6 +408,12 @@ document is how a rule changes without going through Rule 23. Two corrections:
 - Budgets, usage alerts and caps. A lighter model for routine work, a stronger one for design
   and review.
 - A named human stays accountable. That process is what separates this from vibe coding.
+- **Nothing runs without an administrator's approval — at three gates** (owner requirement, 2026-10-02).
+  **Start:** Claude begins a maintenance task only after a named administrator approves that task, through
+  an interface built for it (a triaged, redacted task list where approval is a recorded act — never a
+  schedule that runs on its own). **Merge:** every change is a pull request the administrator approves, after
+  CI. **Deploy:** production changes only on the administrator's approval. Each approval is recorded with who
+  and when.
 
 ## 16. How work is delegated to agents (owner requirement)
 

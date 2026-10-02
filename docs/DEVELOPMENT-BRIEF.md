@@ -341,7 +341,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
   - A project context file in the repository (module map, conventions, commands) for Claude to read.
   - Runbooks for common operations.
   - Structured logs and error tracking that are readable by both people and Claude.
-- **Automation pattern:** Claude proposes changes as **pull requests**. CI and a human approve. Nothing goes straight to production.
+- **Automation pattern:** Claude proposes changes as **pull requests**. CI and a human approve. Nothing goes straight to production. *(Note 2026-10-02, Rule 23.5: the owner added a start gate — Claude begins a maintenance task only after an administrator approves it through an interface built for it — and a recorded deploy approval; Rule 15.)*
   - Least-privilege tokens.
   - No write access to production data.
   - Feature flags, staged rollouts, and rollback.
