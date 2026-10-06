@@ -247,18 +247,27 @@ the owner prefers.
 - **Every value the API needs is validated at start-up** (AP8). A missing or malformed value refuses to boot, and the
   message names the value, never its contents.
 
-**The secrets, per environment, and who holds them:**
+**The secrets, per environment, and who holds them** *(complete list, OR14)*:
 
 | Secret | Held by | Never held by |
 |---|---|---|
 | The API's database login (the application role of the privilege model) | The API service | Anyone else |
 | The **migration** credential (creates and alters tables and roles) | The pre-deploy step only (OP5) | The running API |
-| The **backup** credential (reads every row; OP6) | The backup job only | The API, staff, Claude |
-| The CSRF key, the session-token hash pepper if any, the MFA sealing keys (ADR 0021) | The API service | — |
+| The **backup** database credential (reads every row; OP6) | The backup job only | The API, staff, Claude |
+| The backup job's **storage** credential (add only; OP6) | The backup job only | Everyone else |
+| The backup job's **signing** key (OP6) | The backup job only | Everyone else |
+| The **drill** decryption key (OP6) | Released only to an approved drill run | Everything else, between drills |
+| The **disaster** decryption key (OP6) | The owner, offline, with an escrowed copy (OP11) | Every service |
+| The CSRF key, the session pepper if any, the MFA sealing keys (ADR 0021) | The API service | — |
+| The console's **approval-signing** key and the **GitHub App's** private key (OP8) | The production API only | Staging, GitHub, Claude |
+| The **deploy** tokens for the API host and Vercel (OP5, OP8) | The production API only, used by the Deploy page | GitHub, staging, Claude |
 | Stripe's keys (ADR 0033), the email key (A6), the storage keys (A5), the error-tracking key | The API service | — |
-| The backup **decryption** key (OP6) | The owner, offline and in a password manager | Every service; the backup job holds only the **public** key, so it can encrypt but never read |
+| The staging smoke tenant's login | Staging's smoke-check job | Production; it opens nothing there |
 
-- **No key is shared between environments.** Staging has its own of everything.
+- **No key is shared between environments.** Staging has its own of everything, and **production's checks never trust
+  staging's keys** — in particular, an approval signed by staging's console is worthless in production *(OR14)*.
+- **No secret sits at the repository level in GitHub**, except synthetic ones used by tests *(OR5)*. A workflow on any
+  pushed branch can read repository-level secrets, so none may open anything real.
 - **No secret is ever pasted into a conversation with a model** (Rule 15), into the repository, or into a ticket. The
   repository's secret scanning (gitleaks, already in CI) catches the repository case.
 - **Rotation** is in OP11.
@@ -272,38 +281,60 @@ everyone. A flag is removed once the change is everywhere, so flags do not pile 
 
 ## 6. OP5 · From a change to production: the pipeline
 
+**Build once, then promote the same build** *(OR5)*. A container image is built **once**, by CI, from a merged commit,
+and pushed to an image registry under its **digest** — a fingerprint of its exact contents. Staging and production run
+that same digest. Production never builds from a branch, so it never runs code that differs from what staging tested.
+
 **Every change takes one path, and each step must pass before the next:**
 
-1. **A pull request.** Nothing is pushed straight to `main`.
+1. **A pull request.** Nothing is pushed straight to `main` (OP8).
 2. **CI runs** (`.github/workflows/verify.yml`, extended): typecheck; the full test suite with real PostgreSQL; the
    checkers in `tools/`; the contract drift test; secret scanning; dependency audit; the site build.
-3. **Merge gate.** The administrator approves the pull request (OP8). Only then can it merge to `main`.
-4. **Staging deploys automatically** from `main`, with migrations first (step 6).
-5. **Smoke checks** run against staging automatically:
+3. **Merge gate** (OP8).
+4. **CI builds the image** from the merged commit and pushes it to the registry. The digest is recorded.
+5. **Staging deploys that digest**, with migrations first (step 7). The staging deploy uses the host's own GitHub
+   integration, so **no staging token lives in GitHub** *(OR5)*.
+6. **Smoke checks run against staging:**
    - `/health/ready` answers;
-   - a synthetic contractor signs in;
+   - **a real browser** signs in at `staging.pryvis.com` through the cookie flow *(OR4)*;
    - a synthetic quote is priced and issued;
    - its share page opens on the share host.
 
-   A failure stops the line.
-6. **Migrations run before the new code starts**, in the host's pre-deploy step, with the migration credential (OP4).
+   A pass marks the digest **ready for production**, recorded with the commit, the time and the results. A failure
+   stops the line.
+7. **Migrations run before the new code starts**, in the host's pre-deploy step, with the migration credential (OP4).
    - **Expand, then contract.** A migration must work with the previous version of the code still running: add a
      column, then use it in a later release; stop using one, then drop it in a later release.
    - That is what makes rolling back the code safe without rolling back the database.
    - Migrations are never edited and never run backwards (Rule 6). A bad one is corrected by a new one.
-7. **Deploy gate.** A workflow, `deploy-production`, deploys **the exact commit that passed staging**, and only after
-   the administrator approves it (OP8). Production never deploys automatically.
-8. **After the production deploy:** the same smoke checks run against production, using a dedicated synthetic test
-   tenant that holds no real data.
+8. **Deploy gate** (OP8). The administrator approves **a ready digest** on the staff console's Deploy page. The console
+   then deploys that digest to production through the host's API, and promotes the matching web build on Vercel.
+   **Production never deploys automatically**:
+   - the host's "deploy on push" is **off** for production;
+   - Vercel's automatic production deploys from `main` are **off**, so a merged web change does not go live on its
+     own *(OR4)*;
+   - the API and the web are promoted **together**, from the same commit.
+9. **After the production deploy:** **read-only** smoke checks — `/health/ready`, the sign-in page, and a synthetic
+   tenant that **drafts** a quote and never issues it *(OR13)*. Issuing in production would create numbered, permanent
+   records and could send email.
+
+**Where production is kept apart** *(OR5)*:
+- **Production lives in its own DigitalOcean team**, separate from staging. A team is the boundary for API tokens, so
+  no staging token can touch production.
+- The only production deploy tokens sit in the production API (OP4), used by the Deploy page.
+- **The host's dashboard** can also deploy or roll back. Only the owner has access to production's team, with MFA
+  (OP11), and the runbook says to use the Deploy page instead. Any dashboard deploy shows up as a version the API did not
+  expect at start-up (next paragraph).
+
+**The record** *(OR13)*. The API records its own deployment **when it starts**: the version, the digest, and the
+deployment that the console's approval created. The approval itself is in the platform audit trail (R1.48). So GitHub
+holds no production database credential for writing the record.
 
 **Rolling back:**
-- **Code:** the host's "roll back to the previous deploy", and Vercel's instant rollback. Both are one action, and both
-  are in the runbook. Expand-then-contract makes this safe.
+- **Code:** the Deploy page offers the previous ready digest. It is the same approval, and is quick. The host's and
+  Vercel's own rollback are the fallback in the runbook. Expand-then-contract makes this safe.
 - **Data:** never by reversing a migration. A bad write is corrected by a forward fix; damaged data is restored from
-  the point-in-time history or a backup (OP6), as the restore runbook says.
-
-**The record:** GitHub records who approved each merge and each production deploy, and when. The deploy workflow
-also writes a line to the platform audit trail (R1.48): the commit, the approver and the time.
+  the point-in-time history or a backup (OP6), as the restore runbook says, with the erasure ledger replayed (OP1).
 
 ## 7. OP6 · Backups and restore drills
 
