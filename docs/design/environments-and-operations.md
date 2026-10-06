@@ -161,19 +161,152 @@ when `original-app/` is (K1), or earlier if the owner prefers.
 
 ## 5. OP4 · Configuration and secrets
 
-To be written.
+**Configuration decides where things run, not code** (Rule 10).
+
+- **The API's blueprint is rewritten for the rebuild.** `render.yaml` today describes the old application. The new one
+  defines `pryvis-api-staging` and `pryvis-api-production` from `new-app/`, region Frankfurt (OP2), with every secret
+  marked `sync: false`, so it lives in Render's dashboard, never in the repository. The old service's entry is removed
+  when K1 retires it.
+- **The web app's settings** — Vercel's Root Directory (`new-app/web`), its function region and its environment
+  variables — are dashboard settings that cannot be versioned. They are written down in the deploy runbook (OP9), so
+  they can be rebuilt from the page.
+- **Every value the API needs is validated at start-up** (AP8). A missing or malformed value refuses to boot, and the
+  message names the value, never its contents.
+
+**The secrets, per environment, and who holds them:**
+
+| Secret | Held by | Never held by |
+|---|---|---|
+| The API's database login (the application role of the privilege model) | The API service | Anyone else |
+| The **migration** credential (creates and alters tables and roles) | The pre-deploy step only (OP5) | The running API |
+| The **backup** credential (reads every row; OP6) | The backup job only | The API, staff, Claude |
+| The CSRF key, the session-token hash pepper if any, the MFA sealing keys (ADR 0021) | The API service | — |
+| Stripe's keys (ADR 0033), the email key (A6), the storage keys (A5), the error-tracking key | The API service | — |
+| The backup **decryption** key (OP6) | The owner, offline and in a password manager | Every service; the backup job holds only the **public** key, so it can encrypt but never read |
+
+- **No key is shared between environments.** Staging has its own of everything.
+- **No secret is ever pasted into a conversation with a model** (Rule 15), into the repository, or into a ticket. The
+  repository's secret scanning (gitleaks, already in CI) catches the repository case.
+- **Rotation** is in OP11.
+
+**Feature flags, for staged rollouts.** A change that should reach a few tenants first is switched on by a flag:
+- a **global** flag in configuration;
+- or a **per-tenant** grant, which the staff console already plans through `grant_entitlement` (R1.46).
+
+The first tenants for any staged change are the owner's own test accounts, then a few willing contractors, then
+everyone. A flag is removed once the change is everywhere, so flags do not pile up.
 
 ## 6. OP5 · From a change to production: the pipeline
 
-To be written.
+**Every change takes one path, and each step must pass before the next:**
+
+1. **A pull request.** Nothing is pushed straight to `main`.
+2. **CI runs** (`.github/workflows/verify.yml`, extended): typecheck; the full test suite with real PostgreSQL; the
+   checkers in `tools/`; the contract drift test; secret scanning; dependency audit; the site build.
+3. **Merge gate.** The administrator approves the pull request (OP8). Only then can it merge to `main`.
+4. **Staging deploys automatically** from `main`, with migrations first (step 6).
+5. **Smoke checks** run against staging automatically:
+   - `/health/ready` answers;
+   - a synthetic contractor signs in;
+   - a synthetic quote is priced and issued;
+   - its share page opens on the share host.
+
+   A failure stops the line.
+6. **Migrations run before the new code starts**, in Render's pre-deploy step, with the migration credential (OP4).
+   - **Expand, then contract.** A migration must work with the previous version of the code still running: add a
+     column, then use it in a later release; stop using one, then drop it in a later release.
+   - That is what makes rolling back the code safe without rolling back the database.
+   - Migrations are never edited and never run backwards (Rule 6). A bad one is corrected by a new one.
+7. **Deploy gate.** A workflow, `deploy-production`, deploys **the exact commit that passed staging**, and only after
+   the administrator approves it (OP8). Production never deploys automatically.
+8. **After the production deploy:** the same smoke checks run against production, using a dedicated synthetic test
+   tenant that holds no real data.
+
+**Rolling back:**
+- **Code:** Render's "roll back to the previous deploy", and Vercel's instant rollback. Both are one action, and both
+  are in the runbook. Expand-then-contract makes this safe.
+- **Data:** never by reversing a migration. A bad write is corrected by a forward fix; damaged data is restored from
+  the point-in-time history or a backup (OP6), as the restore runbook says.
+
+**The record:** GitHub records who approved each merge and each production deploy, and when. The deploy workflow
+also writes a line to the platform audit trail (R1.48): the commit, the approver and the time.
 
 ## 7. OP6 · Backups and restore drills
 
-To be written.
+**Two layers, because they protect against different things:**
+
+| Layer | Protects against | How | Kept |
+|---|---|---|---|
+| **Point-in-time restore** (Neon) | "Undo the last few hours": a bad deploy, a mistaken bulk change | Neon's history on the Launch plan; the window is confirmed when buying | The plan's window |
+| **Nightly backup** | Losing the provider, the project, or anything older than the window | A logical dump (`pg_dump`), encrypted, in object storage in the same region (Frankfurt; A5) | **35 days**, then deleted (ADR 0035) |
+
+**How the nightly backup works:**
+1. A **scheduled job inside the production region** (a Render cron job) runs the dump each night, with the **backup
+   credential** (OP4).
+2. It **encrypts the dump with the owner's public key** before it leaves the job. The job cannot decrypt what it
+   wrote; only the owner's offline key can.
+3. It writes to a bucket where its credential can **add but not delete or overwrite**. An attacker holding that
+   credential cannot erase the backups. The bucket's own lifecycle rule deletes each copy at 35 days.
+4. It writes a small **manifest** beside each dump: the date, the schema version, and a row count per table. No data.
+5. A failure alerts the owner (OP7).
+
+**The backup credential is the one deliberate exception to row-level isolation.** A dump must read every tenant's
+rows, so this role bypasses row-level security. That is exactly what the privilege model forbids for the API
+(privilege model D4).
+- **What keeps it safe:** the credential exists only in the backup job; it is read-only; it is never given to the API,
+  to staff or to a model; it is rotated on the calendar (OP12).
+- **The limit, stated:** the privilege model's least-privilege check verifies the API's own role at start-up, not this
+  one. So the backup role's attributes are checked by the restore drill instead (step 3 below).
+
+**The monthly restore drill:**
+1. Take the **latest nightly dump**, and decrypt it with the owner's key, in a short-lived job.
+2. Restore it into a **temporary database inside the production project**. It never goes to staging or development
+   (OP1).
+3. **Check it:**
+   - the schema is at the expected migration;
+   - row counts match the manifest;
+   - the least-privilege check passes for the application role;
+   - the backup role has only the attributes it should;
+   - the nightly reconciliation (A12) runs clean in a dry run.
+4. **Record the result** in the operations log: the date, how long the restore took, pass or fail, and the counts. No
+   data.
+5. **Destroy the temporary database.**
+
+**Once a year: a full rebuild drill.** Build a new project from nothing — migrations, then the latest dump, then the
+checks. It proves the region could be changed, or the provider left, if it ever had to be (Rule 10).
+
+**Targets for release 1** (honest for a one-person operation):
+- **at most 24 hours of data lost**, and minutes within the point-in-time window;
+- **back in service within 4 working hours.**
+
+**What deletion means, with backups** (ADR 0035 §7). Data deleted from the live database remains in the
+point-in-time window and in backups until they expire — at most 35 days. The privacy notice says so, and a person's
+deletion request is answered with that fact.
 
 ## 8. OP7 · Monitoring and alerts
 
-To be written.
+**What is watched, and who is told:**
+
+| Watch | Tool | Alert when | Goes to |
+|---|---|---|---|
+| The API, the share host and the site are up | An uptime monitor (A5) checking `/health/ready` and the site every few minutes, from outside | Two checks fail in a row | The owner by email and phone notification |
+| Errors | Error tracking (A5), with personal-data scrubbing and AP9's redacted shape, in an EU data region where offered | A new kind of error, or a sudden rise | The owner by email |
+| Background jobs | The job table (AP10) | Any job in the dead-letter state; the nightly backup or reconciliation fails or does not run | The owner by email |
+| Money arithmetic | The nightly reconciliation (R1.24e, A12) | A mismatch | The support address (SF2) |
+| The database | Neon's usage figures | 80% of a plan limit (OP10) | The owner by email |
+| Spending | Each provider's spend alerts; the Claude spend cap (OA3) | 80% of a budget | The owner by email |
+
+**No alert carries personal data.** Alerts carry identifiers, counts and error kinds (AP9).
+
+**Who responds, honestly:**
+- In release 1 that is the owner, and the second staff member once named (OA4).
+- **During working hours (Jamaica time),** the target is to start on a "down" alert within an hour.
+- **Outside working hours, it is best effort.** The status is told to people on the site's help page, not hidden. A
+  stated, kept promise is better than an implied one that is not.
+- Paid round-the-clock on-call is a later decision, with a trigger in OP10.
+
+**What is not watched in release 1:** performance dashboards, distributed tracing, and log search beyond what the
+providers include. They are added when a real problem needs them, not before.
 
 ## 9. OP8 · The three approval gates for Claude-assisted maintenance, and their interface
 
