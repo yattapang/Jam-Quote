@@ -964,6 +964,8 @@ owner's key, 35 days, a monthly restore drill; **the three approval gates** — 
 that CI verifies, GitHub's ruleset on `main`, and a production environment with a required reviewer; runbooks; Rule
 10's trigger table for every free piece; MFA and registrar lock; the operations calendar with the 31 March impact
 assessment and the 1 December registration renewal. OA1, OA2 updated and OA24 added.
+**Approved by the owner, 2026-10-06:** OP1-OP12, including Toronto on DigitalOcean subject to the B1 check; ADR 0030
+decision 5 carries a dated note. Next: the independent read, brief `docs/briefs/2026-10-06-operations-design-read.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

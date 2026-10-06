@@ -48,7 +48,10 @@
    *(Note 2026-10-02, finding SR5: `docs/design/support-and-feedback.md` SF5 records the tier and app version on every
    report without asking — neither is personal data, and Rule 25.3 requires both on every piece of feedback — and
    keeps only the page and error references behind consent. The design governs.)*
-5. **Environments and operations.** Keep the current providers and make them proper: the web app and site on
+5. *(Note 2026-10-06: `docs/design/environments-and-operations.md` OP2-OP3, approved by the owner, replaces "keep the
+   current providers" and "US-East" — production in Toronto on DigitalOcean, subject to a check at B1, with Frankfurt
+   then US-East as fallbacks — because of the Data Protection Act's transfer rule, ADR 0035.)*
+   **Environments and operations.** Keep the current providers and make them proper: the web app and site on
    Vercel, the rebuilt API on Render (paid and always on at launch, ADR 0026) defined in a versioned blueprint,
    Neon Postgres with branches for development and staging — three environments. Hosting region US-East,
    nearest Jamaica (data residency to the attorney). Nightly backups to object storage with a monthly restore

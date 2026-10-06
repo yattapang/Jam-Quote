@@ -1,7 +1,8 @@
 # Design: environments and operations — where Pryvis runs, how it is changed, and how it is kept safe
 
-**Status: DRAFT, for the owner's approval** (written section by section and saved as it went, at the owner's request, 2026-10-06). Build plan step
-A4 (`docs/BUILD-PLAN.md`). After approval: an independent read, a closing check, then the owner's sign-off ticks A4.
+**Status: APPROVED by the owner, 2026-10-06 — every recommendation, OP1-OP12** ("Approved"), including production in
+Toronto on DigitalOcean subject to OP2's check at B1. Written section by section and saved as it went, at the owner's
+request. Build plan step A4 (`docs/BUILD-PLAN.md`). Next: an independent read, a closing check, then the owner's sign-off ticks A4.
 Nothing here is built until steps B1-B4 begin.
 
 Date: 2026-10-06 · **Implements the direction of** ADR 0030 decision 5 (environments and operations), as changed by
