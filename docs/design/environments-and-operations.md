@@ -342,18 +342,32 @@ holds no production database credential for writing the record.
 
 | Layer | Protects against | How | Kept |
 |---|---|---|---|
-| **Point-in-time restore** (the managed database) | "Undo the last few hours": a bad deploy, a mistaken bulk change | The provider's history, included in the plan; the window is confirmed when buying | The plan's window |
-| **Nightly backup** | Losing the provider, the project, or anything older than the window | A logical dump (`pg_dump`), encrypted, in object storage in the same country (A5) | **35 days**, then deleted (ADR 0035) |
+| **Point-in-time restore** (the managed database) | "Undo the last few hours": a bad deploy, a mistaken bulk change | The provider's history, included in the plan; the window is confirmed when buying, and must be 35 days or less (OP1) | The plan's window |
+| **Nightly backup** | **Losing the provider or the account**, or anything older than the window | A logical dump, signed and encrypted, held by **a different company** in Canada, under a lock that nobody can lift early | **35 days**, then deleted (ADR 0035) |
+
+**The backup store is with a different company** *(OR7)*. A backup with the same provider and account as the live
+database does not survive losing that account, or an attacker inside it.
+- **The recommended store:** AWS S3 in its Canada (Central) region, under a separate account owned by the business.
+  A5 confirms the choice and its price, which is cents a month at our size.
+- **Object Lock in compliance mode, for 35 days.** Every backup is locked when written: no one — not the job, not an
+  attacker, not the owner — can delete or overwrite it until the lock ends. The bucket's lifecycle rule deletes it
+  after that. This is what "add but not delete or overwrite" means in practice. An ordinary upload credential could
+  overwrite a file of the same name.
 
 **How the nightly backup works:**
-1. A **scheduled job inside the production region** (the host's scheduled job, checked at B1, OP2) runs the dump each night, with the **backup
-   credential** (OP4).
-2. It **encrypts the dump with the owner's public key** before it leaves the job. The job cannot decrypt what it
-   wrote; only the owner's offline key can.
-3. It writes to a bucket where its credential can **add but not delete or overwrite**. An attacker holding that
-   credential cannot erase the backups. The bucket's own lifecycle rule deletes each copy at 35 days.
-4. It writes a small **manifest** beside each dump: the date, the schema version, and a row count per table. No data.
-5. A failure alerts the owner (OP7).
+1. **A scheduled job in the production region** (the host's scheduled job, checked at B1, OP2) runs the dump each
+   night, with the **backup database credential** (OP4).
+2. It **encrypts the dump to two recipients** *(OR6)*:
+   - the owner's **disaster key**, held offline;
+   - a separate **drill key**, used only by the monthly drill.
+
+   Either key can decrypt, so losing one does not lose every backup.
+3. It **signs** the dump and its manifest with the job's own **signing key** *(OR7)*. Encryption to a public key is
+   something anyone can do, so encryption alone cannot prove a backup came from our job. The signature can.
+4. It uploads both to the locked store with an add-only credential.
+5. **The manifest** beside each dump holds the date, the schema version and a row count per table. No data.
+6. **It reports success to a heartbeat check** (OP7). A missed night alerts the owner. So does a newest backup older
+   than 26 hours *(OR8)*.
 
 **The backup credential is the one deliberate exception to row-level isolation.** A dump must read every tenant's
 rows, so this role bypasses row-level security. That is exactly what the privilege model forbids for the API
@@ -361,24 +375,38 @@ rows, so this role bypasses row-level security. That is exactly what the privile
 - **What keeps it safe:** the credential exists only in the backup job; it is read-only; it is never given to the API,
   to staff or to a model; it is rotated on the calendar (OP12).
 - **The limit, stated:** the privilege model's least-privilege check verifies the API's own role at start-up, not this
-  one. So the backup role's attributes are checked by the restore drill instead (step 3 below).
+  one. The backup role's attributes are checked by the drill instead (step 4 below).
+- **Whether a managed database even allows this role** is OP2's check item 2.
 
-**The monthly restore drill:**
-1. Take the **latest nightly dump**, and decrypt it with the owner's key, in a short-lived job.
-2. Restore it into a **temporary database inside the production project**. It never goes to staging or development
-   (OP1).
-3. **Check it:**
+**The monthly restore drill** — everything stays in Canada and in production's own account (OP1):
+1. **An approved drill run starts** in production's team. The **drill key** is released to that run only. The disaster
+   key never leaves the owner.
+2. It takes the newest backup and **verifies its signature first**. An unsigned or badly signed file is refused, and
+   the owner is alerted *(OR7)*. Only then is it decrypted.
+3. It restores into **a separate, throwaway database cluster** — never into a database inside the production cluster
+   *(OR7)*. Roles belong to a whole cluster, so restoring inside production's cluster would let a planted backup reach
+   production's roles. The order *(OR19)*:
+   - create the login roles first;
+   - then a full restore that includes database-level settings (the dump is taken with them), so the privilege
+     model's database permissions come back as they were.
+4. **Check it:**
    - the schema is at the expected migration;
    - row counts match the manifest;
    - the least-privilege check passes for the application role;
    - the backup role has only the attributes it should;
    - the nightly reconciliation (A12) runs clean in a dry run.
-4. **Record the result** in the operations log: the date, how long the restore took, pass or fail, and the counts. No
+5. **Record the result** in the operations log: the date, how long the restore took, pass or fail, and the counts. No
    data.
-5. **Destroy the temporary database.**
+6. **Destroy the cluster**, and **rotate the drill key** on the schedule in OP11.
 
-**Once a year: a full rebuild drill.** Build a new project from nothing — migrations, then the latest dump, then the
-checks. It proves the region could be changed, or the provider left, if it ever had to be (Rule 10).
+**Once a year: a full rebuild drill.** Build a new cluster from nothing — login roles, then the full restore (step 3's
+order), then the checks — and decrypt with the **disaster key** this time, so that key is proven too. It shows the
+region could be changed, or the provider left, if it ever had to be (Rule 10).
+
+**If the owner's disaster key is lost** *(OR6)*: the drill key still opens every backup. If both are lost, a new pair
+is made at once, and the backups made before it are unreadable. The point-in-time window still covers recent mistakes,
+and full protection returns once the new pair has written backups. A sealed **escrow copy** of the disaster key (OP11)
+is what prevents the second case.
 
 **Targets for release 1** (honest for a one-person operation):
 - **at most 24 hours of data lost**, and minutes within the point-in-time window;
@@ -386,7 +414,8 @@ checks. It proves the region could be changed, or the provider left, if it ever 
 
 **What deletion means, with backups** (ADR 0035 §7). Data deleted from the live database remains in the
 point-in-time window and in backups until they expire — at most 35 days. The privacy notice says so, and a person's
-deletion request is answered with that fact.
+deletion request is answered with that fact. A restore replays the erasure ledger (OP1), so a restored backup does not
+bring back what was erased.
 
 ## 8. OP7 · Monitoring and alerts
 
@@ -396,7 +425,8 @@ deletion request is answered with that fact.
 |---|---|---|---|
 | The API, the share host and the site are up | An uptime monitor (A5) checking `/health/ready` and the site every few minutes, from outside | Two checks fail in a row | The owner by email and phone notification |
 | Errors | Error tracking (A5), with personal-data scrubbing and AP9's redacted shape, in an EU data region where offered | A new kind of error, or a sudden rise | The owner by email |
-| Background jobs | The job table (AP10) | Any job in the dead-letter state; the nightly backup or reconciliation fails or does not run | The owner by email |
+| Background jobs | The job table (AP10) | Any job in the dead-letter state; the reconciliation fails or does not run | The owner by email |
+| **The nightly backup** *(OR8)* | **A heartbeat check** in the uptime monitor, pinged by each successful backup; and the age of the newest object in the backup store | **No ping by its deadline; the newest backup older than 26 hours**; a drill that refuses a backup's signature | The owner by email and phone notification |
 | Money arithmetic | The nightly reconciliation (R1.24e, A12) | A mismatch | The support address (SF2) |
 | The database | The provider's usage figures | 80% of a plan limit (OP10) | The owner by email |
 | Spending | Each provider's spend alerts; the Claude spend cap (OA3) | 80% of a budget | The owner by email |
