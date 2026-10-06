@@ -151,8 +151,15 @@ standard container, so nothing in the code is tied to Render or Neon.
 - Vercel's servers never fetch or render a contractor's or client's data;
 - the site's server-side functions, if any, handle only public pages.
 
-The register keeps Vercel's row as "in transit only; nothing stored" (`docs/SERVICE-REGISTER.md`), and B1 adds a test
-that fails if a web page fetches tenant data on the server.
+**How "Vercel holds no personal data" is made true and checkable** *(OR12)*:
+- **The web app is a static export.** It is built as plain files, and the build is checked to contain **no server
+  functions at all**. That is a test a machine can run, unlike "no page fetches tenant data".
+- **No proxying through Vercel:** no rewrites that forward API calls, and no middleware reading cookies.
+- **Links in emails** (verification, sign-in, password reset) carry their token **after the `#`**, which browsers never
+  send to a server. So no token or address reaches Vercel's request logs.
+- **Vercel's analytics are off.** Any analytics added later goes into the register first.
+
+The register keeps Vercel's row as "in transit only; nothing stored" (`docs/SERVICE-REGISTER.md`).
 
 **Before committing to C — a short check on staging at B1**, each item pass or fail:
 1. **The privilege model's migrations run unchanged on DigitalOcean's managed PostgreSQL:** creating the NOLOGIN roles,
@@ -583,7 +590,8 @@ covers.
 | Runbook | Covers |
 |---|---|
 | **Deploy and roll back** | The OP5 path; the emergency path; rolling back code on the API host and Vercel; the dashboard-only settings (OP4) needed to rebuild a service from scratch |
-| **Restore** | Point-in-time restore; restoring from a nightly backup; the drill (OP6); deciding which one a situation needs |
+| **Restore** | Point-in-time restore; restoring from a nightly backup at the second company; the drill (OP6); deciding which one a situation needs; **replaying the erasure ledger** before restored data is used (OP1) |
+| **Recover the backup keys** | Using the drill key if the disaster key is lost; opening the escrowed disaster key; making a new key pair (OP6, OP11) |
 | **Rotate a key** | Each secret in OP4: how to create the new one, deploy it, retire the old one, and confirm nothing still uses it. That includes the MFA sealing keys' order (ADR 0021) and the backup key pair |
 | **Offboard a staff member, the same day** | Remove their platform capabilities; end their sessions (the version bump, ADR 0013); remove them from GitHub, the providers and the mailbox; rotate any secret they could have seen; record it all |
 | **Respond to a breach** | The steps and templates of A11, with the 72-hour clocks to the Commissioner and to each person (ADR 0035) |
@@ -601,16 +609,19 @@ outage.
 
 | Piece | Free or starting plan | Its limit | Move up when | To | About |
 |---|---|---|---|---|---|
-| Website and web app (Vercel) | Hobby, until commercial content | Hobby forbids commercial use | **The site shows prices or takes sign-ups** — a rule, not a threshold | Pro, one seat | US$20 a month |
-| Development database | A provider's free plan | About 0.5 GB and limited compute | 80% of storage or compute | That provider's pay-as-you-go plan | About US$5 a month |
-| Staging (API and database) | The smallest paid sizes on the production provider (OP3) | Small memory and storage | Staging tests fail for size, not code | One size up | About US$10 a month more |
+| Website and web app (Vercel) | Hobby | Hobby forbids commercial use | **Now** — the site already promotes a product *(OR15)* | Pro, one seat | US$20 a month |
+| The repository (GitHub) | A personal account | No rulesets on a private repository; no organisation | **Before B1's first code** — the gates need it (OP8) | A business organisation on the **Team** plan | About US$4 per user a month |
+| CI database | A PostgreSQL container inside each CI run *(OR16)* | None that matters | — | — | US$0 |
+| A hosted development database (optional) | A provider's free plan | About 0.5 GB and limited compute | 80% of storage or compute | That provider's pay-as-you-go plan | About US$5 a month |
+| Staging (API and database) | The smallest sizes, including a managed database cluster (OP3) | Small memory and storage | Staging tests fail for size, not code | One size up | About US$10 a month more |
 | Production database | 1 GB single node | Storage and CPU | 70% of storage, or CPU above 70% for a week | The next size | About US$30 a month |
 | Production database, failover | None: a single node, with backups (OP6) | One machine | An outage longer than the 4-hour target, or **50 paying contractors** | A standby node (high availability) | About double the database's cost |
 | Production API | 1-2 GB, one instance | Memory, CPU | Memory above 80%, or response times above target for a week | More memory, or a second instance | US$10-25 a month more |
+| Backup store (OP6) | Pay per gigabyte; cents at our size | — | — | — | Cents a month; A5 confirms |
 | Error tracking (A5) | Free plan | Events a month | 80% for two months | The paid plan | Priced in A5 |
-| Uptime monitor (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
-| Object storage (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
-| CI minutes (GitHub Actions) | The monthly free allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
+| Uptime monitor and heartbeat (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
+| Object storage for files (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
+| CI minutes (GitHub Actions) | The plan's monthly allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
 | Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |
 | Round-the-clock response | Working hours only (OP7) | One person | A paying contractor needs a stated response time, or **50 paying contractors** | A paid on-call arrangement, or a second responder | Decided then |
 
@@ -620,27 +631,38 @@ outage.
 
 **Accounts:**
 - **Every production account is in the business's name**, with the owner as administrator (OP2's accounts paragraph):
-  hosting, database, Vercel, GitHub, the domain registrar (GoDaddy), the mailbox, Stripe and A5's services.
+  the API host (a **separate team for production**, OP5), the database, the backup store, Vercel, the GitHub
+  organisation, the domain registrar (GoDaddy), the mailbox, Stripe and A5's services.
 - **Every one has multi-factor sign-in turned on.** That includes **the domain registrar.** Whoever controls the domain
   controls the email, the cookies and the share links, so the domain is the single most valuable account. Its
   **registrar lock** is also turned on.
-- **Recovery codes are kept offline**, with the backup decryption key (OP6).
 - **No shared logins.** Each person has their own account, so access can be removed for one person (OP9's offboarding).
-- **Claude's GitHub app** can push branches and open pull requests, and nothing more (OP8). Claude holds no other
-  credential.
+- **Claude has its own GitHub account, with write access only** (OP8). It holds no other credential.
 
-**Keys** (the secrets of OP4):
+**Keeping the most important secrets safe** *(OR6)*:
+- **Recovery codes** for the accounts, and **the backup disaster key**, are kept **in different places.** One theft or
+  fire must not take both.
+- **"Offline" means offline.** A password manager that syncs to the cloud is not offline. The disaster key is kept on
+  paper or an offline device, and **an escrowed copy** is sealed with the attorney or with the second staff member
+  once named (OA4). Either one is enough to restore.
+
+**Keys** — every secret of OP4, and when it is rotated *(OR14)*:
 
 | Key | Rotated |
 |---|---|
 | Application secrets (the CSRF key, the session pepper if any, provider keys) | Yearly; **at once** if exposure is suspected; when a person who could have seen them leaves |
 | Database passwords (the API's, migration and backup credentials) | Yearly, and on the same events |
 | MFA sealing keys (ADR 0021) | Yearly, by the prepend-and-retire method its runbook describes |
-| The backup key pair (OP6) | Every two years; old backups expire within 35 days, so the old private key is destroyed 35 days after the switch |
+| The console's approval-signing key, and the GitHub App's private key (OP8) | Yearly, and on the same events |
+| The deploy tokens (the API host and Vercel) | Yearly, and on the same events |
+| The backup storage credential and the backup signing key | Yearly |
+| The drill key (OP6) | After each drill's year of use, or at once if a drill run is suspected of exposure |
+| The disaster key (OP6) | Every two years. Backups expire within 35 days, so the old key is destroyed 35 days after the switch |
 
 **Dependencies:**
 - **Automated update pull requests** (GitHub's Dependabot), weekly and grouped. They are ordinary pull requests, so
-  they pass CI and the merge gate (OP8). Security updates are flagged for the same week.
+  they pass CI and the merge gate (OP8). Dependabot is on the allow-list, so they need no start approval, but they
+  still need the owner's review. Security updates are flagged for the same week.
 - **The dependency audit in CI becomes blocking** for high and critical advisories in production dependencies, at B2
   (it is advisory today, `docs/SERVICE-REGISTER.md` §4).
 - **Secret scanning (gitleaks)** stays in CI, over the full history.
@@ -657,7 +679,7 @@ operations log, a dated file in the repository created with the first entry.
 | Monthly | **The restore drill**; review alerts, spend and backup listings | OP6; OP7 |
 | Quarterly | Who has access to what; Rule 10's figures | OP11; OP10 |
 | By **31 March** each year | **The data protection impact assessment** for the previous year | Act s. 45; ADR 0035 |
-| Yearly | The full rebuild drill; key rotation; rehearsing the runbooks; reviewing the retention policy (Disposal Regs 2(1)(a)); reviewing this design | OP6; OP11; OP9; ADR 0035 |
+| Yearly | The full rebuild drill, **with the disaster key**; key rotation; **checking the escrowed key is intact**; rehearsing the runbooks; reviewing the retention policy (Disposal Regs 2(1)(a)); reviewing this design | OP6; OP11; OP9; ADR 0035 |
 | By **1 December** each year | **Renewing Pryvis's registration** with the Information Commissioner, and the Canadian company's if it is registered | Registration Regs 3(3)(b); OA23 |
 | Within **14 days** of a change | Telling the Commissioner of a change in the registration particulars — a new provider or country counts (OP2) | Registration Regs 3(4) |
 
