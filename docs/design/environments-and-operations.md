@@ -454,75 +454,125 @@ allows the administrator to approve it without it just running blindly". Rule 15
 Each approval is recorded with who and when. And **Claude never holds production credentials** (Rule 15: "no
 production write access").
 
-### The start gate — a task list in the staff console
+**What the independent read found, and confirmed** *(OR1, OR2)*, which shapes everything below:
+- **Today Claude acts on GitHub as the owner's own account, which has administrator rights.** Claude-assisted commits
+  have reached `main` directly, under the owner's name. GitHub cannot tell Claude's work from the owner's, and an
+  administrator can bypass any rule. **No gate can hold until Claude has its own, limited identity.**
+- **GitHub's "required reviewer" for deployments works on private repositories only on its Enterprise plan.** On the
+  Free, Pro and Team plans it is silently ignored once a repository is private. The owner has decided the repository
+  goes private before the first paying contractor. So a deploy gate built on GitHub environments would vanish exactly
+  when production starts.
+
+### First: Claude gets its own identity, with no administrator rights *(OR1)*
+
+- **A separate GitHub account for Claude**, owned by the business: a machine account named, say, `pryvis-claude`. It is
+  a repository member with **write** access, so it can push branches and open pull requests. It has **no administrator
+  role, no bypass, and it is not a code owner.**
+- **Claude's sessions connect to GitHub as that account, never as the owner's.** The owner does their own GitHub work
+  in their own account, directly on github.com. The exact steps to connect Claude's sessions to the machine account are
+  confirmed when it is set up (OA26).
+- **The default flips** *(OR1)*. Every pull request needs a start approval (below) **unless its author is on a short
+  allow-list**: the owner, and Dependabot (OP11). Claude does not have to be "recognised" — anything not on the
+  allow-list is treated as needing approval.
+
+### The repository's plan *(OR2)*
+
+| Option | Merge gate | Deploy gate | Cost |
+|---|---|---|---|
+| A. Keep the repository public | Works on the free plan | GitHub's required reviewer works | US$0 — but the source code is public, which the owner decided against |
+| B. GitHub Enterprise | Works | GitHub's required reviewer works on a private repository | About US$21 per user a month |
+| **C. (rec) A business organisation on GitHub's Team plan, with the deploy approval in our own staff console** | **Rulesets work on a private repository** | **Our Deploy page** (OP5 step 8), which needs no GitHub feature at all, and **keeps every production credential out of GitHub** | About **US$4 per user a month** |
+
+Option C is cheaper than B, and stronger. In B the deploy credentials would still sit in GitHub. In C, GitHub cannot
+deploy production at all.
+
+### The start gate — approvals that GitHub checks through our own app *(OR3, OR9)*
 
 | Option | For | Against |
 |---|---|---|
-| **A. (rec) The maintenance list in the staff console, with a signed approval** | The list SF8 feeds already lives there, redacted and deletable. Approval is a recorded act by a named person. A signature lets CI **verify** that Claude's work traces to an approved task, so the gate is enforced, not just recorded | We build one page and a small signing step |
-| B. GitHub issues with an "approved" label | Nothing to build | Anyone with triage rights can add a label, including an automated account, so the gate is not enforced. It copies the task text into another system |
+| A. A signature checked by a CI workflow | Simple | **A pull request can change the workflow that checks it, or the public key it checks against** — the check runs the pull request's own code *(OR3)* |
+| **B. (rec) A status set by our own GitHub App, from outside the pull request** | **Nothing in the pull request can change it.** A ruleset can require a status from one named app | We build a small app (B8) |
 | C. A schedule that picks up tasks on its own | Hands-off | Exactly what the owner ruled out: work running blindly |
 
-**How option A works:**
-1. **Triage** (SF8) turns a ticket into a redacted task that passes the guard. It enters the **maintenance list** as
-   *proposed*. The owner can also add a task directly — a dependency update, an idea of their own — and it passes the
-   same guard.
-2. **The administrator reads the task** — which is also SF8's second human check — and chooses **Approve to start**
-   or **Reject**, with a reason.
-3. **Approving is recorded** in the platform audit trail (R1.48): who, when, the task's number, and a fingerprint of
-   the exact text approved.
-4. **Approving produces a brief:** the task's text, its number, and an **approval signature**. The console signs these
-   with a private key that only it holds.
-5. **The administrator starts the Claude session** with that brief. In release 1 the administrator starts the session
-   themselves, which is itself part of the gate. Nothing starts a session automatically.
-6. **Claude's pull request carries the task number and the signature.** A CI check verifies the signature against the
-   console's **public** key, which is committed in the repository.
-   - A pull request from Claude without a valid signature for an approved task **fails CI**, and cannot merge.
-   - A pull request whose task text no longer matches the approved fingerprint fails too.
-   - The owner's own pull requests are not Claude's work, and do not need a signature.
+**How option B works:**
+1. **Triage** (SF8) turns a ticket into a redacted task that passes the guard. It enters the **maintenance list** in the
+   staff console as *proposed*. The owner can also add a task directly, and it passes the same guard.
+2. **The administrator reads it** (SF8's second human check) and chooses **Approve to start**, or **Reject** with a
+   reason.
+3. **Approving is recorded** in the platform audit trail (R1.48): who, when, the task number, and a fingerprint of the
+   exact text approved.
+4. **Approving creates a working branch name** for that task, such as `claude/task-42-k7q2`, and **binds the
+   approval to it**:
+   - the binding expires after 14 days;
+   - it is used up when that branch's pull request merges *(OR3)*;
+   - one approval can therefore never be reused for other work.
+5. **The administrator starts the Claude session** with the task's text and its branch name. The text goes only into
+   the session: **never into git, a commit, or a pull request** *(OR9)*. The pull request carries the task number only.
+   That keeps SF8's promise that a redaction miss can be deleted.
+6. **Pryvis's GitHub App** — owned by the business and installed on the repository — is told by GitHub when a pull
+   request opens or changes. It is a signed provider callback to our API (`docs/design/api-layer.md` AP6). Then:
+   - the API checks the branch is bound to an approved task that is unexpired and unused;
+   - it sets a status named `pryvis/start-approval` on the pull request: pass or fail;
+   - it also notes **when a pull request changes the workflows, the checkers in `tools/`, or the code owners file**,
+     because those are the files that could weaken the gates. It reads the list of changed files from GitHub itself,
+     not from the pull request's code.
+7. **The ruleset requires `pryvis/start-approval` from that app**, for every pull request whose author is not on the
+   allow-list. A status from any other source does not count.
 
-The signature proves an approved task **existed**. It does not prove the change stays within the task. That is what the
-merge gate's review is for.
+**Until the console and the app exist** *(OR18)*: the start gate is the administrator's explicit instruction to start
+a session, and the merge gate (below) is the enforcement. This holds through the build phases, while no production data
+exists. The app and the Maintenance page are built **before production is created** (F3): build step B8.
 
-### The merge gate — GitHub's branch protection
+### The merge gate — a ruleset on `main` *(OR1, OR20)*
 
-Set on `main` as a GitHub ruleset:
-- changes only through a pull request; no direct pushes;
-- **the required CI checks must pass**, including step 6's signature check for Claude's pull requests;
-- **one approving review from the administrator**, named as code owner of the whole repository;
+On the business organisation's **Team** plan, a ruleset on `main`:
+- changes only through a pull request; **no direct pushes, by anyone**;
+- **the required checks must pass**: CI (`verify.yml`) and, for pull requests needing it, `pryvis/start-approval` from
+  the app;
+- **an approving review from a code owner.** The owner is the code owner of the whole repository, with particular
+  entries for `.github/`, `tools/` and the code owners file itself;
 - **a new commit dismisses an earlier approval**, so what merges is what was approved;
-- **Claude's GitHub app can push branches and open pull requests, and nothing more.** It cannot approve, merge, bypass
-  the rules, or change them.
+- **bypass:** the owner only, and **for pull requests only** — never for a direct push. Every bypass is recorded by
+  GitHub. Claude's account is never on the bypass list;
+- **Claude's account** has write access only. It can submit a review, but only a code owner's review counts, so its
+  approval does nothing.
 
-**The one-person case.** GitHub does not let anyone approve their own pull request. The administrator's own pull
-requests — which should be rare — merge through the administrator's **bypass**, which GitHub records. Claude's pull
-requests always need the administrator's review. When a second staff member is named (OA4), they review the
-administrator's pull requests, and the bypass is removed.
+**Repository settings that close the side doors** *(OR20)*:
+- "Allow GitHub Actions to create and approve pull requests" is **off**;
+- workflows run with **read-only permissions by default**, and each job asks for only what it needs;
+- **no `pull_request_target` workflows** and **no self-hosted runners** (none exist today);
+- forked pull requests get no secrets, and first-time contributors need approval to run workflows (GitHub's default,
+  kept).
 
-### The deploy gate — a GitHub environment
+**The one-person case.** The owner's own pull requests, which should be rare, merge by the owner's recorded bypass.
+When a second staff member is named (OA4), they review the owner's pull requests, and the bypass is removed.
 
-- The `deploy-production` workflow (OP5) runs in a GitHub **environment** named `production`, with the administrator
-  as **required reviewer**. The workflow waits until they approve it in GitHub.
-- **Production's deploy credentials are secrets of that environment.** They exist only for an approved run, so
-  nothing else — no other workflow, no Claude session — can deploy.
-- Only `main` may deploy to production, and only a commit that passed staging.
-- **Migrations** run inside the same approved deploy (OP5 step 6), so no database change reaches production without
-  this approval.
+### The deploy gate — the Deploy page in the staff console *(OR2, OR5)*
+
+- **The administrator approves a ready digest** — one that passed staging's smoke checks (OP5 step 6) — on the staff
+  console's **Deploy** page, signed in with MFA (ADR 0021).
+- **The console deploys it**, using deploy tokens that only the production API holds (OP4), and promotes the matching
+  web build on Vercel. The approval is recorded in the platform audit trail: who, when, the digest and the commit.
+- **GitHub holds no production credential at all.** No workflow, branch or pull request can deploy production.
+- **Migrations** run inside that approved deploy (OP5 step 7), so no database change reaches production without it.
+- Production is created at F3, after the console exists (B8), so **production never exists without this gate**.
 
 ### What the administrator sees, and what is recorded
 
 | Gate | Where they approve | Recorded by |
 |---|---|---|
-| Start | The staff console's **Maintenance** page | The platform audit trail: who, when, the task, the fingerprint |
-| Merge | The pull request on GitHub | GitHub's review record |
-| Deploy | The deployment request on GitHub (it can be approved from the GitHub mobile app) | GitHub's deployment record, and a line in the platform audit trail written by the workflow |
+| Start | The staff console's **Maintenance** page | The platform audit trail: who, when, the task, the fingerprint, the bound branch |
+| Merge | The pull request on GitHub | GitHub's review record; bypasses recorded too |
+| Deploy | The staff console's **Deploy** page | The platform audit trail: who, when, the digest, the commit; the API records its own start (OP5) |
 
 **Claude's limits, in one place:**
+- **Its own GitHub account, with write access only** — no administrator rights and no bypass.
 - **Synthetic data only** (Rule 15). Claude never sees production data, and never holds a production secret.
 - **Its spend has a monthly cap** (OA3), and **a lighter model is used for routine tasks** (Rule 15).
-- **Every change it makes is a pull request** that a person approves.
+- **Every change it makes is a pull request** that the administrator approves.
 
 **Emergencies use the same three gates, done quickly.** There is no "skip the gates" switch. The fastest path — a
-small pull request, CI, approval, the deploy approval from a phone — is written into the deploy runbook (OP9).
+small pull request, CI, the review, the deploy from the console on a phone — is written into the deploy runbook (OP9).
 
 ## 10. OP9 · Runbooks
 
