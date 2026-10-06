@@ -43,7 +43,7 @@ Each has options and a recommendation, **(rec)**.
 
 ### AP1 · Where the API lives, relative to the web app — and where the share page lives
 
-The web app and the public site are on Vercel at pryvis.com; the API is on Render. A browser treats a cookie from a
+*(Pointer 2026-10-06: the API's host and region are now set by `docs/design/environments-and-operations.md` OP2 — recommended DigitalOcean in Toronto; what follows holds for any host.)* The web app and the public site are on Vercel at pryvis.com; the API is on Render. A browser treats a cookie from a
 different *site* as third-party, and browsers are blocking those.
 
 | Option | For | Against |

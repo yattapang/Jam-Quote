@@ -71,18 +71,21 @@ WiPay's answers and merchant account, the accountant, the attorney) is sent when
 
 ## Phase B — Platform foundation (after A2, A4, A5)
 
+*B4 comes first: Claude works through its own limited GitHub account before any code is written (OP8).*
+
 - [ ] B1 · Environments and infrastructure — development, staging and production; the rebuilt API's
   blueprint; region; secrets
 - [ ] B2 · API start-up — the global default-deny guard, the least-privilege check, health, the OpenAPI
   contract test, cookie sessions, validation, idempotency
 - [ ] B3 · Monitoring and resilience — error tracking without personal data, uptime, backups and **the first
   restore drill**, runbooks
-- [ ] B4 · The maintenance approval interface — start, merge and deploy gates for Claude-assisted work,
-  each approval recorded (Rule 15)
+- [ ] B4 · The GitHub foundation, **before B1's first code** — the business organisation on the Team plan, Claude's own
+  write-only account, the ruleset on `main`, code owners and the repository hardening (`docs/design/environments-and-operations.md` OP8)
 - [ ] B5 · File storage and malware scanning
 - [ ] B6 · The shared core — money, entitlements, the rule pack (tax rates, names and wording as data per
   country)
 - [ ] B7 · Staff MFA completed — **a launch blocker**
+- [ ] B8 · The console's gates, **after B7 and before F3** — the Maintenance page, the Pryvis GitHub App's start-approval status, the Deploy page, and the API recording its own deployment (Rule 15; OP8)
 
 ## Phase C — The first end-to-end slice (brief §18 step 2)
 

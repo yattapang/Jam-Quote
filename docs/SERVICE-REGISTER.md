@@ -29,6 +29,8 @@ is a defect, not a paperwork oversight.
 
 ## 1. Infrastructure and hosting
 
+*(Pointer 2026-10-06: the rebuild's hosting, region, backup store and plans are decided in `docs/design/environments-and-operations.md` OP2-OP3, OP6 and OP10 — among them Vercel on Pro, not Hobby; this register's rows are replaced in A5.)*
+
 | Service | What it does | Why this one | Tier and cost | Holds personal data | If it went away |
 |---|---|---|---|---|---|
 | **Vercel** | Hosts the Next.js web app **and, from 2026-09-24, the public site at pryvis.com** (ADR 0018) | First-class Next.js support, zero-config preview deploys, free tier sufficient for pre-launch. Root Directory points at `original-app/apps/web` (ADR 0010) | Free (Hobby) | In transit only; nothing stored | Any Node host or container runs Next.js. Migration cost is CI configuration, not code (Rule 10) |

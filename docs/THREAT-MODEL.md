@@ -38,7 +38,7 @@ status of each control**, because a threat model listing only intended controls 
 | T5 | **Our own staff** | Admin capabilities, impersonation | Curiosity, fraud, or a compromised laptop (A6 — everything) |
 | T6 | **An attacker who obtains a database dump** | Every row, no application, no environment | Credentials to reuse elsewhere (A5) |
 | T7 | **A compromised or hostile dependency** | Code execution inside our process | Anything |
-| T8 | **A provider or insider at Neon, Render, Vercel or Resend** | Storage or transit access | A1, A9 |
+| T8 | **A provider or insider at a hosting, database, backup, email or web provider** (today Neon, Render, Vercel and Resend; the rebuild's set is in `docs/design/environments-and-operations.md` OP2-OP3 and A5) | Storage or transit access | A1, A9 |
 | T9 | **Someone defrauding the payment path** | A forged receipt, a colluding approver | Free subscriptions (A7) |
 
 ## 3. Trust boundaries

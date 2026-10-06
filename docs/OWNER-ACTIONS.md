@@ -43,8 +43,8 @@ so they start now.
 
 | # | Action | Why, and the step that needs it | Status |
 |---|---|---|---|
-| OA1 | **Confirm the hosting provider and region, and open its account in the business's name** — recommended: DigitalOcean in Toronto, after the B1 check (`docs/design/environments-and-operations.md` OP2-OP3); staging about US$12 a month from B1, production about US$45-60 a month from F3 | Three environments (B1); always-on at launch (ADR 0026, PRD §9 item 7); Jamaica's transfer rule (ADR 0035) | Open |
-| OA2 | **Four DNS records at GoDaddy:** `api.pryvis.com`, `share.pryvis.com`, and the staging pair `api.staging.pryvis.com` and `share.staging.pryvis.com` (exact values in the batch) | The session cookie must be first-party (`docs/design/api-layer.md` AP1); the share page has its own host (AL10); staging mirrors production (OP1). Needed by B1-B2 | Open |
+| OA1 | **Confirm the hosting provider and region, and open its account in the business's name, with production in a separate team** — recommended: DigitalOcean in Toronto, after the B1 check (`docs/design/environments-and-operations.md` OP2-OP3, OP5); staging about US$20-27 a month from B1, production about US$45-60 a month from F3 | Three environments (B1); always-on at launch (ADR 0026, PRD §9 item 7); Jamaica's transfer rule (ADR 0035) | Open |
+| OA2 | **Five DNS records at GoDaddy:** `api.pryvis.com`, `share.pryvis.com`, and the staging trio `staging.pryvis.com`, `api.staging.pryvis.com` and `share.staging.pryvis.com` (exact values in the batch) | The session cookie must be first-party (`docs/design/api-layer.md` AP1); the share page has its own host (AL10); staging mirrors production, cookies included (OP1, OR4). Needed by B1-B2 | Open |
 | OA3 | **Set a monthly spend limit** in the Claude developer console | Maintenance under Rule 15's approval gates (B4); the support chatbot later (PRD §9 item 10) | Open |
 | OA4 | **Name the second staff member**, or confirm the single-operator fallback for now | Staff MFA and separated approvals (B7, a launch blocker; PRD §9 item 5, R1.34-R1.35) | Open |
 | OA5 | **Confirm how you want to review code** — recommended: a pull request per build step, which you approve or ask about | The first code since planning (B1). The planning audit records that you do not yet review diffs (`docs/PLANNING-AUDIT.md` §3) | Open |
@@ -56,6 +56,10 @@ so they start now.
 
 | OA20 | **Describe the business to Stripe in writing and keep its approval** (wording in the batch): the Canadian company sells subscriptions to software run by a related Jamaican business, to contractors in Jamaica | ADR 0033 condition 1; decides OA8 and D6 | Open — **long lead** |
 | OA24 | **Put every production account in the business's name, with multi-factor sign-in on, and the domain's registrar lock on** — GoDaddy, GitHub, Vercel, the hosting provider, the mailbox, Stripe and A5's services; keep the recovery codes offline (OP11) | Whoever holds the domain holds the email, cookies and share links; one person's access must be removable alone. Before B1 | Open |
+| OA25 | **Create a GitHub organisation for the business on the Team plan, and move the repository into it** (about US$4 per user a month); then set the ruleset on `main` and the repository settings exactly as listed in the batch | The merge gate needs rulesets on a private repository; GitHub's own deploy approval needs Enterprise, so the deploy gate moves to our console (OP8, OR2). **Before B1's first code** (B4) | Open |
+| OA26 | **Create Claude's own GitHub account** (for example `pryvis-claude`) with write access only, and **connect Claude's sessions to it instead of your own account** (steps in the batch) | Today Claude acts as your administrator account, so no approval gate can hold (OP8, OR1). **Before B1's first code** (B4) | Open |
+| OA27 | **Move Vercel to the Pro plan** (about US$20 a month) | Vercel's Hobby plan forbids commercial use, and pryvis.com already promotes a product (OP3, OR15). **Possibly due now** | Open |
+| OA28 | **Make the backup key pair, keep the disaster key offline, and seal an escrow copy** with the attorney or the second staff member; keep it apart from the accounts' recovery codes (steps in the batch) | Backups are useless without a key that survives losing one person or one place (OP6, OP11, OR6). Before B3 | Open |
 | OA22 | **Email the Information Commissioner the five questions** in `docs/DATA-PROTECTION-READING.md` §10 (wording in the batch) — free, and it settles the costliest unknowns before any lawyer | Hosting regions (A4, A5, before B1); registration and the impact assessment; whether contractors must register | Open — **long lead** |
 | OA21 | **Open a Stripe account for the Canadian company and use test mode only** — no live activation until A10 is approved and OA20 is answered. Put the test keys in the environment's secret settings (steps in the batch), never in the chat | The test-mode experiment of ADR 0033 (A10) | Open |
 
@@ -99,6 +103,7 @@ Written when their phases come near:
 
 | Date | Batch or action | What happened |
 |---|---|---|
+| 2026-10-06 | OA1, OA2, OA25-OA28 | From design A4's independent read: production in its own team; the staging web domain; the GitHub organisation (Team) and Claude's own account; Vercel Pro possibly due now; the backup keys and escrow |
 | 2026-10-06 | OA1, OA2, OA24 | From design A4: the provider and region (DigitalOcean, Toronto, recommended), the staging DNS records, and accounts with MFA in the business's name |
 | 2026-10-06 | OA22, OA23 | From the data-protection reading: the Commissioner's questions (batch 1) and registration (batch 4) |
 | 2026-10-02 | OA7, OA15 | Moved to the later WiPay batch: WiPay card links move to release 2 (ADR 0034) |

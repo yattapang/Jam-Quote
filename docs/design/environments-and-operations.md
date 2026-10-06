@@ -1,7 +1,9 @@
 # Design: environments and operations — where Pryvis runs, how it is changed, and how it is kept safe
 
 **Status: APPROVED by the owner, 2026-10-06 — every recommendation, OP1-OP12** ("Approved"), including production in
-Toronto on DigitalOcean subject to OP2's check at B1. Written section by section and saved as it went, at the owner's
+Toronto on DigitalOcean subject to OP2's check at B1. **Amended the same day** to answer its independent read (OR1-OR20,
+§15). That includes two blockers: Claude's own GitHub identity, and the deploy gate moved into the staff console. The
+amendments are approved with the step's sign-off. Written section by section and saved as it went, at the owner's
 request. Build plan step A4 (`docs/BUILD-PLAN.md`). Next: an independent read, a closing check, then the owner's sign-off ticks A4.
 Nothing here is built until steps B1-B4 begin.
 
@@ -35,6 +37,7 @@ on each vendor's own page before anything is bought** (sources in §14).
 12. OP11 · Security operations: accounts, keys and dependencies
 13. OP12 · The operations calendar
 14. What gets built, tests, what this does not do, and sources
+15. The independent read, and where each finding is answered
 
 ## 1. The problem
 
@@ -685,66 +688,92 @@ operations log, a dated file in the repository created with the first entry.
 
 ## 14. What gets built, tests, what this does not do, and sources
 
-**What gets built:**
+**What gets built, and in what order** *(OR18)*:
+- **B4 — the GitHub foundation, before B1's first code:**
+  - the business organisation on the Team plan;
+  - Claude's own account with write access only, and the owner's account no longer connected to Claude's sessions
+    (OP8);
+  - the ruleset on `main`, the code owners file, and the repository settings that close the side doors (OP8).
+
+  Nothing is written to `main` by Claude after this, except through a reviewed pull request.
 - **B1 — environments:**
-  - the Toronto check (OP2), then staging on the chosen provider;
+  - the Toronto check, all six items (OP2), then staging on the chosen provider, in its own team;
   - the app specification file (OP4);
-  - the staging addresses (OA2);
-  - the test that the web app fetches no tenant data on Vercel's servers;
-  - the non-production database with synthetic seed data.
+  - the staging addresses, including `staging.pryvis.com` (OA2);
+  - the non-production database with synthetic seed data;
+  - the web app as a static export, with its check (OP2).
 - **B2 — start-up and pipeline:**
   - API start-up (A2's AP8);
   - CI extended (OP5 step 2), with the audit blocking (OP11);
-  - the staging auto-deploy with migrations first;
-  - the smoke checks;
-  - the `deploy-production` workflow and its environment.
+  - build once into the registry;
+  - staging deploys of the digest with migrations first;
+  - the browser smoke checks;
+  - Vercel's automatic production deploys turned off.
 - **B3 — monitoring and resilience:**
-  - error tracking and the uptime monitor (A5);
-  - the job and backup alerts;
-  - the nightly backup job, the bucket and the key pair;
-  - **the first restore drill**;
+  - error tracking and the uptime monitor, with the backup heartbeat (A5, OP7);
+  - the job alerts;
+  - the backup job, the locked store at the second company, and the signing key and two encryption keys;
+  - **the first restore drill — rehearsed on staging, with the same providers and settings as production**;
   - the runbooks (OP9).
-- **B4 — the approval interface:**
-  - the staff console's Maintenance page;
-  - the approval signature and its CI check;
-  - GitHub's ruleset on `main` and code owners;
-  - the production environment's required reviewer (OP8).
+- **B8 — the console's gates** (new step, after B7's staff MFA, before F3): the Maintenance page, the Pryvis GitHub App
+  and its `pryvis/start-approval` status, the Deploy page, and the API recording its own deployment (OP8, OP5).
+- **At F3**, production is created in its own team, and **the first production backup and restore drill run before
+  any real contractor arrives** (F4).
 
 **Tests, each proved with a planted defect:**
 - **Production data stays in production:** the non-production database holds only seeded synthetic tenants. Plant: a
   real-looking email domain in the seed — the seed check fails.
-- **Vercel holds no tenant data:** no web page fetches tenant data on the server. Plant: a page that does — the check
-  fails.
-- **The start gate:**
-  - a Claude pull request without a valid approval signature fails CI;
-  - so does one whose task text no longer matches the approved fingerprint.
+- **Vercel holds no tenant data:** the web build contains no server functions, and no rewrite or middleware proxies the
+  API *(OR12)*. Plant: one server-rendered page — the build check fails.
+- **The start gate** *(OR3)*:
+  - a pull request from a non-allow-listed author, on a branch with no approval, gets a failing
+    `pryvis/start-approval`;
+  - an approval is refused on a second branch, after its pull request has merged, and after 14 days;
+  - a `pryvis/start-approval` status set by anything but our app does not satisfy the ruleset.
 
-  Plants: a forged signature; an approved task edited after approval.
-- **The merge gate:** a direct push to `main` is refused, and an approval is dismissed by a new commit. This is checked
-  once, by hand, at B4 and recorded, because it is GitHub's setting rather than our code.
-- **The deploy gate:** the production workflow does not start without the reviewer's approval, and its secrets are
-  absent from every other workflow. Plant: the same deploy step in an unprotected workflow — it has no credentials and
-  fails.
-- **Backups:**
-  - the nightly job's credential cannot delete or overwrite a backup;
-  - a backup cannot be read without the owner's key;
-  - the restore drill's checks fail on a truncated dump.
+  Plants: a pull request reusing a merged task's branch binding; an expired binding; a status posted with an ordinary
+  token.
+- **The merge gate:** a direct push to `main` is refused, even by the owner; Claude's account cannot merge; and an
+  approval is dismissed by a new commit. This is checked once, by hand, at B4 and recorded, because it is GitHub's
+  setting rather than our code.
+- **The deploy gate:**
+  - **no GitHub workflow holds a production credential.** A test lists the repository's and environments' secrets and
+    fails on any production one;
+  - only a digest marked ready by staging can be deployed from the console.
 
-  Plants: a delete attempt with the job's credential; a dump with a table removed.
-- **Migrations are expand-then-contract:** a migration that drops a column the previous release still reads fails the
-  rollback test (the previous code run against the new schema). Plant: such a drop.
-- **Alerts:** a planted dead-letter job and a failed backup each raise an alert, with no personal data in it.
+  Plants: a production token added to the repository's secrets; a deploy request for an unmarked digest.
+- **Backups** *(OR6, OR7, OR8)*:
+  - the store refuses deletion or overwrite during the lock;
+  - a dump with a bad signature is refused by the drill;
+  - either key decrypts;
+  - a missed night raises the heartbeat alert.
+
+  Plants: a delete with the job's credential; a dump re-signed with another key; the schedule disabled.
+- **The drill restores into its own cluster**, in the order of OP6 step 3, and its least-privilege check passes on the
+  restored database *(OR19)*.
+- **Migrations are expand-then-contract** *(OR19)*: the previous release's API test suite — excluding the schema
+  snapshot test, which by design fails against any newer migration — runs against the new schema. Plant: a migration
+  dropping a column the previous release reads.
+- **Erasure survives a restore** *(OR11)*: an erased client is absent after restoring a backup made before the
+  erasure. Plant: the ledger replay skipped.
+- **Alerts:** a planted dead-letter job and a missed backup each raise an alert, with no personal data in it.
 
 **What this does not do (Rule 21.4):**
 - It does not choose the storage, error-tracking, uptime or malware-scanning services — A5 does, within OP2's region
-  rule and OP10's thresholds.
+  rule, OP6's second-company rule and OP10's thresholds.
 - It does not design the breach response's content — A11 does. OP9 only lists its runbook.
 - **It does not make Pryvis highly available.** One database node and one API instance mean a provider fault is an
   outage, recovered within the 4-hour target. Failover is OP10's trigger.
 - It does not offer round-the-clock response (OP7).
-- It does not settle the legal question. Toronto makes the transfer case strong, not certain; the Commissioner's answer
-  (OA22) and the attorney decide.
-- **The Toronto check (OP2) may fail** on the privilege model's role powers. Then option B is the plan, as OP2 says.
+- It does not settle the legal question. Toronto makes the transfer case strong, not certain. All candidate providers
+  are US companies (OP2), and the Commissioner's answer (OA22) and the attorney decide.
+- **The Toronto check (OP2) may fail** on the privilege model's role powers, or on the backup role. Then option B is
+  the plan, as OP2 says.
+- **Before B8, the start gate is the administrator's instruction, not a machine check** (OP8). That is acceptable only
+  because no production data exists until F3.
+- **The read could not reach DigitalOcean's, Vercel's or GitHub's websites**, so several provider capabilities are
+  confirmed at B1 and B4, not now: role powers, Object Lock, scheduled jobs, team-scoped tokens, and rulesets on the
+  Team plan.
 
 **Sources** (checked 2026-10-06; prices from third-party summaries, to be confirmed on each vendor's page):
 - Render: [regions](https://render.com/docs/regions); pricing
@@ -761,3 +790,41 @@ operations log, a dated file in the repository created with the first entry.
 - Supabase: [regions](https://supabase.com/docs/guides/platform/regions);
   [free plan](https://costbench.com/software/database-as-service/supabase/free-plan/).
 - Fly.io: [regions](https://fly.io/docs/reference/regions); [managed PostgreSQL](https://fly.io/docs/mpg).
+
+## 15. The independent read, and where each finding is answered
+
+Read by Opus from `docs/briefs/2026-10-06-operations-design-read.md` at `67906dc`.
+- **Verdict:** "sound after the named changes".
+- **Findings:** 20, of which **2 are blockers**, 8 major and 10 minor. Each is answered above.
+- **Its own view of each recommendation:**
+  - it agreed with OP1, OP2, OP4, OP7, OP9, OP10, OP11 and OP12;
+  - it disagreed, at least in part, with OP3, OP5, OP6 and OP8.
+
+  Each disagreement is adopted.
+
+The two blockers were confirmed against the repository and GitHub's own documentation:
+- Claude has been acting as the owner's administrator account;
+- GitHub's deploy approval disappears on a private repository below Enterprise.
+
+| Finding | Severity | Answered in |
+|---|---|---|
+| OR1 · Claude acts as the owner's administrator account, so no gate holds | blocker | OP8, Claude's own identity and the allow-list; B4 first; OA26 |
+| OR2 · GitHub's deploy approval disappears on a private repository below Enterprise | blocker | OP8, the repository's plan (option C) and the console's Deploy page; OA25 |
+| OR3 · the signature check can be defeated from the pull request, and replayed | major | OP8's start gate, option B: our app's status, bound to one branch, single use, expiring |
+| OR4 · Vercel deploys `main` on its own; the preview address breaks the cookie rules | major | OP5 step 8; OP1's `staging.pryvis.com`; the browser smoke check |
+| OR5 · no "exact commit" mechanism; side doors to production | major | OP5: build once, the digest, production in its own team, no repository-level secrets |
+| OR6 · the drill needs the offline key; losing it loses every backup | major | OP6, two recipients; OP11, escrow and separate storage |
+| OR7 · same-provider backups; no real write-once; unsigned dumps restored inside production | major | OP6: a second company, Object Lock, signed dumps, a throwaway cluster |
+| OR8 · a backup that never runs goes unnoticed | major | OP6 step 6; OP7's heartbeat row |
+| OR9 · the task text would land in git | major | OP8 step 5: the text goes only to the session |
+| OR10 · staging on a different database product; the backup role untested | major | OP2, check item 2 and the managed-cluster note; OP3 |
+| OR11 · deletion and "no copies" claims incomplete | minor | OP1's copies table and the erasure ledger; OP6 |
+| OR12 · the Vercel test proves too little | minor | OP2: a static export, tokens after `#`, no analytics |
+| OR13 · production smoke checks issue documents; credentials in GitHub | minor | OP5 step 9 and the record |
+| OR14 · keys missing from the inventory and rotation | minor | OP4's table; OP11's table |
+| OR15 · costs do not add up; Vercel Pro may be due now | minor | OP2's table; OP3; OP10; OA27 |
+| OR16 · Render, Neon and the US still assumed elsewhere; CI's database; the US-company caveat | minor | OP2; OP10; pointers in the API design, the data-protection reading, the threat model and the register |
+| OR17 · owner actions missing | minor | `docs/OWNER-ACTIONS.md`: OA1, OA2, OA25-OA28 |
+| OR18 · the build order leaves gaps | minor | §14's order: B4 first, the new B8, the drill rehearsed on staging and run at F3 |
+| OR19 · the drill and rollback tests would not work as worded | minor | OP6 step 3; §14's tests |
+| OR20 · unstated GitHub hardening | minor | OP8, "Repository settings that close the side doors" |

@@ -207,6 +207,7 @@ A5):
 
 | Service | Holds | Country (to confirm) |
 |---|---|---|
+| *(Pointer 2026-10-06: superseded by `docs/design/environments-and-operations.md` OP2 — production recommended in Toronto, Canada, on DigitalOcean, with backups at a second company in Canada; all candidate providers are US companies)* | | |
 | Neon (the database) | Everything | United States, by default region |
 | Render (the API) | Everything in transit, logs without personal data | United States |
 | Vercel (the website) | Requests in transit | United States and edge locations |
