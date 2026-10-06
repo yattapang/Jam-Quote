@@ -1,6 +1,6 @@
 # Design: environments and operations — where Pryvis runs, how it is changed, and how it is kept safe
 
-**Status: DRAFT, in progress — written section by section and saved as it goes (owner, 2026-10-06).** Build plan step
+**Status: DRAFT, for the owner's approval** (written section by section and saved as it went, at the owner's request, 2026-10-06). Build plan step
 A4 (`docs/BUILD-PLAN.md`). After approval: an independent read, a closing check, then the owner's sign-off ticks A4.
 Nothing here is built until steps B1-B4 begin.
 
@@ -34,8 +34,6 @@ on each vendor's own page before anything is bought** (sources in §14).
 12. OP11 · Security operations: accounts, keys and dependencies
 13. OP12 · The operations calendar
 14. What gets built, tests, what this does not do, and sources
-
-*(Sections are filled in order; an unfilled section reads "to be written".)*
 
 ## 1. The problem
 
@@ -449,16 +447,150 @@ covers.
 
 ## 11. OP10 · Rule 10's trigger
 
-To be written.
+Rule 10: "an ADR records the free-tier setup and the trigger for moving to paid — a concrete threshold, and the
+expected paid equivalent". Finding PA7 asked for it for **every** free-tier piece. This table is that record. ADR
+approval of this design makes it the ADR.
+
+**The general rule:** watch each limit, and act at **80% for two weeks running**. A limit reached by surprise is an
+outage.
+
+| Piece | Free or starting plan | Its limit | Move up when | To | About |
+|---|---|---|---|---|---|
+| Website and web app (Vercel) | Hobby, until commercial content | Hobby forbids commercial use | **The site shows prices or takes sign-ups** — a rule, not a threshold | Pro, one seat | US$20 a month |
+| Development database | A provider's free plan | About 0.5 GB and limited compute | 80% of storage or compute | That provider's pay-as-you-go plan | About US$5 a month |
+| Staging (API and database) | The smallest paid sizes on the production provider (OP3) | Small memory and storage | Staging tests fail for size, not code | One size up | About US$10 a month more |
+| Production database | 1 GB single node | Storage and CPU | 70% of storage, or CPU above 70% for a week | The next size | About US$30 a month |
+| Production database, failover | None: a single node, with backups (OP6) | One machine | An outage longer than the 4-hour target, or **50 paying contractors** | A standby node (high availability) | About double the database's cost |
+| Production API | 1-2 GB, one instance | Memory, CPU | Memory above 80%, or response times above target for a week | More memory, or a second instance | US$10-25 a month more |
+| Error tracking (A5) | Free plan | Events a month | 80% for two months | The paid plan | Priced in A5 |
+| Uptime monitor (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
+| Object storage (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
+| CI minutes (GitHub Actions) | The monthly free allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
+| Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |
+| Round-the-clock response | Working hours only (OP7) | One person | A paying contractor needs a stated response time, or **50 paying contractors** | A paid on-call arrangement, or a second responder | Decided then |
+
+**Recorded each quarter** (OP12): each row's current use, in the operations log.
 
 ## 12. OP11 · Security operations
 
-To be written.
+**Accounts:**
+- **Every production account is in the business's name**, with the owner as administrator (OP2's accounts paragraph):
+  hosting, database, Vercel, GitHub, the domain registrar (GoDaddy), the mailbox, Stripe and A5's services.
+- **Every one has multi-factor sign-in turned on.** That includes **the domain registrar.** Whoever controls the domain
+  controls the email, the cookies and the share links, so the domain is the single most valuable account. Its
+  **registrar lock** is also turned on.
+- **Recovery codes are kept offline**, with the backup decryption key (OP6).
+- **No shared logins.** Each person has their own account, so access can be removed for one person (OP9's offboarding).
+- **Claude's GitHub app** can push branches and open pull requests, and nothing more (OP8). Claude holds no other
+  credential.
+
+**Keys** (the secrets of OP4):
+
+| Key | Rotated |
+|---|---|
+| Application secrets (the CSRF key, the session pepper if any, provider keys) | Yearly; **at once** if exposure is suspected; when a person who could have seen them leaves |
+| Database passwords (the API's, migration and backup credentials) | Yearly, and on the same events |
+| MFA sealing keys (ADR 0021) | Yearly, by the prepend-and-retire method its runbook describes |
+| The backup key pair (OP6) | Every two years; old backups expire within 35 days, so the old private key is destroyed 35 days after the switch |
+
+**Dependencies:**
+- **Automated update pull requests** (GitHub's Dependabot), weekly and grouped. They are ordinary pull requests, so
+  they pass CI and the merge gate (OP8). Security updates are flagged for the same week.
+- **The dependency audit in CI becomes blocking** for high and critical advisories in production dependencies, at B2
+  (it is advisory today, `docs/SERVICE-REGISTER.md` §4).
+- **Secret scanning (gitleaks)** stays in CI, over the full history.
 
 ## 13. OP12 · The operations calendar
 
-To be written.
+**Kept in the owner's calendar, with reminders.** Each result — pass or fail, counts, never data — is written to the
+operations log, a dated file in the repository created with the first entry.
+
+| When | What | Where it is defined |
+|---|---|---|
+| Nightly (automatic) | The backup; the reconciliation | OP6; R1.24e |
+| Weekly, Mondays | Support triage; dependency pull requests | SF8; OP11 |
+| Monthly | **The restore drill**; review alerts, spend and backup listings | OP6; OP7 |
+| Quarterly | Who has access to what; Rule 10's figures | OP11; OP10 |
+| By **31 March** each year | **The data protection impact assessment** for the previous year | Act s. 45; ADR 0035 |
+| Yearly | The full rebuild drill; key rotation; rehearsing the runbooks; reviewing the retention policy (Disposal Regs 2(1)(a)); reviewing this design | OP6; OP11; OP9; ADR 0035 |
+| By **1 December** each year | **Renewing Pryvis's registration** with the Information Commissioner, and the Canadian company's if it is registered | Registration Regs 3(3)(b); OA23 |
+| Within **14 days** of a change | Telling the Commissioner of a change in the registration particulars — a new provider or country counts (OP2) | Registration Regs 3(4) |
 
 ## 14. What gets built, tests, what this does not do, and sources
 
-To be written.
+**What gets built:**
+- **B1 — environments:**
+  - the Toronto check (OP2), then staging on the chosen provider;
+  - the app specification file (OP4);
+  - the staging addresses (OA2);
+  - the test that the web app fetches no tenant data on Vercel's servers;
+  - the non-production database with synthetic seed data.
+- **B2 — start-up and pipeline:**
+  - API start-up (A2's AP8);
+  - CI extended (OP5 step 2), with the audit blocking (OP11);
+  - the staging auto-deploy with migrations first;
+  - the smoke checks;
+  - the `deploy-production` workflow and its environment.
+- **B3 — monitoring and resilience:**
+  - error tracking and the uptime monitor (A5);
+  - the job and backup alerts;
+  - the nightly backup job, the bucket and the key pair;
+  - **the first restore drill**;
+  - the runbooks (OP9).
+- **B4 — the approval interface:**
+  - the staff console's Maintenance page;
+  - the approval signature and its CI check;
+  - GitHub's ruleset on `main` and code owners;
+  - the production environment's required reviewer (OP8).
+
+**Tests, each proved with a planted defect:**
+- **Production data stays in production:** the non-production database holds only seeded synthetic tenants. Plant: a
+  real-looking email domain in the seed — the seed check fails.
+- **Vercel holds no tenant data:** no web page fetches tenant data on the server. Plant: a page that does — the check
+  fails.
+- **The start gate:**
+  - a Claude pull request without a valid approval signature fails CI;
+  - so does one whose task text no longer matches the approved fingerprint.
+
+  Plants: a forged signature; an approved task edited after approval.
+- **The merge gate:** a direct push to `main` is refused, and an approval is dismissed by a new commit. This is checked
+  once, by hand, at B4 and recorded, because it is GitHub's setting rather than our code.
+- **The deploy gate:** the production workflow does not start without the reviewer's approval, and its secrets are
+  absent from every other workflow. Plant: the same deploy step in an unprotected workflow — it has no credentials and
+  fails.
+- **Backups:**
+  - the nightly job's credential cannot delete or overwrite a backup;
+  - a backup cannot be read without the owner's key;
+  - the restore drill's checks fail on a truncated dump.
+
+  Plants: a delete attempt with the job's credential; a dump with a table removed.
+- **Migrations are expand-then-contract:** a migration that drops a column the previous release still reads fails the
+  rollback test (the previous code run against the new schema). Plant: such a drop.
+- **Alerts:** a planted dead-letter job and a failed backup each raise an alert, with no personal data in it.
+
+**What this does not do (Rule 21.4):**
+- It does not choose the storage, error-tracking, uptime or malware-scanning services — A5 does, within OP2's region
+  rule and OP10's thresholds.
+- It does not design the breach response's content — A11 does. OP9 only lists its runbook.
+- **It does not make Pryvis highly available.** One database node and one API instance mean a provider fault is an
+  outage, recovered within the 4-hour target. Failover is OP10's trigger.
+- It does not offer round-the-clock response (OP7).
+- It does not settle the legal question. Toronto makes the transfer case strong, not certain; the Commissioner's answer
+  (OA22) and the attorney decide.
+- **The Toronto check (OP2) may fail** on the privilege model's role powers. Then option B is the plan, as OP2 says.
+
+**Sources** (checked 2026-10-06; prices from third-party summaries, to be confirmed on each vendor's page):
+- Render: [regions](https://render.com/docs/regions); pricing
+  ([costbench](https://costbench.com/software/developer-tools/render/),
+  [makerkit](https://makerkit.dev/pricing-calculator/render)).
+- Neon: [regions](https://neon.com/docs/introduction/regions); [pricing](https://neon.com/pricing),
+  [jetadmin](https://www.jetadmin.io/blog/neon-pricing/).
+- Vercel: Hobby's commercial restriction and Pro's price
+  ([makerkit](https://makerkit.dev/blog/saas/vercel-cost), [schematic](https://schematichq.com/blog/vercel-pricing));
+  [function regions](https://vercel.com/docs/functions/regions).
+- DigitalOcean: pricing ([kuberns](https://kuberns.com/blogs/digitalocean-pricing/),
+  [infratally](https://infratally.com/articles/digitalocean-managed-postgresql-pricing-2026-billing-model/)); Toronto
+  availability is confirmed at B1.
+- Supabase: [regions](https://supabase.com/docs/guides/platform/regions);
+  [free plan](https://costbench.com/software/database-as-service/supabase/free-plan/).
+- Fly.io: [regions](https://fly.io/docs/reference/regions); [managed PostgreSQL](https://fly.io/docs/mpg).
