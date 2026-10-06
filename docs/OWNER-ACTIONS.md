@@ -43,8 +43,8 @@ so they start now.
 
 | # | Action | Why, and the step that needs it | Status |
 |---|---|---|---|
-| OA1 | **Confirm the paid host for the rebuilt API** — the plan and its monthly cost for staging and production (a recommendation with prices comes with design A4) | Three environments (B1); always-on at launch (ADR 0026, PRD §9 item 7) | Open |
-| OA2 | **Two DNS records at GoDaddy:** `api.pryvis.com` and `share.pryvis.com` (exact values in the batch) | The session cookie must be first-party (`docs/design/api-layer.md` AP1); the share page has its own host (AL10). Needed by B1-B2 | Open |
+| OA1 | **Confirm the hosting provider and region, and open its account in the business's name** — recommended: DigitalOcean in Toronto, after the B1 check (`docs/design/environments-and-operations.md` OP2-OP3); staging about US$12 a month from B1, production about US$45-60 a month from F3 | Three environments (B1); always-on at launch (ADR 0026, PRD §9 item 7); Jamaica's transfer rule (ADR 0035) | Open |
+| OA2 | **Four DNS records at GoDaddy:** `api.pryvis.com`, `share.pryvis.com`, and the staging pair `api.staging.pryvis.com` and `share.staging.pryvis.com` (exact values in the batch) | The session cookie must be first-party (`docs/design/api-layer.md` AP1); the share page has its own host (AL10); staging mirrors production (OP1). Needed by B1-B2 | Open |
 | OA3 | **Set a monthly spend limit** in the Claude developer console | Maintenance under Rule 15's approval gates (B4); the support chatbot later (PRD §9 item 10) | Open |
 | OA4 | **Name the second staff member**, or confirm the single-operator fallback for now | Staff MFA and separated approvals (B7, a launch blocker; PRD §9 item 5, R1.34-R1.35) | Open |
 | OA5 | **Confirm how you want to review code** — recommended: a pull request per build step, which you approve or ask about | The first code since planning (B1). The planning audit records that you do not yet review diffs (`docs/PLANNING-AUDIT.md` §3) | Open |
@@ -55,6 +55,7 @@ so they start now.
 | OA10 | **Engage an attorney** and send them the questions: the Data Protection Act 2020 (roles, registration, breach notice, transfers, retention); whether our e-signature clears Jamaica's bar; the terms and privacy notice, including the aggregate-data consent clause; whether anything in the payments flow is regulated; **and ADR 0033's**: the terms with the Canadian company as the seller of subscriptions, the agreement between the Canadian and Jamaican businesses, and Stripe as a processor; **and the structure under consideration**: Solvnow owning the business and the Pryvis name, with Pryvis a Jamaican company handling customers locally — which company is the data controller under Jamaica's Data Protection Act and Canada's privacy law | The e-signature answer can change the accept flow (C5); sign-off is a launch gate (F2; PRD §9 item 6, ADR 0027 D14) | Open — **long lead** |
 
 | OA20 | **Describe the business to Stripe in writing and keep its approval** (wording in the batch): the Canadian company sells subscriptions to software run by a related Jamaican business, to contractors in Jamaica | ADR 0033 condition 1; decides OA8 and D6 | Open — **long lead** |
+| OA24 | **Put every production account in the business's name, with multi-factor sign-in on, and the domain's registrar lock on** — GoDaddy, GitHub, Vercel, the hosting provider, the mailbox, Stripe and A5's services; keep the recovery codes offline (OP11) | Whoever holds the domain holds the email, cookies and share links; one person's access must be removable alone. Before B1 | Open |
 | OA22 | **Email the Information Commissioner the five questions** in `docs/DATA-PROTECTION-READING.md` §10 (wording in the batch) — free, and it settles the costliest unknowns before any lawyer | Hosting regions (A4, A5, before B1); registration and the impact assessment; whether contractors must register | Open — **long lead** |
 | OA21 | **Open a Stripe account for the Canadian company and use test mode only** — no live activation until A10 is approved and OA20 is answered. Put the test keys in the environment's secret settings (steps in the batch), never in the chat | The test-mode experiment of ADR 0033 (A10) | Open |
 
@@ -98,6 +99,7 @@ Written when their phases come near:
 
 | Date | Batch or action | What happened |
 |---|---|---|
+| 2026-10-06 | OA1, OA2, OA24 | From design A4: the provider and region (DigitalOcean, Toronto, recommended), the staging DNS records, and accounts with MFA in the business's name |
 | 2026-10-06 | OA22, OA23 | From the data-protection reading: the Commissioner's questions (batch 1) and registration (batch 4) |
 | 2026-10-02 | OA7, OA15 | Moved to the later WiPay batch: WiPay card links move to release 2 (ADR 0034) |
 | 2026-10-02 | OA8, OA9, OA10, OA20, OA21 | Stripe for subscriptions (ADR 0033): OA8 held; ADR 0033's questions added to OA9 and OA10; OA20-OA21 added to batch 1 |

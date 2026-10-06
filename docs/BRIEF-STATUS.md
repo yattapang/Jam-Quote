@@ -952,6 +952,19 @@ to the Commissioner, batch 1) and OA23 (registration, batch 4) added.
 **Approved by the owner, 2026-10-06:** R1-R12, recorded in **ADR 0035**; dated notes in brief §5a (Rule 23.5) and the PRD
 (R1.20c, R1.41, R1.44, §9). Designs A4, A5, A7, A8, A9 and A11 carry the requirements. Next: design A4.
 
+**Design drafted 2026-10-06: environments and operations** (`docs/design/environments-and-operations.md`, build plan
+A4), written section by section and pushed after each, at the owner's request — twelve decisions (OP1-OP12). Found:
+Render and Neon offer no Canadian region and cannot move a service's region; Vercel's Hobby plan forbids commercial use.
+At the owner's prompt ("if there are other options then you can build that in the plan") the region options widened:
+**recommended, production in Toronto on DigitalOcean** — about as fast from Jamaica as US-East, with Canada's privacy
+law making the transfer rule (ADR 0035) easier — confirmed by a five-item check at B1, falling back to Frankfurt, then
+US-East. Also: production data never leaves production (no copies, ever, except the drill); Vercel holds no tenant data
+(the browser calls the API); the pipeline with expand-then-contract migrations; two backup layers, encrypted with the
+owner's key, 35 days, a monthly restore drill; **the three approval gates** — a Maintenance page with a signed approval
+that CI verifies, GitHub's ruleset on `main`, and a production environment with a required reviewer; runbooks; Rule
+10's trigger table for every free piece; MFA and registrar lock; the operations calendar with the 31 March impact
+assessment and the 1 December registration renewal. OA1, OA2 updated and OA24 added.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
