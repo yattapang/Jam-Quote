@@ -2,9 +2,8 @@
 
 **Status: APPROVED by the owner, 2026-10-06 — every recommendation, OP1-OP12** ("Approved"), including production in
 Toronto on DigitalOcean subject to OP2's check at B1. **Amended the same day** to answer its independent read (OR1-OR20,
-§15). That includes two blockers: Claude's own GitHub identity, and the deploy gate moved into the staff console. The
-amendments are approved with the step's sign-off. Written section by section and saved as it went, at the owner's
-request. Build plan step A4 (`docs/BUILD-PLAN.md`). Next: an independent read, a closing check, then the owner's sign-off ticks A4.
+§15). That includes two blockers: Claude's own GitHub identity, and the deploy gate moved into the staff console. **The owner signed off the step, amendments included, on 2026-10-06** ("A4 is done"); A4 is ticked in the build plan.
+Written section by section and saved as it went, at the owner's request. Build plan step A4 (`docs/BUILD-PLAN.md`).
 Nothing here is built until steps B1-B4 begin.
 
 Date: 2026-10-06 · **Implements the direction of** ADR 0030 decision 5 (environments and operations), as changed by

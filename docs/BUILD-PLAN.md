@@ -49,9 +49,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
   Done: 2026-10-02 · commit `97f0263` · review `docs/briefs/2026-10-02-api-layer-read.md` · closing `docs/briefs/2026-10-02-api-layer-closing-check.md` · owner: approved 2026-10-02
 - [x] A3 · Support and feedback, `docs/design/support-and-feedback.md` and ADR 0032 — the options paper with costs (brief §15), the chatbot under Rule 15, the feedback loop (Rule 25)
   Done: 2026-10-02 · commit `fa933ff` · review `docs/briefs/2026-10-02-support-design-read.md` · closing `docs/briefs/2026-10-02-support-design-recheck.md` · owner: approved 2026-10-02
-- [ ] A4 · Environments and operations — three environments, backups and restore drills, monitoring,
-  runbooks, Rule 10's full trigger, **the three approval gates for Claude maintenance and their interface**
-  (Rule 15)
+- [x] A4 · Environments and operations, `docs/design/environments-and-operations.md` — three environments, backups and restore drills, monitoring, runbooks, Rule 10's full trigger, **the three approval gates for Claude maintenance and their interface** (Rule 15)
+  Done: 2026-10-06 · commit `99c6755` · review `docs/briefs/2026-10-06-operations-design-read.md` · closing `docs/briefs/2026-10-06-operations-design-closing-check.md` · owner: approved 2026-10-06
 - [ ] A5 · The third-party register completed — storage, malware scanning, error tracking, uptime, inbox
 - [ ] A6 · Outbound messaging
 - [ ] A7 · Document settings and the PDF — logo, header, colours, the shared layout

@@ -1006,6 +1006,9 @@ the design does not state an explicit "the digest's commit is an ancestor of `ma
 only from a merged commit. It is carried into B2's build as a test. Provider capabilities stay unverified until B1 and
 B4, as the design says. **A4 now awaits only the owner's sign-off**, which also approves the amendments — chiefly
 Claude's own GitHub account, the GitHub organisation on Team, and the deploy gate in the console.
+**Signed off by the owner, 2026-10-06: "A4 is done".** A4 is ticked with its evidence line. The owner has created
+Claude's separate GitHub account (OA26, begun early at the owner's choice); connecting sessions to it is in progress.
+Next: design A5, the register completed.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
