@@ -55,6 +55,7 @@ so they start now.
 | OA10 | **Engage an attorney** and send them the questions: the Data Protection Act 2020 (roles, registration, breach notice, transfers, retention); whether our e-signature clears Jamaica's bar; the terms and privacy notice, including the aggregate-data consent clause; whether anything in the payments flow is regulated; **and ADR 0033's**: the terms with the Canadian company as the seller of subscriptions, the agreement between the Canadian and Jamaican businesses, and Stripe as a processor; **and the structure under consideration**: Solvnow owning the business and the Pryvis name, with Pryvis a Jamaican company handling customers locally — which company is the data controller under Jamaica's Data Protection Act and Canada's privacy law | The e-signature answer can change the accept flow (C5); sign-off is a launch gate (F2; PRD §9 item 6, ADR 0027 D14) | Open — **long lead** |
 
 | OA20 | **Describe the business to Stripe in writing and keep its approval** (wording in the batch): the Canadian company sells subscriptions to software run by a related Jamaican business, to contractors in Jamaica | ADR 0033 condition 1; decides OA8 and D6 | Open — **long lead** |
+| OA22 | **Email the Information Commissioner the five questions** in `docs/DATA-PROTECTION-READING.md` §10 (wording in the batch) — free, and it settles the costliest unknowns before any lawyer | Hosting regions (A4, A5, before B1); registration and the impact assessment; whether contractors must register | Open — **long lead** |
 | OA21 | **Open a Stripe account for the Canadian company and use test mode only** — no live activation until A10 is approved and OA20 is answered. Put the test keys in the environment's secret settings (steps in the batch), never in the chat | The test-mode experiment of ADR 0033 (A10) | Open |
 
 ## Batch 2 — before the first end-to-end slice (sent when phase B is signed off)
@@ -79,6 +80,7 @@ so they start now.
 | OA16 | **Receive the attorney's sign-off**, and the accountant's review, and pass both on | Launch gates (F2) | Open |
 | OA17 | **Switch production on** — the paid plan from OA1, and billing for every service in production | Production (F3) | Open |
 | OA18 | **Your own test accounts for the soft launch** | Soft launch, then the public launch (F4) | Open |
+| OA23 | **Register Pryvis as a data controller** with the Information Commissioner (online; J$25,000 the first year, J$15,000 a year after; renew by 1 December). If the Canadian company sells the subscriptions, register it too, naming the Jamaican company as its representative (`docs/DATA-PROTECTION-READING.md` §3) | Before the first real contractor (F3-F4); Data Protection Act s. 15 | Open |
 | OA19 | **App-store developer accounts** for Android and iOS, in the business's name | The mobile app (G4). Sent here, before the web launch, because the identity checks take weeks (PRD §9 item 9) | Open — **long lead** |
 
 ## Later batches
@@ -96,6 +98,7 @@ Written when their phases come near:
 
 | Date | Batch or action | What happened |
 |---|---|---|
+| 2026-10-06 | OA22, OA23 | From the data-protection reading: the Commissioner's questions (batch 1) and registration (batch 4) |
 | 2026-10-02 | OA7, OA15 | Moved to the later WiPay batch: WiPay card links move to release 2 (ADR 0034) |
 | 2026-10-02 | OA8, OA9, OA10, OA20, OA21 | Stripe for subscriptions (ADR 0033): OA8 held; ADR 0033's questions added to OA9 and OA10; OA20-OA21 added to batch 1 |
 | 2026-10-02 | — | File created from `docs/PRD.md` §9, `docs/BUILD-PLAN.md`, `docs/PLANNING-AUDIT.md` and the A1 and A2 designs. No batch sent yet |

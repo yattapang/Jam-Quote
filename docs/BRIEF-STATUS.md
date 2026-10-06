@@ -939,6 +939,17 @@ the build plan (D3, H7) and the owner actions (OA7, OA15 moved to a later batch)
 decided:** the owner is open to the Canadian company (Solvnow) owning the business, with Pryvis registered as a
 Jamaican company that handles customers locally — added to the attorney's and accountant's questions (OA9, OA10).
 
+**Data protection reading, 2026-10-06** (`docs/DATA-PROTECTION-READING.md`) — general guidance, not legal advice, at the
+owner's request, from the Data Protection Act 2020 and its three 2024 regulations (now in `docs/legal-sources/`; the
+Act read from a scan by text recognition). Main points: Pryvis is the **processor** for contractors' clients' data
+(contractors are the controllers) and the **controller** of contractors' own accounts, support and the site; Pryvis
+**registers** (J$25,000, then J$15,000 a year); **breaches go to the Commissioner and to each affected person within
+72 hours**; data leaving Jamaica needs adequacy or an exception, so **hosting regions become a design input for A4
+and A5**; **every record needs a maximum retention period** ("kept permanently" in R1.44 does not fit); an annual
+impact assessment; no sensitive data by design (a drawn signature may be biometric); the price index made anonymous
+so it is not personal data. Twelve recommended changes (§11, R1-R12) await the owner's approval. OA22 (five questions
+to the Commissioner, batch 1) and OA23 (registration, batch 4) added.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
