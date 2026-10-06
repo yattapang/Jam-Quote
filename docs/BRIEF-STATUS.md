@@ -1000,6 +1000,12 @@ Owner actions OA25-OA28 added; OA1 and OA2 updated. Next: the closing check (Son
 before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9).* Brief
 `docs/briefs/2026-10-06-operations-design-closing-check.md`, run by `tools/run_brief.py` at HEAD `2e1dd20`: 5 of 5
 expectations hold.
+**Reported 2026-10-06: closable.** 5 of 5 expectations hold at `530b32e`; OR1-OR20 each answered with its quoted sentence;
+the cost figures agree across the design and the owner actions; every amended OP line adopted. One residue, recorded:
+the design does not state an explicit "the digest's commit is an ancestor of `main`" check, though the digest is built
+only from a merged commit. It is carried into B2's build as a test. Provider capabilities stay unverified until B1 and
+B4, as the design says. **A4 now awaits only the owner's sign-off**, which also approves the amendments — chiefly
+Claude's own GitHub account, the GitHub organisation on Team, and the deploy gate in the console.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
