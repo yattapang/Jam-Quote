@@ -967,6 +967,11 @@ assessment and the 1 December registration renewal. OA1, OA2 updated and OA24 ad
 **Approved by the owner, 2026-10-06:** OP1-OP12, including Toronto on DigitalOcean subject to the B1 check; ADR 0030
 decision 5 carries a dated note. Next: the independent read, brief `docs/briefs/2026-10-06-operations-design-read.md`.
 
+**Launched 2026-10-06: independent read of the environments and operations design.** *Delegation (Rule 16.5), declared
+before launch: commit-reviewer at **Opus** — operations, secrets and the approval gates are judgement-class, and the owner
+relies on our judgement.* Brief `docs/briefs/2026-10-06-operations-design-read.md`, run by `tools/run_brief.py` at HEAD
+`d69b33f`: 3 of 3 expectations hold. Findings OR1 onward, and agree/disagree on OP1-OP12, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
