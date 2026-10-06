@@ -996,6 +996,11 @@ different database product.
 Owner actions OA25-OA28 added; OA1 and OA2 updated. Next: the closing check (Sonnet),
 `docs/briefs/2026-10-06-operations-design-closing-check.md`.
 
+**Launched 2026-10-06: closing check of the operations design's answers to OR1-OR20.** *Delegation (Rule 16.5), declared
+before launch: general-purpose at **Sonnet** — mechanical (Rule 16.9).* Brief
+`docs/briefs/2026-10-06-operations-design-closing-check.md`, run by `tools/run_brief.py` at HEAD `2e1dd20`: 5 of 5
+expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
