@@ -108,6 +108,8 @@ which PGlite (one connection) cannot. It runs when `PRYVIS_PG_URL` points at a s
 (it creates and drops a throwaway database) and prints a loud SKIPPED line otherwise; CI sets
 `PRYVIS_REQUIRE_PG`, which turns a missing database into a failure. Both variables are declared in
 `turbo.json`, because Turbo drops undeclared environment variables — and did, silently, the first time.
+In a fresh container, `sh tools/pg-local.sh` (from the repository root) creates and starts a throwaway cluster on port
+55440; then run the suite with `PRYVIS_PG_URL=postgres://postgres@127.0.0.1:55440/postgres PRYVIS_REQUIRE_PG=1`.
 
 **Financial writes must run under READ COMMITTED** (the PostgreSQL default). Acceptance, acceptance evidence, invoice, void,
 credit note, variation, withdrawal, sealing, opening a balance row and a balance recompute all take a per-quote lock that is

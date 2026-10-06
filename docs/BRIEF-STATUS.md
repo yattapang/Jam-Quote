@@ -1010,6 +1010,22 @@ Claude's own GitHub account, the GitHub organisation on Team, and the deploy gat
 Claude's separate GitHub account (OA26, begun early at the owner's choice); connecting sessions to it is in progress.
 Next: design A5, the register completed.
 
+**Session handoff, 2026-10-06 — read this first in a new session.** The owner connected Claude's sessions to the new,
+write-only GitHub account. This session started before that, so it still acted as `yattapang` (admin); the work moves
+to a new session, which should:
+1. run `gh api user` and `gh api repos/yattapang/Jam-Quote --jq .permissions`, and confirm the login is **not**
+   `yattapang` and `admin` is `false` — then record OA26 as done in `docs/OWNER-ACTIONS.md` (if either is wrong, stop
+   and tell the owner);
+2. work on the branch `claude/admiring-fermat-41btub`, and — because OA25's ruleset does not exist yet — **never push to
+   `main`**: changes reach `main` only through a pull request the owner merges;
+3. start the test database with `sh tools/pg-local.sh`, and run the gate before every commit (root `CLAUDE.md`);
+4. continue with **design A5**, the register completed (`docs/BUILD-PLAN.md`), in the same cycle as A1-A4: a draft with
+   options and recommendations for the owner, saved and pushed section by section; the owner's approval; an Opus
+   independent read from a committed brief (Rule 16.7); fixes; a Sonnet closing check; the owner's sign-off; the tick.
+
+Where things stand: A1-A4 done (4 of 64 steps); ADRs up to 0035; owner actions OA1-OA28 in
+`docs/OWNER-ACTIONS.md`, no batch sent yet; the owner's standing instructions are in the root `CLAUDE.md` and this file.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
