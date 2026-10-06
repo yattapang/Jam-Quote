@@ -1,5 +1,7 @@
 # Data protection — a reading of Jamaica's Act and Regulations for Pryvis
 
+**Recommendations R1-R12 approved by the owner, 2026-10-06; recorded in ADR 0035.**
+
 **General guidance, not legal advice.** This was written on 2026-10-06 at the owner's request ("You will assume the
 role of a jamaican lawyer and give us the feedback that we will use as general guidance. We already know and accept
 that you cannot give legal advice"). It reads the primary texts and states what they appear to require of Pryvis, and

@@ -408,7 +408,7 @@ R1.41, R1.42.
   domain already owed (§9 item 1a). SMS is a new paid sub-processor and absent from the register;
   WhatsApp Business sending is release 3. **A code lasts 30 minutes, is single-use, and allows five wrong
   attempts** — longer than two cold starts and a slow inbox together (finding H17, ADR 0026).
-- **R1.20c** **Moved to release 2 (ADR 0027 D13, finding B26): uploading a signed copy.** Since J5 it is
+- **R1.20c** *(Note 2026-10-06, ADR 0035: a handwritten signature may be biometric, therefore sensitive, data under the Data Protection Act s. 2; this item is reconsidered before release 2.)* **Moved to release 2 (ADR 0027 D13, finding B26): uploading a signed copy.** Since J5 it is
   graded 1, the same as a tenant's own record, which needs no file — and it was R1's second hostile-upload
   path, making the unchosen malware scanner and object storage load-bearing for W5. In R1 a client who
   signs paper is recorded as `tenant_recorded` (grade 1) with "the client signed paper" as its reason, and
@@ -700,7 +700,7 @@ R1.41, R1.42.
   each issued document's PDF. The terms and the pricing page already promise it; a lapse (R1.37c) and a
   person's request for their data (R1.44) both rest on it. *(Pointer 2026-10-02, finding SR7: the export also
   includes the tenant's support tickets — `docs/design/support-and-feedback.md` SF7.)*
-- **R1.44** **A person's request about their data can be carried out** (finding B8). Staff can export what
+- **R1.44** *(Note 2026-10-06, ADR 0035: no record is kept permanently — every kind has a maximum period under the Act's fifth standard and the Disposal Regulations; the schedule is in `docs/DATA-PROTECTION-READING.md` §7, and rights are answered within the Act's deadlines.)* **A person's request about their data can be carried out** (finding B8). Staff can export what
   we hold about one of a tenant's clients, and **redact a client's personal fields while leaving the
   financial record intact**. Whether the records the product keeps permanently — the client book (R1.3), a
   rejected seal (R1.18j), the audit trail (ADR 0020), an acceptance's IP address and user agent (R1.20) —
@@ -802,7 +802,7 @@ and R1.43 builds the export.
   the walkthrough, which is a scripted test — so this is a reporting surface, not new tracking, and it
   carries **no personal data** into any dashboard we build.
 
-- **R1.41** `price_observation` — what a tenant actually paid, captured when a material cost changes — is
+- **R1.41** *(Note 2026-10-06, ADR 0035: observations are stored without the tenant's identity and used only in aggregate, so they are not personal data; consent becomes separate and optional, never a sign-up condition.)* `price_observation` — what a tenant actually paid, captured when a material cost changes — is
   **built in R1 and written to only with the tenant's recorded consent.** The aggregate price index is the
   most defensible asset in the business and **consent cannot be retro-fitted**, so the capture path and the
   consent flag must exist before the first tenant registers (brief §5a). R1 builds **capture only**; there
@@ -851,6 +851,7 @@ to catch.
 
 ## 9. Dependencies on the owner
 
+*(Pointer 2026-10-06: the data-protection duties behind items 3, 4 and 6 are read in `docs/DATA-PROTECTION-READING.md` and decided in ADR 0035.)*
 *(Pointer 2026-10-02: when each of these is asked for, and in which batch, is scheduled in `docs/OWNER-ACTIONS.md`,
 at the owner's request — complete batches at each stage, never one at a time.)*
 

@@ -949,6 +949,8 @@ and A5**; **every record needs a maximum retention period** ("kept permanently" 
 impact assessment; no sensitive data by design (a drawn signature may be biometric); the price index made anonymous
 so it is not personal data. Twelve recommended changes (§11, R1-R12) await the owner's approval. OA22 (five questions
 to the Commissioner, batch 1) and OA23 (registration, batch 4) added.
+**Approved by the owner, 2026-10-06:** R1-R12, recorded in **ADR 0035**; dated notes in brief §5a (Rule 23.5) and the PRD
+(R1.20c, R1.41, R1.44, §9). Designs A4, A5, A7, A8, A9 and A11 carry the requirements. Next: design A4.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
