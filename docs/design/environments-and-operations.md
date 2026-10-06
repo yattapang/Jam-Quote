@@ -75,8 +75,22 @@ staging or development — not for a bug, not for a test, not "just this once".
   the restore drill (OP6), which restores inside production's own account and region and is deleted afterwards.
 - **A bug that only real data shows** is reproduced by writing a synthetic case that has the same shape, never by
   copying the real row.
-- **Restore drills** (OP6) restore into an isolated, short-lived target inside the production project, run their checks
-  and are destroyed. Their results hold counts and pass/fail, never data.
+- **Restore drills** (OP6) restore into a separate, short-lived database cluster in production's own account and
+  region, run their checks and are destroyed. Their results hold counts and pass/fail, never data.
+
+**Every kind of copy of production data, and its lifetime** *(OR11)* — the complete list, so that "no copies" is checkable:
+
+| Copy | Where | Lifetime |
+|---|---|---|
+| The provider's own daily backups and point-in-time history | The production database provider | The plan's window (confirmed when buying; must be 35 days or less) |
+| A point-in-time restore, if one is ever made | A new cluster in production's account | Deleted once the incident is resolved, and recorded in the operations log |
+| The nightly encrypted dumps | The backup store (OP6) | 35 days |
+| The monthly restore drill | A throwaway cluster in production's account | Hours; destroyed after the checks |
+| The yearly rebuild drill | A throwaway cluster in production's account | Hours; destroyed after the checks |
+
+**Restoring must not undo an erasure** *(OR11)*. When a person's data is erased (R1.44, ADR 0035), the erasure is
+written to an **erasure ledger** — identifiers only, never the data itself. Restoring any copy replays the ledger before
+the restored data is used. So a restore cannot silently bring back what someone asked to delete.
 
 **Each environment is separated at every layer:**
 - its own database (production in its own project);
@@ -92,12 +106,14 @@ A staging key that leaks opens nothing in production.
 
 | | Production | Staging |
 |---|---|---|
-| Website and web app | `pryvis.com` | a Vercel preview address, protected by Vercel's deployment protection |
+| Website and web app | `pryvis.com` | **`staging.pryvis.com`** — a custom domain, so staging's pages are same-site with staging's API and the cookie rules of AP2 work as in production *(OR4)* |
 | API | `api.pryvis.com` | `api.staging.pryvis.com` |
 | Share page | `share.pryvis.com` | `share.staging.pryvis.com` |
 
-The staging hosts need the same cookie rules as production (AP1-AP2): staging pages call `api.staging.pryvis.com`
-from a staging web origin. The two staging DNS records join OA2.
+The staging hosts follow the same cookie rules as production (AP1-AP2): pages from `staging.pryvis.com` call
+`api.staging.pryvis.com`. A Vercel preview address (`*.vercel.app`) would be cross-site to the API, so the session
+cookie would never be sent, and staging could not test what it claims to *(OR4)*. The three staging DNS records join
+OA2.
 
 ## 3. OP2 · The hosting region
 
@@ -123,7 +139,7 @@ production's region matters.**
 |---|---|---|---|---|
 | A. US-East, on Render and Neon | Fastest: about 40-60 ms | Hardest: the US has no general federal privacy law, so this rests on the Commissioner approving our safeguards | About US$55-95 a month | None |
 | B. Frankfurt, on Render and Neon | Slowest: about 110-140 ms | Easy: the EU's GDPR | About the same as A | Region only |
-| **C. (rec) Toronto, on DigitalOcean** | About 50-70 ms, close to A | **Strong:** Canada has a comprehensive private-sector privacy law (PIPEDA), and the owner's Canadian company is already there (ADR 0033) | About US$30-45 a month for the API and database (§4) | A new provider for the API and database; Vercel stays for the site |
+| **C. (rec) Toronto, on DigitalOcean** | About 50-70 ms, close to A | **Strong:** Canada has a comprehensive private-sector privacy law (PIPEDA), and the owner's Canadian company is already there (ADR 0033) | About US$25-40 a month for the API and database (§4) *(OR15)* | A new provider for the API and database; Vercel stays for the site |
 
 **Why C.** It is nearly as fast as US-East and nearly as strong as the EU on data protection, and it costs no more —
 less than A or B at launch size. The portability rule (Rule 10) is what makes the move cheap: standard PostgreSQL and a
@@ -142,19 +158,33 @@ that fails if a web page fetches tenant data on the server.
 1. **The privilege model's migrations run unchanged on DigitalOcean's managed PostgreSQL:** creating the NOLOGIN roles,
    SECURITY DEFINER functions, forced row-level security, and the least-privilege check passing for the API's role.
    This is the item most likely to need work, because a managed database restricts some role powers.
-2. **A pre-deploy step for migrations** (OP5) and **a scheduled job for the nightly backup** (OP6) are available.
-3. **Object storage in Toronto** for files and backups (A5), or another Canadian store.
-4. **Prices** on DigitalOcean's own page, for the sizes chosen.
-5. **R1.8's timing** measured from Jamaica.
+2. **The backup role works** *(OR10)*: create a read-only role that bypasses row-level security (OP6), take a full
+   dump with it, and restore that dump the way the drill does (OP6). On PostgreSQL 16 only a role that itself bypasses
+   row-level security can grant that power, so a managed database may not allow it. This is as likely to fail as
+   item 1.
+3. **A pre-deploy step for migrations** (OP5) and **a scheduled job for the nightly backup** (OP6) are available.
+4. **Object storage in Toronto** for files (A5); backups go to a different company (OP6).
+5. **Prices** on DigitalOcean's own page, for the sizes chosen.
+6. **R1.8's timing** measured from Jamaica.
 
-If item 1 fails and cannot be fixed within the privilege model's rules, the fallback is **B (Frankfurt)**, then A —
-each recorded with its reason.
+All six items run against a **managed database cluster**, the product production uses — not App Platform's cheaper
+"development database", which is a different and more restricted product *(OR10)*.
+
+If item 1 or 2 fails and cannot be fixed within the privilege model's rules, the fallback is **B (Frankfurt)**, then
+A — each recorded with its reason.
+
+**One caveat for the s. 31 analysis** *(OR16)*: DigitalOcean is a United States company, so data it holds in Toronto
+can still be reached by US legal process. Canada's law protects it in Canada, but the Commissioner should hear this
+when asked (OA22). Every option on this page shares the same caveat, because all the candidate providers are US
+companies.
 
 **Development and staging:**
-- **Development** is local, plus a free hosted database for Claude sessions and CI. Its region does not matter
-  (synthetic data only).
-- **Staging** runs on **the same provider and settings as production**, at the smallest sizes, so a deploy that works on
-  staging works in production. Mixing providers between staging and production is how "it worked on staging" fails.
+- **Development** is local. CI uses a PostgreSQL container inside the CI run, as `verify.yml` does today, because the
+  race suite needs full database powers *(OR16)*. A free hosted database for Claude sessions is optional. None of this
+  holds anything but synthetic data, so its region does not matter.
+- **Staging** runs on **the same provider, products and settings as production**, at the smallest sizes — including a
+  managed database cluster, not a development database *(OR10)* — so a deploy that works on staging works in
+  production. Mixing providers or products between staging and production is how "it worked on staging" fails.
 
 **This changes ADR 0030 decision 5** ("keep the current providers … Hosting region US-East"), which was written before
 the Data Protection Act was read. The ADR carries a dated note pointing here once the owner approves.
@@ -184,14 +214,17 @@ If the Toronto check fails, they are reused, in the business's name, for option 
 | Object storage, error tracking, uptime, malware scanning | Chosen in A5 | — | Mostly free tiers at launch |
 | **Total, production** | | | **about US$45-60 a month**, before A5's services |
 
-**Staging:** the same provider at the smallest sizes — a small web service and a development database. About
-**US$12 a month**, from when B1 creates it.
+**Staging:** the same provider and products at the smallest sizes — a small web service and the smallest **managed
+database cluster** *(OR10)*. About **US$20-27 a month**, from when B1 creates it.
 
 **Development:** local, plus a free hosted database. About **US$0**.
 
-**Before launch:** only development, and staging from B1, run — roughly **US$12 a month plus Vercel Pro**. That is the
-only cost before F3. Vercel Pro can wait until the site carries commercial content: the marketing site's price list
-counts, so the switch is due with the pricing work (OA13). Production is created at F3, when OA17 switches it on.
+**Before launch:** only development, and staging from B1, run — roughly **US$20-27 a month**, plus Vercel Pro and
+GitHub's Team plan (OP8, about US$4 per user a month). Production is created at F3, when OA17 switches it on.
+
+**Vercel Pro may already be due** *(OR15)*. Vercel's ban on commercial use of Hobby is generally read to cover any site
+that promotes a product for sale, and pryvis.com already does (ADR 0018). The safe reading is to move to Pro **now**,
+not at the pricing work. It is put to the owner as its own action (OA27).
 
 **For comparison:** option B (Render and Neon in Frankfurt) is about US$55-95 a month in production, with staging near
 US$0 on free tiers.
