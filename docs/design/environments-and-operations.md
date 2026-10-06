@@ -695,7 +695,8 @@ operations log, a dated file in the repository created with the first entry.
     (OP8);
   - the ruleset on `main`, the code owners file, and the repository settings that close the side doors (OP8).
 
-  Nothing is written to `main` by Claude after this, except through a reviewed pull request.
+  Nothing is written to `main` by Claude after this, except through a reviewed pull request. Only the owner can set
+  these up, so each is an owner action: OA25-OA28, with OA1 and OA2 *(OR17)*.
 - **B1 — environments:**
   - the Toronto check, all six items (OP2), then staging on the chosen provider, in its own team;
   - the app specification file (OP4);

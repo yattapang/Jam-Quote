@@ -971,6 +971,30 @@ decision 5 carries a dated note. Next: the independent read, brief `docs/briefs/
 before launch: commit-reviewer at **Opus** — operations, secrets and the approval gates are judgement-class, and the owner
 relies on our judgement.* Brief `docs/briefs/2026-10-06-operations-design-read.md`, run by `tools/run_brief.py` at HEAD
 `d69b33f`: 3 of 3 expectations hold. Findings OR1 onward, and agree/disagree on OP1-OP12, in its reply.
+**Reported 2026-10-06: OR1-OR20**, verdict "sound after the named changes"; tree left clean. **Two blockers, both
+confirmed:**
+- **OR1:** Claude's sessions act on GitHub as the owner's own administrator account, so Claude-assisted commits have
+  reached `main` directly, and no gate can hold until Claude has its own limited identity;
+- **OR2:** GitHub's deploy approval is ignored on private repositories below Enterprise, and the owner plans to go
+  private before the first paying contractor.
+
+Majors: the signature check could be defeated from the pull request and replayed; Vercel deploys `main` on its own, and
+a preview address breaks the cookie rules; no "exact build" mechanism; backups with the same provider, unsigned, and
+restored inside production's cluster; a backup that never ran would go unnoticed; task text in git; and staging on a
+different database product.
+
+**Answered the same day, saved in six parts** (the design's §15 maps each finding):
+- Claude gets its own write-only GitHub account;
+- a business organisation on GitHub's Team plan;
+- the start gate becomes a status set by our own GitHub App, bound to one branch, single use and expiring;
+- **the deploy gate moves into the staff console**, so GitHub holds no production credential;
+- build once and promote the digest;
+- backups at a second company under Object Lock, signed, with two keys and an escrow;
+- drills in a throwaway cluster, and a heartbeat;
+- the build order: B4 first, and a new B8.
+
+Owner actions OA25-OA28 added; OA1 and OA2 updated. Next: the closing check (Sonnet),
+`docs/briefs/2026-10-06-operations-design-closing-check.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
