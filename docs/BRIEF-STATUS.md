@@ -1241,6 +1241,14 @@ design updated.
 (Rule 16.5), declared before launch: general-purpose at **Sonnet** — named plants and break attempts against two small
 tools (Rule 16.9).* Brief `docs/briefs/2026-10-10-plan-parser-recheck.md`, run by `tools/run_brief.py` at HEAD `d253966`:
 4 of 4 expectations hold.
+**Reported 2026-10-10: not closable.** 4 of 4 expectations at `df33f9a`; the specified plants all behaved, but five
+more tick shapes (`[ x]`, `[]`, `[xx]`, `( x )`, `☑`) still vanished from both tools, a full-width `A５` was read
+differently by the two, and the docstrings claimed "whatever its shape". **Answered at the root the same day** (a third
+miss of one class, Rule 24.4): the parse is checked against **an index of every step id**, `docs/build-plan-manifest.json`
+(64 steps), written only by `--update`; ids normalised (NFKC) and ASCII; an orphan evidence line fails. **28 plants**,
+run for the first time in a **disposable `git worktree`** — because the session restarted mid-run once, leaving
+`- [ x] A5` in the real build plan, which was found and restored from its backup at the restart before anything else.
+M46 and the design updated.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

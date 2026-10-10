@@ -70,3 +70,7 @@ And its first real run is recorded: what it found, and what was fixed.
   checkbox must be a well-formed step, read by **one parser** (`read_plan` in `tools/check_build_plan.py`) that this tool
   imports. Eighteen plants — every shape found silent, the earlier ones, both fence kinds, an HTML comment — each fail
   both tools; a closed tilde-fenced example and an untouched plan pass.
+- **The re-check of the parser** (`docs/briefs/2026-10-10-plan-parser-recheck.md`): **not closable** — five more shapes and
+  a full-width id still slipped through, and the docstrings over-claimed. Answered at the root: the parse is checked
+  against **an index of every step id** (`docs/build-plan-manifest.json`, `--update` only), so a step that stops
+  parsing is missing whatever its shape. 28 plants, run in a disposable worktree.

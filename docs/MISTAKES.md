@@ -945,3 +945,20 @@ outside a fence that carries a checkbox must be a well-formed step or the run fa
 — and 18 plants found it before commit. Now 18 of 18 behave: every shape fails both tools; a closed tilde-fenced example
 and an untouched plan pass. **What remains, stated in the docstring:** a step written with no checkbox at all is not a
 step to either tool; the printed count of steps is where it would show.
+
+**And the replacement needed replacing (2026-10-10).** The re-check of the shared parser
+(`docs/briefs/2026-10-10-plan-parser-recheck.md`) found it **not closable**: its "any line with a checkbox" rule
+recognised a checkbox only as a one-character bracket, so `[ x]`, `[]`, `[xx]`, `( x )` and `☑` still made a step vanish
+silently, and a full-width `A５` was read as a step by one tool and missed by the other, blinding the deferral check.
+Its docstrings claimed "whatever its shape". **Third miss of one class, so the class was answered at its root**: the
+plan's steps are now checked against **an index of every step id** (`docs/build-plan-manifest.json`, written only by
+`tools/check_build_plan.py --update`, Rule 23.3's pattern). A step whose line does not parse is reported missing,
+whatever was done to it — no shape needs recognising. Ids are read in ASCII after Unicode normalisation; an evidence
+line with no tick above it fails. **28 plants**: every shape found so far fails both tools; a deliberate new step fails
+until `--update` and then passes; a full-width tick is read as A5 by both tools, and a stale deferral to it is caught.
+
+**A plant left in the tree, twice.** The first plant harness died mid-plant and left the build plan mutated; a
+`finally` block was added. Then the session itself restarted mid-run, a killed process runs no `finally`, and
+`- [ x] A5` was found in the real build plan at the restart — restored from its backup and compared before anything
+else. The `finally` was decorative against a kill (Rule 24.4). **Plants now run in a disposable `git worktree` in the
+scratch directory, never in the working tree**: a run that dies there cannot leave a defect where work happens.

@@ -25,9 +25,10 @@ the finding mechanical for the forms it knows. Design: docs/design/deferral-chec
   spaces inside the phrase, a step id glued to a word ("matchedA5"), or the phrase broken across two lines (the scan is
   per line, and a resolution counts only on the phrase's own line). The verb list is short on purpose; a second miss
   of the same class means replacing this tool's shape, not adding a verb (Rule 21.9).
-- It reads the plan's ticks through check_build_plan.py's parser (`read_plan`). A line carrying a checkbox that is not
-  a well-formed step, or a fence left open, stops the run rather than shrinking the set it checks (M46). A step written
-  with no checkbox at all is not a step to either tool.
+- It reads the plan's ticks through check_build_plan.py's parser (`read_plan`), whose completeness is proved against
+  `docs/build-plan-manifest.json`, the index of every step id: if any step's line fails to parse, whatever its shape,
+  or a fence is left open, it stops rather than check a smaller set (M46). It cannot tell whether the index itself is
+  right; that is the reviewed diff of `check_build_plan.py --update`.
 - A deletion that leaves another document relying on what was removed is invisible to it (A6's MR16).
 - A resolution is checked for presence, not truth: a dated pointer to the wrong design passes.
 - Deferrals to steps not yet ticked are correct and are not checked.
@@ -38,6 +39,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -124,7 +126,8 @@ def main() -> int:
             skipped.append((path, reason))
             continue
         scanned.append(path)
-        text = (ROOT / path).read_text(encoding="utf-8", errors="replace")
+        # NFKC, as the plan's parser does, so a full-width "A５" is read as A5 here too (the re-check of 2026-10-10).
+        text = unicodedata.normalize("NFKC", (ROOT / path).read_text(encoding="utf-8", errors="replace"))
         for number, line in enumerate(text.splitlines(), start=1):
             for pattern in (FORWARD, BACKWARD):
                 for match in pattern.finditer(line):
