@@ -588,7 +588,7 @@ US$57-75 and US$25-32)*. Option A for scanning instead of B would add about **US
 | RG4 | Error tracking | Sentry, EU region, free plan, API only |
 | RG5 | Uptime and heartbeats | Better Stack free; phone alerts bought at the first paying contractor at the latest. *Amended after the read:* **UptimeRobot Solo, about US$9 a month — owner, 2026-10-09** (RR6) |
 | RG6 | The mailbox | Microsoft 365 Business Basic, **held by the Canadian company** (owner, 2026-10-09) |
-| RG7 | The backup store | AWS S3 in Canada, three AWS accounts as listed |
+| RG7 | The backup store | AWS S3 in Canada, three AWS accounts as listed *(two more added by A6 for email — RG7's table)* |
 | RG8 | The register rewritten, and the sub-processor list | As written |
 | RG9 | The costs and triggers | As written |
 
@@ -685,7 +685,7 @@ US$57-75 and US$25-32)*. Option A for scanning instead of B would add about **US
 **Owner actions** (`docs/OWNER-ACTIONS.md`) — **no new action**; four made precise:
 - **OA1** carries the new production estimate (RG9).
 - **OA6** (batch 1) names the accounts: DigitalOcean Spaces, its three keys and the files worker are part of OA1's
-  DigitalOcean account; **an AWS organisation with three accounts and the tag policy** (RG7, RR3); **Sentry** (EU region,
+  DigitalOcean account; **an AWS organisation with three accounts and the tag policy** (RG7, RR3) *(five since A6: OA6)*; **Sentry** (EU region,
   chosen when the organisation is created); **the uptime service** (RG5). Each in the business's name, with MFA (OA24).
 - **OA10** gains a question *(RR8)*: the Canadian company holds the support mailbox and sells subscriptions — is it
   Pryvis's processor for that mail, what contract does that need, and how is it named in the privacy notice?

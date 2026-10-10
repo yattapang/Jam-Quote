@@ -1175,6 +1175,14 @@ declared before launch: general-purpose at **Sonnet** — mechanical: every item
 and the stale-phrase sweep is executed (Rule 16.9).* Brief `docs/briefs/2026-10-09-messaging-design-closing-check.md`,
 run by `tools/run_brief.py` at HEAD `c9ad653`: 6 of 6 expectations hold. The sweep's Unicode patterns were proved able
 to match (M36's lesson) by running two of them, through the same call path, against phrases that do exist.
+**Reported 2026-10-09: closable.** 6 of 6 expectations hold at `0026437`; MR1-MR24 each answered with its quoted
+sentence; every "disagree" and "agree in part" adopted; tree clean (checked after it finished); CI on `0026437` green.
+It also found **six defects in the amendments themselves, D1-D6**: OP12 lacked the Postmaster row MS6 pointed to; the
+cost claim "stays within US$76-95" was false (about US$80-99); **§13 still called two C1 tests "executed"** — M45's
+pattern once more, added to M45; `message_secret`'s lifetime on failure was unstated; how a code passes SES's
+suppression was unstated; and "three accounts" survived in A5's text. **All six fixed on 2026-10-10**; §13 now gives every
+row one of three fixed verdicts, a check proved by planting a row without one. The fixes are re-checked independently
+before the sign-off (Rule 24.6): brief `docs/briefs/2026-10-10-messaging-design-recheck.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

@@ -693,7 +693,7 @@ operations log, a dated file in the repository created with the first entry.
 | When | What | Where it is defined |
 |---|---|---|
 | Nightly (automatic) | The backup; the reconciliation | OP6; R1.24e |
-| Weekly, Mondays | Support triage; dependency pull requests | SF8; OP11 |
+| Weekly, Mondays | Support triage; dependency pull requests; **Gmail's spam rate for `send.pryvis.com` in Google Postmaster Tools** (A6) | SF8; OP11; `docs/design/outbound-messaging.md` MS6 |
 | Monthly | **The restore drill**; review alerts, spend and backup listings | OP6; OP7 |
 | Quarterly | Who has access to what; Rule 10's figures | OP11; OP10 |
 | By **31 March** each year | **The data protection impact assessment** for the previous year | Act s. 45; ADR 0035 |

@@ -893,3 +893,10 @@ on the commit the check reads; and §13 now says, row by row, which answers are 
    independent read (Rule 1.10) and the closing check (Rule 24.6) catch it, and this entry says so rather than
    pretending otherwise. The lesson: **a table of mistakes and answers is a claim, not a control — each row counts only
    when it names a check that runs.**
+
+**And once more, inside the amendments (2026-10-09).** The amended §13 still called two C1 tests — the breaker's and the
+cap's race — "executed", and said production's cost "stays within" a total the sum exceeds. The closing check
+(`docs/briefs/2026-10-09-messaging-design-closing-check.md`) found both, with four smaller defects (D1-D6). §13 now gives
+every row one of three fixed verdicts — **mechanical now** (naming the check), **C1 test** (not yet running), or **not
+mechanical** (naming who catches it) — so a row cannot claim mechanism in free words. That is a format, not a guard: a
+reader still has to check that a "mechanical now" row names a check that exists.

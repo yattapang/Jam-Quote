@@ -136,7 +136,10 @@ internals).
    verification link's token must be rendered into the message, but are stored hashed everywhere else. So the plaintext
    is kept in `message_secret` — no tenant, no application privilege, door functions only — **sealed** with a key held
    in configuration (as `MFA_TOTP_KEYS` seals second-factor secrets, ADR 0021), and **deleted when the provider
-   accepts the message**. A retry before acceptance re-sends the **same** code; after acceptance there is nothing to
+   accepts the message** — or when the message reaches any final status (`failed`, `suppressed`) — and, whatever
+   happens, **a sweep deletes any secret older than one hour**, so a worker that stops between acceptance and the delete
+   leaves a secret for at most an hour (the closing check's D4). A code's own life is 30 minutes (R1.20b), so nothing
+   valid outlives the sweep. A retry before acceptance re-sends the **same** code; after acceptance there is nothing to
    resend, and a new code is a new request. The share link's token follows the same rule if A9 stores it hashed.
 4. **The job re-checks before it sends** *(MR10)*. A message can wait — offline on a phone, or in retries for hours.
    Before calling the provider, the job re-checks the message's own preconditions, per kind, and otherwise ends it
@@ -225,7 +228,11 @@ as unknown in MS10.)* **Decided by the owner, 2026-10-09: à la carte pricing** 
   tenants' "combined sending activity still affects your overall account reputation", and some findings need "a
   minimum representative volume" — so it isolates, but does not protect the account by itself (MR1).
 - **Suppression per tenant, not per account** *(MR5)*. The client account uses **tenant-level suppression lists**: "bounces
-  and complaints only affect the tenant that sent the email" (AWS). One business's misconfigured mail server bouncing
+  and complaints only affect the tenant that sent the email" (AWS). **SES suppresses for bounces only**; complaints are
+  suppressed by us, per tenant, so that a client's own code request can pass (MS6) — SES's lists cannot tell a code
+  from a reminder. Whether a tenant's or configuration set's suppression can be limited to bounces is a **C1 check**
+  (AWS documents reasons for the account-level list and for configuration sets); if it cannot, complaint suppression
+  in SES is switched off for the client configuration set and ours is the only one (the closing check's D5). One business's misconfigured mail server bouncing
   once for one contractor no longer stops every other contractor reaching it. The account stream, alone in its own
   account, uses account-level suppression for bounces. An entry is removed only through a named door: by **staff, with a
   recorded reason** (audited), when a client confirms the address works; and by **A11's erasure job**. AWS also keeps a
@@ -366,7 +373,7 @@ client record with the same address does not escape it *(MR7)*:
 marks a quote as spam produces **no** complaint event: the contractor is not told, and the per-tenant complaint count
 does not move. Complaints are therefore **not** the main signal in MS8 — bounces, caps and the circuit breaker are —
 and Gmail's own figure for our domain is read from Google Postmaster Tools (MS4), weekly, on the operations calendar
-(OP12). The contractor-facing words never claim "no complaints".
+(OP12's Monday row, added by this design). The contractor-facing words never claim "no complaints".
 
 ## 8. MS7 · Consent, opt-out, reminders and per-country rules
 
@@ -628,7 +635,9 @@ the body.
 
 **Costs** (à la carte, the owner's choice): SES about **US$4 a month** at 30,000 emails — US$0.10 per 1,000, plus
 US$0.005 a month per SES tenant (about US$0.50 at 100 tenants) and US$0.005 per 1,000 of their emails; SNS and
-EventBridge a few cents. Production's total stays within A5's about US$76-95 a month. OP10's row: AWS's sending quota at
+EventBridge a few cents. **Production's total becomes about US$80-99 a month**: A5's about US$76-95 had no email line,
+and this adds about US$4 *(the closing check's D2: the draft said it "stays within" A5's figure, which the sum does not
+bear)*. OA1 carries the new figure. OP10's row: AWS's sending quota at
 80%, and the breaker's alarms.
 
 **Owner actions** (`docs/OWNER-ACTIONS.md`), on approval of the amendments:
@@ -661,29 +670,33 @@ The owner asked, on starting A6, that the rule about preventing repetition be ke
 table mapping each recorded mistake to a line of the design. **The read found that table was itself the mistake it was
 meant to prevent**: it promised answers, and most were not mechanical — the keys were still missing (RR4's class), a
 vendor fact still had no vendor page (RR6's), and the approval commit itself left a twin contradicting its sibling
-(M13's). That is recorded as **M45** in `docs/MISTAKES.md`. The table below now says, for each row, what the read found
-and what is mechanical after the amendments.
+(M13's). That is recorded as **M45** in `docs/MISTAKES.md`. The table below says, for each row, what the read found
+and what is mechanical now.
 
-| Mistake | What the draft claimed | What the read found | Now — and is it mechanical? |
+**Every row now carries one of three verdicts, and only these** *(the closing check's D3: the first amendment still
+called C1 tests "executed")*: **Mechanical now** — a named check that runs today; **C1 test** — a test specified in §12,
+which does not exist until C1 builds it; **Not mechanical** — caught only by a person, who is named.
+
+| Mistake | What the read found | Now | Verdict |
 |---|---|---|---|
-| **RR6** (A5) | Every vendor fact from the vendor's page | "SES does not keep the body" had no page (MR14); Essentials pricing missed (MR21) | Withdrawn as a reason; every fact in §12's sources is a page read on 2026-10-09. **Not mechanical**: a reader still has to check each one, which is why the read exists |
-| **RR4, RR7, RR13** (A5) | MS10 names every key | Management keys missing; OP4's old row left standing (MR11) | MS10's key table rebuilt; the closing check greps OP4 for the old row. **Partly mechanical**: the grep for this case, not for the next design |
-| **RR8** (A5) | Rest separated from transit | The global suppression list; OP2's "inside Canada" (MR15, MR24) | Both in MS10; OP2 corrected |
-| **RR10** (A5) | The actual request is captured | It cannot see what SES adds (MR8) | The C1 hand checks read the received message |
-| **RR9** (A5) | Routes declared with limits | No numbers; GET undeclared (MR8) | MS7 and MS6 give kinds, limits and methods |
-| **RR2** (A5) | Residuals stated | Duplicates and WhatsApp understated (MR19, MR20) | MS2 and MS9 restated |
-| **OR11** (A4), RR4 | Every copy listed | Six copies missing (MR15) | MS10 rebuilt |
-| **M23, M39** (Rule 21.10) | No "only X writes" sentence | Acceptable | Unchanged; the door and the test are C1 build items |
-| **M14, H16, M18** | Citations exist | Mechanical, and passing | Unchanged |
-| **M13, M15, M29** | Every dependent document changed in the approval commit | **The approval commit re-made the twin** (MR11, MR16, MR24) | Fixed; the closing check's brief **greps for each stale phrase** the read named. **The general mechanism is M45's, and it is not yet built** |
-| **M16, M17** | A dedicated answers section and a closing check | A process | Unchanged — §14, and the closing check |
-| **M44** | CI read after every push | A promise, not a mechanism | Still a promise until OA25's ruleset makes CI required to merge |
-| **M43** | No new tooling | Fine | Unchanged |
-| **AL6** *(missed by the draft)* | — | Claiming under row security undefined (MR12) | MS2: AP10's queue and claim door; two tables |
-| **M31** *(missed)* | — | One of two twins handled: the account stream, the opt-out's reversal, codes in the limits (MR3, MR4, MR7) | Each twin named and handled in MS1, MS7, MS8 |
-| **M32, M33** *(missed)* | — | A cap's concurrency claim nobody raced (MR18) | §12's cap test is raced on real PostgreSQL |
-| **M28** *(missed)* | — | "No tenant can damage another" claimed, never executed (MR1) | §1 restated; §12's breaker and low-volume tests execute it |
-| **RR3** (A5) *(missed)* | — | Half a vendor's control: tenant isolation without its caveat (MR1) | MS3 quotes AWS's caveat; the breaker does not rely on it |
+| **RR6** (A5) — a vendor fact without the vendor's page | "Body not kept" had no page (MR14); Essentials pricing missed (MR21) | Withdrawn as a reason; every fact in §12's sources is a page read on 2026-10-09 | **Not mechanical** — the independent read checks each fact |
+| **RR4, RR7, RR13** (A5) — keys missing from OP4 | Management keys missing; OP4's old row left (MR11) | MS10's key table rebuilt; OP4 updated | **Mechanical now** for the old row: the closing check's sweep. **Not mechanical** for completeness — the read |
+| **RR8** (A5) — rest overstated | The global suppression list; OP2 (MR15, MR24) | Both in MS10; OP2 corrected | **Mechanical now** for OP2's phrase: the sweep. Otherwise **not mechanical** — the read |
+| **RR10** (A5) — a test of a function, not of what left | Cannot see what SES adds (MR8) | The actual request captured; the received message read by hand | **C1 test** (the captured request), plus a **hand check** at C1 |
+| **RR9** (A5) — a public route without kind or limits | No numbers; GET undeclared (MR8) | Kinds, limits and methods in MS6 and MS7 | **C1 test** (the opt-out route's tests); the declaration itself is enforced by the existing route guard once the route exists |
+| **RR2** (A5) — a residual understated | Duplicates, WhatsApp (MR19, MR20) | MS2 and MS9 restated | **Not mechanical** — the read |
+| **OR11** (A4), RR4 — copies not listed | Six missing (MR15) | MS10 rebuilt | **Not mechanical** — the read |
+| **M23, M39** (Rule 21.10) — prose on who writes a table | Acceptable | No such sentence; the door and its test are C1 items | **C1 test** |
+| **M14, H16, M18** — citations that do not exist | Passing | Unchanged | **Mechanical now** — `tools/check_citations.py` and `tools/check_schema_citations.py`, in the gate and CI |
+| **M13, M15, M29** — a twin left contradicting its sibling | The approval commit re-made it (MR11, MR16, MR24) | Fixed; the closing check sweeps seven stale phrases | **Mechanical now** for those seven phrases only. **Not mechanical** in general — M45, and its proposed checker awaits the owner |
+| **M16, M17** — amendments introducing defects | A process | §14 and the closing check | **Not mechanical** — the closing check, which found D1-D6 in these amendments |
+| **M44** — CI not read | A promise | CI read after every push in this step | **Not mechanical** until OA25's ruleset requires CI to merge |
+| **M43** — a tool for one environment | Fine | No new tooling | — |
+| **AL6** — claiming under row security undefined | MR12 | MS2: AP10's queue and claim door; two tables | **C1 test** (the cross-tenant and claim tests) |
+| **M31** — one of two twins handled | MR3, MR4, MR7 | Each twin named in MS1, MS7, MS8 | **Not mechanical** — the read and the closing check |
+| **M32, M33** — a concurrency claim nobody raced | MR18 | The cap test is to be raced on real PostgreSQL | **C1 test** — not run until C1 |
+| **M28** — a property claimed, never executed | MR1 | §1 restated; the breaker and low-volume tests specified | **C1 test** — not run until C1; until then the property is a design, not a fact |
+| **RR3** (A5) — half a vendor's control | MR1 | MS3 quotes AWS's caveat; the breaker does not depend on SES's tenant pause | **Not mechanical** — the read; the breaker itself is a **C1 test** |
 
 ## 14. The independent read, and where each finding is answered
 
