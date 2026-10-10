@@ -1237,6 +1237,11 @@ positive rule (any checkbox line must be a well-formed step) and **one shared pa
 commit; fixed by putting the box rule in the parser. **18 of 18 plants** behave, each restored and compared. M46 and the
 design updated.
 
+**Launched 2026-10-10, at the owner's word ("run the re-check"): re-check of the shared plan parser.** *Delegation
+(Rule 16.5), declared before launch: general-purpose at **Sonnet** — named plants and break attempts against two small
+tools (Rule 16.9).* Brief `docs/briefs/2026-10-10-plan-parser-recheck.md`, run by `tools/run_brief.py` at HEAD `d253966`:
+4 of 4 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
