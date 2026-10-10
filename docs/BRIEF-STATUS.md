@@ -1213,6 +1213,16 @@ examples). M45 updated. Next: its independent check,
 general-purpose at **Sonnet** — a small guard checked against a written design, with named plants and break attempts
 (Rule 16.9).* Brief `docs/briefs/2026-10-10-deferral-checker-check.md`, run by `tools/run_brief.py` at HEAD `5deabdd`: 6 of
 6 expectations hold.
+**Reported 2026-10-10: closable.** 6 of 6 expectations hold at `918e230`; the five plants behave as specified, restores
+clean; eight of the 13 resolutions spot-checked against the deciding sections, all right. Its break attempts found
+three gaps, **two of them fail-open**: a tick line in any other form (`* [x]`, two spaces, `A5 -`) or an unclosed fence
+made a step vanish **from `check_build_plan.py` as well**, so one wrong character silenced both guards; and the backward
+form was case-sensitive. **Fixed the same day**, recorded as **M46**: both tools now fail on a line that looks like a
+step but is not in the exact form, and on an unclosed fence; the backward form is case-insensitive; the docstring lists
+the remaining wordings. Proved by six plants on backed-up copies, each restored and compared. Two slips of mine while
+fixing, both caught before any commit: a scripted edit put a literal backspace byte into `check_build_plan.py`'s new
+pattern (found by reading the bytes, Rule 22.2; repaired), and the first plant harness died mid-plant and left the build
+plan mutated (restored from its backup and compared at once; the harness now restores in `finally`).
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

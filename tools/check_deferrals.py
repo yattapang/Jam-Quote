@@ -21,8 +21,12 @@ the finding mechanical for the forms it knows. Design: docs/design/deferral-chec
 
 ## What it does NOT prove (Rule 21.4)
 
-- Other wordings pass unseen: "(A6)" used as a placeholder, "owed to A5", "waits for A6". The verb list is short on
-  purpose; a second miss of the same class means replacing this tool's shape, not adding a verb (Rule 21.9).
+- Other wordings pass unseen: "(A6)" used as a placeholder, "owed to A5", "waits for A6", "chosen in the A5 step", two
+  spaces inside the phrase, a step id glued to a word ("matchedA5"), or the phrase broken across two lines (the scan is
+  per line, and a resolution counts only on the phrase's own line). The verb list is short on purpose; a second miss
+  of the same class means replacing this tool's shape, not adding a verb (Rule 21.9).
+- It trusts the plan's ticks once they are well formed. A tick line in any other form, or an unclosed fence, stops the
+  run (since 2026-10-10) rather than shrinking the set it checks.
 - A deletion that leaves another document relying on what was removed is invisible to it (A6's MR16).
 - A resolution is checked for presence, not truth: a dated pointer to the wrong design passes.
 - Deferrals to steps not yet ticked are correct and are not checked.
@@ -53,7 +57,10 @@ SKIPPED_PREFIXES = {
 STEP = r"[A-K][0-9]{1,2}"
 VERBS = r"chosen|priced|decided|designed|confirmed|settled|named|picked"
 FORWARD = re.compile(rf"\b(?:to be |not yet )?(?:{VERBS}) (?:in|by) (?:design )?({STEP})\b", re.IGNORECASE)
-BACKWARD = re.compile(rf"\b({STEP}) (?:chooses|confirms|prices|decides|will choose|will confirm|will decide)\b")
+# Case-insensitive, like FORWARD: before 2026-10-10 this was case-sensitive, and "a6 will confirm" passed unseen (found
+# by the independent check, docs/briefs/2026-10-10-deferral-checker-check.md).
+BACKWARD = re.compile(rf"\b({STEP}) (?:chooses|confirms|prices|decides|will choose|will confirm|will decide)\b",
+                      re.IGNORECASE)
 POINTER = re.compile(r"pointer \d{4}-\d{2}-\d{2}", re.IGNORECASE)
 DESIGN_PATH = re.compile(r"`docs/design/[A-Za-z0-9_.-]+\.md`")
 QUOTES = [('"', '"'), ("“", "”")]
@@ -67,14 +74,23 @@ def tracked_markdown() -> list[str]:
 def ticked_steps() -> set[str]:
     # Outside fenced blocks only: the plan's own example of an evidence line ("- [x] B1 · …") sits in a fence, and the
     # first run of this tool counted it, reporting B1 as ticked when it is not. check_build_plan.py skips fences too.
+    # A tick in any other form, or a fence left open, would make steps silently vanish from this check (found by its
+    # independent check, 2026-10-10): refuse to run rather than check a smaller set than the plan holds.
     ticked, fenced = set(), False
-    for line in PLAN.read_text(encoding="utf-8").splitlines():
+    for number, line in enumerate(PLAN.read_text(encoding="utf-8").splitlines(), start=1):
         if line.startswith("```"):
             fenced = not fenced
             continue
-        match = None if fenced else re.match(r"^- \[x\] ([A-K][0-9]{1,2}) ·", line)
+        if fenced:
+            continue
+        match = re.match(r"^- \[x\] ([A-K][0-9]{1,2}) ·", line)
         if match:
             ticked.add(match.group(1))
+        elif re.match(r"^\s*[-*+]\s*\[[^ ]\]\s*[A-K][0-9]{1,2}\b", line):
+            raise SystemExit(f"docs/BUILD-PLAN.md:{number}: a ticked step not in the form '- [x] A1 · …' — fix it "
+                             "(check_build_plan.py reports it too); not checking a smaller set than the plan holds")
+    if fenced:
+        raise SystemExit("docs/BUILD-PLAN.md: a code fence is never closed — every tick after it would be missed")
     return ticked
 
 

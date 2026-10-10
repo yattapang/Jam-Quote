@@ -913,3 +913,23 @@ B1 done; the banner, which prints the ticked steps, showed it, and the tool now 
 does. Proved by seven plants, each restored from a backup and compared with `diff -q`. **Still not prevented:** other
 wordings, and a deletion another document relied on (MR16) — as the tool's docstring says.
 
+
+### M46 · Two guards skipped a malformed build-plan line silently, so one wrong character could hide a step from both
+`Repeat of:` M20, M34, M38, M42 — a guard checking a smaller set than it reports.
+
+`tools/check_build_plan.py` (built 2026-10-02) matched step lines by one exact pattern and **skipped any other line
+without a word**. A tick written `* [x] A5 · …`, `- [x]  A5 · …` (two spaces) or `- [x] A5 - …` was neither counted
+nor checked: its missing evidence went unreported, and "Every ticked step carries its evidence" still printed. An
+unclosed code fence hid every step after it. `tools/check_deferrals.py`, built 2026-10-10 on the same parsing, inherited
+both, and so did its trust in the ticked set: a step that vanished from the plan's parse had its stale deferrals
+unchecked too. Found by the deferral checker's independent check (`docs/briefs/2026-10-10-deferral-checker-check.md`),
+which tried to break the tool in ways its design did not list; its lower-case backward form ("a6 will confirm") passed
+unseen as well.
+
+**Cost:** none realised — every tick in the plan was well formed. But two guards were each one keystroke from silence.
+
+**Prevented by:** both tools now treat a line that looks like a step but is not in the exact form, and a fence never
+closed, as a failure — `check_build_plan.py` reports it, and `check_deferrals.py` refuses to run rather than check a
+smaller set. The backward form is case-insensitive. Proved by six plants on backed-up copies, each restored and
+compared. **The lesson, again: a guard must fail on input it cannot read, never skip it** — "no steps parsed" was
+already a failure here; "some steps not parsed" was not.

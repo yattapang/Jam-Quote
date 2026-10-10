@@ -37,6 +37,10 @@ ROOT = Path(__file__).resolve().parent.parent
 PLAN = ROOT / "docs" / "BUILD-PLAN.md"
 
 STEP = re.compile(r"^- \[(.)\] ([A-K]\d+) · ")
+# Anything that looks like a step but is not in STEP's exact form. Before 2026-10-10 such a line was skipped silently, so
+# "* [x] A5", "- [x]  A5" or "- [x] A5 -" made a step vanish from this check and from check_deferrals.py alike (found by
+# the deferral checker's independent check, docs/briefs/2026-10-10-deferral-checker-check.md).
+LOOSE_STEP = re.compile(r"^\s*[-*+]\s*\[.\]\s*[A-K]\d+\b")
 EVIDENCE = re.compile(
     r"^  Done: (\d{4}-\d{2}-\d{2}) · commit `([0-9a-f]{7,40})` · review `([^`]+)` · closing `([^`]+)`"
     r" · owner: approved (\d{4}-\d{2}-\d{2})\s*$"
@@ -63,6 +67,9 @@ def main() -> int:
             continue
         step = STEP.match(line)
         if not step:
+            if LOOSE_STEP.match(line):
+                problems.append(f"docs/BUILD-PLAN.md:{index + 1}: a step line not in the form '- [ ] A1 · …' — "
+                                "this tool and check_deferrals.py would otherwise skip it silently")
             continue
         box, step_id = step.groups()
         where = f"docs/BUILD-PLAN.md:{index + 1}"
@@ -88,6 +95,8 @@ def main() -> int:
             if not (ROOT / path).is_file():
                 problems.append(f"{where}: {step_id}'s {label} brief `{path}` is not a file in the repository")
 
+    if fenced:
+        problems.append("docs/BUILD-PLAN.md: a code fence is never closed — every step after it would be skipped")
     if not seen:
         problems.append("docs/BUILD-PLAN.md: no steps parsed — a plan this tool cannot read is not checked")
     for problem in problems:

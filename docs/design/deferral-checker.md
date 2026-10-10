@@ -61,4 +61,8 @@ And its first real run is recorded: what it found, and what was fixed.
 - **Seven plants** on `docs/design/api-layer.md`, restored from a backup and shown identical with `diff -q`: a stale
   deferral in each form fails (2); one to an open step passes; a quoted one passes; one with a dated pointer on its line
   passes; one whose pointer is on the next line fails; one whose design path comes before the phrase fails.
+- **The independent check** (`docs/briefs/2026-10-10-deferral-checker-check.md`): closable, and its break attempts found
+  three gaps — a malformed tick line or an unclosed fence made a step vanish from this tool **and from
+  `tools/check_build_plan.py`**, and the backward form was case-sensitive. Both tools now fail on such input instead of
+  skipping it (`docs/MISTAKES.md` M46); proved by six more plants, each restored and compared.
 
