@@ -276,7 +276,9 @@ R1.41, R1.42.
   balance row survives — deleting it would reintroduce the empty-lock hole R1.24a exists for — and is
   simply inert.
 - **R1.16** The PDF carries the tenant's logo, header details and two brand colours from
-  `document_settings` — a shared layout reading tenant data, never an uploaded template.
+  `document_settings` — a shared layout reading tenant data, never an uploaded template. *(Pointer 2026-10-10,
+  design A7: read from the settings **version the issue was sealed with**, never the live row; colours only where the
+  tier includes them, resolved at seal — `docs/design/document-settings-and-pdf.md` DS1, DS6.)*
 - **R1.16a** The rendered PDF's hash is recorded once, on `document_render`, and the issue and any
   acceptance **reference that row** rather than each storing their own copy (F17 — it had been specified
   twice, differently). **The hash is verified whenever a stored PDF is re-served**, or it is evidence

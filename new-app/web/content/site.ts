@@ -176,8 +176,9 @@ export const site = {
           "Your own materials, labour rates and equipment",
           "Branded PDF quotes",
           // The owner's decision, 2026-10-10 (design A7, document-settings-and-pdf.md): no Pryvis line on any
-          // tenant's document, Free included, and the tiers say so. True of release 1's PDF, so in `delivered`.
-          "Your name on your documents, never ours — no Pryvis branding, even on Free",
+          // tenant's document, Free included, and the tiers say so. Narrowed the same day to the documents (the
+          // read's DR8): the email that carries the link says "via Pryvis" (A6), so "no Pryvis branding" overclaimed.
+          "No Pryvis name or logo on your quotes and invoices — even on Free",
           "Share by WhatsApp or email, client accepts online",
           "Client list",
           "One reusable job recipe",

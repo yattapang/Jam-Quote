@@ -153,12 +153,17 @@ of five minutes issued only after the owning row is read under row-level securit
   (`Content-Disposition: attachment`) with the content type we recorded, never the uploader's; nothing uploaded is ever
   served inline from a `pryvis.com` origin.
 - **Rendered PDFs are verified when re-served** (R1.16a): the stored hash is checked against the bytes before the
-  share page hands them out. A mismatch is refused and alerted, never served.
+  share page hands them out. A mismatch is refused and alerted, never served. *(Pointer 2026-10-10: renders are
+  **streamed through the API**, which hashes the bytes it sends, never handed out by signed URL; and they are
+  **rendered in the files worker**, which checks the logo's hash before decoding it — `docs/design/document-settings-and-pdf.md`
+  DS5-DS6.)*
 
 **Backing up the files.** OP6 backs up the database only; the files need the same protection.
 - **The nightly backup job (OP6) also archives the files bucket**, with its read key: every current object, in one
   encrypted and signed archive beside the database dump, at the second company under the same 35-day Object Lock. At
-  launch size this is a full copy each night, so any single night's archive restores everything.
+  launch size this is a full copy each night, so any single night's archive restores everything. *(Pointer 2026-10-10:
+  each rendered PDF is hashed against its row before it is archived, and a mismatch is alerted, not archived as good;
+  a disposed render is expected absent — `docs/design/document-settings-and-pdf.md` DS8.)*
 - **Trigger:** when the files bucket passes **5 GB**, the job switches to a **rolling copy** *(RR14)*: each night it
   copies, encrypted and signed, every file that is new **or whose newest backup copy is more than 28 days old**, each
   copy locked for 35 days. So every live file always has a copy younger than 35 days, and a deleted file's last copy

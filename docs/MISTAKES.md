@@ -969,3 +969,44 @@ its stale deferral caught, additions and deletions are reported, and defeating t
 which shows in the diff. Two things it noted were not stated: un-ticking a step passes (the index pins which steps
 exist, not which are done), and a malformed index failed with a traceback. The first is now in both docstrings; the
 second fails with a plain message, proved by six malformed-index plants in a worktree.
+
+### M47 · A7's mistakes table over-claimed for the third design running, and the approval put a claim on the public site that was broader than the decision
+`Repeat of:` M45 (a table of mistakes and answers that promised rather than prevented), M14 (a citation of something
+that is not there), M13 and M29 (a twin left contradicting its sibling), and Rule 20 (a public claim that is not true).
+
+The independent read of A7 (`docs/briefs/2026-10-10-document-design-read.md`, DR1-DR16) found:
+- **§11 called the deferral checker "Mechanical now" for this design** — the read ran its own patterns over the file and
+  they matched none of its deferrals, all written in forms the tool's docstring says it does not see (DR13);
+- **§11 promised twins "checked against DS1-DS6 in the same change", on approval** — the approval commit `7e4f390`
+  touched none of them, and `docs/PRD.md` R1.16 and two rows of the domain model still contradicted the design (DR13);
+- **DS6 credited `docs/design/acceptance-evidence.md` with a rule it never states** — that design does not mention
+  renders (DR15, M14's shape);
+- **the site's new Free-tier line said "no Pryvis branding"**, when the email that carries every document says "via
+  Pryvis" by A6's approved design — the owner decided the PDF; the line claimed the whole delivery (DR8).
+
+**Cost:** none reached a build or a deploy. But the site line was committed to the marketing copy and its guard's
+`delivered` list, a public claim broader than the truth (Rule 20); and an owner reading §11 was told the deferral
+checker covered a design it covered not at all.
+
+**Why the M45 answer did not hold:** M45's answer was a format — three fixed verdicts — and its own entry said so: "a
+reader still has to check that a 'mechanical now' row names a check that exists". The row named a check that existed;
+nothing showed it touching this design. **By Rule 24.4 the format was decorative, so the rule is rewritten:** Rule 24.7
+(added in this change) lets a design say "Mechanical now" only by citing a committed brief whose check block names the
+design, and `tools/check_mechanical_claims.py` fails the gate and CI's `docs` job otherwise. **Proved by plants**, in a
+disposable worktree: a row with no brief, a brief that is not tracked, a brief whose checks name another design, a
+lower-case verdict and an unclosed fence each fail; a fenced example and "not mechanical now" pass; and **A7's own
+draft row, at `6de59d1`, fails it** — the tool would have caught DR13's first half. Its first version checked unclosed
+fences only in the last file it read; the plant found it, and it was fixed before commit. On its first run it also
+flagged A6's four "Mechanical now" rows, which named no brief; each now cites the closing check that ran.
+
+**Prevented by, for A7:** §11 restated row by row; the twins corrected in this change and swept by the closing check's
+brief; the citation replaced by the schema's key; the site line narrowed, by the owner, to "No Pryvis name or logo on
+your quotes and invoices — even on Free".
+**Not prevented in general:**
+- **A cited document that does not say what it is cited for** (DR15). `tools/check_citations.py` resolves names and
+  paths, not content; only the read catches it.
+- **A public claim broader than the decision behind it** (DR8). The site guard checks that a line is listed as
+  delivered, not that it is true — its own docstring says so. Only the read and the closing check catch it, and this
+  entry says so rather than pretending otherwise.
+- **Whether a cited brief's check tests what the row claims** — Rule 24.7 makes the claim cite evidence; the closing
+  check judges it.

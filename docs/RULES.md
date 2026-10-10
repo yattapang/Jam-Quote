@@ -11,7 +11,7 @@ service register, 19 the brief as plan of record, 20 the public site, **21 a con
 coverage**, **22 a scripted edit is verified mechanically** (2026-09-24) ·
 **23 changing a rule changes everything that cites it**, **24 every mistake is answered with a
 mechanism** (2026-09-25) · 6 numbering, 11 sends, 12 offline retention, 15 the three approval gates amended, **25 customer
-service and feedback** added (2026-10-02).
+service and feedback** added (2026-10-02) · **24.7 a "Mechanical now" verdict cites a brief's check** (2026-10-10).
 
 **How this file is changed.** Rule 23. In short: explicit numbers, append never insert, tombstone a
 retirement, and `tools/check_rules.py` fails the build when a rule's text or number changes until the
@@ -969,6 +969,22 @@ edit was *correct*. Only the re-review does that, which is why both halves exist
 **What Rule 24 does not fix.** It records and it forces a mechanism to be named; it cannot make the
 mechanism good. And it depends on defects being *found* — which is Rule 9's independent review and
 Rule 21.2's plants, not this.
+
+**24.7 A design may say an answer is "Mechanical now" only by citing a committed brief whose check ran it against
+that design (added 2026-10-10, M47).** Designs carry a table of the recorded mistakes they are checked against, each
+row with one of three verdicts — **Mechanical now**, a test owed to a build step, or **Not mechanical** with the person
+who catches it. Three designs running over-claimed the first: A6's table called untested things executed (M45), and
+A7's called the deferral checker mechanical for a design whose deferrals it matched none of, and promised twins
+"checked on approval" in a commit that touched none of them (M47). A verdict in the author's own words is the
+writer-set prose of M23. So a "Mechanical now" row cites, in backticks, a `docs/briefs/` file whose check block names
+the design — a check `tools/run_brief.py` ran on the commit the brief names. Anything else is "Not mechanical", or a
+test owed to a step.
+
+- **The mechanism:** `tools/check_mechanical_claims.py`, in the gate and CI's `docs` job, fails when a design's table
+  row says "Mechanical now" without such a brief.
+
+**What Rule 24.7 does not fix.** It makes a claim cite its evidence; it cannot tell whether the cited check tests what
+the row claims, or still passes after a later edit. The closing check reads that.
 
 ## 25. Customer service and feedback (owner requirement; added 2026-10-02)
 

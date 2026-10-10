@@ -469,7 +469,8 @@ The storage provider is chosen in A5 *(Pointer 2026-10-09: DigitalOcean Spaces i
   the key's tenant segment is checked against the tenant in context (the read's note on AP11). So a tenant can only ever get a
   URL for a file their own row points to. The URL expires in **5 minutes** (rec), is for one object and one method,
   and is never logged (AP9). A URL issued just before a revocation or a suspension lives out its 5 minutes: that
-  residual is accepted.
+  residual is accepted. *(Pointer 2026-10-10: **rendered PDFs are never served by signed URL** — the API streams them
+  after hashing the bytes it sends — `docs/design/document-settings-and-pdf.md` DS6.)*
 - **Uploads** go through the API's own route kind (size and type checked, then the malware scan of B5). A client
   never chooses where a file lands.
 - **Caches.** R1 has no shared cache. If one is added, every key begins with the tenant id, and its design says so: a

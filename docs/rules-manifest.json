@@ -282,6 +282,10 @@
       "title": "A finding is not \"closed\" until the claim cites every document the finding named \u2014 and a fix is\nnot proved until someone else has checked it (added 2026-09-25)",
       "hash": "6f3d0ffe6752582b"
     },
+    "24.7": {
+      "title": "A design may say an answer is \"Mechanical now\" only by citing a committed brief whose check ran it against\nthat design (added 2026-10-10, M47)",
+      "hash": "8779b2d1bde05e80"
+    },
     "25": {
       "title": "Customer service and feedback (owner requirement; added 2026-10-02)",
       "hash": "3f8e20f064fb18d0"

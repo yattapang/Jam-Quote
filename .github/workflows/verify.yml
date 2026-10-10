@@ -254,6 +254,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_deferrals.py
 
+      # A design's "Mechanical now" verdict must cite a committed brief whose check block names that
+      # design (Rule 24.7, M47): three designs running claimed mechanism in prose. Proved by plants: a
+      # row with no brief, a brief that is not tracked, a brief whose checks never name the design
+      # (each fails), and a fenced example (passes). It makes a claim cite evidence; it does not judge it.
+      - name: A "Mechanical now" claim cites a brief's check
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_mechanical_claims.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

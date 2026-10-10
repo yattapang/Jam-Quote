@@ -673,6 +673,7 @@ meant to prevent**: it promised answers, and most were not mechanical — the ke
 vendor fact still had no vendor page (RR6's), and the approval commit itself left a twin contradicting its sibling
 (M13's). That is recorded as **M45** in `docs/MISTAKES.md`. The table below says, for each row, what the read found
 and what is mechanical now.
+*(Pointer 2026-10-10: each "Mechanical now" row now cites the brief whose check ran against this design, as Rule 24.7 requires — `tools/check_mechanical_claims.py`.)*
 
 **Every row now carries one of three verdicts, and only these** *(the closing check's D3: the first amendment still
 called C1 tests "executed")*: **Mechanical now** — a named check that runs today; **C1 test** — a test specified in §12,
@@ -681,15 +682,15 @@ which does not exist until C1 builds it; **Not mechanical** — caught only by a
 | Mistake | What the read found | Now | Verdict |
 |---|---|---|---|
 | **RR6** (A5) — a vendor fact without the vendor's page | "Body not kept" had no page (MR14); Essentials pricing missed (MR21) | Withdrawn as a reason; every fact in §12's sources is a page read on 2026-10-09 | **Not mechanical** — the independent read checks each fact |
-| **RR4, RR7, RR13** (A5) — keys missing from OP4 | Management keys missing; OP4's old row left (MR11) | MS10's key table rebuilt; OP4 updated | **Mechanical now** for the old row: the closing check's sweep. **Not mechanical** for completeness — the read |
-| **RR8** (A5) — rest overstated | The global suppression list; OP2 (MR15, MR24) | Both in MS10; OP2 corrected | **Mechanical now** for OP2's phrase: the sweep. Otherwise **not mechanical** — the read |
+| **RR4, RR7, RR13** (A5) — keys missing from OP4 | Management keys missing; OP4's old row left (MR11) | MS10's key table rebuilt; OP4 updated | **Mechanical now** for the old row: the closing check's sweep (`docs/briefs/2026-10-09-messaging-design-closing-check.md`). **Not mechanical** for completeness — the read |
+| **RR8** (A5) — rest overstated | The global suppression list; OP2 (MR15, MR24) | Both in MS10; OP2 corrected | **Mechanical now** for OP2's phrase: the sweep (`docs/briefs/2026-10-09-messaging-design-closing-check.md`). Otherwise **not mechanical** — the read |
 | **RR10** (A5) — a test of a function, not of what left | Cannot see what SES adds (MR8) | The actual request captured; the received message read by hand | **C1 test** (the captured request), plus a **hand check** at C1 |
 | **RR9** (A5) — a public route without kind or limits | No numbers; GET undeclared (MR8) | Kinds, limits and methods in MS6 and MS7 | **C1 test** (the opt-out route's tests); the declaration itself is enforced by the existing route guard once the route exists |
 | **RR2** (A5) — a residual understated | Duplicates, WhatsApp (MR19, MR20) | MS2 and MS9 restated | **Not mechanical** — the read |
 | **OR11** (A4), RR4 — copies not listed | Six missing (MR15) | MS10 rebuilt | **Not mechanical** — the read |
 | **M23, M39** (Rule 21.10) — prose on who writes a table | Acceptable | No such sentence; the door and its test are C1 items | **C1 test** |
-| **M14, H16, M18** — citations that do not exist | Passing | Unchanged | **Mechanical now** — `tools/check_citations.py` and `tools/check_schema_citations.py`, in the gate and CI |
-| **M13, M15, M29** — a twin left contradicting its sibling | The approval commit re-made it (MR11, MR16, MR24) | Fixed; the closing check sweeps seven stale phrases | **Mechanical now** for those seven phrases only. **Not mechanical** in general — M45, and its proposed checker awaits the owner |
+| **M14, H16, M18** — citations that do not exist | Passing | Unchanged | **Mechanical now** — `tools/check_citations.py` and `tools/check_schema_citations.py`, in the gate and CI, run on this design by `docs/briefs/2026-10-09-messaging-design-closing-check.md` |
+| **M13, M15, M29** — a twin left contradicting its sibling | The approval commit re-made it (MR11, MR16, MR24) | Fixed; the closing check sweeps seven stale phrases | **Mechanical now** for those seven phrases only (`docs/briefs/2026-10-09-messaging-design-closing-check.md`). **Not mechanical** in general — M45; the deferral checker built for it (2026-10-10) sees only its own forms |
 | **M16, M17** — amendments introducing defects | A process | §14 and the closing check | **Not mechanical** — the closing check, which found D1-D6 in these amendments |
 | **M44** — CI not read | A promise | CI read after every push in this step | **Not mechanical** until OA25's ruleset requires CI to merge |
 | **M43** — a tool for one environment | Fine | No new tooling | — |

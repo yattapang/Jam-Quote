@@ -105,7 +105,7 @@ These are settled by work already landed, and are stated here so no entity re-li
 | `registration_claim` | A pending registration: an address, a hashed token, an expiry. **Not a user** (ADR 0025 decision 5). | Deliberately **not unique on the address**, so two people may attempt the same one; and not tenant-scoped, because it exists before any tenant does. This is what makes the row above possible: the claim holds nothing, verification inserts the user, and the unique index decides — so **"first to verify wins" is a database guarantee rather than application logic** (finding H8). Claims expire in 72 hours and are deleted, so the table cannot become a shadow user list. |
 | `membership_role` | What a user may do inside the tenant. | At least one active owner at all times; the last owner cannot be demoted or deactivated. |
 | `platform_capability` | What one of **our** staff may do. | Every grant has a granter (least privilege is only real with an author). Holding one requires a confirmed second factor (ADR 0021). |
-| `document_settings` | Logo, header details, two colours, default terms. **Built so far (J8):** the default acceptance bar and the deposit-suggestion threshold only; the rest is owed. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. An absent row means the defaults (bar 3, no deposit suggestion). |
+| `document_settings` | Logo, header details, two colours, default terms. **Built so far (J8):** the default acceptance bar and the deposit-suggestion threshold only; the rest is owed. *(Pointer 2026-10-10: the branding fields live in insert-only `document_settings_version` rows, one per change, and each issue names the version it was sealed with — `docs/design/document-settings-and-pdf.md` DS6-DS7.)* | One per tenant (its versions: many). A small fixed set of fields, never free-form CSS or an uploaded template. An absent row means the defaults (bar 3, no deposit suggestion). |
 | `number_series` | Prefix, next number, reset rule (never / yearly / monthly). | One per tenant **per document kind**. Allocation is atomic and gapless per series. |
 
 **Isolation is three layers and the second one had a hole (finding J3, 2026-09-26).** Row-level security
@@ -206,7 +206,7 @@ official number offline, and separating them dissolves the contradiction.
 |---|---|---|
 | **Seal** | Freeze the lines, prices, tax rates, currency, terms, settings, totals and `catalog_synced_at` | **No** — happens on the device, offline |
 | **Number** | Allocate from the tenant's series: unique, gapless, answerable to an accountant | **Yes**, or a device lease (deferred) |
-| **Deliver** | Render the PDF, mint the share link, send it | Yes |
+| **Deliver** | Render the PDF, mint the share link, send it *(Pointer 2026-10-10: the PDF is rendered once the issue is numbered, before delivery, and an issue with no stored render cannot be delivered — `docs/design/document-settings-and-pdf.md` DS6)* | Yes |
 
 *(Pointer 2026-10-02, finding TD14: `docs/design/tax-and-documents.md` T9 replaces `issue_number` with a per-quote number row and a
 per-issue numbering row, keeping this section's argument — no UPDATE on `quote_issue`.)*

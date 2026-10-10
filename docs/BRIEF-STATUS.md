@@ -1424,3 +1424,29 @@ before launch: commit-reviewer at **Opus** — the record of a commitment and it
 on our judgement.* Brief `docs/briefs/2026-10-10-document-design-read.md`, run by `tools/run_brief.py` at HEAD `7e4f390`:
 4 of 4 expectations hold.
 
+
+**Returned 2026-10-10: the independent read of A7** — DR1-DR16 (1 blocker, 10 major, 5 minor), "sound after the named
+changes". The blocker: `@react-pdf/renderer` decodes images (`png-js`, `jay-peg`, SVG), so rendering in the API undid
+A5's RR1. Confirmed in the repository before answering (Rule 16.4): DR1, DR3 (the application role holds `UPDATE` and
+`DELETE` on `document_render`), DR5, DR8, DR9, DR14 and DR15. **The owner decided the three amendments that changed what
+was approved, 2026-10-10, as recommended ("Recommendations accepted"):** rendering in the files worker (DR1); the site's
+line narrowed to the documents (DR8); colour presets on Pro (DR10). **And the proposed rule amendment:** Rule 24.7.
+
+**Answered 2026-10-10.** *Delegation (Rule 16.5): Opus, main session, as the design.* The design's DS1-DS8 amended and
+§12 added (every finding to the place it is answered); §11 restated. Twins corrected in the same change: `docs/PRD.md`
+R1.16, `docs/design/domain-model.md` (the settings row, the Deliver row), RG2 in `docs/design/third-party-register.md`
+(serving, the backup's hash check), AP11 in `docs/design/api-layer.md`, `docs/TIERS.md`, the site's Free line and its
+guard's list ("No Pryvis name or logo on your quotes and invoices — even on Free"). **M47** in `docs/MISTAKES.md`: §11
+over-claimed for the third design running. **Rule 24.7** (Rule 23's process: `check_rules.py` listed no existing
+citation affected, then `--update`) and its tool **`tools/check_mechanical_claims.py`**, in the gate (`CLAUDE.md`: seven
+checkers) and CI's `docs` job (the workflow re-parsed after the edit, Rule 22.2). Proved by nine runs in a disposable
+worktree: a clean baseline, eight plants each as expected; A7's draft row at `6de59d1` fails it; its first version
+missed an unclosed fence in any file but the last, found by the plant and fixed. Its first real run flagged A6's four
+"Mechanical now" rows, which now cite the closing check that ran. Gate: typecheck and tests pass (the race suite not
+run — no database code changed); all seven checkers pass.
+
+**Proposed to the owner (Rule 19), not made:** brief §10's "the offline sync design (section 13) needs to account for the
+logo and settings being available for offline PDF generation" becomes "… for an offline **draft preview**; the issued PDF
+is rendered by the server once the issue is numbered, since issuing needs a connection in release 1 (ADR 0022; design
+A7, DS8)". Next: the closing check, brief `docs/briefs/2026-10-10-document-design-closing-check.md`; then the owner's
+sign-off of the amended design and of the brief edit; then A7 is ticked.
