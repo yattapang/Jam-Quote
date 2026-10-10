@@ -1,7 +1,8 @@
 # Design: document settings and the PDF — what a tenant's client receives, and how it stays the record
 
-**Status: PROPOSED — awaiting the owner.** Build plan step A7 (`docs/BUILD-PLAN.md`). Nothing here is built until C4
-(issuing: the branded PDF and its storage).
+**Status: APPROVED by the owner, 2026-10-10 — every recommendation, DS1-DS8** ("Approved"), with the owner's choice of
+**no "Sent with Pryvis" line on any document, Free included — and that made known in the marketing of the tiers**.
+Build plan step A7 (`docs/BUILD-PLAN.md`). Nothing here is built until C4 (issuing: the branded PDF and its storage).
 
 Date: 2026-10-10 · **Answers** `docs/PLANNING-AUDIT.md` §7 item 7 (logo, header, colours, terms; the shared layout and
 its presets; the render and its hash; the original application's branding cross-checked) and the owner's requirement 10
@@ -126,7 +127,9 @@ One layout, read from the **sealed snapshot** (R1.13), never from live settings:
 5. **Terms**: the snapshot's terms text for the kind.
 6. **Payment details** on an invoice: the reserved place D3 fills.
 7. **Footer, every page**: the privacy line (ADR 0035 decision 5), "Page 2 of 3", and the document number again, so a
-   loose page is identifiable.
+   loose page is identifiable. **Never Pryvis's name or logo**, on any tier (the owner, 2026-10-10) — the document's
+   metadata names the tenant as author; the PDF's "producer" field is the only place software is named, and it is not
+   shown on the page.
 
 **Long content breaks across pages, never off them.** A line's description may wrap; the table's header repeats on each
 page; the totals are never orphaned from the last line. Each is a test (§10).
@@ -217,7 +220,7 @@ never replaced is a C4 test (an update and a delete are refused), not a sentence
 | DS6 | **One render, at numbering, stored and hashed; re-served, never re-rendered** | As written |
 | DS7 | Owner-only changes, versioned and audited, applying to later documents | As written |
 | DS8 | Offline preview from a cache; the PDF deleted when its document is anonymised | As written |
-| — | **A "Sent with Pryvis" line on Free tenants' documents?** `docs/TIERS.md` is silent. It would advertise the product on every Free quote; it is also our name on the tenant's document | **The owner's choice.** If yes, small, in the footer, Free only, and never on Pro |
+| — | **A "Sent with Pryvis" line on Free tenants' documents?** `docs/TIERS.md` was silent. It would advertise the product on every Free quote; it is also our name on the tenant's document | **Decided by the owner, 2026-10-10: no** — no Pryvis branding on any document, any tier; and the site's Free tier says so (Your name on your documents, never ours — no Pryvis branding, even on Free), with `docs/TIERS.md` recording it |
 
 **What gets built** (C4, issuing): `document_settings`' new columns, by a new migration (Rule 6); the settings screen
 and its preview; the contrast rule in the shared core; the renderer module in the API with the embedded font; the

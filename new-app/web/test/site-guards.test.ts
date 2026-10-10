@@ -257,6 +257,7 @@ describe("nothing untrue", () => {
       "3 jobs numbered a month — revisions and declines are free",
       "Your own materials, labour rates and equipment",
       "Branded PDF quotes",
+      "Your name on your documents, never ours — no Pryvis branding, even on Free",
       "Share by WhatsApp or email, client accepts online",
       "Client list",
       "One reusable job recipe",

@@ -55,6 +55,7 @@ country. What each tier *includes* is the design.
 | Consolidated reporting across projects | — | — | ✓ |
 | Material price index and supplier comparison | — | read | read + alerts |
 | Custom document branding (logo, colours, terms) | logo | logo + colours | full, plus per-client terms |
+| No Pryvis branding on the tenant's documents — no "Sent with Pryvis" line *(owner, 2026-10-10; `docs/design/document-settings-and-pdf.md`)* | ✓ | ✓ | ✓ |
 | WhatsApp Business sending (templated, receipts) | — | — | ✓ |
 | API access and integrations | — | — | ✓ |
 | Support | email (a chatbot is the owner's goal, designed later — ADR 0029 E1) | email | priority |

@@ -1412,4 +1412,10 @@ plan's evidence lines cite branch commits by SHA; all six cited commits were che
 **Design drafted 2026-10-10: document settings and the PDF** (`docs/design/document-settings-and-pdf.md`, build plan A7).
 *Delegation (Rule 16.5), declared before starting: Opus, main session — what a client receives as the record of a
 commitment, and the hash that makes it evidence, are judgement-class.* Next: the owner's approval.
+**Approved by the owner, 2026-10-10:** DS1-DS8 ("Approved"), with **no "Sent with Pryvis" line on any document, Free
+included — "and also let that be known in the marketing of the tiers"**. On approval: the design records it (DS4's
+footer, §10's decision row); `docs/TIERS.md` gains the row; the site's Free tier gains "Your name on your documents,
+never ours — no Pryvis branding, even on Free", added to the site guard's `delivered` list — the guard proved to cover it
+by removing the line in a disposable worktree (the test then fails, naming it). Next: the independent read, brief
+`docs/briefs/2026-10-10-document-design-read.md`.
 
