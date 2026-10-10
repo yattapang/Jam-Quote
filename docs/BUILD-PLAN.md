@@ -51,7 +51,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
   Done: 2026-10-02 · commit `fa933ff` · review `docs/briefs/2026-10-02-support-design-read.md` · closing `docs/briefs/2026-10-02-support-design-recheck.md` · owner: approved 2026-10-02
 - [x] A4 · Environments and operations, `docs/design/environments-and-operations.md` — three environments, backups and restore drills, monitoring, runbooks, Rule 10's full trigger, **the three approval gates for Claude maintenance and their interface** (Rule 15)
   Done: 2026-10-06 · commit `99c6755` · review `docs/briefs/2026-10-06-operations-design-read.md` · closing `docs/briefs/2026-10-06-operations-design-closing-check.md` · owner: approved 2026-10-06
-- [ ] A5 · The third-party register completed — storage, malware scanning, error tracking, uptime, inbox
+- [x] A5 · The third-party register completed — storage, malware scanning, error tracking, uptime, inbox, `docs/design/third-party-register.md`
+  Done: 2026-10-09 · commit `0e9c2c5` · review `docs/briefs/2026-10-09-register-design-read.md` · closing `docs/briefs/2026-10-09-register-design-closing-check.md` · owner: approved 2026-10-09
 - [ ] A6 · Outbound messaging
 - [ ] A7 · Document settings and the PDF — logo, header, colours, the shared layout
 - [ ] A8 · Sign-up and verification

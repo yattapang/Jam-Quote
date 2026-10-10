@@ -1112,6 +1112,8 @@ sentence; the costs agree across RG9, OA1 and OP3; every "disagree" and "agree i
 (checked after it finished, and two of its quotes re-read). One note, fixed: RG6 called the 14-day recoverable window a
 "minimum" where it is the default, raisable to 30 — the design now says it is never raised. **A5 now awaits only the
 owner's sign-off.**
+**Signed off by the owner, 2026-10-09: "A5 is done".** A5 is ticked with its evidence line (5 of 64 steps). Next:
+design A6, outbound messaging.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

@@ -4,7 +4,8 @@
 choices: **the Canadian company holds the mailbox** (RG6), and **the PDF residual is accepted** for release 1 (RG3).
 **Amended the same day to answer its independent read (RR1-RR17, §12)**. Two amendments changed what the owner had
 approved, and **the owner decided both on 2026-10-09**: PDF receipts are **rasterised** in the files worker (RG3, RR2),
-and uptime is **UptimeRobot's Solo plan** (RG5, RR6). Build plan step A5
+and uptime is **UptimeRobot's Solo plan** (RG5, RR6). **The owner signed off the step, amendments included, on
+2026-10-09** ("A5 is done"); A5 is ticked in the build plan. Build plan step A5
 (`docs/BUILD-PLAN.md`). Written section by section and saved as it went, as A4 was. Nothing here is
 built or bought before its build step; the accounts are owner actions OA6 (batch 1) and OA12 (batch 2).
 
