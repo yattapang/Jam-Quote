@@ -836,7 +836,8 @@ session's changes are documents and one tool line, which it does not exercise.
 
 **Prevented by:** the runner now resolves `bash` through `PATH` (`shutil.which`), proved on this machine — the brief
 that gave 0 of 4 gives 4 of 4, and a planted wrong expectation fails. `npm ci` restored the install. **Not
-prevented:** `tools/pg-local.sh` is still Linux-only, and nothing yet starts real PostgreSQL on Windows; the race suite
-therefore stays owed for any database change made from this machine until the owner chooses a way (a local
-PostgreSQL 16, or a container). The lesson: **a tool that shells out names the shell it means, and a setup step
+prevented at first:** `tools/pg-local.sh` was Linux-only. **Closed the same day at the owner's instruction:** PostgreSQL
+16.15's official Windows binaries are unpacked under the user's profile, and the script now handles Git Bash on
+Windows (no service, no administrator, trust on 127.0.0.1 only); its first-use, restart and already-up paths were each
+run, and the race suite passed 22 of 22 on this machine. The lesson: **a tool that shells out names the shell it means, and a setup step
 says which machine it is for.**
