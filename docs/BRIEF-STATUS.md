@@ -1035,6 +1035,15 @@ Where things stand: A1-A4 done (4 of 64 steps); ADRs up to 0035; owner actions O
    `/usr/lib/postgresql/16`). Nothing was installed without the owner's say. So **the race suite prints SKIPPED in this
    session's gate runs**; every other suite and the five checkers run. The changes in this session are documents
    only, which the race suite does not exercise; it must run before any change that touches the database.
+   **Closed the same day at the owner's instruction ("Install PostgreSQL 16 locally"):** PostgreSQL 16.15's official
+   Windows binaries zip (EDB's download, linked from postgresql.org; the zip's binaries carry no Authenticode signature,
+   only EDB's installer is signed) unpacked in `~/.pryvis-pg`, outside the repository; `tools/pg-local.sh` taught Git
+   Bash on Windows (M43). The race suite: 22 of 22 on this machine.
+   **Open, owed:** in one full gate run of five, the race suite's test worker crashed ("Worker exited unexpectedly";
+   258 of 272 db tests ran; no assertion failed). It did not recur in four later runs, the last a full gate with
+   PostgreSQL required: 486 of 486. Cause unproven; the suspect is that its `pg` clients have no `error` handler. Offered
+   to the owner as a separate task; until it is diagnosed, a crash of that worker is re-run once and recorded, never
+   re-run silently.
    Also found: the local `node_modules` lacked `pg` (declared in the lockfile), so typecheck failed before any change;
    `npm ci` restored it, changing no tracked file.
 4. Next: design A5.
@@ -1072,6 +1081,27 @@ relies on our judgement.* Brief `docs/briefs/2026-10-09-register-design-read.md`
 `fa3ae9a`: 4 of 4 expectations hold (the runner first gave 0 of 4 on this Windows machine, because a bare `bash` found
 WSL's launcher; fixed and proved with a planted wrong expectation, M43). Findings RR1 onward, and agree/disagree on
 RG1-RG9, in its reply.
+**Reported 2026-10-09: RR1-RR17**, verdict "sound after the named changes"; 8 major, 9 minor, no blocker; its
+`git status` showed only the builder's four files. Agreed with RG1, RG2, RG6, RG7; in part with RG3, RG4, RG9;
+disagreed with RG5, and in part with RG8. Four findings confirmed on the vendors' own pages before answering (Rule
+16.4): RR3, RR5, RR6, RR7. The majors:
+- **RR1:** image decoding ran in the API process, which holds every production secret;
+- **RR2:** the PDF residual the owner accepted was stated too narrowly;
+- **RR3:** only half of AWS's tag control;
+- **RR4, RR5:** the files keys, backup and drill did not fit together, and Spaces cannot expire old versions;
+- **RR6:** Better Stack's free plan is "Free for personal projects", while UptimeRobot's terms allow business use;
+- **RR7:** staff access to Sentry contradicted SF5;
+- **RR8:** the sub-processor list lacked the Canadian company and Vercel.
+
+**Answered the same day** (the design's §12 maps each finding): a separate files worker holding no production secret;
+AWS's two statements and the organisation policy; three named Spaces keys, versioning off, a standing drill bucket, a
+rolling copy past 5 GB; Sentry reached by staff only through the console, Team plan when that is built; the
+sub-processor list completed and qualified "at rest"; the mailbox's tenant country and 76-day tag. Production about
+US$76-95 a month. **Two amendments change what the owner approved and await the owner:** PDF receipts rasterised in
+the files worker (RR2), and UptimeRobot's Solo plan for uptime (RR6). OA1, OA6, OA10 and OA12 updated.
+**Decided by the owner, 2026-10-09: both as recommended** — "Rasterise" (RR2), superseding the earlier acceptance of
+the PDF residual, and "UptimeRobot Solo" (RR6), replacing Better Stack. Next: the closing check (Sonnet), once the
+gate is green.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

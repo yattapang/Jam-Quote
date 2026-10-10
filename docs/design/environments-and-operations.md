@@ -90,6 +90,8 @@ staging or development — not for a bug, not for a test, not "just this once".
 | The monthly restore drill | A throwaway cluster in production's account | Hours; destroyed after the checks |
 | The yearly rebuild drill | A throwaway cluster in production's account | Hours; destroyed after the checks |
 
+*(Pointer 2026-10-09: the copies of **files** — quarantine, the files bucket, their backups and the drill's — are listed in `docs/design/third-party-register.md` RG2.)*
+
 **Restoring must not undo an erasure** *(OR11)*. When a person's data is erased (R1.44, ADR 0035), the erasure is
 written to an **erasure ledger** — identifiers only, never the data itself. Restoring any copy replays the ledger before
 the restored data is used. So a restore cannot silently bring back what someone asked to delete.
@@ -271,8 +273,12 @@ the owner prefers.
 | The console's **approval-signing** key and the **GitHub App's** private key (OP8) | The production API only | Staging, GitHub, Claude |
 | The **deploy** tokens for the API host and Vercel (OP5, OP8) | The production API only, used by the Deploy page | GitHub, staging, Claude |
 | Stripe's keys (ADR 0033), the email key (A6), the storage keys (A5), the error-tracking key | The API service | — |
-| *(2026-10-09, A5)* The files bucket's per-bucket key (RG2) | The API service only | Staff, other jobs, Claude |
-| *(2026-10-09, A5)* The upload quarantine's put-only key, and the scan job's key that reads contents only when tagged clean (RG3) | The API service; the scan job | Staff, Claude; the backup account |
+| *(2026-10-09, A5, amended after its read)* The files bucket's keys (RG2): the API's read/write/delete key; the files worker's own read/write/delete key; the backup job's read key | The API; the files worker; the backup job — each its own | Staff, Claude, any other job |
+| *(A5)* The standing drill bucket's key (RG2) | Released only to an approved drill run, like the drill key | Everything else, between drills |
+| *(A5)* The upload quarantine's `PutObject`-only key; the files worker's key that reads tags, reads contents only when tagged clean, and deletes (RG3) | The API; the files worker | Staff, Claude; the backup account |
+| *(A5)* The files worker's database login, able to call one door function only (RG3) | The files worker | The API, staff, Claude |
+| *(A5)* The backup bucket's list-only key, for the morning backup-age check (RG5) | The production API's job worker | Staff, Claude |
+| *(A5)* Sentry's read-only API token, once the Team plan is bought for the console's error link (RG4) | The production API | Staff, Claude |
 | The staging smoke tenant's login | Staging's smoke-check job | Production; it opens nothing there |
 
 - **No key is shared between environments.** Staging has its own of everything, and **production's checks never trust

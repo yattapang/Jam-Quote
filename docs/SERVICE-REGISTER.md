@@ -39,13 +39,14 @@ and `docs/design/third-party-register.md` §10.
 
 | Service | What it does | Holds personal data | Where | Status | Decided in | If it went away |
 |---|---|---|---|---|---|---|
-| **DigitalOcean** — App Platform, managed PostgreSQL, Spaces | The API and its job worker; the database; the files (logos, rendered PDFs, receipts) | **Yes — everything** | Toronto, Canada | Chosen, not yet in use (B1, B5); subject to OP2's Toronto check | OP2-OP3; RG2 | Standard containers, PostgreSQL and the S3 API: restore the backups at another provider (OP6's yearly rebuild drill proves it) |
+| **DigitalOcean** — App Platform, managed PostgreSQL, Spaces | The API and its job worker; the files worker (RG3); the database; the files (logos, rendered PDFs, receipts) | **Yes — everything** | Toronto, Canada | Chosen, not yet in use (B1, B5); subject to OP2's Toronto check | OP2-OP3; RG2 | Standard containers, PostgreSQL and the S3 API: restore the backups at another provider (OP6's yearly rebuild drill proves it) |
 | **Vercel** (Pro) | The site and the web app, as static files | In transit only; nothing stored (OP2) | Global edge | The site is in use, on Hobby until OA27 | OP2-OP3 | Any static host |
-| **AWS** — S3 and GuardDuty, three accounts under one organisation | The backup store (ciphertext only); the upload quarantine and its malware scan | Backups: encrypted, unreadable to AWS. Quarantine: **yes, plain uploads for at most one day** | Canada (Central) | Chosen, not yet in use (B3, B5) | OP6; RG3; RG7 | Backups: any store with a write-once lock. Scanning: ClamAV in our own hosting (RG3 option A) |
-| **Sentry** (Developer plan) | Error tracking, from the API only | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | EU (Frankfurt) | Chosen, not yet in use (B3) | RG4 | Another error tracker; the redacted shape is ours |
-| **Better Stack** (free plan) | Uptime checks and heartbeats | No — URLs and check names | — | Chosen, not yet in use (B3) | RG5 | Another monitor; the checks are plain HTTP |
-| **Microsoft 365** (Business Basic), held by the Canadian company | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Canada | Chosen, not yet in use (OA12) | RG6; SF2 | Any mail provider: change the domain's MX record, export the mailbox |
+| **AWS** — S3 and GuardDuty, three accounts under one organisation | The backup store (ciphertext only); the upload quarantine and its malware scan | Backups: encrypted, unreadable to AWS. Quarantine: **yes, plain uploads — normally minutes, about two days at most** | Canada (Central) | Chosen, not yet in use (B3, B5) | OP6; RG3; RG7 | Backups: any store with a write-once lock. Scanning: ClamAV in our own hosting (RG3 option A) |
+| **Sentry** (Developer plan) | Error tracking, from the API only | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | Error events at rest in the EU (Frankfurt); account data in the US | Chosen, not yet in use (B3) | RG4 | Another error tracker; the redacted shape is ours |
+| **UptimeRobot** (Solo) — the owner's choice after the read (RR6), replacing Better Stack | Uptime checks and heartbeats | No — URLs and check names | — | Chosen, not yet in use (B3) | RG5 | Another monitor; the checks are plain HTTP |
+| **Microsoft 365** (Business Basic), held by the Canadian company | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Mailbox content at rest in Canada (a tenant provisioned in Canada) | Chosen, not yet in use (OA12) | RG6; SF2 | Any mail provider: change the domain's MX record, export the mailbox |
 | **The transactional email provider** | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses and documents sent | Chosen in A6 | Not chosen | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
+| **The Canadian company** (ADR 0033) | Holds the mailbox's Microsoft account (RG6); sells subscriptions through Stripe | **Yes** — support mail, including what clients write; tenants' billing details | Canada | Chosen (RG6); its role goes to the attorney (OA10) | RG6; ADR 0033 | The mailbox moves to the Jamaican company's own Microsoft tenant: a migration |
 | **Stripe**, through the Canadian company | Tenants' subscriptions by card | **Yes** — the tenant's billing details; card numbers never touch us | Canada and the United States | Test mode only (OA21) | ADR 0033; A10 | WiPay, the fallback (ADR 0033; OA8) |
 | **GitHub** (Team, the business's organisation) | Code, CI, Claude's pull requests | No — code and synthetic data only | United States | In use on a personal account until OA25 | OP8 | Any git host; CI rewritten |
 | **GoDaddy** | The domain's registrar | The registrant's contact details | — | In use | — | Transfer to another registrar |
@@ -58,17 +59,16 @@ the database, sealed with a key held in configuration and never in the database 
 **The sub-processor list** — what a contractor is given and what the privacy notice says (ADR 0035 decisions 1 and 2;
 the Act's s. 16(2)(g)). Only services that hold personal data appear:
 
-| Sub-processor | What it does for Pryvis | Where the data is |
-|---|---|---|
-| DigitalOcean | Hosting, database and file storage | Canada |
-| Amazon Web Services | Encrypted backups; checking uploaded files for malware | Canada |
-| Microsoft | Our email inbox | Canada |
-| The transactional email provider | Sending email | Chosen in A6 |
-| Stripe | Subscription payments | Canada and the United States |
-| Sentry | Error reports, built to contain no personal data | European Union |
+The list, with where the data rests and where it may be processed, is kept **once**, in
+`docs/design/third-party-register.md` RG8 (amended after its read: the Canadian company and Vercel added, and locations
+qualified as "at rest"). In short: DigitalOcean, AWS, the Canadian company, Microsoft, Vercel, the transactional email
+provider (A6), Stripe and Sentry.
 
-All of them are United States companies: data held in Canada can still be reached by US legal process (OP2's
-caveat), and the privacy notice says so.
+All the providers are United States companies: data held in Canada can still be reached by US legal process (OP2's
+caveat). **The privacy notice must say so** (E6). The draft notice on the site today (`new-app/web/content/legal.ts`)
+still names the old application's providers and says nothing of it, and the site's guard
+(`new-app/web/test/site-guards.test.ts`) lists the same five names by hand, so both change together when the notice is
+rewritten.
 
 ## 1. The old application — infrastructure and hosting (until K1)
 
@@ -251,7 +251,8 @@ development uses `.env` files, which are git-ignored, from the checked-in `.env.
    Sentry's scrubbing both work (RG4).
 2. **AWS sees uploads in plain form** for the minutes they wait to be scanned (RG3). A choice made for a store-enforced
    "never read unscanned", recorded rather than hidden.
-3. **PDF receipts are not disarmed in release 1** — a residual the owner accepted on 2026-10-09 (RG3).
+3. **PDF receipts are rasterised for staff** in the files worker (the owner's decision, 2026-10-09, RG3); a PDF that
+   exploits the renderer reaches only that worker, which holds no production secret.
 4. **No restore has been run yet.** The first drill is rehearsed on staging at B3 and run in production at F3 (OP6).
 5. **Several provider capabilities are unconfirmed** from public pages and are checked before the build relies on them
    (`docs/design/third-party-register.md` §11).

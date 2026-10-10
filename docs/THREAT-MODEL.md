@@ -104,7 +104,7 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 | A share link becomes a login | `@ShareTokenRoute` never mints a session | **BUILT** (as a property of the guard: no caller is resolved) |
 | Registration confirms whether an email is registered | Duplicate answers as new; the existing owner is emailed | **OWED** — registration not built; ADR 0015 fixes the design |
 | Registration creates unlimited tenants, or sends mail on demand | Rate limits, email verification before anything costly | **OWED** |
-| A hostile upload (malware, zip bomb, SVG with script) | Type, size, dimension checks; scanning; private tenant-scoped storage | **OWED** — no uploads yet. *Designed 2026-10-09* (`docs/design/third-party-register.md` RG3): eight fail-closed steps, a scan the store enforces, images re-encoded; PDF receipts not disarmed in release 1, accepted by the owner |
+| A hostile upload (malware, zip bomb, SVG with script) | Type, size, dimension checks; scanning; private tenant-scoped storage | **OWED** — no uploads yet. *Designed 2026-10-09* (`docs/design/third-party-register.md` RG3): eight fail-closed steps, a scan the store enforces, decoding in a files worker that holds no production secret, images re-encoded, PDF receipts rasterised for staff (amended after the read, RR1-RR3; owner, 2026-10-09) |
 
 ### 4.4 Platform staff (T5 → A6, everything)
 

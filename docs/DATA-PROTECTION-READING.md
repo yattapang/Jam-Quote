@@ -110,6 +110,10 @@ where Pryvis stores it.
 - The cleanest split: the **Jamaican company is the controller of everything except billing**, and the processor for
   contractors' clients; the **Canadian company is the controller of billing only**, with the Jamaican company as its
   representative. Stripe is the Canadian company's processor for card payments, and holds the card data itself.
+- *(Pointer 2026-10-09: by the owner's choice in `docs/design/third-party-register.md` RG6, the Canadian company also
+  holds the support mailbox's Microsoft account, so it handles support mail — including what clients write — for
+  Pryvis. "Controller of billing only" no longer describes all it does; its role for that mail goes to the attorney
+  with OA10.)*
 
 ## 3. Registration — what Pryvis must file, and when
 
