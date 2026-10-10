@@ -1107,6 +1107,11 @@ gate is green.
 16.5), declared before launch: general-purpose at **Sonnet** — mechanical: every item names its text, and the costs are
 summed (Rule 16.9).* Brief `docs/briefs/2026-10-09-register-design-closing-check.md`, run by `tools/run_brief.py` at
 HEAD `b583c59`: 5 of 5 expectations hold.
+**Reported 2026-10-09: closable.** 5 of 5 expectations hold at `aa05b1e`; RR1-RR17 each answered with its quoted
+sentence; the costs agree across RG9, OA1 and OP3; every "disagree" and "agree in part" line adopted; tree clean
+(checked after it finished, and two of its quotes re-read). One note, fixed: RG6 called the 14-day recoverable window a
+"minimum" where it is the default, raisable to 30 — the design now says it is never raised. **A5 now awaits only the
+owner's sign-off.**
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

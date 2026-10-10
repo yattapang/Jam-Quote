@@ -437,7 +437,8 @@ Canadian data centre, with the period at 2 months.
   to 30), so:
   - a default tag on the whole mailbox with the **Permanently Delete** action at **76 days**, so that 76 plus the 14-day
     recoverable window is 90;
-  - the recoverable window left at its 14-day minimum;
+  - the recoverable window left at its 14-day default — it can be raised to 30, which would break the 90, so it is
+    never raised (the closing check's note);
   - **users cannot opt out**: "Never Delete" is a system tag that cannot be removed, and users may apply tags by
     default, so the role that lets a user choose their own retention tags is removed from every mailbox user;
 - **checked by hand twice and recorded** in the operations log: at set-up, that the tag and the role restriction are in
