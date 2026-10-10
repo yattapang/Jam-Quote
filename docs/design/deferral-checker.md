@@ -65,4 +65,8 @@ And its first real run is recorded: what it found, and what was fixed.
   three gaps — a malformed tick line or an unclosed fence made a step vanish from this tool **and from
   `tools/check_build_plan.py`**, and the backward form was case-sensitive. Both tools now fail on such input instead of
   skipping it (`docs/MISTAKES.md` M46); proved by six more plants, each restored and compared.
-
+- **The re-check of those fixes** (`docs/briefs/2026-10-10-build-plan-tools-recheck.md`): closable for them, but seven
+  more tick shapes still vanished silently. By Rule 21.9 the pattern was replaced, not patched again: any line with a
+  checkbox must be a well-formed step, read by **one parser** (`read_plan` in `tools/check_build_plan.py`) that this tool
+  imports. Eighteen plants — every shape found silent, the earlier ones, both fence kinds, an HTML comment — each fail
+  both tools; a closed tilde-fenced example and an untouched plan pass.

@@ -1229,6 +1229,13 @@ fully green, the deferral checker's first CI run among it ("ticked steps: A1, A2
 declared before launch: general-purpose at **Sonnet** — named plants against two small tools (Rule 16.9).* Brief
 `docs/briefs/2026-10-10-build-plan-tools-recheck.md`, run by `tools/run_brief.py` at HEAD `9203e0e`: 4 of 4 expectations
 hold; its control-byte check was proved able to fire on a planted backspace first.
+**Reported 2026-10-10: closable** for the M46 fixes (4 of 4 expectations at `c187dcb`; all seven plants as briefed;
+restores identical) — **but the class was reduced, not closed**: seven more tick shapes still vanished from both tools,
+and a docstring claimed more than the tool did. **Rule 21.9 applied the same day**: the shape-list patch was replaced by a
+positive rule (any checkbox line must be a well-formed step) and **one shared parser** that `check_deferrals.py` imports
+(Rule 7). Its own first version still let `[X]` and `[✓]` through to the deferral checker, which the plants caught before
+commit; fixed by putting the box rule in the parser. **18 of 18 plants** behave, each restored and compared. M46 and the
+design updated.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

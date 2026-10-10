@@ -933,3 +933,15 @@ closed, as a failure — `check_build_plan.py` reports it, and `check_deferrals.
 smaller set. The backward form is case-insensitive. Proved by six plants on backed-up copies, each restored and
 compared. **The lesson, again: a guard must fail on input it cannot read, never skip it** — "no steps parsed" was
 already a failure here; "some steps not parsed" was not.
+
+**Then replaced, not patched a third time (Rule 21.9), 2026-10-10.** The re-check of that fix
+(`docs/briefs/2026-10-10-build-plan-tools-recheck.md`) found it **reduced the class, not closed it**: seven more tick
+shapes — a lower-case, bold or backticked id, a numbered list, a blockquote, an id outside A-K, no id at all — still
+vanished silently from both tools, and the deferral checker's docstring claimed "any other form" stops the run, which
+was untrue. The patch had been a second list of shapes. **Replaced by a positive rule and one parser**: any line
+outside a fence that carries a checkbox must be a well-formed step or the run fails, and `check_deferrals.py` imports
+`check_build_plan.py`'s parser rather than keeping its own copy (Rule 7). The first version of the replacement still let
+`[X]` and `[✓]` silence the deferral checker — the box rule lived in the other tool's main loop, not in the shared parser
+— and 18 plants found it before commit. Now 18 of 18 behave: every shape fails both tools; a closed tilde-fenced example
+and an untouched plan pass. **What remains, stated in the docstring:** a step written with no checkbox at all is not a
+step to either tool; the printed count of steps is where it would show.

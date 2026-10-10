@@ -25,8 +25,9 @@ the finding mechanical for the forms it knows. Design: docs/design/deferral-chec
   spaces inside the phrase, a step id glued to a word ("matchedA5"), or the phrase broken across two lines (the scan is
   per line, and a resolution counts only on the phrase's own line). The verb list is short on purpose; a second miss
   of the same class means replacing this tool's shape, not adding a verb (Rule 21.9).
-- It trusts the plan's ticks once they are well formed. A tick line in any other form, or an unclosed fence, stops the
-  run (since 2026-10-10) rather than shrinking the set it checks.
+- It reads the plan's ticks through check_build_plan.py's parser (`read_plan`). A line carrying a checkbox that is not
+  a well-formed step, or a fence left open, stops the run rather than shrinking the set it checks (M46). A step written
+  with no checkbox at all is not a step to either tool.
 - A deletion that leaves another document relying on what was removed is invisible to it (A6's MR16).
 - A resolution is checked for presence, not truth: a dated pointer to the wrong design passes.
 - Deferrals to steps not yet ticked are correct and are not checked.
@@ -72,26 +73,17 @@ def tracked_markdown() -> list[str]:
 
 
 def ticked_steps() -> set[str]:
-    # Outside fenced blocks only: the plan's own example of an evidence line ("- [x] B1 · …") sits in a fence, and the
-    # first run of this tool counted it, reporting B1 as ticked when it is not. check_build_plan.py skips fences too.
-    # A tick in any other form, or a fence left open, would make steps silently vanish from this check (found by its
-    # independent check, 2026-10-10): refuse to run rather than check a smaller set than the plan holds.
-    ticked, fenced = set(), False
-    for number, line in enumerate(PLAN.read_text(encoding="utf-8").splitlines(), start=1):
-        if line.startswith("```"):
-            fenced = not fenced
-            continue
-        if fenced:
-            continue
-        match = re.match(r"^- \[x\] ([A-K][0-9]{1,2}) ·", line)
-        if match:
-            ticked.add(match.group(1))
-        elif re.match(r"^\s*[-*+]\s*\[[^ ]\]\s*[A-K][0-9]{1,2}\b", line):
-            raise SystemExit(f"docs/BUILD-PLAN.md:{number}: a ticked step not in the form '- [x] A1 · …' — fix it "
-                             "(check_build_plan.py reports it too); not checking a smaller set than the plan holds")
-    if fenced:
-        raise SystemExit("docs/BUILD-PLAN.md: a code fence is never closed — every tick after it would be missed")
-    return ticked
+    # The plan is read by check_build_plan.py's own parser, never a second copy (Rule 7): two copies of the parsing
+    # disagreed twice in one day — first this tool read a fenced example as a B1 tick, then both let malformed tick
+    # lines vanish silently (M46). If the parser cannot read every checkbox line, refuse to run rather than check a
+    # smaller set than the plan holds.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from check_build_plan import read_plan
+
+    steps, problems = read_plan(PLAN)
+    if problems:
+        raise SystemExit("\n".join(problems) + "\nnot checking deferrals against a plan that cannot be read in full")
+    return {step_id for _, box, step_id in steps if box == "x"}
 
 
 def skip_reason(path: str) -> str | None:
