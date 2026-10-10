@@ -222,7 +222,7 @@ If the Toronto check fails, they are reused, in the business's name, for option 
 | API (DigitalOcean App Platform, Toronto) | One always-on web service, 1-2 GB memory | Always on (ADR 0026); Nest with Prisma and a job worker in one process | US$10-25 |
 | Database (DigitalOcean managed PostgreSQL, Toronto) | Single node, 1 GB to start | Daily backups and point-in-time restore included; standard PostgreSQL | US$15 |
 | Website and web app (Vercel) | **Pro**, one seat | Hobby forbids commercial use | US$20 |
-| Object storage, error tracking, uptime, malware scanning | Chosen in A5 | — | Mostly free tiers at launch |
+| Object storage, error tracking, uptime, malware scanning | Chosen in A5 *(Pointer 2026-10-09: `docs/design/third-party-register.md` RG2-RG5)* | — | Mostly free tiers at launch |
 | **Total, production** | | | **about US$45-60 a month**, before A5's services |
 
 **Staging:** the same provider and products at the smallest sizes — a small web service and the smallest **managed
@@ -369,7 +369,7 @@ holds no production database credential for writing the record.
 **The backup store is with a different company** *(OR7)*. A backup with the same provider and account as the live
 database does not survive losing that account, or an attacker inside it.
 - **The recommended store:** AWS S3 in its Canada (Central) region, under a separate account owned by the business.
-  A5 confirms the choice and its price, which is cents a month at our size.
+  A5 confirms the choice and its price, which is cents a month at our size. *(Pointer 2026-10-09: confirmed — `docs/design/third-party-register.md` RG7.)*
 - **Object Lock in compliance mode, for 35 days.** Every backup is locked when written: no one — not the job, not an
   attacker, not the owner — can delete or overwrite it until the lock ends. The bucket's lifecycle rule deletes it
   after that. This is what "add but not delete or overwrite" means in practice. An ordinary upload credential could
@@ -632,10 +632,10 @@ outage.
 | Production database | 1 GB single node | Storage and CPU | 70% of storage, or CPU above 70% for a week | The next size | About US$30 a month |
 | Production database, failover | None: a single node, with backups (OP6) | One machine | An outage longer than the 4-hour target, or **50 paying contractors** | A standby node (high availability) | About double the database's cost |
 | Production API | 1-2 GB, one instance | Memory, CPU | Memory above 80%, or response times above target for a week | More memory, or a second instance | US$10-25 a month more |
-| Backup store (OP6) | Pay per gigabyte; cents at our size | — | — | — | Cents a month; A5 confirms |
-| Error tracking (A5) | Free plan | Events a month | 80% for two months | The paid plan | Priced in A5 |
-| Uptime monitor and heartbeat (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
-| Object storage for files (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
+| Backup store (OP6) | Pay per gigabyte; cents at our size | — | — | — | Cents a month; A5 confirms *(Pointer 2026-10-09: about US$1-3, `docs/design/third-party-register.md` RG7)* |
+| Error tracking (A5) | Free plan | Events a month | 80% for two months | The paid plan | Priced in A5 *(Pointer 2026-10-09: `docs/design/third-party-register.md` §10)* |
+| Uptime monitor and heartbeat (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 *(Pointer 2026-10-09: UptimeRobot Solo, `docs/design/third-party-register.md` §10)* |
+| Object storage for files (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 *(Pointer 2026-10-09: `docs/design/third-party-register.md` §10)* |
 | CI minutes (GitHub Actions) | The plan's monthly allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
 | *(A6)* Email sending (SES, à la carte, two accounts) | Pay per use: US$0.10 per 1,000, and US$0.005 a month per SES tenant | Each account's sending quota; the account-email stream's own ceiling (500 a day) | 80% of either | A quota raise on request; the ceiling raised as real sign-ups grow; the fallback provider if refused | About US$4 a month at 30,000 emails |
 | Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |

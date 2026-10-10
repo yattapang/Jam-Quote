@@ -245,6 +245,15 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_build_plan.py
 
+      # A step that is ticked is never still "to be decided" elsewhere: "chosen in A5", "priced in
+      # A5", "A5 confirms" must be rewritten or carry a dated pointer to the deciding design (M45;
+      # docs/design/deferral-checker.md). Proved by planting a stale deferral in both forms (fails),
+      # one to an open step (passes), and each excuse on and off its own line. It knows a short list
+      # of wordings and states so; it cannot see a deletion another document relied on.
+      - name: No deferral names a decided step
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_deferrals.py
+
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all
   #

@@ -1197,6 +1197,18 @@ owner: M45's proposed checker for stale deferrals, and the brief edit of MS2 ("n
 its evidence line (6 of 64 steps). The brief's §12 is edited as MS2 proposed, with a dated note (Rule 1.9). M45's
 checker is built next, with its own short design.
 
+**Built 2026-10-10: the deferral checker** (`tools/check_deferrals.py`, design `docs/design/deferral-checker.md`, owner's
+word: "build the checker"). *Delegation (Rule 16.5), declared before starting: in-session — a guard whose proof is an
+ordered plant, restore and compare, which Rule 16.6 keeps in-session; an independent Sonnet check follows.* **Its first
+real run found 13 stale deferrals** (twelve to A5, one to A6) that two reads and two closing checks had passed over; the
+twelve now carry dated pointers and the one cites the deciding design. Its own first version misread the plan's fenced example as a B1 tick (M21's pattern),
+caught by its banner and fixed. Seven plants, each restored and compared with `diff -q`. Added to the gate (root
+`CLAUDE.md`: six checkers) and to CI's `docs` job (the workflow re-parsed after the edit, Rule 22.2). Coverage line
+(Rule 21.3), in the tool's words, with its own design tracked: "28 deferral phrases found; 24 name a ticked step;
+resolved: 8 by quotation, 13 by dated pointer, 3 by cites the deciding design" (the four more are the design's quoted
+examples). M45 updated. Next: its independent check,
+`docs/briefs/2026-10-10-deferral-checker-check.md`.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

@@ -406,7 +406,7 @@ secret's value.
 
   The captured log output is then searched for each planted value. Plants: logging the raw URL, and logging
   `error.message` — each fails the test.
-- **Error tracking** (a service chosen in A5) receives the same redacted shape and nothing more.
+- **Error tracking** (a service chosen in A5 — *Pointer 2026-10-09: Sentry, EU region, API only, `docs/design/third-party-register.md` RG4*) receives the same redacted shape and nothing more.
 
 ### AP10 · Background jobs carry their tenant
 
@@ -460,7 +460,7 @@ model D4). So:
 
 ### AP11 · Files, signed URLs and caches are tenant-scoped
 
-The storage provider is chosen in A5; these rules hold for any provider:
+The storage provider is chosen in A5 *(Pointer 2026-10-09: DigitalOcean Spaces in Toronto, with uploads scanned in quarantine first — `docs/design/third-party-register.md` RG2-RG3)*; these rules hold for any provider:
 
 - **Object keys are made by the server**, never from a file name or any client input:
   `tenants/<tenant_id>/<kind>/<uuid>`. The tenant segment comes from the caller's session — or, on a share route,

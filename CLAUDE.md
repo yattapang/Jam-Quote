@@ -29,8 +29,8 @@ history.
 ## The gate, before every commit
 
 From `new-app/`: `npm run typecheck && npm test` (workspace root, never one package). Then from the
-repository root, the five checkers in `tools/` — `check_rules.py`, `check_dispositions.py`,
-`check_citations.py`, `check_schema_citations.py`, `check_build_plan.py`. Read the counts, not the exit codes. The race suite needs
+repository root, the six checkers in `tools/` — `check_rules.py`, `check_dispositions.py`,
+`check_citations.py`, `check_schema_citations.py`, `check_build_plan.py`, `check_deferrals.py` (added 2026-10-10, M45). Read the counts, not the exit codes. The race suite needs
 real PostgreSQL via `PRYVIS_PG_URL` (see `new-app/CLAUDE.md`).
 
 ## Non-negotiables (details in `docs/RULES.md`)

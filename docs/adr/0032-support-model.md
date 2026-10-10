@@ -19,7 +19,7 @@ design named above.
 1. **Support conversations live in a small ticket built into Pryvis**, under row-level security and audited, rather
    than in a hosted helpdesk. The deciding reason is that support messages carry tenants' clients' data; a helpdesk
    would hold a further copy outside our isolation. **Revisit** at more than 20 new tickets a day for a month.
-2. **One mailbox, two addresses** (`info@`, `support@`). Its provider is chosen in A5, and must delete mail
+2. **One mailbox, two addresses** (`info@`, `support@`). Its provider is chosen in A5 *(Pointer 2026-10-09: Microsoft 365 Business Basic, held by the Canadian company — `docs/design/third-party-register.md` RG6)*, and must delete mail
    automatically on a schedule.
 3. **Three ways in:** "Contact support", "Report a problem", and email. An emailed ticket joins a tenant's account
    only after the tenant confirms it, signed in. Support never changes sign-in details on an email's word.

@@ -900,3 +900,16 @@ cap's race — "executed", and said production's cost "stays within" a total the
 every row one of three fixed verdicts — **mechanical now** (naming the check), **C1 test** (not yet running), or **not
 mechanical** (naming who catches it) — so a row cannot claim mechanism in free words. That is a format, not a guard: a
 reader still has to check that a "mechanical now" row names a check that exists.
+
+**Built, 2026-10-10, at the owner's word ("build the checker").** `tools/check_deferrals.py`
+(`docs/design/deferral-checker.md`) now fails the gate and CI's `docs` job when a deferral phrase — "chosen in A5",
+"priced in A5", "A5 confirms" and the other forms its docstring lists — names a ticked step and its line carries no
+quotation, dated pointer or citation of the deciding design. **Its first real run found 13 stale deferrals** — twelve
+to A5, in `docs/design/api-layer.md`, `docs/design/environments-and-operations.md`, `docs/design/support-and-feedback.md`
+and ADR 0032, and one to A6 in A5's register — each a sentence still calling a decided thing open, after two
+independent reads and two closing checks had passed over them. The twelve now carry dated pointers, and the one cites the design that decided it. **And its own first
+version was wrong (M21's pattern):** it read the build plan's fenced example line ("- [x] B1 · …") as a tick and reported
+B1 done; the banner, which prints the ticked steps, showed it, and the tool now skips fences as `check_build_plan.py`
+does. Proved by seven plants, each restored from a backup and compared with `diff -q`. **Still not prevented:** other
+wordings, and a deletion another document relied on (MR16) — as the tool's docstring says.
+

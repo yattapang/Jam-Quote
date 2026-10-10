@@ -526,7 +526,7 @@ s. 16(2)(g)). Only services that hold personal data appear:
 | **The Canadian company** (Solvnow) | Holds our email inbox's account, and sells subscriptions | Canada | Canada |
 | Microsoft, for the Canadian company | Our email inbox | Canada | Under its terms, including outside Canada |
 | Vercel | Delivers the website and web app; **data passes through, nothing is stored** | — | Its global network |
-| Amazon Web Services (SES) — *chosen in A6* | Sending email | Canada (messages and bounced addresses); AWS's global suppression list, location not stated, up to 14 days | Under its terms |
+| Amazon Web Services (SES) — *chosen in A6* (`docs/design/outbound-messaging.md` MS3) | Sending email | Canada (messages and bounced addresses); AWS's global suppression list, location not stated, up to 14 days | Under its terms |
 | Stripe | Subscription payments | Canada and the United States | Under its terms |
 | Sentry | Error reports, built to contain no personal data | European Union (error events) | The United States for account data |
 

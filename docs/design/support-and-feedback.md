@@ -86,7 +86,7 @@ helpdesk is chosen with its processor terms in hand.
 - **Two addresses, one mailbox:** `info@pryvis.com` (already the site's contact, PRD §9 item 1) and
   `support@pryvis.com` as an alias of it. One place to read, and two addresses so a support reply never looks like
   marketing.
-- **The provider is chosen in A5**, with the rest of the register. **The deciding requirement is that it can delete
+- **The provider is chosen in A5** *(Pointer 2026-10-09: Microsoft 365 Business Basic, held by the Canadian company — `docs/design/third-party-register.md` RG6)*, with the rest of the register. **The deciding requirement is that it can delete
   mail automatically on a schedule** (SF7) *(SR7)*; price comes second.
 
 | Option | Cost | Note |
@@ -270,7 +270,7 @@ Rule 25.3 already reads this way — every piece of feedback is linked to the ve
   requests. The app keeps them in memory for this purpose only. The server accepts only UUIDs *(SR10)*.
 - **Nothing else** is attached: no form contents, no screenshots, no local storage.
 
-**The error link.** An error reference lets staff open the matching event in error tracking (chosen in A5).
+**The error link.** An error reference lets staff open the matching event in error tracking (chosen in A5 — *Pointer 2026-10-09: Sentry, reached through the console on its Team plan, `docs/design/third-party-register.md` RG4*).
 
 - Staff open it **through the console**, which checks `answer_support` and records the access *(SR10)*.
 - The events themselves must hold no personal data. AP9's test searches log lines, so B3 adds the same test to the
@@ -452,7 +452,7 @@ own decision, with its gate, when the signals above say so.
 | Item | At the web launch | Later |
 |---|---|---|
 | Tickets, form, console, measures (SF1, SF3, SF5, SF6, SF8) | US$0 licence; a small build in E1-E2 | — |
-| Mailbox (SF2) | US$0 (Zoho Mail free) to about US$7-8.40 per user a month (Google Workspace) — chosen in A5 | — |
+| Mailbox (SF2) | US$0 (Zoho Mail free) to about US$7-8.40 per user a month (Google Workspace) — chosen in A5 *(Pointer 2026-10-09: Microsoft 365, about US$6, `docs/design/third-party-register.md` RG6)* | — |
 | Help centre (SF4) | US$0 | — |
 | Chatbot | — | Phase 2: US$0. Phase 3, if approved: about US$33-66 per thousand conversations |
 | WhatsApp support line | — | Revisited with I3 |
