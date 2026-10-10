@@ -1151,6 +1151,24 @@ launch: commit-reviewer at **Opus** — where personal data goes, and abuse cont
 visitor can trigger, are judgement-class; the owner relies on our judgement.* Brief
 `docs/briefs/2026-10-09-messaging-design-read.md`, run by `tools/run_brief.py` at HEAD `3eb37e8`: 4 of 4 expectations
 hold. Findings MR1 onward, agree/disagree on MS1-MS10, and an attack on §13's mistake mapping, in its reply.
+**Reported 2026-10-09: MR1-MR24**, verdict "sound after the named changes"; **1 blocker**, 15 major, 8 minor; tree
+clean; CI on `62eb0d5` green. Agreed with MS5; in part with eight; **disagreed with MS8**. Confirmed on AWS's own pages
+before answering (Rule 16.4): AWS reviews an account at 5% bounces and 0.1% complaints, so the draft's per-tenant
+thresholds were at or above AWS's lines and blind below 40 sends (**MR1, the blocker**); Gmail sends SES no complaints
+(MR2); suppression lasts until removed, and SES offers tenant-level lists (MR5); new accounts default to dearer pricing
+(MR21). Confirmed in the repository: the approval commit left OP4, SF7, RG6/OA11 and the threat model stale (MR11,
+MR14, MR16, MR24). **§13's mistake mapping was itself found decorative**: recorded as **M45**, with a proposed checker
+for stale deferrals awaiting the owner, and the part with no mechanical guard said plainly.
+**The owner decided three amendments, 2026-10-09, each as recommended:** a separate AWS account for account mail (MR4),
+TLS required (MR22), à la carte pricing (MR21). MR3's open question was answered by the approved acceptance design
+(§4.1: the contractor types the channel), so a code goes only to the contractor's chosen address.
+**Answered the same day** (the design's §14 maps each finding): two message tables and AP10's queue; sealed secrets;
+re-check at send; a client key; forward-only statuses; tenant-level suppression; atomic caps, a new-tenant ramp,
+absolute low-volume limits and **an automatic circuit breaker at half AWS's lines**; opt-out keyed on the address and
+reversed only by a code to it; names checked by shape; every copy and key; the mailbox's records restored to OA11.
+Twins corrected in OP2, OP4, OP7, OP10, SF7, RG6-RG8, the register, the data-protection reading and the threat model;
+a sweep for each replaced phrase run across the documents. A brief edit (§12, "nothing is sent twice") is proposed to
+the owner. Next: the closing check (Sonnet), `docs/briefs/2026-10-09-messaging-design-closing-check.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

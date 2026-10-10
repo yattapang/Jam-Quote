@@ -203,7 +203,7 @@ the Data Protection Act was read. The ADR carries a dated note pointing here onc
 **Services that still sit outside Canada**, listed for the registration and the privacy notice (s. 16(2)(g)):
 - Stripe, through the Canadian company (Canada and the United States);
 - Vercel (in transit only, as above);
-- the transactional email provider (A6) — *chosen 2026-10-09: Amazon SES in Canada (Central), so in fact inside Canada (`docs/design/outbound-messaging.md` MS3)*;
+- the transactional email provider (A6) — *chosen 2026-10-09: Amazon SES in Canada (Central); messages rest in Canada, but AWS's global suppression list, of a location AWS does not state, holds bounced addresses up to 14 days (`docs/design/outbound-messaging.md` MS10)*;
 - error tracking (A5: an EU or Canadian data region where offered);
 - GitHub, which holds code and synthetic data only — never personal data.
 
@@ -272,14 +272,15 @@ the owner prefers.
 | The CSRF key, the session pepper if any, the MFA sealing keys (ADR 0021) | The API service | — |
 | The console's **approval-signing** key and the **GitHub App's** private key (OP8) | The production API only | Staging, GitHub, Claude |
 | The **deploy** tokens for the API host and Vercel (OP5, OP8) | The production API only, used by the Deploy page | GitHub, staging, Claude |
-| Stripe's keys (ADR 0033), the email key (A6), the storage keys (A5), the error-tracking key | The API service | — |
+| Stripe's keys (ADR 0033), the storage keys (A5), the error-tracking key | The API service | — |
 | *(2026-10-09, A5, amended after its read)* The files bucket's keys (RG2): the API's read/write/delete key; the files worker's own read/write/delete key; the backup job's read key | The API; the files worker; the backup job — each its own | Staff, Claude, any other job |
 | *(A5)* The standing drill bucket's key (RG2) | Released only to an approved drill run, like the drill key | Everything else, between drills |
 | *(A5)* The upload quarantine's `PutObject`-only key; the files worker's key that reads tags, reads contents only when tagged clean, and deletes (RG3) | The API; the files worker | Staff, Claude; the backup account |
 | *(A5)* The files worker's database login, able to call one door function only (RG3) | The files worker | The API, staff, Claude |
 | *(A5)* The backup bucket's list-only key, for the morning backup-age check (RG5) | The production API's job worker | Staff, Claude |
 | *(A5)* Sentry's read-only API token, once the Team plan is bought for the console's error link (RG4) | The production API | Staff, Claude |
-| *(A6)* The SES sending key, limited to sending through the production email account's configuration sets (MS3, MS10) | The production API's job worker | Staff, Claude, the files worker |
+| *(A6, amended after its read, MR11)* The email keys — the client account's sending key and tenant-management key, the account-email account's sending key — each as listed in `docs/design/outbound-messaging.md` MS10 | The production API's job worker | Staff, Claude, the files worker |
+| *(A6)* The sealing key for messages' secrets (MS2) | The production API | Everyone else |
 | *(A6)* The reminder opt-out token's signing key (MS7) | The production API | Everyone else |
 | *(A6)* Staging's own SES key, in the sandbox | Staging's API | Production |
 | The staging smoke tenant's login | Staging's smoke-check job | Production; it opens nothing there |
@@ -449,6 +450,7 @@ bring back what was erased.
 | **The nightly backup** *(OR8)* | **A heartbeat check** in the uptime monitor, pinged by each successful backup; and the age of the newest object in the backup store | **No ping by its deadline; the newest backup older than 26 hours**; a drill that refuses a backup's signature | The owner by email and phone notification |
 | Money arithmetic | The nightly reconciliation (R1.24e, A12) | A mismatch | The support address (SF2) |
 | The database | The provider's usage figures | 80% of a plan limit (OP10) | The owner by email |
+| *(A6)* Email sending | Our own counts from SES's events, and AWS's reputation alarms | A tenant paused (MS8); the client account's circuit breaker trips (half AWS's review lines); the account-email stream at 80% of its daily ceiling; SES pauses a tenant (EventBridge) | The owner by email, through AWS's notification service rather than SES |
 | Spending | Each provider's spend alerts; the Claude spend cap (OA3) | 80% of a budget | The owner by email |
 
 **No alert carries personal data.** Alerts carry identifiers, counts and error kinds (AP9).
@@ -635,7 +637,7 @@ outage.
 | Uptime monitor and heartbeat (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
 | Object storage for files (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
 | CI minutes (GitHub Actions) | The plan's monthly allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
-| *(A6)* Email sending (SES) | Pay per use: US$0.10 per 1,000 | AWS's sending quota; the account's bounce and complaint rates | 80% of the quota; the account alarm (MS8) | A quota raise on request; the fallback provider if refused | About US$3 a month at 30,000 emails |
+| *(A6)* Email sending (SES, à la carte, two accounts) | Pay per use: US$0.10 per 1,000, and US$0.005 a month per SES tenant | Each account's sending quota; the account-email stream's own ceiling (500 a day) | 80% of either | A quota raise on request; the ceiling raised as real sign-ups grow; the fallback provider if refused | About US$4 a month at 30,000 emails |
 | Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |
 | Round-the-clock response | Working hours only (OP7) | One person | A paying contractor needs a stated response time, or **50 paying contractors** | A paid on-call arrangement, or a second responder | Decided then |
 

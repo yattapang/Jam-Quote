@@ -862,3 +862,34 @@ clones above and by this pull request's own CI. **Partly prevented:** "read CI a
 24.5 does not count. The mechanism arrives with OA25: a ruleset that requires CI to pass before anything merges, so a
 red job blocks rather than waits to be noticed. Until then, the app's pull-request monitor shows the checks to this
 session. The lesson: **the gate is where it runs — a local pass is evidence about the local machine, not about CI.**
+
+### M45 · A6's "mistakes this design is checked against" table repeated the mistakes it listed
+`Repeat of:` M13, M15, M29 (a twin left contradicting its sibling), and A5's RR4, RR6 and RR8 — on the day the owner
+asked, on starting A6, that "the rule about preventing repetition of mistakes" be kept in view.
+
+A6's draft carried a §13 mapping each recorded mistake to "the line that answers it". The independent read
+(`docs/briefs/2026-10-09-messaging-design-read.md`, MR1-MR24) found that most rows promised rather than prevented:
+- **RR4's class again**: the design's management keys were missing from the key table, and OP4 kept an old row
+  contradicting the new ones (MR11);
+- **RR6's**: "SES does not keep the body" was a deciding reason with no AWS page behind it, and the approval commit then
+  dropped its "to confirm" in SF7 (MR14);
+- **M13's**: the approval commit rewrote OA11 with SES's records only, which made A5's RG6 untrue and left the mailbox
+  with no MX record in any owner action (MR16), and left OP2, the data-protection reading and the threat model stale
+  (MR24).
+
+**Cost:** none reached a build — A6 is a design, and the read caught each before C1. But an owner who reads a table
+headed "the mistakes this design is checked against" is entitled to believe the checks exist.
+
+**What the table was:** a claim about the design, written by its author, in prose — the same shape as the writer-set
+prose of M23 and M39. A row that names no command that runs is vigilance (Rule 24.5), however it is laid out.
+
+**Prevented by, for A6:** the closing check's brief greps for each stale phrase the read named, by `tools/run_brief.py`,
+on the commit the check reads; and §13 now says, row by row, which answers are mechanical and which are not.
+**Not prevented in general.** Two parts of the class remain:
+1. **A deferral left standing after its step is decided** ("chosen in A6", "priced in A5") is mechanically findable. A
+   checker that fails when a ticked build step is still named in such a phrase is **proposed to the owner** — a small
+   tool, planted against before use (Rule 21.2) — and not built without that approval.
+2. **A rewrite that deletes something another document relies on** (MR16) has no mechanical guard here. Only the
+   independent read (Rule 1.10) and the closing check (Rule 24.6) catch it, and this entry says so rather than
+   pretending otherwise. The lesson: **a table of mistakes and answers is a claim, not a control — each row counts only
+   when it names a check that runs.**

@@ -449,6 +449,8 @@ Canadian data centre, with the period at 2 months.
   into the product**: anything that needs action becomes a ticket (SF3), written by staff;
 - mail **sent by the product** goes through the transactional email provider (A6), never through this mailbox (SF2).
   The records the domain needs for both (MX for receiving, SPF, DKIM and DMARC for sending) are written out in OA11.
+  *(Pointer 2026-10-09: A6's approval commit briefly left OA11 with SES's records only; restored after A6's read, MR16 —
+  `docs/design/outbound-messaging.md` MS4.)*
 
 ## 8. RG7 · The backup store, confirmed
 
@@ -474,7 +476,8 @@ reading back for a drill costs AWS's transfer price on a few gigabytes.
 | Production backup | The locked backup bucket | The owner, with MFA. The backup job holds an add-only key; the morning backup-age check a list-only key (RG5; OP4) |
 | Production upload scanning | The quarantine bucket (unversioned) and GuardDuty (RG3) | The owner, with MFA. The API holds a `PutObject`-only key; the files worker a key that reads tags, reads contents only when clean, and deletes. Both of AWS's bucket-policy statements, and the organisation policy reserving the scan tag to GuardDuty *(RR3)* |
 | Staging | Staging's backup bucket and quarantine bucket; SES, **kept in the sandbox** (A6) | The owner, with MFA |
-| *(Added by A6, 2026-10-09)* Production email | SES in Canada (Central): its configuration sets, SES tenants and SNS event topics (`docs/design/outbound-messaging.md` MS3) | The owner, with MFA. The production API's job worker holds a key that can only send through those configuration sets |
+| *(Added by A6, 2026-10-09)* Production client email | SES in Canada (Central) for tenants' client mail: its configuration set, SES tenants with tenant-level suppression lists, SNS and EventBridge (`docs/design/outbound-messaging.md` MS3) | The owner, with MFA. The production API's job worker holds a sending key and a tenant-management key (MS10) |
+| *(Added after A6's read, MR4)* Production account email | SES in Canada (Central) for Pryvis's own account mail — sign-up, resets, notices, support replies — so a pause of client mail never stops it | The owner, with MFA. The production API's job worker holds a sending key (MS10) |
 
 The organisation's own management account holds nothing but billing and the organisation policy that reserves the `GuardDutyMalwareScanStatus` tag to GuardDuty (RR3). Separate accounts mean a leaked scanning key
 opens nothing in the backup store, and a staging key opens nothing in production (RG1 test 6).
@@ -523,7 +526,7 @@ s. 16(2)(g)). Only services that hold personal data appear:
 | **The Canadian company** (Solvnow) | Holds our email inbox's account, and sells subscriptions | Canada | Canada |
 | Microsoft, for the Canadian company | Our email inbox | Canada | Under its terms, including outside Canada |
 | Vercel | Delivers the website and web app; **data passes through, nothing is stored** | — | Its global network |
-| Amazon Web Services (SES) — *chosen in A6* | Sending email | Canada (messages in transit; bounced addresses) | Under its terms |
+| Amazon Web Services (SES) — *chosen in A6* | Sending email | Canada (messages and bounced addresses); AWS's global suppression list, location not stated, up to 14 days | Under its terms |
 | Stripe | Subscription payments | Canada and the United States | Under its terms |
 | Sentry | Error reports, built to contain no personal data | European Union (error events) | The United States for account data |
 

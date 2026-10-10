@@ -1,8 +1,9 @@
 # Design: outbound messaging — one service, the email provider, delivery status, opt-out and caps
 
 **Status: APPROVED by the owner, 2026-10-09 — every recommendation, MS1-MS10** ("approved"). Build plan step A6
-(`docs/BUILD-PLAN.md`). Nothing here is built until C1; the provider's account and the domain's records are owner
-actions (§12).
+(`docs/BUILD-PLAN.md`). **Amended the same day to answer its independent read (MR1-MR24, §14)**; three amendments
+changed what the owner had approved, and the owner decided each on 2026-10-09 (§14). Nothing here is built until C1;
+the provider's accounts and the domain's records are owner actions (§12).
 
 Date: 2026-10-09 · **Answers** `docs/PLANNING-AUDIT.md` §7 item 6 (one service, channels, delivery status and bounces,
 opt-out, message caps; always the issued snapshot, as a PDF or an expiring link; per-tenant sender name and reply-to;
@@ -40,6 +41,7 @@ at C1 before the build relies on it.
 11. MS10 · What is kept, where, for how long — and the keys
 12. What gets built, tests, what this does not do, costs, owner actions, sources
 13. The mistakes this design is checked against (Rule 24)
+14. The independent read, and where each finding is answered
 
 ## 1. The problem
 
@@ -64,8 +66,11 @@ out from the console (SF3).
   sign-up — or a reminder setting the contractor switched on (MS7);
 - the contractor sees the true outcome of each message: sent, delivered, bounced, or refused, never a hopeful "sent"
   (R1.21b);
-- **no tenant can damage another tenant's ability to send**, and no tenant can use Pryvis to send what it likes to
-  whom it likes (MS8);
+- **no single tenant can stop another tenant's mail**, and no tenant can use Pryvis to send what it likes to whom it
+  likes (MS8). *(Restated after the read, MR1: the draft said "no tenant can damage another tenant's ability to send",
+  which its thresholds did not achieve.)* If many tenants together approach AWS's lines, **our own breaker pauses client
+  mail for everyone** — codes to known addresses still go — before AWS would pause the account; that is damage to
+  others, chosen and bounded, and it never touches sign-up and account mail, which have their own account;
 - personal data in messages rests in Canada where a provider offers it (RG1 test 1), and the provider keeps as little
   as possible (MS10).
 
@@ -85,7 +90,17 @@ Every message in release 1, and none other. A new kind is added here first.
 | 8 | **Password reset** | The tenant user | Their request | Controller | Account | Email |
 | 9 | **Subscription notices** (R1.37b, R1.37c) | The tenant's owner | A renewal, a failed payment, a lapse | Controller | Account | Email |
 | 10 | **Support reply** (SF3) | Whoever wrote to support | Staff send it from the console | Controller | Account | Email |
-| 11 | **Operational alert** (OP7) | The owner | A dead-letter job, a reconciliation mismatch (A12), a sending pause (MS8) | — (no personal data) | Account | Email |
+| 11 | **Operational alert** (OP7) | The owner | A dead-letter job, a reconciliation mismatch (A12), a sending pause or the circuit breaker (MS8) | — (no personal data) | Account | Email |
+| 12 | **"Confirm this support message is yours"** (SF3) *(added after the read, MR23)* | The account's own verified address | An email to `support@` from an address that matches an account | Controller | Account | Email; **at most one a day per account** — a forged From line cannot turn it into a flood |
+| 13 | **A new member's address verification** (ADR 0029 E3, Pro members 2 and 3) *(MR23)* | The new member | The tenant's owner adding them | Controller | Account | Email; counted in A8's sign-up limits |
+
+**Where an acceptance code goes is fixed by the contractor, never by the visitor** *(MR3)*. The approved acceptance
+design says the channel "may be typed at send time" — by the contractor, when he sends the quote
+(`docs/design/acceptance-evidence.md` §4.1) — and the acceptance records "which destination was actually used". So
+the share page offers "send me a code" **only to the destination the contractor gave**; it has no field for typing
+another address. A visitor holding a forwarded link can ask for a code, but only to the client's own address. That
+removes the "email a friend" pattern AWS warns about, rather than limiting it. If the client's address is wrong, the
+contractor corrects it and sends again.
 
 **What is not sent, and why:**
 - **No marketing, no newsletters, no "tips".** Release 1 sends only what someone's act or setting asked for. A
@@ -100,27 +115,55 @@ Every message in release 1, and none other. A new kind is added here first.
 (Rule 11; `api/src/core/architecture/import-boundaries.test.ts` already refuses reaching into another module's
 internals).
 
-1. **Asking to send writes a row, in the caller's own transaction.** `outbound_message` (a new tenant-owned table, with
-   `tenant_id` and row-level security like every other; a platform message such as a sign-up code has none — see
-   below) records: the kind (MS1), the channel, the recipient, the related record (the issue, invoice, ticket…), the
-   template and its version, the parameters the template needs (identifiers, never copies of personal data — AP10),
-   and status `queued`. **If the caller's transaction rolls back, the message never existed.** If it commits, the
-   message will be attempted. That is the outbox pattern, and it is what makes "send" and "the thing it reports"
-   agree.
-2. **A job sends it** (AP10). The job claims `queued` rows, renders the template, calls the channel, and records the
-   provider's message id and status `sent` — or a failure, below. A tenant's message is sent inside
-   `withTenant(tenant_id)`; a platform message (MS1 rows 6-8, 11) is a **declared platform job kind**, with its written
-   reason, as AP10 requires.
-3. **The request to send is idempotent** (AP6): the client's idempotency key means a double tap, or the mobile app's
-   outbox replaying a send after a lost connection (R1.18), creates one row, not two.
-4. **Retries.** A failure the provider calls temporary (throttling, a timeout, a 5xx) is retried with back-off — after 1,
-   5, 30 and 120 minutes — then the row is `failed` and the contractor sees it (MS6). A permanent refusal is not
-   retried.
+1. **Asking to send writes a row, in the caller's own transaction.** Two tables, never one with a missing tenant
+   *(MR12)*:
+   - `outbound_message` — **tenant-owned**, with `tenant_id`, row-level security and composite keys (Rule 4.1), for
+     every message a tenant's act causes (MS1 rows 1-3, 5, 9, 13);
+   - `platform_outbound_message` — **no tenant**, for messages sent before any tenant exists or about no tenant (rows 6-8,
+     10-12). The application role has **no privilege on it**; it is written and read only through named door functions,
+     the privilege model's pattern, like the credential tables.
 
-**The one duplicate this cannot prevent, stated:** if the provider accepts a message but the reply is lost (a timeout
-after acceptance), the retry sends it again. The provider recommended in MS3 has no idempotency key on its send call,
-so at-least-once is the honest promise. A client may, rarely, receive the same quote twice. Losing a message silently
-would be worse, and Rule 11 says so.
+   Each row records the kind (MS1), the channel, the recipient, the related record, the template and its version, the
+   parameters the template needs (identifiers — AP10), a **client key** (below) and status `queued`. **If the caller's
+   transaction rolls back, the message never existed.** If it commits, it will be attempted. That is the outbox
+   pattern: "send" and "the thing it reports" agree.
+2. **One queue: AP10's job table** *(MR12)*. The same transaction enqueues one AP10 job per message, carrying the
+   message's id and, for a tenant message, its `tenant_id`. The worker claims jobs through AP10's claim door — never by
+   reading `outbound_message` directly — and runs a tenant's job inside `withTenant(tenant_id)`. Platform messages are
+   a **declared platform job kind**, with the written reason "messages sent before or outside any tenant", reaching
+   `platform_outbound_message` only through its doors.
+3. **Secrets in a message are held sealed, briefly** *(MR13)*. An acceptance code, a reset link's token and a
+   verification link's token must be rendered into the message, but are stored hashed everywhere else. So the plaintext
+   is kept in `message_secret` — no tenant, no application privilege, door functions only — **sealed** with a key held
+   in configuration (as `MFA_TOTP_KEYS` seals second-factor secrets, ADR 0021), and **deleted when the provider
+   accepts the message**. A retry before acceptance re-sends the **same** code; after acceptance there is nothing to
+   resend, and a new code is a new request. The share link's token follows the same rule if A9 stores it hashed.
+4. **The job re-checks before it sends** *(MR10)*. A message can wait — offline on a phone, or in retries for hours.
+   Before calling the provider, the job re-checks the message's own preconditions, per kind, and otherwise ends it
+   `suppressed` with the reason:
+   - a document: still the current, un-withdrawn, un-revoked issue or invoice;
+   - a reminder: the invoice still unpaid, still not "do not remind", the subscription still active;
+   - any tenant message: the tenant not suspended (R1.46), its sending not paused (MS8), the address not suppressed,
+     the client not opted out (MS7);
+   - a code: its code still unused and unexpired.
+5. **The request to send is idempotent, without a time limit** *(MR10)*. AP6's idempotency records last seven days, and a
+   phone may be offline longer. So `outbound_message` carries a **client key** with a unique index per tenant — the
+   pattern R1.22g uses for variations — and a replay after any delay finds the row it already made.
+6. **Retries.** A failure the provider calls temporary (throttling, a timeout, a 5xx) is retried with back-off — after 1,
+   5, 30 and 120 minutes — then the row is `failed` and the contractor sees it (MS6). A permanent refusal is not
+   retried. **AP10 asks that a job calling a provider pass an idempotency key; SES's send call takes none.** That
+   exception is recorded here, with its consequence below.
+
+**The duplicates this cannot prevent, stated in full** *(MR20)*: a message is sent at least once, and may rarely be
+sent twice, when
+- the provider accepts it but the reply is lost (a timeout after acceptance), and the retry sends it again; or
+- the worker stops — a crash, a deploy, a lease that runs out — after the provider accepted it and before the job
+  recorded that (AP10: every job is at-least-once).
+
+A client may, rarely, receive the same quote twice. Losing a message silently would be worse, and Rule 11 says so.
+**The brief says otherwise** — §12: "so nothing is sent twice" — so an edit is proposed to the owner (Rule 1.9): "Include
+retries and idempotency, so a request is never sent twice; a provider's lost reply can still, rarely, cause a
+duplicate, and the design says when."
 
 **Statuses, and what each means** — the contractor sees these words (MS6):
 
@@ -134,6 +177,11 @@ would be worse, and Rule 11 says so.
 | `failed` | Temporary failures ran out, or the provider refused it | The job |
 | `suppressed` | **Not attempted**: the address bounced before, or the client opted out (MS7), or the tenant's sending is paused (MS8) | The job, before calling the provider |
 | `handed_to_device` | WhatsApp only: the contractor's phone opened WhatsApp with the message. We cannot know more (MS9) | The app |
+
+**A status only moves forward** *(MR9)*. The order is `queued` → `sent` → `delivered`, and `bounced`, `complained`,
+`failed` and `suppressed` are final. Every write — the job's and the event door's — is conditional on that order, so a
+late `sent` never overwrites `delivered`, and a late delivery event never overwrites `complained`. A complaint after
+delivery moves `delivered` to `complained`; nothing moves a final status back.
 
 **"Delivered" is not "read".** It means the recipient's server took it. Whether the client looked is known only when
 they open the share page, which records its own view (A9). Nothing pretends otherwise.
@@ -149,31 +197,47 @@ use allowed on the plan; separate per environment; portable.
 
 | Option | Region | Cost at our size | For | Against |
 |---|---|---|---|---|
-| **A. (rec) Amazon SES, Canada (Central)** | **Canada** — listed among SES's regions on AWS's endpoint page | **US$0.10 per 1,000 emails**, plus US$0.12 per GB of attachments (AWS's SES pricing page). At 100 tenants sending ten client emails a day, about 30,000 a month: **about US$3** | AWS is **already a sub-processor in Canada** (RG3, RG7), so no new company. **Does not keep message bodies** after sending. Per-tenant **reputation isolation with automatic pausing** (SES "tenants", 2025). A **sandbox** that only delivers to verified addresses — so staging can never email a real person | More to build: delivery events come through AWS's notification service (SNS), whose signatures we verify. New accounts start in the sandbox (200 emails a day) until AWS approves production use — **an owner action with a lead time** (OA29). No idempotency key on the send call (MS2's stated duplicate) |
+| **A. (rec) Amazon SES, Canada (Central)** | **Canada** — listed among SES's regions on AWS's endpoint page | **US$0.10 per 1,000 emails "à la carte"** — new accounts now start on the dearer Essentials plan (about US$0.16) unless à la carte is chosen *(MR21)* — plus US$0.12 per GB of attachments, and **US$0.005 a month per SES tenant** plus US$0.005 per 1,000 of its emails (AWS's SES pricing page). At 100 tenants sending ten client emails a day, about 30,000 a month: **about US$4** | AWS is **already a sub-processor in Canada** (RG3, RG7), so no new company. Per-tenant **reputation isolation, with per-tenant suppression lists and automatic pausing** (SES "tenants", 2025). A **sandbox** that only delivers to verified addresses — so staging can never email a real person. *(How long SES keeps a message body after sending is **not stated** on any AWS page read — MR14 — and is not a reason for this choice)* | More to build: delivery events come through AWS's notification service (SNS), whose signatures we verify. New accounts start in the sandbox (200 emails a day) until AWS approves production use — **an owner action with a lead time** (OA29). No idempotency key on the send call (MS2's stated duplicate) |
 | B. Resend | Multi-region sending; regions not listed on its pricing page | Free: 3,000 a month, **100 a day**; Pro US$20 a month for 50,000 | Simple; idempotency keys; signed webhooks | A new US company holding tenants' clients' messages; keeps logs **30 days** on Free, Pro and Scale; the free plan's 100 a day would block sends at 10 tenants |
 | C. Postmark | Region not stated on its pricing page | Free: 100 a month; paid plans from about US$15 a month (to confirm) | Excellent deliverability; transactional and broadcast in separate "message streams" | Keeps **full message content 45 days** by default (7-365 days as a paid add-on): our share links and codes sit in its history. A new US company |
 | D. Our own mail server | Toronto | A server, and the deliverability work | No processor | Deliverability from a fresh server is poor, and a mail server is a 2am job. Rejected |
 
-**Recommendation: A, Amazon SES in Canada (Central).** The deciding reasons: no new company; the message body is not
-kept by the provider, so the share links and codes inside it are not sitting in a dashboard for a month; Canada; and
-a cost of a few dollars a month. The extra build (event signatures, the sandbox request) is a one-time cost, and the
-sandbox is itself a safety property for staging.
+**Recommendation: A, Amazon SES in Canada (Central).** The deciding reasons: no new company; Canada; per-tenant
+isolation and suppression built in; a sandbox that keeps staging from reaching real people; and a cost of a few
+dollars a month. *(Amended after the read, MR14: the draft also gave "the body is not kept" as a deciding reason. No
+AWS page read says so — AWS says only that SES "encrypts all data at rest" — so it is withdrawn as a reason and treated
+as unknown in MS10.)* **Decided by the owner, 2026-10-09: à la carte pricing** (MR21).
 
 **How it is set up** (checked at C1, each pass or fail, recorded):
-- **A fourth AWS account, "production email"**, in RG7's organisation, so SES's sending key and its reputation are
-  apart from the backups and the upload scanner. Staging uses the staging account, **left in the sandbox for ever**:
-  it can send only to addresses verified in it, which are the owner's test addresses.
-- **Configuration sets**, one per stream (MS4), each publishing its events to one SNS topic in Canada, delivered to
-  our API by HTTPS (MS6).
-- **SES tenants** (AWS's feature): one per Pryvis tenant that sends client mail, with the **Standard** reputation
-  policy — AWS pauses a tenant on high-impact findings. This is the second net; our own thresholds (MS8) are the first.
-- **Account-level suppression for bounces only.** A hard-bounced address is suppressed across all tenants, because an
-  address that does not exist does not exist for anyone. **Complaints are not suppressed account-wide**: a client who
-  marks one contractor's quote as spam has said nothing about another contractor, so complaints are suppressed per
-  tenant, by us (MS6).
+- **Two production email accounts** in RG7's organisation *(MR4; decided by the owner, 2026-10-09: "Separate
+  account")*: **"production client email"** for the client stream and **"production account email"** for the account
+  stream (MS4). AWS reviews and pauses **a whole account**, so a pause caused by tenants' client mail can no longer
+  stop sign-up codes or password resets. Each needs AWS's production approval (OA29). Staging uses the staging account,
+  **left in the sandbox for ever**: it can send only to addresses verified in it, which are the owner's test addresses.
+- **Configuration sets**, one per stream, each publishing its events to one SNS topic in Canada, delivered to our API by
+  HTTPS (MS6). **Each requires TLS** *(MR22; decided by the owner, 2026-10-09: "Require TLS")*: SES otherwise "sends
+  the message unencrypted" when the receiving server cannot do TLS, and a message carries a share link or a code. A
+  server that cannot do TLS gets nothing; the contractor sees "could not be delivered securely" and can share by
+  WhatsApp. The account stream requires TLS too, for the same reason — its reset and verification links are credentials.
+- **SES tenants** (AWS's feature), in the client account: one per Pryvis tenant that sends client mail, **named by an
+  opaque id, never the business's name** (AWS advises against personal data in names and tags, MR15), with the
+  **Standard** reputation policy. This is the second net; ours (MS8) is the first. **Its limit, in AWS's words:**
+  tenants' "combined sending activity still affects your overall account reputation", and some findings need "a
+  minimum representative volume" — so it isolates, but does not protect the account by itself (MR1).
+- **Suppression per tenant, not per account** *(MR5)*. The client account uses **tenant-level suppression lists**: "bounces
+  and complaints only affect the tenant that sent the email" (AWS). One business's misconfigured mail server bouncing
+  once for one contractor no longer stops every other contractor reaching it. The account stream, alone in its own
+  account, uses account-level suppression for bounces. An entry is removed only through a named door: by **staff, with a
+  recorded reason** (audited), when a client confirms the address works; and by **A11's erasure job**. AWS also keeps a
+  **global suppression list** of hard-bounced addresses for up to 14 days, which we cannot clear (MS10).
 - **Open and click tracking off.** Click tracking rewrites links through AWS's tracking domain, which would put share
   tokens into another system's logs; open tracking is a pixel that reports when someone reads their mail. Neither is
   wanted (MS5).
+- **A tenant paused by SES** *(MR11)*: AWS says "any attempt to send email using that tenant will fail". That error is
+  classified as `suppressed — paused by the provider`, not retried as temporary; SES's tenant status changes, which AWS
+  publishes to **EventBridge** (not SNS), are routed by an EventBridge rule to an SNS topic, and so reach the same signed
+  event route (MS6) with the same signature check, which
+  marks the tenant paused, tells the contractor and alerts the owner.
 
 **If AWS refuses or delays production access** (OA29): B (Resend) is the fallback, with its 30-day log retention
 stated in the register and the privacy notice. The messaging module's channel interface makes the swap one adapter.
@@ -187,27 +251,48 @@ sending domain, so one tenant's spam complaints must not drag down the sign-up c
 
 | Stream | From | Reply-To | Domain |
 |---|---|---|---|
-| **Account** (MS1 rows 5-11) | `Pryvis <hello@pryvis.com>`; support replies `Pryvis Support <support@pryvis.com>` | `support@pryvis.com` (the mailbox, RG6) | `pryvis.com` |
+| **Account** (MS1 rows 5-13) — **its own AWS account** (MS3) | `Pryvis <support@pryvis.com>`; support replies `Pryvis Support <support@pryvis.com>` — an address that exists and is read (the mailbox, RG6), so a reply or a bounce never vanishes *(MR16: the draft's `hello@` was in no owner action)* | `support@pryvis.com` | `pryvis.com` |
 | **Client** (rows 1-3) | `<Business name> via Pryvis <documents@send.pryvis.com>` | **The contractor's own verified address** — the client's reply goes straight to the contractor and never passes through us | `send.pryvis.com` |
 
 **Never the tenant's own domain in From.** Sending as `delroy@delroysplumbing.com` from our servers would fail that
 domain's own checks (DMARC) and look exactly like spoofing — which, from our servers, it would be. The client sees the
 business's name, and replies reach the business.
 
-**The business name in From is cleaned:** quotes, angle brackets, `@`, line breaks and anything resembling an address
-are removed; it is cut to 60 characters; and a name that contains "Pryvis", "support", "security", "bank" or a bank's
-name from a short list is refused at the tenant settings, so a tenant cannot appear as us or as a bank.
+**The business name in From is cleaned, and checked by its shape, not its spelling** *(MR17)*:
+1. **normalised first**: Unicode NFKC, then a confusables map (the Cyrillic `у` read as `y`, digits read as letters —
+   `1` as `l`, `0` as `o`), with invisible characters (zero-width spaces and joiners) and spacing between letters
+   removed — so "Prуvis", "Pry​vis", "P r y v i s" and "Pryv1s" all compare as "pryvis";
+2. **then refused** if the normalised name contains a protected word or name: Pryvis; words a scam leans on —
+   "support", "security", "bank", "billing", "account", "refund", "tax", "verification", "fraud", "disconnection";
+   and a rule-pack list of the country's banks, utilities, telecoms and tax authority (for Jamaica, among others: NCB,
+   Scotiabank, JN, Sagicor, JPS, NWC, Digicel, Flow, TAJ);
+3. quotes, angle brackets, `@` and line breaks are removed, and it is cut to 60 characters.
 
-**The domain's records** (owner action OA11, exact values written into the batch from the SES console when the
-identities are created):
-- **DKIM** for `pryvis.com` and for `send.pryvis.com`: three CNAME records each (SES "Easy DKIM", 2048-bit);
-- **a custom MAIL FROM** subdomain for each — `bounce.pryvis.com` and `bounce.send.pryvis.com` — each with an MX record
-  to SES's Canadian feedback endpoint and an SPF record, so bounces return to SES and SPF aligns;
-- **SPF** on `pryvis.com` itself stays Microsoft's (the mailbox, RG6) — SES sends with its own MAIL FROM, so the two do
-  not collide;
-- **DMARC** on `pryvis.com` (which covers its subdomains): `p=none` for the first four weeks with aggregate reports
-  going to a dedicated address, then `p=quarantine`, then `p=reject` once the reports show only our own senders. The
-  reports name sending servers and counts, not message content.
+**The residual, stated:** a deny-list is incomplete by construction. What does not depend on it: the From address is
+always ours (`send.pryvis.com`); the display name always ends "via Pryvis"; the body is our fixed template, with no
+links but ours; and a refused or suspicious name is visible to staff. **The share page is the larger surface**: it
+shows the tenant's own line descriptions, notes and terms, so a phishing text blocked from the email could sit there.
+That page is A9's, and A9 must treat the tenant's free text as untrusted for the same reason (links not made
+clickable, no tenant-supplied HTML).
+
+**The domain's records** (owner action OA11, exact values written into the batch from the SES and Microsoft 365
+consoles when the identities are created). **The mailbox's records and SES's live side by side, and OA11 carries both**
+*(MR16: the approval commit's OA11 listed only SES's, which left the mailbox with no MX record and made A5's RG6 untrue)*:
+- **for the mailbox (RG6)**: Microsoft 365's **MX** record on `pryvis.com`, its **SPF** record (`include:` Microsoft's
+  servers), its **DKIM** (two CNAME records, so the mailbox's own mail passes DMARC when it is forwarded), and its
+  autodiscover record;
+- **for SES**: **DKIM** for `pryvis.com` and for `send.pryvis.com` — three CNAME records each (SES "Easy DKIM",
+  2048-bit) — and **a custom MAIL FROM** subdomain for each, `bounce.pryvis.com` and `bounce.send.pryvis.com`, each
+  with an MX record to SES's Canadian feedback endpoint and its own SPF record, so bounces return to SES and SPF aligns
+  without touching the root domain's SPF;
+- **for staging**: its own identity on `staging.pryvis.com`, with its own DKIM — so under `p=reject` staging's mail is
+  not refused, and staging can never sign as production;
+- **DMARC** on `pryvis.com` (which covers its subdomains): `p=none` for the first four weeks, then `p=quarantine`, then
+  `p=reject` once the reports show only our own senders. **Aggregate reports go to `dmarc@pryvis.com`, an alias of the
+  mailbox** (added to OA12), deleted on the mailbox's schedule; they name sending servers and counts, not message
+  content;
+- **Google Postmaster Tools** verified for `send.pryvis.com` (a TXT record), because Gmail sends SES no complaint data
+  (MS6) and this is where Gmail's own spam-rate figure for our domain can be read.
 
 ## 6. MS5 · What a message says: templates, the issued snapshot, no tracking
 
@@ -246,52 +331,72 @@ client chose to open.
 ## 7. MS6 · Delivery status, bounces and complaints
 
 **How events reach us.** SES publishes each message's events (delivery, bounce, complaint, rejection, delivery delay)
-to an SNS topic, which posts them to `POST /v1/provider-events/ses` — **AP6's signed provider callback route kind**:
-- the SNS message's signature is verified against AWS's certificate, fetched only from an `sns.ca-central-1.amazonaws.com`
-  address, and the topic must be ours; anything else is refused;
-- each message carries an SES **message tag** with our `outbound_message` id, so an event finds its row even if it
-  arrives before the job recorded the provider's id;
-- the route is idempotent on (provider message id, event type), so SNS's retries change nothing twice;
+to an SNS topic, which posts them to `POST /v1/provider-events/ses` — **AP6's signed provider callback route kind**,
+declared with its reason and a body-size limit:
+- **the signature is verified as AWS describes** *(MR9)*: SNS signature version 2 only; the signing certificate fetched
+  **over HTTPS** and only from an `sns.ca-central-1.amazonaws.com` host; the topic must be one of ours; anything else is
+  refused;
+- **a subscription confirmation** is confirmed only for one of our topics, and logged; any other is refused;
+- each message carries an SES **message tag** with our message's id, so an event finds its row even if it arrives
+  before the job recorded the provider's id;
+- **idempotent on the SNS message id**, as AP6 de-duplicates by the provider's own event id *(MR9)*, so SNS's retries
+  change nothing twice;
 - the row is updated **through one door function** that sets only the status fields, owned by its own role — the
-  privilege model's pattern — because the event arrives with no tenant context.
+  privilege model's pattern — because the event arrives with no tenant context; it applies MS2's forward-only order.
 
 **What the contractor sees** (R1.21b):
 - on the issue or invoice, the **latest message's status in plain words**: "Sent", "Delivered to client@…", "Bounced
   — this address does not accept mail; check it with your client", "Marked as spam by the recipient", "Not sent — this
-  client asked not to receive reminders";
+  client asked not to receive reminders", "Not sent — could not be delivered securely" (MS3's TLS);
 - a **notice in the app** when a document or a code bounces (MS1 row 4), and the week's bounces in the digest;
 - **a bounced acceptance code is shown on the client's share page** too: "We could not deliver the code to that
-  address", with the way to try another channel or to contact the business (R1.21b).
+  address — please contact the business", because the destination is the contractor's to correct (MS1) (R1.21b).
 
-**What a bounce or complaint does:**
+**What a bounce or complaint does** — keyed on **(tenant, normalised address)**, never on a client record, so a new
+client record with the same address does not escape it *(MR7)*:
 
 | Event | Effect |
 |---|---|
-| **Hard bounce** | The address is marked undeliverable on that client, for that tenant; further sends to it are `suppressed` until the contractor corrects the address. SES also suppresses it account-wide (MS3) |
+| **Hard bounce** | The address is undeliverable **for that tenant**: further sends to it are `suppressed` until the contractor corrects it. SES's tenant-level list holds it for that tenant only (MS3). Staff can lift a wrong entry with a recorded reason |
 | Soft bounce (mailbox full, server down) | SES retries for a while; if it gives up, `bounced` with the reason "temporary" and **no** suppression |
-| **Complaint** (marked as spam) | That client's address is suppressed **for that tenant, for every kind of message**, and the contractor is told; it counts towards the tenant's complaint rate (MS8) |
-| Rejected by SES (for example, a virus or a suppressed address) | `failed` or `suppressed`, with the reason |
+| **Complaint** (marked as spam) | The address is suppressed for that tenant for documents and reminders, and the contractor is told; it counts towards the tenant's thresholds (MS8). **A code the client asks for is not suppressed** — asking is the client's own act *(MR6)* — and **the client can lift the suppression** by confirming, with a code sent to that address, that they want this business's messages (MS7's reversal) |
+| Rejected or paused by SES | `failed`, or `suppressed` with the reason, including "paused by the provider" (MS3) |
+
+**Gmail does not report complaints** *(MR2)*. AWS: "Gmail doesn't provide complaint data to SES." So a Gmail client who
+marks a quote as spam produces **no** complaint event: the contractor is not told, and the per-tenant complaint count
+does not move. Complaints are therefore **not** the main signal in MS8 — bounces, caps and the circuit breaker are —
+and Gmail's own figure for our domain is read from Google Postmaster Tools (MS4), weekly, on the operations calendar
+(OP12). The contractor-facing words never claim "no complaints".
 
 ## 8. MS7 · Consent, opt-out, reminders and per-country rules
 
 **Rule 11's test, applied to each kind:** a document is sent because the contractor tapped send; a code because the
-client asked for it; account mail because the person acted. **Reminders are the one kind sent on a schedule**, so they
-need the contractor's explicit act:
+client asked for it, to the address the contractor gave (MS1); account mail because the person acted. **Reminders are
+the one kind sent on a schedule**, so they need the contractor's explicit act:
 - **reminders are off until the tenant switches them on**, in their settings, with a plain description of what will be
   sent and when; switching them on is audited;
 - **an invoice marked "do not remind"** (R1.25a) is skipped;
-- reminders **stop when the subscription lapses** (R1.37c).
+- reminders **stop when the subscription lapses** (R1.37c), and are re-checked at send (MS2).
 
 **Opt-out (R1.21c)** — on every reminder:
 - a visible "Stop these reminders" link, and the `List-Unsubscribe` and `List-Unsubscribe-Post` headers so the
   recipient's mail app offers one-click unsubscribe (RFC 8058);
-- the link carries a signed, single-purpose token (an HMAC over the message's id, with a key in OP4) and is served at
-  `POST /v1/opt-out` on the share host, declared `@PublicRoute("one-click opt-out from a tenant's reminders; the
-  token names one client of one tenant and does nothing else")`, rate-limited, idempotent;
-- **scope: one tenant's reminders to one client.** It does not stop documents the contractor sends by hand — those
-  are what the client is waiting for — and it does not affect other tenants;
-- the contractor sees "This client opted out of reminders" and **cannot switch it back on**; only the client can,
-  from the share page.
+- **one address, two methods, and only one changes anything** *(MR8)*: `GET /v1/opt-out?t=…` shows a page with a
+  "Stop reminders" button and **changes nothing** — so a corporate link-scanner that fetches links cannot opt anyone
+  out; `POST /v1/opt-out` at the same address does it, from the button or from the mail app's one-click. Both are on the
+  share host, declared `@PublicRoute("one-click opt-out from one tenant's reminders; the token names one address of one
+  tenant and does nothing else")`, rate-limited at **30 requests a minute per IP**, idempotent;
+- the token is an HMAC over (tenant, normalised address, purpose), with a key in OP4 — **not** over a client record
+  *(MR7)*;
+- **scope: one tenant's reminders to one address.** It does not stop documents the contractor sends by hand — those are
+  what the client is waiting for — and it does not affect other tenants;
+- **reversal needs the address, not a link** *(MR7)*: the contractor, and anyone a share link was forwarded to, can
+  open the share page, so a share link cannot be the key. A client who wants reminders back asks on the share page, and
+  **a code is sent to the opted-out address itself**; entering it reverses the opt-out. The record says who proved
+  what. The contractor sees "This client opted out of reminders" and cannot reverse it.
+- **RFC 8058 needs the two headers inside the DKIM signature** ("MUST be covered by the signature"). AWS's pages do not
+  say whether Easy DKIM signs them; a C1 check reads a received reminder's DKIM `h=` tag. If they are not covered, SES's
+  own DKIM is replaced by signing with our key for that stream (BYODKIM), and the check is repeated.
 
 **The digest to a tenant** (MS1 row 5) is weekly, Monday morning Jamaica time, and the tenant can switch it off.
 
@@ -300,54 +405,86 @@ need the contractor's explicit act:
 | Rule | Jamaica (release 1) |
 |---|---|
 | Channels available | Email; WhatsApp click-to-chat |
-| Phone numbers' default country code, for WhatsApp links | +1 876 / +1 658 |
+| Phone numbers for WhatsApp links | **Must include the area code** (876 or 658) — a seven-digit number is refused, because Jamaica has two area codes and guessing one could send the link to a stranger *(MR19)* |
 | Reminder sending hours | 09:00-17:00, Monday to Friday, `America/Jamaica` |
 | Reminders need an opt-out | Yes |
 | Footer wording, and the privacy sentence's template | From the rule pack, in the country's languages |
+| Protected names for the From check (MS4) | The rule pack's list of banks, utilities, telecoms and the tax authority |
 
 **What has not been read:** whether Jamaica has rules on commercial electronic messages beyond the Data Protection Act's
 right to object to direct marketing. Release 1 sends no marketing, and reminders to a business's own clients about
-their own invoices are not marketing — but that reading is the attorney's to confirm (OA10 gains the question, §12).
+their own invoices are not marketing — but that reading is the attorney's to confirm (OA10).
 
 ## 9. MS8 · Caps and abuse
 
 **The risk, plainly.** Sign-up is free and self-service (Rule 14). Without limits, someone could sign up, enter
-thousands of "clients", and use Pryvis's domain to send phishing — or simply send carelessly to bad addresses. AWS
-watches the whole account's bounce and complaint rates and, past its thresholds, reviews and then pauses it: **every
-sign-up code and every quote, for every tenant, would stop.** Four layers stop that, the first three ours:
+"clients" at addresses that do not exist or do not want mail, and spend Pryvis's reputation. AWS judges **the whole
+account**: in its words, at a bounce rate of "5% or greater, we'll place your account under review", at "10% or
+greater, we might pause"; at a complaint rate of "0.1% or greater … under review", "0.5% or greater … might pause".
+A pause of the client account would stop every tenant's quotes. **The draft's thresholds were not below those lines**
+(MR1, a blocker): "above 5%" bounce was AWS's review line itself; "two complaints in 40 sends" was 5%, fifty times
+AWS's; nothing was checked below 40 sends; and many small tenants, each under its own limit, could together pass
+AWS's line with no tenant paused. Rebuilt, in five layers, the first four ours:
 
-1. **Nothing reaches a client before the tenant's own address is verified** (Rule 14), and no client message carries
-   free content beyond MS5's personal message — no links, no HTML.
-2. **A daily cap per tier** (R1.21c), held as entitlement data and checked through the one entitlement service (Rule
-   14). It counts client emails (MS1 rows 1 and 3) per tenant per Jamaican calendar day. Recommended defaults, set with
-   the prices (OA13): **Free 20 a day, Pro 200 a day.** A refusal names the limit and the tier that raises it.
-   **Acceptance codes are not in the tenant's cap** — a client must never be unable to accept because the contractor
-   sent a lot that day — but are limited per issue (5 an hour, 10 a day) and per address (ADR 0016's buckets).
-3. **Per-tenant reputation thresholds, below AWS's**: over the last 30 days, once a tenant has sent at least 40 client
-   emails, a **hard-bounce rate above 5%**, or **two or more complaints**, **pauses that tenant's client mail**. The
-   tenant is told why, in plain words, and how to fix it; the owner is alerted; staff can lift the pause with a
-   recorded reason (audited). While paused, the contractor can still share by WhatsApp.
-4. **SES's own per-tenant pause** (MS3), the second net. And **account-wide alarms**: AWS's own alarms email the owner
-   if the whole account's bounce rate passes 2% or its complaint rate 0.05% — through AWS's notification service, not
-   through SES, so the alarm still arrives if SES is the thing that stopped.
+1. **Nothing reaches a client before the tenant's own address is verified** (Rule 14); no client message carries free
+   content beyond MS5's personal message — no links, no HTML; and a code goes only to the contractor's chosen address
+   (MS1).
+2. **Caps, counted atomically** *(MR18)*. Per tenant per Jamaican calendar day, in a counter row incremented
+   conditionally — ADR 0016's shape — so two sends at once cannot both take the last place:
+   - **client emails** (MS1 rows 1 and 3): **Free 20, Pro 200** (set with the prices, OA13), through the one
+     entitlement service (Rule 14); a refusal names the limit and the tier that raises it;
+   - **a new tenant's first seven days: at most 10 a day**, whatever the tier — a ramp, because a fresh account with no
+     history is where abuse starts;
+   - **reminders may use at most half of the day's cap**, so the contractor's own sends always have the other half; a
+     reminder the cap refuses waits for the next sending window, for up to three days, and is then skipped and listed in
+     the digest;
+   - **acceptance codes are counted separately**: per issue 5 an hour and 10 a day, and per tenant **three times its
+     client-email cap** a day — never inside the client-email cap, so a client is not blocked from accepting because the
+     contractor sent a lot that day.
+3. **Per-tenant limits that work at small numbers**, counting codes as well as documents and reminders. A tenant's
+   client mail is **paused** when, in a rolling window:
+   - **3 hard bounces in 7 days**, whatever the volume — an absolute count, because a rate means nothing at 10 sends;
+   - or, once it has sent 100 or more in 30 days, a **hard-bounce rate of 2% or more** — AWS's own "maintain a bounce
+     rate below 2%";
+   - or **2 complaints in 30 days**, whatever the volume (Gmail sends none, MS6, so this is a floor, not the main net).
 
-**The thresholds are configuration**, and AWS's own published review thresholds are read from its page at C1 and the
-values set comfortably below them.
+   The tenant is told why, in plain words, and how to fix it; the owner is alerted; staff can lift the pause with a
+   recorded reason (audited). **While paused, codes still go to addresses this tenant has delivered to before**, so a
+   real client can still accept; the contractor can still share by WhatsApp.
+4. **An automatic circuit breaker for the whole client account** *(MR1)*. From our own event counts, over the last 500
+   client-account sends (or 7 days, whichever is more): a **hard-bounce rate of 2.5%**, or a **complaint rate of
+   0.05%**, half of AWS's review lines, **pauses all client mail automatically** — except codes to addresses already
+   delivered to — and alerts the owner. Only the owner resumes it, with a recorded reason. AWS's own reputation alarms
+   (CloudWatch, on the account's bounce and complaint rates, at the same values) trip the same breaker through the
+   signed event route, so the breaker acts even if our own counts are wrong. The alert travels by AWS's notification
+   service, not SES, so it arrives when SES is what stopped.
+5. **SES's own per-tenant pause** (MS3), the last net — useful, but per AWS it needs volume and does not protect the
+   account by itself.
+
+**The account stream has its own limits** *(MR4)*, in its own AWS account (MS3): per address, ADR 0016's buckets;
+"someone tried to register" (row 7) at most once a day per address; a **global ceiling of 500 account emails a day**,
+alarmed at 80% (raised as real sign-ups grow, OP10); and the same breaker at the same values, which stops row 7 first
+and slows verification (row 6) to a trickle rather than stopping it. A8 carries the sign-up controls themselves; the
+threat model's "volume registration" row points here (§12).
+
+**The numbers are configuration**, and each is set from AWS's own published lines, read from its page on 2026-10-09
+(§12's sources), not from memory.
 
 ## 10. MS9 · WhatsApp, and later channels
 
 **Release 1 is click-to-chat** (R1.21): the server cannot send WhatsApp messages and does not try.
-- The app builds a link — `https://wa.me/<number>?text=<message>` with the client's number in international form
-  (the rule pack's default country code fills in a local number), or `https://wa.me/?text=<message>` if there is none,
-  so the contractor picks the contact — and opens it **on the contractor's own device**.
+- The app builds a link — `https://wa.me/<number>?text=<message>` with the client's number in international form, or
+  `https://wa.me/?text=<message>` if there is none, so the contractor picks the contact — and opens it **on the
+  contractor's own device**. A number without its area code is refused (MS7's table), never guessed.
 - The prefilled text is the same as the email's (MS5): the business, the document, the link, and the personal message.
 - A row is written with channel `whatsapp_click` and status `handed_to_device`. **The product never says "sent" or
-  "delivered" for WhatsApp**: it says "Opened in WhatsApp — sent by you". Whether the contractor pressed send, we cannot
-  know.
+  "delivered" for WhatsApp**: it says **"Opened in WhatsApp — check that you pressed send"** *(MR19: the draft's "sent by
+  you" claimed what the next sentence said we cannot know)*.
 
 **The residual, stated:** on a computer, `wa.me` opens in a browser, so the prefilled text — with the share link and
 its token — passes through WhatsApp's web service (Meta) on its way to the app. That is the contractor's own channel,
-chosen by them, and the token remains revocable and expiring (A9). On a phone, the link opens the app directly.
+chosen by them, and the token remains revocable and expiring (A9). How the link behaves on each phone was not read from
+WhatsApp's own page (it renders by script), and is checked by hand at C1 on an Android and an iPhone.
 
 **Release 3** (I3) adds WhatsApp Business sending as a channel adapter: templates approved by Meta, the recipient's
 consent, per-message cost, Meta's verification — and a new register row. Its own design comes then; nothing here
@@ -355,145 +492,238 @@ assumes its rules, which the brief says to check at build time.
 
 ## 11. MS10 · What is kept, where, for how long — and the keys
 
-**Every copy of a message, and its lifetime** — written so that "the provider keeps nothing" is checkable (the lesson
-of A4's OR11 and A5's RR4):
+**Every copy of a message, and its lifetime** — rebuilt after the read found six copies missing *(MR15)*:
 
-| Copy | Where | What | Lifetime |
+| Copy | Where | What | Lifetime, and erasure |
 |---|---|---|---|
-| The `outbound_message` row | Our database (Toronto) | Kind, status, recipient address, related record, template version, provider id, times. **Not the body** — it is rebuilt from the template version and the issued snapshot if ever needed | **As long as the record it belongs to**: a document's sends with the document (the tax period, ADR 0035's schedule); a code's row 90 days; account mail 90 days; support replies with their ticket (24 months, SF7) |
-| The message in transit | SES, Canada | The whole message, briefly, while delivering | Minutes; **SES does not keep the body after sending** (to confirm in AWS's data-handling terms at C1) |
-| Event records | SNS, Canada | Event metadata, including the recipient address | In transit only; retried for a short time if our endpoint is down |
-| The suppression list | SES account-level, Canada | Addresses that hard-bounced | Until removed — **an erasure removes the address** (A11's erasure job calls SES's delete-suppressed-destination) |
+| `outbound_message` / `platform_outbound_message` rows | Our database (Toronto) | Kind, status, recipient address, related record, template version, provider id, times. **Not the body**, which is rebuilt from the template version and the issued snapshot if needed | **As long as the record it belongs to**: a document's sends with the document (the tax period, ADR 0035's schedule); a code's row 90 days; account mail 90 days; support replies with their ticket (24 months, SF7). Erasure redacts the address |
+| `message_secret` (MS2) | Our database, sealed | A code's or token's plaintext | **Until the provider accepts the message** — normally seconds |
+| AP10's job rows | Our database | Message id and tenant id only | AP10's own clean-up |
+| AP6's idempotency records | Our database | The send request's response body — which therefore **never includes** a code, a token or the recipient's address | 7 days (AP6) |
+| ADR 0016's rate-limit rows | Our database | An unsalted hash of a typed address ("reversible by guessing", ADR 0016's own words) | Until the bucket refills and the sweep deletes it; on erasure, the address's bucket is deleted |
+| The message in transit, and after | SES, Canada | The whole message | **Unknown after sending**: no AWS page read states how long SES keeps a body (MR14); AWS states it is encrypted at rest. Treated as "kept for an unstated period" in the privacy notice until AWS's data-handling terms say otherwise (checked at C1) |
+| SES's tenant-level and account-level suppression lists | SES, Canada | Addresses that hard-bounced, and complained ones for a tenant | Until removed; **erasure removes them** (A11's job, with the key below) |
+| **AWS's global suppression list** | AWS, location not stated | Addresses that hard-bounced | **Up to 14 days, set by AWS; we cannot clear it.** Stated in the privacy notice |
+| SNS event messages | SNS, Canada | **The message's headers** — subject, the business's name in From, the contractor's Reply-To, the opt-out URL — and the recipient | In transit; retried for a short time if our endpoint is down |
+| DMARC aggregate reports | The mailbox (RG6) | Sending servers and counts; no content | The mailbox's 90 days |
 | The recipient's mailbox | The client's own provider | The message | Outside our control, as for any email; the link inside it expires (A9) |
 
-**On a client's erasure** (R1.44, A11): the client's address is redacted from their `outbound_message` rows, and
-removed from the SES suppression list; the erasure ledger (OP1) records it.
+**On a client's erasure** (R1.44, A11): their address is redacted from message rows, removed from SES's tenant-level
+list, and their rate-limit bucket deleted; the erasure ledger (OP1) records it. AWS's global list ages out within 14
+days, which the notice says.
 
-**The keys, for OP4's table** (the lesson of A5's RR4, RR7 and RR13: name every credential when it is designed):
+**The keys, for OP4's table** — rebuilt after the read found the management keys missing *(MR11)*:
 
-| Key | Held by | Never held by |
-|---|---|---|
-| SES sending key — `ses:SendEmail` on the production email account's configuration sets only | The production API's job worker | Staff, Claude, the files worker |
-| The opt-out token's signing key (MS7) | The production API | Everyone else |
-| Staging's own SES key, sandboxed | Staging's API | Production |
+| Key | Can do | Held by | Never held by |
+|---|---|---|---|
+| Client-account sending key | `SendEmail` through the client stream's configuration set, and **nothing else** (the exact IAM resources confirmed at C1 from AWS's authorisation reference, which the read could not load) | The production API's job worker | Staff, Claude, the files worker |
+| Client-account tenant-management key | Create an SES tenant and associate its identity and configuration set; remove an entry from a tenant's suppression list (erasure, or staff's audited removal) | The production API's job worker, used only by those named jobs | Staff directly, Claude |
+| Account-account sending key | `SendEmail` through the account stream's configuration set only | The production API's job worker | Staff, Claude, the files worker |
+| The opt-out token's signing key (MS7) | Sign and check opt-out tokens | The production API | Everyone else |
+| `message_secret`'s sealing key (MS2) | Seal and open message secrets | The production API | Everyone else |
+| Staging's own SES key, sandboxed | Send to verified addresses only | Staging's API | Production |
 
-SNS events need no shared secret: their signatures are AWS's, verified against AWS's certificate (MS6).
+Re-enabling a tenant SES paused is done by the owner in AWS's console, after reading why — not by a key the API holds.
+SNS events need no shared secret: their signatures are AWS's, verified against AWS's certificate (MS6). **OP4's old
+row** that named "the email key (A6)" as held by "the API service" is replaced by these rows.
 
 **No personal data in logs** (AP9): the job logs the message id, kind and status — never the address, the subject or
 the body.
 
 ## 12. What gets built, tests, what this does not do, costs, owner actions, sources
 
-**The decisions, as approved by the owner on 2026-10-09:**
+**The decisions, as approved by the owner on 2026-10-09, and as amended after the read** (§14):
 
-| # | Decision | Recommended |
-|---|---|---|
-| MS1 | The eleven kinds of message, and what is not sent | As written |
-| MS2 | One service, the outbox, statuses, at-least-once with its stated duplicate | As written |
-| MS3 | The provider | **Amazon SES in Canada**, a fourth AWS account; Resend as the fallback |
-| MS4 | Two streams on two domains; never the tenant's domain in From; the records | As written |
-| MS5 | **A link, not an attachment**; no amount in the email; no links in the personal message; no tracking | As written |
-| MS6 | Events by signed SNS; what the contractor sees; bounce and complaint effects | As written |
-| MS7 | **Reminders off until the tenant switches them on**; opt-out scope; Jamaica's rules as data | As written |
-| MS8 | Caps **Free 20 / Pro 200 a day** (set with the prices); per-tenant thresholds; AWS alarms | As written |
-| MS9 | WhatsApp click-to-chat; "opened in WhatsApp", never "sent" | As written |
-| MS10 | Copies, retention, erasure, keys | As written |
+| # | Decision | As approved | Amended after the read |
+|---|---|---|---|
+| MS1 | What is sent | Eleven kinds | Thirteen (SF3's confirmation, new members); **a code goes only to the contractor's chosen address** |
+| MS2 | One service and the outbox | Outbox, statuses, at-least-once | Two tables (no null tenant); AP10's queue; sealed secrets; re-check at send; a client key; forward-only statuses; every duplicate named |
+| MS3 | The provider | SES in Canada, one account | **Two production email accounts** (owner); **TLS required** (owner); **à la carte** (owner); tenant-level suppression; paused tenants and EventBridge handled; "body not kept" withdrawn as a reason |
+| MS4 | Senders and the domain | Two streams, two domains | Account mail from `support@`; names checked by shape; the mailbox's records restored to OA11; staging's identity; the DMARC report address; Postmaster Tools |
+| MS5 | Content | A link, no amount, no links, no tracking | Unchanged; the share page's free text named as A9's surface |
+| MS6 | Events and outcomes | Signed SNS | SNS v2 over HTTPS, confirmation, de-duplication on SNS's id; Gmail's missing complaints stated; a client's code exempt from complaint suppression; keyed on the address |
+| MS7 | Consent and opt-out | Reminders off by default | GET shows, POST acts; keyed on the address; reversal only by a code to that address; DKIM coverage checked |
+| MS8 | Caps and abuse | Free 20 / Pro 200; thresholds; alarms | Atomic caps; a new-tenant ramp; reminders at most half; absolute low-volume limits; **an automatic account circuit breaker at half AWS's lines**; account-stream limits |
+| MS9 | WhatsApp | "Opened in WhatsApp" | "Check that you pressed send"; area code required |
+| MS10 | Copies and keys | As written | Six more copies; the management keys; OP4's old row replaced |
 
 **What gets built, and when:**
-- **On approval (A6):** the register's transactional-email row and the sub-processor list (`docs/SERVICE-REGISTER.md`
-  §0; `docs/design/third-party-register.md` RG8) name SES; RG7's account table gains the production email account; OP4
-  gains MS10's keys; SF7's row for "our replies, as sent" points here; OA6, OA10 and OA11 are made precise and OA29 is
-  added (below).
-- **C1 — email messaging:** the `messaging` module, `outbound_message` with its policy, the send job, the SES adapter,
-  the SNS route and its door, the templates for MS1 rows 1-2 and 6-8, the statuses on the issue, the caps, the
-  per-tenant thresholds, the SES set-up and its checks.
-- **C2 (sign-up)** uses rows 6-7; **C5 (share and accept)** uses row 2 and the bounced-code message on the share page;
-  **D2 (invoicing)** adds rows 3 and 5 and the opt-out; **D6** row 9; **E1** row 10.
+- **On approval of the amendments (A6):** `docs/SERVICE-REGISTER.md` §0's SES row (two accounts; the body's retention
+  unknown); A5's RG6, RG7 and RG8; OP2's list, OP4's rows, OP7's watch table and OP10's row in
+  `docs/design/environments-and-operations.md`; SF7's pointer; the data-protection reading's §5 row; the threat model's
+  rows; OA6, OA10, OA11, OA12 and OA29; and the brief edit of MS2, if the owner approves it.
+- **C1 — email messaging:** the `messaging` module, both message tables with their policy and doors, `message_secret`,
+  the send job on AP10's queue, the SES adapter, the SNS route and its door, the EventBridge rule, the templates for MS1
+  rows 1-2, 6-8 and 12, the statuses, the caps and their counters, the per-tenant limits, the circuit breaker, the SES
+  set-up in both accounts, and its checks.
+- **C2 (sign-up)** uses rows 6-7 and 13; **C5 (share and accept)** uses row 2 and the bounced-code message; **D2
+  (invoicing)** adds rows 3 and 5 and the opt-out; **D6** row 9; **E1** rows 10 and 12.
 
 **Tests, each proved with a planted defect:**
-- **The outbox is atomic** (MS2): a send requested in a transaction that rolls back leaves no row and sends nothing.
-  Plant: the row written outside the caller's transaction.
-- **A double tap sends once** (MS2): two requests with one idempotency key create one row. Plant: the key ignored.
-- **Retries stop** (MS2): a provider that fails temporarily four times leaves the row `failed`, after the fourth
-  back-off. Plant: an unbounded retry.
-- **Nothing reaches a provider for a suppressed address, an opted-out client or a paused tenant** (MS6-MS8): each ends
-  `suppressed` with no call made. Plants: each check removed in turn.
-- **A forged or foreign event is refused** (MS6): a body with a bad signature, a certificate URL off
-  `sns.ca-central-1.amazonaws.com`, or another topic's ARN changes nothing. Plants: each check skipped.
-- **An event applied twice changes nothing twice** (MS6). Plant: the idempotency check removed.
-- **The cap and its exclusions** (MS8): the 21st Free client email in a Jamaican day is refused with the tier named;
-  an acceptance code is still sent. Plants: the cap counted per UTC day; codes counted in the cap.
-- **The pause** (MS8): a tenant crossing a threshold is paused, its client mail `suppressed`, and another tenant's
-  mail unaffected. Plant: the pause applied account-wide.
-- **The From name cannot impersonate** (MS4): names containing `"`, `<`, `@`, a line break, "Pryvis" or a bank's name
-  are cleaned or refused. Plant: the cleaner skipped.
+- **The outbox is atomic** (MS2): a send requested in a transaction that rolls back leaves no row, no job and nothing
+  sent. Plant: the row written outside the caller's transaction.
+- **A replay sends once, at any age** (MS2): two requests with one client key create one row, including after AP6's
+  record has expired. Plant: the unique index dropped.
+- **Re-checked at send** (MS2): a quote withdrawn, a reminder's invoice paid, a tenant suspended — each after queueing —
+  ends `suppressed` with no provider call. Plants: each re-check removed in turn.
+- **Statuses only move forward** (MS2, MS6): a `sent` written after `delivered`, and a delivery event after
+  `complained`, change nothing. Plant: the order check removed.
+- **Secrets are gone once sent** (MS2): after the provider accepts a code's message, its `message_secret` row is gone,
+  and the application role cannot read the table at any time. Plants: the delete skipped; a grant added.
+- **Retries stop** (MS2): four temporary failures leave the row `failed`. Plant: an unbounded retry.
+- **A paused tenant is not "failed"** (MS3): SES's paused-tenant error ends `suppressed — paused by the provider` and is
+  not retried. Plant: the error classed as temporary.
+- **Nothing reaches a provider for a suppressed address, an opted-out address or a paused tenant** (MS6-MS8). Plants:
+  each check removed in turn.
+- **A forged or foreign event is refused** (MS6): a bad signature, signature version 1, a certificate URL that is not
+  HTTPS or not on `sns.ca-central-1.amazonaws.com`, another topic's ARN, or a subscription confirmation for another
+  topic changes nothing. Plants: each check skipped.
+- **An event applied twice changes nothing twice** (MS6), keyed on SNS's message id. Plant: the check removed.
+- **Caps, atomically** (MS8): twenty-one concurrent sends on a Free tenant's day — **raced against real PostgreSQL**, as
+  the race suite does (M32's lesson) — let exactly twenty through; a reminder cannot take the second half; a code is
+  still sent. Plants: count-then-insert without the conditional increment; the cap counted per UTC day; codes counted
+  in the client cap.
+- **Low-volume limits** (MS8): a tenant's third hard bounce in seven days pauses it after three sends; while paused, a
+  code to an address delivered before still goes and one to a new address does not. Plants: the absolute count
+  replaced by a rate; the paused-code exception widened to every address.
+- **The breaker** (MS8): synthetic events taking the client account to 2.5% bounces pause all client mail and alert the
+  owner; account mail, in its own account, is untouched; only the owner's recorded act resumes it. Plants: the breaker
+  scoped to one tenant; a resume without a reason.
+- **The From name cannot impersonate** (MS4): the read's list — "Prуvis Billing" (Cyrillic), "Pry​vis",
+  "P r y v i s Accounts", "Pryv1s Accounts", "National Commercial Bnk", "TAJ Tax Refund Unit", "JPS Disconnection
+  Notice", "Fraud Department" — is refused, and an ordinary business name passes. Plant: normalisation skipped.
 - **The personal message carries no link** (MS5). Plant: the check removed.
-- **What leaves us is what we meant** (MS5, MS10): the **actual request** sent to the SES adapter — captured, not the
-  template's output alone — contains the share link, no amount, no tracking settings, the opt-out headers on a
-  reminder and only on a reminder; and the job's log lines for it contain no address. (The lesson of A5's RR10.)
-  Plants: an amount added to the template; the address logged.
-- **WhatsApp is never "sent"** (MS9): a `whatsapp_click` row cannot reach `sent` or `delivered`. Plant: the status
-  allowed.
-- **The opt-out** (MS7): the token opts out exactly one client of one tenant from reminders, is refused if altered, and
-  a hand-sent document to that client still goes. Plants: the scope widened to all kinds; the signature unchecked.
-- **Staging cannot email a real person** (MS3): checked by hand at C1 — a send to an unverified address from staging is
-  refused by SES's sandbox — and recorded.
-- **A cross-tenant test** (Rule 4): tenant B cannot read, resend or change the status of tenant A's messages, by id or
-  through the event route.
+- **What leaves us is what we meant** (MS5, MS10): the **actual request** sent to SES — captured — contains the share
+  link, no amount, no tracking, TLS required on its configuration set, the opt-out headers on a reminder and only on a
+  reminder; the job's log lines contain no address; and AP6's stored response for the send contains no code, token or
+  address. Plants: an amount added to the template; the address logged; the code returned in the response.
+- **What SES adds, checked by hand at C1 and recorded:** a received reminder's DKIM `h=` tag covers `List-Unsubscribe`
+  and `List-Unsubscribe-Post` (MS7); staging's sandbox refuses an unverified address (MS3); a configuration set
+  requiring TLS refuses a server without it.
+- **WhatsApp is never "sent"** (MS9), and a seven-digit number is refused. Plants: the status allowed; an area code
+  guessed.
+- **The opt-out** (MS7): GET changes nothing; POST opts out one address of one tenant from reminders, is refused if the
+  token is altered, and leaves hand-sent documents going; reversal needs the code sent to that address, and possession
+  of a share link is not enough. Plants: GET acting; the scope widened; the token unchecked; reversal by link.
+- **A complaint does not block a client's own code** (MS6). Plant: the code suppressed by the complaint.
+- **Cross-tenant** (Rule 4): tenant B cannot read, resend, re-check or change the status of tenant A's messages — by id,
+  through the event route, or through the platform table's doors.
 
 **What this does not do (Rule 21.4):**
 - **It does not guarantee arrival.** "Delivered" means the client's server accepted it; spam folders are outside
-  anyone's control. DKIM, SPF, DMARC and the separate client stream improve the odds; they do not decide them.
-- **At-least-once, not exactly-once** (MS2): a lost reply after acceptance can send a message twice.
+  anyone's control.
+- **At least once, not exactly once** (MS2): a lost reply, or a worker stopping after acceptance, can send a message
+  twice.
+- **Gmail's complaints are invisible to us** (MS6): Postmaster Tools gives a domain-wide figure, not who complained.
+- **The From check is a deny-list**, normalised but incomplete by construction (MS4); the share page's free text is A9's.
+- **How long SES keeps a body is unknown** (MS10), and AWS's global suppression list holds bounced addresses up to 14
+  days where we cannot clear them.
 - **WhatsApp's outcome is unknowable** (MS9), and on a computer the prefilled text passes through Meta's web service.
 - **It does not read Jamaica's commercial-messaging law** beyond what is stated (MS7); the attorney does (OA10).
-- **It does not design the share page, its link's form or its expiry** (A9), the document settings that hold the
-  privacy line (A7), or the erasure job (A11). It names what it needs from each.
-- **SES's capabilities are read from AWS's pages, not yet exercised**: tenants and their reputation policy, the
-  sandbox's refusal, suppression by reason, and that the body is not kept. Each is a C1 check.
+- **It does not design** the share page (A9), the document settings (A7), the sign-up controls (A8) or the erasure job
+  (A11). It names what it needs from each.
+- **SES's capabilities are read from AWS's pages, not exercised**: tenants, tenant-level suppression, the paused-tenant
+  error and its EventBridge event, TLS enforcement, the sandbox, and the IAM resources a sending key can be limited to.
+  Each is a C1 check.
 
-**Costs:** SES about **US$3 a month** at 30,000 emails, rising with use (US$0.10 per 1,000); SNS's charges for
-deliveries to an HTTPS endpoint are a few cents at this volume. Production's total stays within A5's about US$76-95 a
-month. OP10 gains a row: **SES — trigger: AWS's sending quota at 80%** (the quota is raised on request), and the
-account's bounce or complaint alarm.
+**Costs** (à la carte, the owner's choice): SES about **US$4 a month** at 30,000 emails — US$0.10 per 1,000, plus
+US$0.005 a month per SES tenant (about US$0.50 at 100 tenants) and US$0.005 per 1,000 of their emails; SNS and
+EventBridge a few cents. Production's total stays within A5's about US$76-95 a month. OP10's row: AWS's sending quota at
+80%, and the breaker's alarms.
 
-**Owner actions** (`docs/OWNER-ACTIONS.md`), on approval:
-- **OA6** gains the **production email** AWS account (and SES in the staging account, sandboxed).
-- **OA11** (batch 2) gains its exact contents: MS4's DKIM, MAIL FROM and DMARC records for `pryvis.com` and
-  `send.pryvis.com`, with DMARC's staged policy and its report address.
-- **New, OA29** (batch 2, **long lead**): **request SES production access** in the production email account, with the
-  use case written in the batch (transactional mail only, opt-out on reminders, bounce and complaint handling as MS6
-  and MS8 describe). AWS can take days, ask questions, or refuse; MS3's fallback applies if it refuses.
-- **OA10** gains a question: does Jamaica regulate commercial electronic messages beyond the Data Protection Act, and
-  do overdue reminders to a business's own clients fall under it?
+**Owner actions** (`docs/OWNER-ACTIONS.md`), on approval of the amendments:
+- **OA6**: **two** production email AWS accounts (client and account) and SES in the staging account, sandboxed; **choose
+  à la carte** for SES in each, when the account is opened.
+- **OA11** (batch 2): **both sets of records** — the mailbox's (Microsoft's MX, SPF, DKIM and autodiscover) and SES's
+  (DKIM and MAIL FROM for `pryvis.com` and `send.pryvis.com`) — staging's identity on `staging.pryvis.com`, DMARC's
+  three stages with reports to `dmarc@pryvis.com`, and Google Postmaster Tools for `send.pryvis.com`.
+- **OA12** (batch 2): `dmarc@pryvis.com` added as an alias of the mailbox.
+- **OA29** (batch 2, **long lead**): **request SES production access in both production email accounts**, with each
+  account's use case written in the batch. AWS can take days, ask questions or refuse; MS3's fallback applies if it does.
+- **OA10**: does Jamaica regulate commercial electronic messages beyond the Data Protection Act, and do overdue reminders
+  to a business's own clients fall under it?
 
 **Sources** (read 2026-10-09 on each vendor's own pages):
-- AWS: [SES endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/ses.html) (Canada (Central) listed;
-  sandbox default 200 per 24 hours, 1 per second); [SES pricing](https://aws.amazon.com/ses/pricing/) (US$0.10 per
-  1,000; US$0.12 per GB of attachments); [SES tenants](https://docs.aws.amazon.com/ses/latest/dg/tenants.html) and
-  [their announcement](https://aws.amazon.com/about-aws/whats-new/2025/08/amazon-ses-tenant-isolation-automated-reputation-policies/).
-- Resend: [pricing](https://resend.com/pricing) (3,000 a month and 100 a day free; Pro US$20; 30-day retention).
-- Postmark: [pricing](https://postmarkapp.com/pricing) (45-day content retention by default; message streams).
-- RFC 8058, one-click unsubscribe (the `List-Unsubscribe-Post` header).
+- AWS: [SES endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/ses.html) (Canada (Central); sandbox
+  200 per 24 hours); [SES pricing](https://aws.amazon.com/ses/pricing/) (à la carte US$0.10 per 1,000; Essentials the
+  default for new accounts from 21 July 2026; tenants US$0.005 a month each); [SES tenants](https://docs.aws.amazon.com/ses/latest/dg/tenants.html);
+  [the sending review FAQ](https://docs.aws.amazon.com/ses/latest/dg/faqs-enforcement.html) (review at 5% bounces and
+  0.1% complaints, pause possible at 10% and 0.5%; "maintain a bounce rate below 2%"; CAPTCHA for "email a friend");
+  [the account-level suppression list](https://docs.aws.amazon.com/ses/latest/dg/sending-email-suppression-list.html)
+  ("remain there until you remove them"; "Gmail doesn't provide complaint data to SES"; tenant-level lists; the global
+  list).
+- Resend: [pricing](https://resend.com/pricing). Postmark: [pricing](https://postmarkapp.com/pricing).
+- RFC 8058, one-click unsubscribe (§3.2 the GET and POST target; §4 the DKIM coverage requirement).
 
 ## 13. The mistakes this design is checked against (Rule 24)
 
-The owner asked, on starting A6, that the rule about preventing repetition be kept in view. Rule 24.4 says a repeat
-means the first answer was decorative; so this section names each recorded mistake that a design of this kind could
-repeat, and the line of this design that answers it — for the independent read to attack.
+The owner asked, on starting A6, that the rule about preventing repetition be kept in view. The draft answered with a
+table mapping each recorded mistake to a line of the design. **The read found that table was itself the mistake it was
+meant to prevent**: it promised answers, and most were not mechanical — the keys were still missing (RR4's class), a
+vendor fact still had no vendor page (RR6's), and the approval commit itself left a twin contradicting its sibling
+(M13's). That is recorded as **M45** in `docs/MISTAKES.md`. The table below now says, for each row, what the read found
+and what is mechanical after the amendments.
 
-| Mistake (ledger or finding) | What it was | How this design answers it |
+| Mistake | What the draft claimed | What the read found | Now — and is it mechanical? |
+|---|---|---|---|
+| **RR6** (A5) | Every vendor fact from the vendor's page | "SES does not keep the body" had no page (MR14); Essentials pricing missed (MR21) | Withdrawn as a reason; every fact in §12's sources is a page read on 2026-10-09. **Not mechanical**: a reader still has to check each one, which is why the read exists |
+| **RR4, RR7, RR13** (A5) | MS10 names every key | Management keys missing; OP4's old row left standing (MR11) | MS10's key table rebuilt; the closing check greps OP4 for the old row. **Partly mechanical**: the grep for this case, not for the next design |
+| **RR8** (A5) | Rest separated from transit | The global suppression list; OP2's "inside Canada" (MR15, MR24) | Both in MS10; OP2 corrected |
+| **RR10** (A5) | The actual request is captured | It cannot see what SES adds (MR8) | The C1 hand checks read the received message |
+| **RR9** (A5) | Routes declared with limits | No numbers; GET undeclared (MR8) | MS7 and MS6 give kinds, limits and methods |
+| **RR2** (A5) | Residuals stated | Duplicates and WhatsApp understated (MR19, MR20) | MS2 and MS9 restated |
+| **OR11** (A4), RR4 | Every copy listed | Six copies missing (MR15) | MS10 rebuilt |
+| **M23, M39** (Rule 21.10) | No "only X writes" sentence | Acceptable | Unchanged; the door and the test are C1 build items |
+| **M14, H16, M18** | Citations exist | Mechanical, and passing | Unchanged |
+| **M13, M15, M29** | Every dependent document changed in the approval commit | **The approval commit re-made the twin** (MR11, MR16, MR24) | Fixed; the closing check's brief **greps for each stale phrase** the read named. **The general mechanism is M45's, and it is not yet built** |
+| **M16, M17** | A dedicated answers section and a closing check | A process | Unchanged — §14, and the closing check |
+| **M44** | CI read after every push | A promise, not a mechanism | Still a promise until OA25's ruleset makes CI required to merge |
+| **M43** | No new tooling | Fine | Unchanged |
+| **AL6** *(missed by the draft)* | — | Claiming under row security undefined (MR12) | MS2: AP10's queue and claim door; two tables |
+| **M31** *(missed)* | — | One of two twins handled: the account stream, the opt-out's reversal, codes in the limits (MR3, MR4, MR7) | Each twin named and handled in MS1, MS7, MS8 |
+| **M32, M33** *(missed)* | — | A cap's concurrency claim nobody raced (MR18) | §12's cap test is raced on real PostgreSQL |
+| **M28** *(missed)* | — | "No tenant can damage another" claimed, never executed (MR1) | §1 restated; §12's breaker and low-volume tests execute it |
+| **RR3** (A5) *(missed)* | — | Half a vendor's control: tenant isolation without its caveat (MR1) | MS3 quotes AWS's caveat; the breaker does not rely on it |
+
+## 14. The independent read, and where each finding is answered
+
+Read by Opus from `docs/briefs/2026-10-09-messaging-design-read.md` at `62eb0d5`.
+- **Verdict:** "sound after the named changes".
+- **Findings:** 24 — **1 blocker** (MR1), 15 major, 8 minor. Each is answered above.
+- **Its view of each decision:** agreed with MS5; agreed in part with MS1, MS2, MS3, MS4, MS6, MS7, MS9 and MS10;
+  disagreed with MS8. Each disagreement is adopted.
+
+Confirmed on AWS's own pages before answering (Rule 16.4): AWS's review and pause lines and its 2% advice (MR1);
+"Gmail doesn't provide complaint data to SES" (MR2); suppression "until you remove them", tenant-level lists and the
+global list (MR5, MR15); Essentials as the new default, and the tenants' price (MR21). Confirmed in the repository:
+OP4's contradicting row (MR11), SF7's dropped caveat (MR14), RG6 against OA11 (MR16), the threat model's "Resend"
+(MR24). **MR3's open question was answered by the approved acceptance design** (§4.1: the contractor types the
+channel). **Three amendments changed what the owner approved**, and the owner decided each on 2026-10-09 as
+recommended: two production email accounts (MR4), TLS required (MR22), à la carte pricing (MR21).
+
+| Finding | Severity | Answered in |
 |---|---|---|
-| **RR6** (A5) | A vendor's terms taken from a third-party summary, backwards | Every vendor fact here is from the vendor's own page (§12's sources); what was not confirmed is marked "to confirm" or "C1 check" |
-| **RR4, RR7, RR13** (A5) | Credentials needed by the design but missing from OP4 | MS10 names every key, who holds it and who never does |
-| **RR8** (A5) | "Where the data is" overstated as where it rests | MS10's copies table separates rest from transit; SES's "does not keep the body" is marked to confirm |
-| **RR10** (A5) | A privacy test that checked a function, not what actually left | §12's test captures the actual request sent to the adapter |
-| **RR9** (A5) | A public route with no declared kind or limits | MS7's opt-out route and MS6's event route each name their kind, their check and their limit |
-| **RR2** (A5) | A residual stated too narrowly | Each residual is stated with its mechanism: the duplicate (MS2), WhatsApp through Meta's web (MS9), arrival (§12) |
-| **OR11** (A4), RR4 (A5) | "No copies" claimed without listing copies | MS10's every-copy table, with erasure for each |
-| **M23, M39** (Rule 21.10) | Prose claiming who writes a table, wrong three times | No sentence here says "only X writes" `outbound_message`. Its writers are named as build items (the send request, the job, and one door for events), and C1 must ship the test that inserts through each — or the claim is not made |
-| **M14, H16, M18** (Rule 21.8) | Citing files or symbols that do not exist | Things to be built are named as to-be-built (`outbound_message`, the `messaging` module, the routes); the checkers run before every commit |
-| **M13, M15, M29** | One document fixed, its twin left saying the opposite | §12 lists every document that said "chosen in A6" or depends on this — the register, RG7, RG8, OP4, OP10, SF7, OA6, OA10, OA11 — and all change in the approval commit |
-| **M16, M17** | Amendments introducing new defects | The read's findings will be answered in a dedicated section, and the closing check re-reads each answer, as A4 and A5 did |
-| **M44** | CI red for a week while local gates passed | After every push in this step, the pull request's checks are read before the next step begins |
-| **M43** | A tool that worked only in one environment | Nothing new in tooling here; the checks named for C1 are AWS-console checks, recorded by hand, not scripts assumed to run anywhere |
+| MR1 · thresholds at or above AWS's lines; blind at low volume; no account breaker | blocker | MS8, layers 2-4; §1 restated; §12's tests |
+| MR2 · Gmail sends no complaints | major | MS6; MS4's Postmaster Tools; MS8 layer 3; §12 |
+| MR3 · codes as "email a friend"; codes outside the limits | major | MS1 (the contractor's address only); MS8 layers 2-3 |
+| MR4 · the account stream shares the client account; no account limits | major | MS3 (two accounts, owner); MS8's account-stream limits |
+| MR5 · account-wide, permanent, cross-tenant suppression | major | MS3 (tenant-level lists; staff removal); MS6's table |
+| MR6 · a complaint blocks a client's own code, with no exit | major | MS6's table; MS7's reversal |
+| MR7 · the contractor can reverse an opt-out through a share link | major | MS7 (reversal by code to the address; keyed on the address); MS6 |
+| MR8 · GET not declared; DKIM coverage of the headers | minor | MS7; §12's hand check |
+| MR9 · statuses can regress; de-duplication; SNS hardening | major | MS2's order; MS6's route |
+| MR10 · no re-check at send; replay past seven days | major | MS2 items 4-5 |
+| MR11 · management keys missing; paused tenants; EventBridge; OP4's old row | major | MS10's keys; MS3; OP4 |
+| MR12 · claiming under row security; null tenants; AP10's exception | major | MS2 items 1-2 and 6 |
+| MR13 · where a code's plaintext lives | major | MS2 item 3 |
+| MR14 · "SES does not keep the body" unsupported | major | MS3; MS10; SF7 and the register corrected |
+| MR15 · copies missing | major | MS10's table |
+| MR16 · OA11 dropped the mailbox's records; report address; staging; `hello@` | major | MS4's records; OA11; OA12 |
+| MR17 · deny-list by spelling; the share page's free text | major | MS4 (normalised; residual); A9 named |
+| MR18 · caps' concurrency, reminders' share, refused reminders | minor | MS8 layer 2; §12's raced test |
+| MR19 · "sent by you"; two area codes | minor | MS9; MS7's table |
+| MR20 · duplicates understated; the brief | minor | MS2's duplicates; the brief edit proposed |
+| MR21 · Essentials pricing; tenants' price | minor | MS3 (à la carte, owner); §12's costs; OA6 |
+| MR22 · opportunistic TLS | minor | MS3 (TLS required, owner) |
+| MR23 · two kinds missing | minor | MS1 rows 12-13 |
+| MR24 · stale twins in OP2, the reading, the threat model, OP7 | minor | Each corrected in this change |

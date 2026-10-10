@@ -38,7 +38,7 @@ status of each control**, because a threat model listing only intended controls 
 | T5 | **Our own staff** | Admin capabilities, impersonation | Curiosity, fraud, or a compromised laptop (A6 — everything) |
 | T6 | **An attacker who obtains a database dump** | Every row, no application, no environment | Credentials to reuse elsewhere (A5) |
 | T7 | **A compromised or hostile dependency** | Code execution inside our process | Anything |
-| T8 | **A provider or insider at a hosting, database, backup, email or web provider** (today Neon, Render, Vercel and Resend; the rebuild's set is in `docs/design/environments-and-operations.md` OP2-OP3 and A5) | Storage or transit access | A1, A9 |
+| T8 | **A provider or insider at a hosting, database, backup, email or web provider** (today Neon, Render, Vercel and Resend; the rebuild's set is in `docs/design/environments-and-operations.md` OP2-OP3, A5, and A6's `docs/design/outbound-messaging.md` — email through Amazon SES in Canada) | Storage or transit access | A1, A9 |
 | T9 | **Someone defrauding the payment path** | A forged receipt, a colluding approver | Free subscriptions (A7) |
 
 ## 3. Trust boundaries
@@ -50,7 +50,7 @@ status of each control**, because a threat model listing only intended controls 
    entitlements are separate questions.
 4. **Tenant → platform staff.** Crossed only by impersonation: explicit, capability-gated,
    audited, time-bounded.
-5. **Application → third parties** (Resend, WiPay, Neon, Vercel, Render). Data leaves us here.
+5. **Application → third parties** (Resend, WiPay, Neon, Vercel, Render — the old application's; the rebuild's are in `docs/SERVICE-REGISTER.md` §0, email through Amazon SES since A6). Data leaves us here.
 6. **Us → Claude API.** No tenant or client personal data, and no secrets, ever (Rule 15).
 
 ## 4. Threats, controls, and what is actually true today
@@ -103,7 +103,8 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 | A share token exposes more than its one document | Token scopes to one document; unknown, draft and withdrawn answered identically | **OWED** — the route kind is declared and named, no such route exists yet |
 | A share link becomes a login | `@ShareTokenRoute` never mints a session | **BUILT** (as a property of the guard: no caller is resolved) |
 | Registration confirms whether an email is registered | Duplicate answers as new; the existing owner is emailed | **OWED** — registration not built; ADR 0015 fixes the design |
-| Registration creates unlimited tenants, or sends mail on demand | Rate limits, email verification before anything costly | **OWED** |
+| Registration creates unlimited tenants, or sends mail on demand | Rate limits, email verification before anything costly | **OWED** — *designed 2026-10-09* for the mail it sends: account mail in its own AWS account, with per-address limits, a daily ceiling and a breaker (`docs/design/outbound-messaging.md` MS8); the sign-up controls are A8's |
+| *(Added 2026-10-09, A6)* Pryvis used to send unwanted mail — a tenant's bad addresses, a forwarded share link, phishing in a business name | — | **OWED** — *designed* in `docs/design/outbound-messaging.md`: a code only to the contractor's chosen address (MS1); names checked by shape (MS4); caps, low-volume limits and an account circuit breaker (MS8) |
 | A hostile upload (malware, zip bomb, SVG with script) | Type, size, dimension checks; scanning; private tenant-scoped storage | **OWED** — no uploads yet. *Designed 2026-10-09* (`docs/design/third-party-register.md` RG3): eight fail-closed steps, a scan the store enforces, decoding in a files worker that holds no production secret, images re-encoded, PDF receipts rasterised for staff (amended after the read, RR1-RR3; owner, 2026-10-09) |
 
 ### 4.4 Platform staff (T5 → A6, everything)
@@ -167,7 +168,7 @@ responsibility, and the terms should say so rather than implying we can protect 
 | Threat | What is actually true today | Control |
 |---|---|---|
 | **An email bomb aimed at a known tenant.** A duplicate registration deliberately does not reveal the address is taken and **mails the existing owner instead** (Rule 14) — so anyone who knows a tenant's address can make us send them a hundred messages | Nothing is built yet, and the PRD's own list of registration bounds had silently dropped the per-address limit while presenting itself as exhaustive | A rate limit **per address** as well as per IP (PRD R1.30d). The non-enumerating response is right and it is exactly what creates this, which is why the two must ship together |
-| **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message |
+| **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message. *(2026-10-09: the one message is itself a bounce source; A6 puts account mail in its own AWS account with a daily ceiling and a breaker — `docs/design/outbound-messaging.md` MS8)* |
 | **Squatting on a competitor's address** to lock them out | The global unique index is on `app_credential.email` — the one on `app_user.email` is per tenant (corrected 2026-10-02, finding B28) — and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
 | **CGNAT makes an IP bound useless or harmful** | Jamaican mobile networks put tens of thousands of subscribers behind one address | The IP limit is on *attempts* and deliberately loose; the real defences are verification and the free tier's own cost ceiling. **No device fingerprinting** — it was proposed and removed as a tracking technology nobody had weighed |
 
