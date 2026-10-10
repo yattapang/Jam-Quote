@@ -1419,3 +1419,8 @@ never ours — no Pryvis branding, even on Free", added to the site guard's `del
 by removing the line in a disposable worktree (the test then fails, naming it). Next: the independent read, brief
 `docs/briefs/2026-10-10-document-design-read.md`.
 
+**Launched 2026-10-10: independent read of the document settings and PDF design.** *Delegation (Rule 16.5), declared
+before launch: commit-reviewer at **Opus** — the record of a commitment and its hash are judgement-class; the owner relies
+on our judgement.* Brief `docs/briefs/2026-10-10-document-design-read.md`, run by `tools/run_brief.py` at HEAD `7e4f390`:
+4 of 4 expectations hold.
+
