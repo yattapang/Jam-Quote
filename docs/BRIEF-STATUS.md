@@ -1170,6 +1170,12 @@ Twins corrected in OP2, OP4, OP7, OP10, SF7, RG6-RG8, the register, the data-pro
 a sweep for each replaced phrase run across the documents. A brief edit (§12, "nothing is sent twice") is proposed to
 the owner. Next: the closing check (Sonnet), `docs/briefs/2026-10-09-messaging-design-closing-check.md`.
 
+**Launched 2026-10-09: closing check of the outbound messaging design's answers to MR1-MR24.** *Delegation (Rule 16.5),
+declared before launch: general-purpose at **Sonnet** — mechanical: every item names its text, the costs are summed,
+and the stale-phrase sweep is executed (Rule 16.9).* Brief `docs/briefs/2026-10-09-messaging-design-closing-check.md`,
+run by `tools/run_brief.py` at HEAD `c9ad653`: 6 of 6 expectations hold. The sweep's Unicode patterns were proved able
+to match (M36's lesson) by running two of them, through the same call path, against phrases that do exist.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
