@@ -2,7 +2,8 @@
 
 **Status: APPROVED by the owner, 2026-10-10 — every recommendation, DS1-DS8** ("Approved"), with the owner's choice of
 **no "Sent with Pryvis" line on any document, Free included — and that made known in the marketing of the tiers**.
-**Amended the same day to answer its independent read (DR1-DR16, §12).** Three amendments changed what the owner had
+**Amended the same day to answer its independent read (DR1-DR16, §12); closing check closable; the amended design
+signed off by the owner, 2026-10-10** ("Approved"). Three amendments changed what the owner had
 approved, and **the owner decided all three on 2026-10-10 as recommended** ("Recommendations accepted"): PDFs are
 **rendered in the files worker**, not the API (DS5, DR1); the site's line is **narrowed to the documents** (DS4, DR8);
 **colour presets are Pro**, and a downgraded tenant's later documents use the neutral pair (DS1, DR10). Build plan step
@@ -298,8 +299,8 @@ disposal table, DS8) from the application role, so either is refused with an err
 - **Offline (the mobile app, G1):** the settings version and logo are cached on the device so a **draft preview** works
   with no signal; **the issued PDF is still made by the server at sync**, when the number exists (R1.18). The mobile
   design owns the cache. Brief §10 asks for "offline PDF generation"; this narrows it to the draft, because issuing needs
-  a connection in release 1 (brief §13's answer, ADR 0022) — **the brief edit is proposed to the owner** (Rule 19)
-  *(DR16)*.
+  a connection in release 1 (brief §13's answer, ADR 0022) — **the brief edit was approved by the owner, 2026-10-10, and
+  made** (Rule 19) *(DR16)*.
 - **Every copy of a PDF** *(DR13: the draft's list was short)*:
 
 | Copy | Where | Lifetime |
@@ -488,4 +489,4 @@ files worker (DR1), the narrowed site line (DR8), presets on Pro (DR10).
 | DR13 · §11 overstated its mechanisms; copies missing | minor | §11 restated; M47; Rule 24.7; DS8's copies |
 | DR14 · `creator` names the software; emoji; PDF/A; the font's reach | minor | DS4 item 7; DS5 (printable check, emoji, PDF/A, the font's coverage) |
 | DR15 · a rule credited to a document that does not contain it | minor | DS6 (the schema's key cited) |
-| DR16 · privacy line, render size, the draft's reach, staff access, the brief, the backup | minor | DS1; DS5's bounds; DS4's internal copy; DS8's copies and backup check; the brief edit proposed |
+| DR16 · privacy line, render size, the draft's reach, staff access, the brief, the backup | minor | DS1; DS5's bounds; DS4's internal copy; DS8's copies and backup check; the brief edit, approved and made |

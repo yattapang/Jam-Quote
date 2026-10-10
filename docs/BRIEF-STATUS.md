@@ -1456,3 +1456,14 @@ launch: general-purpose at **Sonnet** (Rule 16.9) — every item names its text,
 first run, at `c7a5d45`, held 7 of 8: the brief itself cited a deliberately missing path in backticks, which
 `check_schema_citations.py` refused — the gate had not been re-run after the brief was written. Reworded; run again at
 the commit below.
+
+**Returned 2026-10-10: A7's closing check** (Sonnet, at `6e441cf`): 8 of 8 expectations hold; **DR1-DR16 all answered;
+closable.** Two notes for C4: RG3's own test text should name the renderer when C4 extends it, and the API's render
+request to the worker is an internal network path, not a database door — a builder confirms that reading. For Rule
+24.7's tool: all six plants as briefed, and of eleven break attempts three got past it **without its docstring saying
+so** — table rows indented or inside a blockquote, variants of the phrase (bold split, double or non-breaking space), and
+a fence mark inside an HTML comment hiding a visible row. Answered separately, below.
+
+**A7 signed off by the owner, 2026-10-10** ("Approved, and approve the brief edit"): the amended design, and the brief
+edit, now made in `docs/DEVELOPMENT-BRIEF.md` §10 (offline *draft preview*; the issued PDF made by the server once
+numbered). **A7 ticked** in `docs/BUILD-PLAN.md`. Next in phase A: A8, sign-up and verification.

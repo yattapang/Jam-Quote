@@ -55,7 +55,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
   Done: 2026-10-09 · commit `0e9c2c5` · review `docs/briefs/2026-10-09-register-design-read.md` · closing `docs/briefs/2026-10-09-register-design-closing-check.md` · owner: approved 2026-10-09
 - [x] A6 · Outbound messaging, `docs/design/outbound-messaging.md`
   Done: 2026-10-10 · commit `2eaaf0f` · review `docs/briefs/2026-10-09-messaging-design-read.md` · closing `docs/briefs/2026-10-09-messaging-design-closing-check.md` · owner: approved 2026-10-10
-- [ ] A7 · Document settings and the PDF — logo, header, colours, the shared layout
+- [x] A7 · Document settings and the PDF — logo, header, colours, the shared layout, `docs/design/document-settings-and-pdf.md`
+  Done: 2026-10-10 · commit `c7a5d45` · review `docs/briefs/2026-10-10-document-design-read.md` · closing `docs/briefs/2026-10-10-document-design-closing-check.md` · owner: approved 2026-10-10
 - [ ] A8 · Sign-up and verification
 - [ ] A9 · The share page and the accept flow
 - [ ] A10 · Payments, the payments abstraction, the tenant's WiPay connection in their profile, and the staff
