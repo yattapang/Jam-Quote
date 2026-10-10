@@ -35,6 +35,10 @@ asks that each tick carry its evidence. A tick is a sentence; this makes it a cl
 - Anything about the order of steps, or a step done out of order.
 - That the index is right: `--update` records whatever the plan holds when it is run. Reviewing that diff is the
   control, as with `docs/rules-manifest.json`.
+- That a tick stays ticked: the index pins which steps exist, not which are done. Un-ticking a step (and removing its
+  evidence line) passes, and `tools/check_deferrals.py` then stops checking deferrals to it. The plan's diff is where
+  that shows (found by the step-index re-check, `docs/briefs/2026-10-10-step-index-recheck.md`).
+- A malformed or missing index fails with a plain message naming it, not a traceback.
 """
 
 from __future__ import annotations
@@ -99,8 +103,10 @@ def read_plan(path: Path = PLAN) -> tuple[list[tuple[int, str, str]], list[str]]
         if step_id in seen:
             problems.append(f"docs/BUILD-PLAN.md:{step_index + 1}: {step_id} appears twice")
         seen.add(step_id)
-    if MANIFEST.is_file():
-        expected = json.loads(MANIFEST.read_text(encoding="utf-8"))["steps"]
+    expected, index_problem = load_index()
+    if index_problem:
+        problems.append(index_problem)
+    else:
         for missing in [s for s in expected if s not in seen]:
             problems.append(f"docs/BUILD-PLAN.md: step {missing} is in the index but its line does not parse as "
                             "'- [ ] ID · …' or '- [x] ID · …' — fix the line, or, if the step was removed on purpose, "
@@ -108,9 +114,21 @@ def read_plan(path: Path = PLAN) -> tuple[list[tuple[int, str, str]], list[str]]
         for extra in [s for s in ids if s not in expected]:
             problems.append(f"docs/BUILD-PLAN.md: step {extra} is not in the index — if it was added on purpose, run "
                             "tools/check_build_plan.py --update")
-    else:
-        problems.append(f"{MANIFEST.relative_to(ROOT)} is missing — create it with tools/check_build_plan.py --update")
     return steps, problems
+
+
+def load_index() -> tuple[list[str], str | None]:
+    """The index's step ids, or a plain message saying why it cannot be read (never a traceback)."""
+    name = MANIFEST.relative_to(ROOT).as_posix()
+    if not MANIFEST.is_file():
+        return [], f"{name} is missing — create it with tools/check_build_plan.py --update"
+    try:
+        steps = json.loads(MANIFEST.read_text(encoding="utf-8"))["steps"]
+    except (ValueError, KeyError, TypeError) as error:
+        return [], f"{name} cannot be read as the index ({type(error).__name__}) — regenerate it with --update"
+    if not isinstance(steps, list) or not all(isinstance(s, str) for s in steps):
+        return [], f"{name}'s \"steps\" is not a list of step ids — regenerate it with --update"
+    return steps, None
 
 
 def commit_exists(sha: str) -> bool:
@@ -172,7 +190,7 @@ def main() -> int:
     for problem in problems:
         print(problem)
     print(f"\n{done} steps done, {open_} open, in docs/BUILD-PLAN.md ({len(steps)} parsed; the index holds "
-          f"{len(json.loads(MANIFEST.read_text(encoding='utf-8'))['steps']) if MANIFEST.is_file() else 0})")
+          f"{len(load_index()[0])})")
     if problems:
         print(f"FAILED: {len(problems)} problem(s) in the build plan")
         return 1

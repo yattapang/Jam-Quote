@@ -74,3 +74,5 @@ And its first real run is recorded: what it found, and what was fixed.
   a full-width id still slipped through, and the docstrings over-claimed. Answered at the root: the parse is checked
   against **an index of every step id** (`docs/build-plan-manifest.json`, `--update` only), so a step that stops
   parsing is missing whatever its shape. 28 plants, run in a disposable worktree.
+- **The re-check of the index** (`docs/briefs/2026-10-10-step-index-recheck.md`): **closable**. Un-ticking a step passes
+  (stated now in both docstrings); a malformed index now fails with a plain message (six plants, in a worktree).

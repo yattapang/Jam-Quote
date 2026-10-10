@@ -1254,6 +1254,13 @@ M46 and the design updated.
 16.5), declared before launch: general-purpose at **Sonnet** — named plants and break attempts against two small tools,
 every plant in a disposable worktree (Rule 16.9).* Brief `docs/briefs/2026-10-10-step-index-recheck.md`, run by
 `tools/run_brief.py` at HEAD `87f099d`: 5 of 5 expectations hold.
+**Reported 2026-10-10: closable.** 5 of 5 expectations at `ac78827`; every plant ran in a disposable worktree, removed
+after, and the working tree was untouched. All eleven tick shapes fail both tools; the full-width tick is read as A5 and
+a stale deferral to it caught; a new step fails until `--update`; a lost tick or a deleted step is reported. Defeating
+the index needs the index edited with the plan — stated, and visible in the diff. It noted two unstated points: un-ticking
+a step passes, and a malformed index failed with a traceback. Both answered the same day: the first stated in both
+docstrings, the second now a plain message (six plants, in a worktree). **M46 closed.** The deferral checker, its design,
+and its five rounds of checks are done; the owner's instruction "build the checker" is complete.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

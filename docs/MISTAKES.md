@@ -962,3 +962,10 @@ until `--update` and then passes; a full-width tick is read as A5 by both tools,
 `- [ x] A5` was found in the real build plan at the restart — restored from its backup and compared before anything
 else. The `finally` was decorative against a kill (Rule 24.4). **Plants now run in a disposable `git worktree` in the
 scratch directory, never in the working tree**: a run that dies there cannot leave a defect where work happens.
+
+**Closed, 2026-10-10.** The re-check of the step index (`docs/briefs/2026-10-10-step-index-recheck.md`, plants in a
+disposable worktree) found it **closable**: all eleven tick shapes fail both tools, a full-width tick is read as A5 and
+its stale deferral caught, additions and deletions are reported, and defeating the index needs the index itself edited,
+which shows in the diff. Two things it noted were not stated: un-ticking a step passes (the index pins which steps
+exist, not which are done), and a malformed index failed with a traceback. The first is now in both docstrings; the
+second fails with a plain message, proved by six malformed-index plants in a worktree.

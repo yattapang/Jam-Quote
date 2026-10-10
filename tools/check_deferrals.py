@@ -29,6 +29,8 @@ the finding mechanical for the forms it knows. Design: docs/design/deferral-chec
   `docs/build-plan-manifest.json`, the index of every step id: if any step's line fails to parse, whatever its shape,
   or a fence is left open, it stops rather than check a smaller set (M46). It cannot tell whether the index itself is
   right; that is the reviewed diff of `check_build_plan.py --update`.
+- A step that is un-ticked stops being checked: the index pins which steps exist, not which are done.
+- Untracked files are not scanned; a deferral in a file not yet added to git is invisible until it is.
 - A deletion that leaves another document relying on what was removed is invisible to it (A6's MR16).
 - A resolution is checked for presence, not truth: a dated pointer to the wrong design passes.
 - Deferrals to steps not yet ticked are correct and are not checked.
