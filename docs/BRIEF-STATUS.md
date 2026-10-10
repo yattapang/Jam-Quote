@@ -1184,6 +1184,11 @@ suppression was unstated; and "three accounts" survived in A5's text. **All six 
 row one of three fixed verdicts, a check proved by planting a row without one. The fixes are re-checked independently
 before the sign-off (Rule 24.6): brief `docs/briefs/2026-10-10-messaging-design-recheck.md`.
 
+**Launched 2026-10-10: re-check of the fixes to D1-D6.** *Delegation (Rule 16.5), declared before launch:
+general-purpose at **Sonnet** — mechanical: six named defects, each with its text and an executed expectation (Rule
+16.9).* Brief `docs/briefs/2026-10-10-messaging-design-recheck.md`, run by `tools/run_brief.py` at HEAD `ec7c115`: 5 of 5
+expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
