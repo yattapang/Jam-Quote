@@ -16,11 +16,14 @@
  *
  * - **Nothing about true concurrency.** PGlite is a single connection, so "two devices at once"
  *   cannot be simulated here. What is proved is the *serial* case the lock exists to make safe:
- *   two invoices that are each individually under the ceiling and together over it. Real
- *   concurrency needs a two-connection test against Postgres, and it is owed.
+ *   two invoices that are each individually under the ceiling and together over it. The races
+ *   themselves are in `concurrency.pg.test.ts`, against real PostgreSQL (this line called them owed
+ *   until 2026-09-27; P6).
  * - **Nothing about the application.** These tests call the functions directly. A repository that
- *   never calls `issue_balance_apply` cannot insert an invoice without it — the policies see to
- *   that — but one that computes a wrong line total is wrong in a way only its own tests catch.
+ *   never calls `issue_balance_apply` cannot insert an invoice without it — the triggers on
+ *   `invoice`, `invoice_void`, `credit_note` and `variation` see to that (J2; this said "the policies"
+ *   until the R7 finding) — but one that computes a wrong line total is wrong in a way only its own
+ *   tests catch.
  * - **Nothing about money arithmetic below the ceiling:** per-line GCT, markup, discount, rounding.
  * - **Nothing about the offline path.** Sealing on a device, the outbox and sync are application
  *   concerns; what is proved here is that the database refuses the *outcomes* they must not produce.
@@ -55,34 +58,89 @@ async function sql<T = Record<string, unknown>>(query: string, params: unknown[]
   return (await db.query<T>(query, params)).rows;
 }
 
+/** Since J11 an issue's subtotal must equal the sum of its frozen lines when the transaction commits,
+ * so every seal here carries one line whose total is the subtotal — in the SAME statement, because
+ * PGlite commits each statement on its own. The line is 1 × the subtotal, so its total is exact. */
+function withOneLine(insertIssue: string): string {
+  return `WITH h AS (${insertIssue} RETURNING id, tenant_id, subtotal_minor)
+    INSERT INTO quote_issue_line
+      (id, tenant_id, issue_id, section_title, description, position, quantity_thousandths,
+       unit_price_minor, line_total_minor, tax_treatment)
+    SELECT gen_random_uuid(), tenant_id, id, 'Works', 'Fence', 1, 1000, subtotal_minor, subtotal_minor,
+           'standard'
+      FROM h`;
+}
+
 /** Seals an issue for the given revision and returns its id. `total` is in minor units. */
 async function seal(revision: number, total: bigint, issueId = id()): Promise<string> {
   await sql(
-    `INSERT INTO quote_issue
+    withOneLine(`INSERT INTO quote_issue
        (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
         currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
         sealed_at, sealed_by_user_id, catalog_synced_at)
      VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
-             now(), $7, now())`,
+             now(), $7, now())`),
     [issueId, TENANT, QUOTE, revision, CLIENT, total.toString(), USER],
   );
   return issueId;
 }
 
+/**
+ * Numbers an issue unless it already has a number. Since W4 a client may respond only to a numbered,
+ * current issue, so every fixture response numbers first. Numbers start at 1000, clear of the small
+ * numbers tests assign by hand.
+ */
+async function numberIfNeeded(issueId: string): Promise<void> {
+  await sql(
+    `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+     SELECT $1, $2, $3, $4, $5::integer, 'Q-' || $5::integer::text
+      WHERE NOT EXISTS (SELECT 1 FROM issue_number n WHERE n.issue_id = $3)`,
+    [id(), TENANT, issueId, SERIES, 1000 + ids],
+  );
+}
+
 /** Accepts an issue, which is also what opens its balance row — the two are one transaction. */
 async function accept(issueId: string): Promise<string> {
+  await numberIfNeeded(issueId);
   const acceptanceId = id();
   await db.exec("BEGIN");
-  await sql(
-    `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                             occurred_at)
-     VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
-    [acceptanceId, TENANT, issueId],
-  );
+  await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [acceptanceId, TENANT, issueId, "accepted"]);
   await sql(`SELECT issue_balance_open($1)`, [issueId]);
   await db.exec("COMMIT");
   return acceptanceId;
 }
+
+/**
+ * Every acceptance records the render the client saw, of its own issue (R9): `document_render_id` is
+ * NOT NULL and keyed on `(document_render_id, issue_id, tenant_id)`. So a fixture acceptance renders
+ * the issue first, in the same statement — and, since J6, an accepted one records its first evidence
+ * row (a link tap) in that statement too. `$1` acceptance id, `$2` tenant, `$3` issue, `$4` outcome.
+ */
+const WITH_RENDER = `
+  WITH r AS (
+    INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+    VALUES (gen_random_uuid(), $2, $3, 'test/render.pdf',
+            encode(sha256(gen_random_uuid()::text::bytea), 'hex'), 1, '{}')
+    RETURNING id)`;
+/** Records a render of `issueId` for the current tenant and returns its id. */
+async function renderOf(issueId: string, tenant = TENANT): Promise<string> {
+  const renderId = id();
+  await sql(
+    `INSERT INTO document_render (id, tenant_id, issue_id, storage_key, sha256, byte_size, settings)
+     VALUES ($1, $2, $3, 'test/render.pdf', encode(sha256(convert_to($4::text, 'UTF8')), 'hex'), 1, '{}')`,
+    [renderId, tenant, issueId, renderId],
+  );
+  return renderId;
+}
+
+const ACCEPT_FROM_RENDER = `
+  , a AS (
+    INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                            consented_to_sign, occurred_at)
+    SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r
+    RETURNING id, tenant_id, outcome, occurred_at)
+  INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, occurred_at)
+  SELECT gen_random_uuid(), tenant_id, id, 'link_tap', occurred_at FROM a WHERE outcome = 'accepted'`;
 
 /** Issues an invoice and applies the balance, as one transaction — the only safe order. */
 async function invoice(issueId: string, amount: bigint): Promise<void> {
@@ -277,8 +335,9 @@ describe("J2 · the ceiling is enforced by the database, not by callers remember
   });
 
   it("REFUSES invoicing an issue that was never accepted — a second hole that was only prose", async () => {
-    // No acceptance means no balance row, and the function raises rather than treating a missing row as
-    // permission. Previously this was a sentence in the PRD and nothing in the database.
+    // Without an acceptance the ceiling is 0, so the invoice is refused. (Not "no acceptance means no
+    // balance row": issue_balance_open() does not check for an acceptance, so a row can exist without
+    // one — finding V18. Either way nothing can be invoiced.) Previously this was a sentence in the PRD and nothing in the database.
     const issue = await seal(1, 100_000n);
     await expect(invoiceDirectly(issue, 1_000n)).rejects.toThrow(/issue_balance row missing/);
   });
@@ -316,7 +375,8 @@ describe("J2 · the ceiling is enforced by the database, not by callers remember
 describe("J12 · which insert moves which balance column, executed rather than listed", () => {
   // §6.2a of the domain model carried a prose "who writes it" column three times, and it was wrong
   // three times — the last time crediting a credit note as a writer of `invoiced_total_minor`, which
-  // it has never been. The document no longer says; this says, by doing it.
+  // it was not then. J4 has since made it one, deliberately (the credit-note test below). The document
+  // no longer says; this says, by doing it.
   //
   // Each test inserts ONE kind of row and reads all three columns, so a defect that moves the wrong
   // column is caught as precisely as one that moves nothing.
@@ -358,15 +418,15 @@ describe("J12 · which insert moves which balance column, executed rather than l
     expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 40_000 });
   });
 
-  it("a CREDIT NOTE moves nothing, which is the claim J12 found in the document", async () => {
-    // The document said "every invoice and credit note" writes `invoiced_total_minor`. A credit note
-    // reduces what is OWED on an invoice; it does not reduce what was invoiced, and the ceiling
-    // expression excludes it deliberately (documents_core: "what does NOT raise the ceiling:
-    // retention and credit notes"). So this is the assertion that the wrong writer stays wrong.
+  it("a CREDIT NOTE moves invoiced_total_minor DOWN and nothing else — changed by J4", async () => {
+    // This assertion said the opposite until 2026-09-26: a credit note moved nothing, deliberately.
+    // J4 showed that left no way to reduce agreed scope below what was invoiced, and the owner chose
+    // to net credit notes into the invoiced figure (docs/design/scope-reduction.md). The ceiling is
+    // still untouched — a credit note never RAISES it — which the unchanged `accepted` and
+    // `variations` columns below assert.
     const issue = await seal(1, 100_000n);
     await accept(issue);
     const invoiceId = await insertInvoice(issue, 40_000n);
-    const before = await totals(issue);
 
     await sql(
       `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
@@ -374,8 +434,7 @@ describe("J12 · which insert moves which balance column, executed rather than l
       [id(), TENANT, invoiceId],
     );
 
-    expect(await totals(issue)).toEqual(before);
-    expect((await totals(issue)).invoiced).toBe(40_000);
+    expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 25_000 });
   });
 
   it("a VOID does move invoiced_total_minor, down, because the invoice stops counting", async () => {
@@ -390,7 +449,7 @@ describe("J12 · which insert moves which balance column, executed rather than l
     expect(await totals(issue)).toEqual({ accepted: 100_000, variations: 0, invoiced: 0 });
   });
 
-  it("accepted_total_minor survives all four untouched, because it is written once", async () => {
+  it("accepted_total_minor survives all four untouched, because none of them writes it", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
     const invoiceId = await insertInvoice(issue, 40_000n);
@@ -414,40 +473,412 @@ describe("J12 · which insert moves which balance column, executed rather than l
   });
 });
 
-describe("2 · issue_balance has exactly one writer", () => {
-  it("refuses a direct UPDATE from the application, however it is granted", async () => {
-    // The harness grants UPDATE on every table (see test-support), which is exactly why the control
-    // cannot be a grant: a REVOKE in the migration would be undone here. The write policies require
-    // a transaction-local flag that only the function sets.
+// ===========================================================================
+describe("J4 · agreed scope can be reduced after it has been invoiced", () => {
+  // docs/design/scope-reduction.md. Accepted 100,000, invoiced 90,000, the client removes 20,000 of
+  // work. Before this block existed, every variation in the suite was positive, and the one line of
+  // the schema saying amounts may be negative had nothing executed behind it.
+  async function insertInvoice(issueId: string, amount: bigint) {
+    const invoiceId = id();
+    await sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [invoiceId, TENANT, issueId, amount.toString()],
+    );
+    return invoiceId;
+  }
+
+  async function vary(issueId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'bathroom removed', $4, $5, now())`,
+      [id(), TENANT, issueId, amount.toString(), USER],
+    );
+  }
+
+  async function credit(invoiceId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, $4, 'scope removed', now())`,
+      [id(), TENANT, invoiceId, amount.toString()],
+    );
+  }
+
+  async function voidInvoice(invoiceId: string) {
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'wrong amount', $4)`,
+      [id(), TENANT, invoiceId, USER],
+    );
+  }
+
+  /** Runs `work` as one transaction, rolling back and rethrowing on failure. */
+  async function inTransaction(work: () => Promise<void>) {
+    await db.exec("BEGIN");
+    try {
+      await work();
+      await db.exec("COMMIT");
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  async function totals(issueId: string) {
+    const row = await balance(issueId);
+    return {
+      variations: minor(row.variations_total_minor),
+      invoiced: minor(row.invoiced_total_minor),
+    };
+  }
+
+  it("records a negative variation that leaves the ceiling at or above what is invoiced", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
+    await insertInvoice(issue, 60_000n);
 
-    const affected = await db.query(
-      `UPDATE issue_balance SET invoiced_total_minor = 999999 WHERE issue_id = $1`,
-      [issue],
-    );
-    expect(affected.affectedRows ?? 0).toBe(0);
-    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(0);
+    await vary(issue, -20_000n);
+
+    expect(await totals(issue)).toEqual({ variations: -20_000, invoiced: 60_000 });
+    // And the lowered ceiling is the one enforced: 80,000 less 60,000 leaves exactly 20,000.
+    await insertInvoice(issue, 20_000n);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 80000/);
   });
 
-  it("refuses a direct INSERT, so a row cannot be conjured to satisfy a later lock", async () => {
+  it("REFUSES a reduction below what is invoiced, leaves no row, and names the shortfall", async () => {
     const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await insertInvoice(issue, 90_000n);
 
+    // 90,000 invoiced against a ceiling of 80,000: 10,000 must be credited first.
+    await expect(vary(issue, -20_000n)).rejects.toThrow(/exceeds the ceiling 80000 .* by 10000/);
+
+    // The review's original finding was a COMMITTED row the balance could never count. Assert it is
+    // not there, and that the issue is not stuck: it can still be invoiced up to its real ceiling.
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(0);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 90_000 });
+    await insertInvoice(issue, 10_000n);
+  });
+
+  it("ACCEPTS credit-then-reduce as one transaction — the remedy the finding said did not exist", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 90_000n);
+
+    await inTransaction(async () => {
+      await credit(invoiceId, 10_000n);
+      await vary(issue, -20_000n);
+    });
+
+    expect(await totals(issue)).toEqual({ variations: -20_000, invoiced: 80_000 });
+    // Exactly at the ceiling, so nothing more may be billed.
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 80000/);
+  });
+
+  it("rolls the credit back too when the reduction in the same transaction is still too deep", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 90_000n);
+
+    await expect(
+      inTransaction(async () => {
+        await credit(invoiceId, 5_000n);
+        await vary(issue, -20_000n);
+      }),
+    ).rejects.toThrow(/by 5000/);
+
+    expect(await sql(`SELECT 1 FROM credit_note`)).toHaveLength(0);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 90_000 });
+  });
+
+  it("REFUSES a credit note larger than its invoice", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+
+    await expect(credit(invoiceId, 40_001n)).rejects.toThrow(/would total more than the invoice/);
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 40_000 });
+  });
+
+  it("REFUSES over-crediting across several notes, where each one alone is within the invoice", async () => {
+    // The shape of J2's two-invoice case, applied to credits: each is fine, together they are not, and
+    // an over-credited invoice would count as NEGATIVE and manufacture room under the ceiling.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+
+    await credit(invoiceId, 30_000n);
+    await expect(credit(invoiceId, 20_000n)).rejects.toThrow(/would total more than the invoice/);
+
+    await credit(invoiceId, 10_000n);  // exactly the invoice: allowed
+    expect(await totals(issue)).toEqual({ variations: 0, invoiced: 0 });
+  });
+
+  it("REFUSES a credit note against an invoice that is already voided", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const invoiceId = await insertInvoice(issue, 40_000n);
+    await voidInvoice(invoiceId);
+
+    // L4: the reason is asserted, not only the refusal. The first version claimed a double subtraction
+    // that the arithmetic does not have (K2), and reverting to that text left every test green.
+    await expect(credit(invoiceId, 10_000n)).rejects.toThrow(
+      /is voided and no longer counts; a credit note against it would record a reduction of nothing/,
+    );
+    expect(await sql(`SELECT 1 FROM credit_note`)).toHaveLength(0);
+  });
+
+  it("drops a voided invoice's earlier credit notes with it, so nothing is subtracted twice", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const kept = await insertInvoice(issue, 50_000n);
+    const voided = await insertInvoice(issue, 40_000n);
+    await credit(voided, 15_000n);
+    await credit(kept, 5_000n);
+    expect((await totals(issue)).invoiced).toBe(70_000);
+
+    await voidInvoice(voided);
+
+    // 50,000 less its own 5,000 credit. Were the voided invoice's 15,000 still counted, this would
+    // read 30,000 — and 15,000 of ceiling room would exist that nobody granted.
+    expect((await totals(issue)).invoiced).toBe(45_000);
+  });
+
+  it("N6 · the ceiling is the total the client accepted INCLUDING tax, not the subtotal", async () => {
+    // Every other test seals with tax 0, so a ceiling built from `subtotal_minor` passed all 126 db
+    // tests — and would refuse a contractor's own 115,000 invoice on a 100,000 + 15% GCT job.
+    const issue = id();
+    await sql(
+      withOneLine(`INSERT INTO quote_issue
+         (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+          currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+          sealed_at, sealed_by_user_id, catalog_synced_at)
+       VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 1500, 100000, 15000,
+               115000, now(), $5, now())`),
+      [issue, TENANT, QUOTE, CLIENT, USER],
+    );
+    await accept(issue);
+
+    await insertInvoice(issue, 115_000n);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 115000/);
+  });
+
+  it("K3 · a credit note nets only against its OWN issue, never against another job", async () => {
+    // The re-review planted "subtract every credit in the tenant" and all 113 db tests stayed green:
+    // every credit-note test used one issue. Two jobs here, one fully credited, the other at its ceiling.
+    const otherQuote = id();
+    await asSuperuser(db, () =>
+      sql(
+        `INSERT INTO quote (id, tenant_id, client_id, title, currency, updated_at)
+         VALUES ($1, $2, $3, 'Roof', 'JMD', now())`,
+        [otherQuote, TENANT, CLIENT],
+      ),
+    );
+    const jobX = await seal(1, 100_000n);
+    await accept(jobX);
+    const jobY = id();
+    await sql(
+      withOneLine(`INSERT INTO quote_issue
+         (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+          currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+          sealed_at, sealed_by_user_id, catalog_synced_at)
+       VALUES ($1, $2, $3, 1, $4, 'Delroy', 'Roof', 'itemised', 'JMD', 'Terms', 0, 100000, 0, 100000,
+               now(), $5, now())`),
+      [jobY, TENANT, otherQuote, CLIENT, USER],
+    );
+    await accept(jobY);
+
+    const onX = await insertInvoice(jobX, 60_000n);
+    await credit(onX, 60_000n);
+    await insertInvoice(jobY, 100_000n);
+
+    // X's 60,000 of credit is not room on Y.
+    await expect(insertInvoice(jobY, 60_000n)).rejects.toThrow(/exceeds the ceiling 100000 .* by 60000/);
+    expect(await totals(jobX)).toEqual({ variations: 0, invoiced: 0 });
+    expect(await totals(jobY)).toEqual({ variations: 0, invoiced: 100_000 });
+  });
+
+  it("K1 · an invoice credited beyond its amount before the check existed strands nothing", async () => {
+    // Simulates history written before `20260926200000_scope_reduction`: the trigger is switched off
+    // as the table's owner, an over-credit is written, and it is switched back on. The first version of
+    // the check scanned every invoice on the issue, so this one row made every later write on the issue
+    // raise — a void included, so there was no exit.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    const old = await insertInvoice(issue, 40_000n);
+    await asSuperuser(db, async () => {
+      await db.exec(`ALTER TABLE credit_note DISABLE TRIGGER credit_note_enforces_ceiling`);
+      await sql(
+        `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+         VALUES ($1, $2, $3, 50000, 'written before the check', now())`,
+        [id(), TENANT, old],
+      );
+      await db.exec(`ALTER TABLE credit_note ENABLE TRIGGER credit_note_enforces_ceiling`);
+    });
+
+    // Other writes on the issue proceed, and the over-credited invoice counts as zero, not -10,000:
+    // a negative contribution would be 10,000 of ceiling room nobody granted.
+    const other = await insertInvoice(issue, 100_000n);
+    expect((await totals(issue)).invoiced).toBe(100_000);
+    await expect(insertInvoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling/);
+    await credit(other, 1_000n);
+    await vary(issue, 5_000n);
+    // Further credit on the over-credited invoice itself is still refused.
+    await expect(credit(old, 1n)).rejects.toThrow(/would total more than the invoice/);
+  });
+});
+
+// ===========================================================================
+describe("K4 · a wrong document is withdrawn once nothing is still billed on it (and J15)", () => {
+  // Owner's decision 2026-09-27 (docs/design/scope-reduction.md): the "credit note and a fresh quote"
+  // remedy used to reopen the old issue's whole ceiling once its invoice was credited, with no way to
+  // close it — withdrawal refused while an invoice existed, a new revision refused by J10.
+  async function insertInvoice(issueId: string, amount: bigint) {
+    const invoiceId = id();
+    await sql(
+      `INSERT INTO invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+       VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`,
+      [invoiceId, TENANT, issueId, amount.toString()],
+    );
+    return invoiceId;
+  }
+  async function credit(invoiceId: string, amount: bigint) {
+    await sql(
+      `INSERT INTO credit_note (id, tenant_id, invoice_id, amount_minor, reason, issued_at)
+       VALUES ($1, $2, $3, $4, 'wrong client', now())`,
+      [id(), TENANT, invoiceId, amount.toString()],
+    );
+  }
+  async function withdraw(acceptanceId: string) {
+    return sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+  const ceiling = async (issueId: string) =>
+    minor((await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issueId]))[0]!.c);
+
+  it("allows withdrawal once the invoice is fully credited, closes the ceiling, and frees the next revision", async () => {
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
+    const wrong = await insertInvoice(rev1, 100_000n);
+    await credit(wrong, 100_000n);
+
+    await withdraw(acceptance);
+
+    // The re-review's K4: before, the credited issue took a second 100,000 invoice. Now its ceiling is 0.
+    expect(await ceiling(rev1)).toBe(0);
+    await expect(insertInvoice(rev1, 100_000n)).rejects.toThrow(/exceeds the ceiling 0/);
+    // And the fresh quote is the next revision of the SAME quote, not a second job.
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+    await insertInvoice(rev2, 100_000n);
+  });
+
+  it("J15 · allows withdrawal once the invoice is voided", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    const wrong = await insertInvoice(issue, 40_000n);
+    await sql(
+      `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+       VALUES ($1, $2, $3, 'wrong client', $4)`,
+      [id(), TENANT, wrong, USER],
+    );
+
+    await withdraw(acceptance);
+    expect(await ceiling(issue)).toBe(0);
+  });
+
+  it("REFUSES withdrawal while any invoice still has money billed — a partial credit is not enough", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    const partly = await insertInvoice(issue, 40_000n);
+    await credit(partly, 39_999n);
+
+    await expect(withdraw(acceptance)).rejects.toThrow(/1 invoice\(s\) against the issue still have money/);
+  });
+
+  it("L1 · withdraws a wrong document WITH a variation once fully credited, and the next revision replaces it", async () => {
+    // The second re-review's executed case: variation +10,000, invoiced 110,000, credited in full.
+    // Withdrawal and a new revision were both refused, so the fresh quote had to be a separate quote,
+    // and the old issue then took another 110,000 invoice — two live ceilings on one job.
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
+    await sql(
+      `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                              recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, 'A gate', 10000, $4, now())`,
+      [id(), TENANT, rev1, USER],
+    );
+    const wrong = await insertInvoice(rev1, 110_000n);
+    await credit(wrong, 110_000n);
+
+    await withdraw(acceptance);
+
+    expect(await ceiling(rev1)).toBe(0);
+    await expect(insertInvoice(rev1, 110_000n)).rejects.toThrow(/exceeds the ceiling 0/);
+    const rev2 = await seal(2, 110_000n);
+    await accept(rev2);
+    await insertInvoice(rev2, 110_000n);
+    // One live ceiling across the quote, not two.
+    expect((await ceiling(rev1)) + (await ceiling(rev2))).toBe(110_000);
+  });
+
+  it("L4 · REFUSES a variation on a WITHDRAWN (not superseded) issue — the other half of K6's twin check", async () => {
+    // The second re-review removed this half of the check and all 124 db tests stayed green.
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 30000, $4, now())`,
+        [id(), TENANT, issue, USER],
+      ),
+    ).rejects.toThrow(/superseded or no longer accepted/);
+  });
+});
+
+describe("2 · only the balance functions can write issue_balance (R5, privilege model)", () => {
+  // Until 2026-10-01 the write policies required a transaction-local flag the balance functions set —
+  // and the application could set it too (R5, executed). Now the application role has SELECT only on
+  // `issue_balance`, and the write policies require `current_user = 'pryvis_balance'`, which only the
+  // SECURITY DEFINER balance functions are (`20260927220000_privilege_model`). Each test sets the old flag
+  // by hand first: R5's exact attack, refused.
+  const withOldFlag = () => sql(`SELECT set_config('pryvis.balance_write', 'on', false)`);
+
+  it("R5 · refuses a direct UPDATE from the application, even with the old flag set", async () => {
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await withOldFlag();
+    await expect(
+      db.query(`UPDATE issue_balance SET accepted_total_minor = 999999999 WHERE issue_id = $1`, [issue]),
+    ).rejects.toThrow(/permission denied for table issue_balance/);
+    expect(minor((await balance(issue)).accepted_total_minor)).toBe(100_000);
+  });
+
+  it("R5 · refuses a direct INSERT, so a row cannot be conjured to satisfy a later lock", async () => {
+    const issue = await seal(1, 100_000n);
+    await withOldFlag();
     await expect(
       db.query(
         `INSERT INTO issue_balance (issue_id, tenant_id, accepted_total_minor)
          VALUES ($1, $2, 500)`,
         [issue, TENANT],
       ),
-    ).rejects.toThrow(/policy/i);
+    ).rejects.toThrow(/permission denied for table issue_balance/);
   });
 
-  it("has no DELETE policy at all, so a balance row cannot be removed", async () => {
+  it("refuses a DELETE, so a balance row cannot be removed", async () => {
     const issue = await seal(1, 100_000n);
     await accept(issue);
-
-    const affected = await db.query(`DELETE FROM issue_balance WHERE issue_id = $1`, [issue]);
-    expect(affected.affectedRows ?? 0).toBe(0);
+    await expect(db.query(`DELETE FROM issue_balance WHERE issue_id = $1`, [issue])).rejects.toThrow(
+      /permission denied for table issue_balance/,
+    );
     expect(await balance(issue)).toBeDefined();
   });
 
@@ -462,7 +893,9 @@ describe("2 · issue_balance has exactly one writer", () => {
     );
   });
 
-  it("opens the balance row as part of accepting, not as a separate step somebody may forget", async () => {
+  // `accept()` calls issue_balance_open() explicitly in the same transaction. Nothing opens the row by
+  // itself — the N2 test reaches an acceptance without one (R7; finding U10 corrected this title).
+  it("opens the balance row when the acceptance transaction calls issue_balance_open()", async () => {
     const issue = await seal(1, 100_000n);
     expect(await sql(`SELECT 1 FROM issue_balance WHERE issue_id = $1`, [issue])).toHaveLength(0);
 
@@ -470,25 +903,22 @@ describe("2 · issue_balance has exactly one writer", () => {
     expect(minor((await balance(issue)).accepted_total_minor)).toBe(100_000);
   });
 
-  it("sets the write flag in exactly one place, so the predicate cannot be defeated casually", async () => {
-    // The flag is not a secret and the policy comment says so. What keeps it honest is that it is
-    // set in one file: the migration. A guard, because a grep in a comment is not a control.
-    const migration = await readFile(
-      join(import.meta.dirname, "..", "migrations", "20260925120000_documents_core", "migration.sql"),
-      "utf8",
+  it("runs both balance functions as pryvis_balance, and no live function sets the old flag", async () => {
+    // Read from the catalogue: what the database runs, not what a migration once said.
+    const fns = await sql<{ name: string; definer: boolean; owner: string }>(
+      `SELECT p.proname AS name, p.prosecdef AS definer, r.rolname AS owner
+         FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+        WHERE p.proname IN ('issue_balance_apply', 'issue_balance_open') ORDER BY p.proname`,
     );
-    // Comment lines are excluded, because the policy block deliberately MENTIONS the call while
-    // explaining that the flag is not a secret — and the first version of this assertion counted
-    // that sentence as if it were a call, which is a guard measuring the wrong thing.
-    const code = migration
-      .split(SPLIT_ON_NEWLINES)
-      .filter((line: string) => !line.trim().startsWith("--"))
-      .join(" ");
-    const occurrences = code.match(/set_config\('pryvis\.balance_write'/g) ?? [];
-    // Two per function (raise, then clear), for exactly two functions.
-    expect(occurrences).toHaveLength(4);
-    expect(migration).toContain("issue_balance_apply");
-    expect(migration).toContain("issue_balance_open");
+    expect(fns).toEqual([
+      { name: "issue_balance_apply", definer: true, owner: "pryvis_balance" },
+      { name: "issue_balance_open", definer: true, owner: "pryvis_balance" },
+    ]);
+    const flagSetters = await sql<{ name: string }>(
+      `SELECT p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.prosrc LIKE '%pryvis.balance_write%'`,
+    );
+    expect(flagSetters).toEqual([]);
   });
 });
 
@@ -509,7 +939,7 @@ describe("3 · a document's state is derived, so there is no value to disagree a
     expect(await state(issue)).toBe("issued");
   });
 
-  it("reads accepted, then issued again once the acceptance is withdrawn", async () => {
+  it("reads accepted, then withdrawn once the acceptance is withdrawn (J13 reversed 'issued again')", async () => {
     const issue = await seal(1, 100_000n);
     await sql(
       `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
@@ -525,8 +955,10 @@ describe("3 · a document's state is derived, so there is no value to disagree a
       [id(), TENANT, acceptance, USER],
     );
 
-    // No column was updated to make this happen — the state is a function of the rows.
-    expect(await state(issue)).toBe("issued");
+    // No column was updated to make this happen — the state is a function of the rows. Until J13 this
+    // read "issued", a state that promised an acceptance the schema then refused; the owner's decision
+    // (C plus A) makes a withdrawn issue final, with the next revision as the remedy.
+    expect(await state(issue)).toBe("withdrawn");
   });
 
   it("reads superseded when a later revision exists", async () => {
@@ -599,7 +1031,8 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
   it("REFUSES a later revision while an accepted revision has been invoiced", async () => {
     // The executed finding: revision 1 accepted and part-invoiced, revision 2 sealed and accepted, two
     // live ceilings totalling 230,000 for one 130,000 job. The prescribed remedy — withdraw first — is
-    // impossible here, because H4's trigger refuses a withdrawal once an invoice exists.
+    // impossible here, because H4's trigger refuses a withdrawal while an invoice still has money
+    // billed on it (since K4, a voided or fully credited invoice no longer blocks it).
     const rev1 = await seal(1, 100_000n);
     await accept(rev1);
     await invoiceDirect(rev1, 60_000n);
@@ -662,6 +1095,86 @@ describe("J10 · at most one revision of a quote holds a live ceiling", () => {
     const rev1 = await seal(1, 100_000n);
     expect(await state(rev1)).toBe("sealed_awaiting_number");
   });
+
+  it("K6 · REFUSES revision 3 when revision 2 has money, even though revision 1 is still accepted and has none", async () => {
+    // The J4 re-review's stuck state, executed. Revision 1's acceptance is superseded, not withdrawn,
+    // so it still matches "accepted"; the guard took the first match with LIMIT 1, found no money on
+    // it, and let revision 3 seal — taking revision 2's ceiling to 0 with 90,000 invoiced against it.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+    await invoiceDirect(rev2, 90_000n);
+
+    await expect(seal(3, 100_000n)).rejects.toThrow(/revision 2 is accepted and has 1 invoice/);
+    // And revision 2 stays billable to its real ceiling — the issue is not stuck.
+    expect(await ceiling(rev2)).toBe(100_000);
+    await invoiceDirect(rev2, 10_000n);
+  });
+
+  it("K6 · still allows revision 3 when no live revision has money — the control", async () => {
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await accept(rev2);
+
+    await seal(3, 100_000n);
+    expect(await ceiling(rev2)).toBe(0);
+  });
+
+  it("L2 · a variation left on a superseded revision by older code no longer blocks the quote", async () => {
+    // Legal until `20260926210000`: simulated by switching the variation trigger off as the owner. The
+    // guard then treated revision 1 as "accepted with money" and refused every later revision, blaming a
+    // revision whose ceiling is 0. It now judges the live revision only.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    const rev2 = await seal(2, 100_000n);
+    await asSuperuser(db, async () => {
+      await db.exec(`ALTER TABLE variation DISABLE TRIGGER variation_enforces_ceiling`);
+      await sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'recorded before the check', 30000, $4, now())`,
+        [id(), TENANT, rev1, USER],
+      );
+      await db.exec(`ALTER TABLE variation ENABLE TRIGGER variation_enforces_ceiling`);
+    });
+
+    await seal(3, 100_000n);
+    expect(await ceiling(rev1)).toBe(0);
+    expect(await ceiling(rev2)).toBe(0);
+  });
+
+  it("N2 · seals the next revision when the accepted one has no balance row (nothing billed on it)", async () => {
+    // The L6 fix called `issue_balance_apply()` inside the seal, which raises when no balance row
+    // exists — so this seal was refused, with a message about a missing balance row. Nothing makes
+    // `issue_balance_open()` run with every acceptance, so the state is reachable.
+    const rev1 = await seal(1, 100_000n);
+    await numberIfNeeded(rev1);
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev1, "accepted"]);
+
+    await seal(2, 100_000n);
+    expect(await state(rev1)).toBe("superseded");
+  });
+
+  it("K6's twin · REFUSES a variation against a superseded revision", async () => {
+    // Its ceiling is 0 but so is what is invoiced, so the ceiling check alone let a +30,000 variation
+    // through — agreed work on a document nobody can bill, which also blocks withdrawal (H4) and so
+    // would block every later revision of the quote for good.
+    const rev1 = await seal(1, 100_000n);
+    await accept(rev1);
+    await seal(2, 130_000n);
+
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 30000, $4, now())`,
+        [id(), TENANT, rev1, USER],
+      ),
+    ).rejects.toThrow(/superseded or no longer accepted/);
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(0);
+  });
 });
 
 // ===========================================================================
@@ -681,10 +1194,12 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     const acceptance = await accept(issue);
 
     await withdraw(acceptance);
-    expect(await state(issue)).toBe("sealed_awaiting_number");
+    // Read "sealed_awaiting_number" until W4: the fixture accepted an issue it never numbered, which a
+    // client can no longer do, so the withdrawn acceptance now reads as what it is.
+    expect(await state(issue)).toBe("withdrawn");
   });
 
-  it("REFUSES a withdrawal once an invoice exists", async () => {
+  it("REFUSES a withdrawal once an invoice with money billed on it exists", async () => {
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await invoice(issue, 40_000n);
@@ -692,10 +1207,12 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     await expect(withdraw(acceptance)).rejects.toThrow(/credit note and a fresh quote/);
   });
 
-  it("REFUSES a withdrawal once a variation exists — the case the guard condition missed", async () => {
-    // Without this, $400,000 of immutable agreed work ends up pointing at a superseded issue whose
-    // acceptance is gone: unbillable, unmovable, and re-recording it leaves two identical copies
-    // with nothing marking which pair is live.
+  it("ALLOWS a withdrawal once a variation exists, and the variation becomes inert history — changed by L1", async () => {
+    // This test asserted the opposite until 2026-09-27. H4 refused it because $400,000 of agreed work
+    // would point at a dead issue with two copies and nothing marking which was live. Since K6's twin
+    // check a withdrawn issue takes no new variation, so the old rows are history, not a live copy —
+    // and keeping the refusal left a wrong document with variations uncorrectable (L1). Owner's
+    // decision, docs/design/scope-reduction.md §3b.
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await sql(
@@ -705,11 +1222,25 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
       [id(), TENANT, issue, USER],
     );
 
-    await expect(withdraw(acceptance)).rejects.toThrow(/recorded variation/);
+    await withdraw(acceptance);
+
+    // What H4 feared, asserted absent: the agreement stays on record, and nothing can grow it or bill it.
+    expect(await sql(`SELECT 1 FROM variation`)).toHaveLength(1);
+    const ceiling = await sql<{ c: string }>(`SELECT issue_ceiling_minor($1) AS c`, [issue]);
+    expect(minor(ceiling[0]!.c)).toBe(0);
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'another', 1000, $4, now())`,
+        [id(), TENANT, issue, USER],
+      ),
+    ).rejects.toThrow(/no longer accepted/);
+    await expect(invoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling 0/);
   });
 
   it("drops the ceiling to zero on withdrawal, so nothing more can be invoiced", async () => {
-    // Nothing is mutated to achieve this. `accepted_total_minor` stays written-once, and the CEILING is
+    // Nothing is mutated to achieve this. no function rewrites `accepted_total_minor` (R5 aside), and the CEILING is
     // state-aware — which is how ADR 0025's own contradiction was resolved.
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
@@ -720,7 +1251,9 @@ describe("H4 · withdrawal cannot detach money from the issue it was agreed agai
     await expect(invoice(issue, 1n)).rejects.toThrow(/exceeds the ceiling/);
   });
 
-  it("leaves accepted_total untouched, because an immutable copy is what makes it safe", async () => {
+  // Finding V16: the column is not immutable — a caller that sets the flag can rewrite it (R5). What this
+  // executes is that WITHDRAWAL does not touch it; the copy is safe because the ISSUE cannot change.
+  it("leaves accepted_total untouched on withdrawal; the issue it copies is immutable", async () => {
     const issue = await seal(1, 100_000n);
     const acceptance = await accept(issue);
     await withdraw(acceptance);
@@ -976,16 +1509,19 @@ describe("the tenant boundary still holds over all of it", () => {
     // The attack in full. Ids are client-generated (ADR 0019) and travel through sync payloads,
     // PDFs, share links and exports, so knowing this id is a leak rather than a guess.
     const issue = await seal(1, 100_000n);
+    // The victim's render exists and its id is as leakable as the issue's, so the attacker has both.
+    const render = await renderOf(issue);
 
     await db.query(`SELECT set_config('app.tenant_id', $1, false)`, [OTHER_TENANT]);
     await expect(
       db.query(
-        `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
-                                 occurred_at)
-         VALUES ($1, $2, $3, 'declined', 'Not Their Client', true, now())`,
-        [id(), OTHER_TENANT, issue],
+        `INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                 consented_to_sign, occurred_at)
+         VALUES ($1, $2, $3, $4, 'declined', 'Not Their Client', true, now())`,
+        [id(), OTHER_TENANT, issue, render],
       ),
-    ).rejects.toThrow(/foreign key|violates/i);
+      // A named tenant key, not the NOT NULL on the render: a bare /violates/ would pass on that alone.
+    ).rejects.toThrow(/acceptance_(issue_id|document_render_id)_fkey/);
 
     // And the consequence that made this a blocker rather than a curiosity: the rightful owner's
     // acceptance still works. Before the composite key, the planted row satisfied the global
@@ -1046,6 +1582,29 @@ describe("the tenant boundary still holds over all of it", () => {
     );
   });
 
+  it("R17 · refuses a balance write that stored nothing, even when the figures would read back the same", async () => {
+    // The second line, exercised. Something that silently suppresses the UPDATE — here a BEFORE UPDATE
+    // trigger returning NULL, standing in for a mistaken trigger or policy — leaves the row unwritten.
+    // When the new figures differ from the stored ones, the read-back check also catches it; when they
+    // are the same (a recompute with nothing changed), only the ROW_COUNT check does. Finding R17: no
+    // test went red when that check was removed. This one does.
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 10_000n);
+
+    await asSuperuser(db, () =>
+      db.exec(`
+        CREATE FUNCTION test_suppress_balance_write() RETURNS TRIGGER LANGUAGE plpgsql AS $$
+        BEGIN RETURN NULL; END; $$;
+        CREATE TRIGGER test_suppress_balance_write BEFORE UPDATE ON issue_balance
+          FOR EACH ROW EXECUTE FUNCTION test_suppress_balance_write();`),
+    );
+
+    await expect(sql(`SELECT issue_balance_apply($1)`, [issue])).rejects.toThrow(
+      /affected 0 row\(s\), not 1/,
+    );
+  });
+
   it("refuses a seal planted into another tenant", async () => {
     await expect(
       db.query(
@@ -1057,5 +1616,926 @@ describe("the tenant boundary still holds over all of it", () => {
         [id(), OTHER_TENANT, QUOTE, CLIENT, USER],
       ),
     ).rejects.toThrow(/policy/i);
+  });
+});
+
+// ===========================================================================
+// Findings R1/Q4, R2, R4, R9 and R16 of the re-review of the seven (J3 and J9 re-opened), fixed by
+// migration 20260927150000_keys_cannot_rewrite_history. Each test names the constraint or trigger it
+// proves, so it cannot pass on a different refusal — a bare /violates/ would pass on a NOT NULL.
+describe("R · no key rewrites history, and every document names its own tenant's people", () => {
+  const OTHER_USER = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const OTHER_CLIENT = "cdcdcdcd-cdcd-4cdc-8cdc-cdcdcdcdcdcd";
+
+  /** Another tenant's user and client, whose ids an attacker in TENANT is assumed to know. */
+  async function otherTenantPeople() {
+    await asSuperuser(db, async () => {
+      await db.query(
+        `INSERT INTO app_user (id, tenant_id, email, role, session_version, updated_at)
+         VALUES ($1, $2, 'someone@example.com', 'owner', 0, now())`,
+        [OTHER_USER, OTHER_TENANT],
+      );
+      await db.query(
+        `INSERT INTO client (id, tenant_id, name, updated_at) VALUES ($1, $2, 'Their Client', now())`,
+        [OTHER_CLIENT, OTHER_TENANT],
+      );
+    });
+  }
+
+  // --- R9 -------------------------------------------------------------------
+  it("R9 · REFUSES an acceptance bound to another issue's render", async () => {
+    // The re-review's attack: accept the small issue while pointing at another issue's PDF. An
+    // acceptance cannot be updated, so a wrong binding would be permanent.
+    const rev1 = await seal(1, 9_000_000n);
+    const rev1Render = await renderOf(rev1);
+    const rev2 = await seal(2, 100_000n);
+    // Numbered, so the response rules (W4) let it through to the key this test is about.
+    await numberIfNeeded(rev2);
+
+    await expect(
+      sql(
+        `INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome, signer_name,
+                                 consented_to_sign, occurred_at)
+         VALUES ($1, $2, $3, $4, 'accepted', 'A Client', true, now())`,
+        [id(), TENANT, rev2, rev1Render],
+      ),
+    ).rejects.toThrow(/acceptance_document_render_id_fkey/);
+
+    // Its own render is accepted.
+    expect(await accept(rev2)).toBeTruthy();
+  });
+
+  it("R9 · REFUSES an acceptance that records no render at all", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    await expect(
+      sql(
+        `INSERT INTO acceptance (id, tenant_id, issue_id, outcome, signer_name, consented_to_sign,
+                                 occurred_at)
+         VALUES ($1, $2, $3, 'accepted', 'A Client', true, now())`,
+        [id(), TENANT, issue],
+      ),
+    ).rejects.toThrow(/null value in column "document_render_id"/);
+  });
+
+  // --- R1 (Q4) and R2 -------------------------------------------------------
+  it("R1 · no foreign key in the schema is ON UPDATE CASCADE", async () => {
+    // The migration asserts this once; this holds it for every later migration.
+    const rows = await sql<{ name: string }>(
+      `SELECT c.conrelid::regclass || '.' || c.conname AS name
+         FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+        WHERE c.contype = 'f' AND c.confupdtype = 'c' AND n.nspname = 'public'`,
+    );
+    expect(rows.map((r) => r.name)).toEqual([]);
+  });
+
+  it("R1 · REFUSES renaming a quote's id under a sealed issue, which cascaded into the seal", async () => {
+    const issue = await seal(1, 100_000n);
+    await expect(
+      sql(`UPDATE quote SET id = $1 WHERE id = $2`, [id(), QUOTE]),
+    ).rejects.toThrow(/quote_issue_quote_id_fkey/);
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1 AND quote_id = $2`, [issue, QUOTE]))
+      .toHaveLength(1);
+  });
+
+  it("R2 · REFUSES a user id rename that would rewrite ANOTHER tenant's audit row", async () => {
+    // audit_entry.actor_user_id is single-column on purpose (a staff actor may belong to another
+    // tenant), and referential actions bypass row security — so a cascade crossed the boundary.
+    const auditId = id();
+    await asSuperuser(db, () =>
+      db.query(
+        `INSERT INTO audit_entry (id, tenant_id, actor_kind, actor_user_id, action, subject_type, summary)
+         VALUES ($1, $2, 'staff', $3, 'impersonation.start', 'tenant', 'staff acted on this tenant')`,
+        [auditId, OTHER_TENANT, USER],
+      ),
+    );
+
+    await expect(
+      sql(`UPDATE app_user SET id = $1 WHERE id = $2`, [id(), USER]),
+    ).rejects.toThrow(/audit_entry_actor_user_id_fkey/);
+
+    const [row] = await asSuperuser(db, async () =>
+      (await db.query<{ actor: string }>(`SELECT actor_user_id AS actor FROM audit_entry WHERE id = $1`, [auditId])).rows,
+    );
+    expect(row!.actor).toBe(USER);
+  });
+
+  // --- R4 -------------------------------------------------------------------
+  it("R4 · REFUSES the application deleting its own tenant", async () => {
+    await expect(sql(`DELETE FROM tenant WHERE id = $1`, [TENANT])).rejects.toThrow(
+      /a tenant cannot be deleted by the application/,
+    );
+    expect(await sql(`SELECT 1 FROM tenant WHERE id = $1`, [TENANT])).toHaveLength(1);
+  });
+
+  it("R4 · even the platform cannot delete a tenant out from under its audit trail", async () => {
+    // OTHER_TENANT has nothing hanging off it but this audit row, so the audit key is the refusal.
+    await asSuperuser(db, () =>
+      db.query(
+        `INSERT INTO audit_entry (id, tenant_id, actor_kind, action, subject_type, summary)
+         VALUES ($1, $2, 'system', 'tenant.create', 'tenant', 'tenant created')`,
+        [id(), OTHER_TENANT],
+      ),
+    );
+    await expect(
+      asSuperuser(db, () => db.query(`DELETE FROM tenant WHERE id = $1`, [OTHER_TENANT])),
+    ).rejects.toThrow(/audit_entry_tenant_id_fkey/);
+  });
+
+  // --- R16 ------------------------------------------------------------------
+  it("R16 · REFUSES a seal naming another tenant's client", async () => {
+    await otherTenantPeople();
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'X', 'itemised', 'JMD', 'T', 0, 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, OTHER_CLIENT, USER],
+      ),
+    ).rejects.toThrow(/quote_issue_client_id_fkey/);
+  });
+
+  it("R16 · REFUSES a seal whose sealer is another tenant's user", async () => {
+    await otherTenantPeople();
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'X', 'itemised', 'JMD', 'T', 0, 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, CLIENT, OTHER_USER],
+      ),
+    ).rejects.toThrow(/quote_issue_sealed_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a rejected seal naming another tenant's client, or sealed by their user", async () => {
+    await otherTenantPeople();
+    const rejected = (client: string, user: string) =>
+      sql(
+        `INSERT INTO rejected_seal
+           (id, tenant_id, quote_id, revision_attempted, refusal_reason, client_id, client_name, title,
+            currency, subtotal_minor, tax_minor, total_minor, sealed_at, sealed_by_user_id,
+            catalog_synced_at)
+         VALUES ($1, $2, $3, 1, 'lost the race', $4, 'X', 'X', 'JMD', 1, 0, 1, now(), $5, now())`,
+        [id(), TENANT, QUOTE, client, user],
+      );
+    await expect(rejected(OTHER_CLIENT, USER)).rejects.toThrow(/rejected_seal_client_id_fkey/);
+    await expect(rejected(CLIENT, OTHER_USER)).rejects.toThrow(/rejected_seal_sealed_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a variation recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await expect(
+      sql(
+        `INSERT INTO variation (id, tenant_id, issue_id, description, amount_minor,
+                                recorded_by_user_id, occurred_at)
+         VALUES ($1, $2, $3, 'A gate', 1000, $4, now())`,
+        [id(), TENANT, issue, OTHER_USER],
+      ),
+    ).rejects.toThrow(/variation_recorded_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a void recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 10_000n);
+    const invoiceId = (await sql<{ id: string }>(`SELECT id FROM invoice LIMIT 1`))[0]!.id;
+    await expect(
+      sql(
+        `INSERT INTO invoice_void (id, tenant_id, invoice_id, reason, voided_by_user_id)
+         VALUES ($1, $2, $3, 'Wrong amount', $4)`,
+        [id(), TENANT, invoiceId, OTHER_USER],
+      ),
+    ).rejects.toThrow(/invoice_void_voided_by_user_id_fkey/);
+  });
+
+  it("R16 · REFUSES a withdrawal recorded by another tenant's user", async () => {
+    await otherTenantPeople();
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(
+      sql(
+        `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+         VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+        [id(), TENANT, acceptance, OTHER_USER],
+      ),
+    ).rejects.toThrow(/acceptance_withdrawal_withdrawn_by_user_id_fkey/);
+  });
+});
+
+// ===========================================================================
+// J13 — what may follow a client's first answer (option C plus A; migration
+// 20260927160000_acceptance_responses). Each refusal is pinned to the index or the message that makes
+// it, so a test cannot pass on some other refusal.
+describe("J13 · decline then accept, one accepted row, and withdrawn is final", () => {
+  /** Numbers the issue, so its state reads past sealed_awaiting_number. */
+  async function numbered(revision = 1): Promise<string> {
+    const issue = await seal(revision, 100_000n);
+    await sql(
+      `INSERT INTO issue_number (id, tenant_id, issue_id, series_id, number, formatted)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [id(), TENANT, issue, SERIES, revision, `Q-${revision}`],
+    );
+    return issue;
+  }
+  /** A client response with its own render (R9). `accept()` is used where the balance must open. */
+  async function respond(issue: string, outcome: "accepted" | "declined"): Promise<string> {
+    const responseId = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [responseId, TENANT, issue, outcome]);
+    return responseId;
+  }
+  async function withdraw(acceptanceId: string) {
+    return sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+  const responses = async (issue: string) =>
+    (await sql(`SELECT 1 FROM acceptance WHERE issue_id = $1`, [issue])).length;
+
+  it("accepts after a decline, keeps the decline, and opens the balance", async () => {
+    const issue = await numbered();
+    await respond(issue, "declined");
+    expect(await state(issue)).toBe("declined");
+
+    await accept(issue);
+    expect(await state(issue)).toBe("accepted");
+    expect(await responses(issue)).toBe(2);
+    // The money side keys on the one accepted row, undisturbed by the decline before it.
+    await invoice(issue, 100_000n);
+    expect(minor((await balance(issue)).invoiced_total_minor)).toBe(100_000);
+  });
+
+  it("accepts after several declines", async () => {
+    const issue = await numbered();
+    for (let i = 0; i < 3; i += 1) await respond(issue, "declined");
+    expect(await state(issue)).toBe("declined");
+    await accept(issue);
+    expect(await state(issue)).toBe("accepted");
+    expect(await responses(issue)).toBe(4);
+  });
+
+  it("REFUSES a second acceptance of the same issue", async () => {
+    const issue = await numbered();
+    await accept(issue);
+    await expect(respond(issue, "accepted")).rejects.toThrow(/acceptance_accepted_issue_key/);
+  });
+
+  it("REFUSES a decline after an acceptance", async () => {
+    const issue = await numbered();
+    await accept(issue);
+    await expect(respond(issue, "declined")).rejects.toThrow(/a decline cannot follow an acceptance/);
+    expect(await state(issue)).toBe("accepted");
+  });
+
+  it("reads withdrawn after a withdrawal, and REFUSES any response after it", async () => {
+    const issue = await numbered();
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+    expect(await state(issue)).toBe("withdrawn");
+
+    // The withdrawn row still holds the one accepted slot: the remedy is the next revision.
+    await expect(respond(issue, "accepted")).rejects.toThrow(/acceptance_accepted_issue_key/);
+    await expect(respond(issue, "declined")).rejects.toThrow(/a decline cannot follow an acceptance/);
+    expect(await state(issue)).toBe("withdrawn");
+  });
+
+  it("REFUSES withdrawing a decline", async () => {
+    const issue = await numbered();
+    const decline = await respond(issue, "declined");
+    await expect(withdraw(decline)).rejects.toThrow(/only an acceptance can be withdrawn/);
+    expect(await state(issue)).toBe("declined");
+  });
+
+  it("an earlier decline does not outrank a later acceptance's withdrawal", async () => {
+    const issue = await numbered();
+    await respond(issue, "declined");
+    const acceptance = await accept(issue);
+    await withdraw(acceptance);
+    expect(await state(issue)).toBe("withdrawn");
+  });
+});
+
+// ===========================================================================
+// Finding J11, fixed by migration 20260927170000_issue_lines_add_up: a frozen line's total is quantity
+// times unit price rounded half away from zero at the cent, and an issue's subtotal is the sum of its
+// own lines, checked at COMMIT. Each refusal names the constraint or the trigger's message, so it cannot
+// pass on a different refusal.
+describe("J11 · an issue's lines add up to its subtotal, in the database", () => {
+  const HEADER = `INSERT INTO quote_issue
+       (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+        currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+        sealed_at, sealed_by_user_id, catalog_synced_at)
+     VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, $6, 0, $6,
+             now(), $7, now())`;
+  const LINE = `INSERT INTO quote_issue_line
+       (id, tenant_id, issue_id, section_title, description, position, quantity_thousandths,
+        unit_price_minor, line_total_minor, tax_treatment)
+     VALUES ($1, $2, $3, 'Works', 'Item', $4, $5, $6, $7, 'standard')`;
+  type Line = { qty: bigint; price: bigint; total: bigint };
+
+  /** Seals one issue with these lines and this subtotal, as ONE transaction: header first, then lines. */
+  async function sealWith(revision: number, subtotal: bigint, lines: Line[]): Promise<string> {
+    const issue = id();
+    await db.exec("BEGIN");
+    try {
+      await sql(HEADER, [issue, TENANT, QUOTE, revision, CLIENT, subtotal.toString(), USER]);
+      for (const [index, line] of lines.entries()) {
+        await sql(LINE, [id(), TENANT, issue, index + 1, line.qty.toString(), line.price.toString(),
+          line.total.toString()]);
+      }
+      await db.exec("COMMIT");
+    } catch (error) {
+      await db.exec("ROLLBACK");
+      throw error;
+    }
+    return issue;
+  }
+
+  /** Half away from zero at the cent, computed here independently of the database's expression. */
+  function rounded(qty: bigint, price: bigint): bigint {
+    const product = qty * price;
+    const magnitude = product < 0n ? -product : product;
+    const cents = (magnitude * 2n + 1000n) / 2000n;
+    return product < 0n ? -cents : cents;
+  }
+
+  // [quantity in thousandths, unit price in minor units] — the halves are the cases that matter.
+  const CASES: Array<[bigint, bigint]> = [
+    [1000n, 12_345n], // 1 × 123.45: exact
+    [1500n, 333n], // 1.5 × 3.33 = 4.995 → 5.00
+    [1500n, -333n], // a discount: -4.995 → -5.00, not -4.99
+    [2500n, 1n], // 0.025 → 0.03: half away, not to even
+    [-2500n, 1n], // a negative quantity rounds the same way
+    [2499n, 1n], // 0.02499 → 0.02
+    [-2499n, 1n],
+    [1n, 500n], // 0.005 → 0.01
+    [1n, -500n], // -0.005 → -0.01
+    [1n, 499n], // 0.00499 → 0.00
+    [0n, 99_999n],
+    // The product overflows a BIGINT (about 1e20); the total does not. NUMERIC `/` got this one a cent
+    // high (its quotient is rounded to a size-picked scale); `div()` is exact.
+    [999_999_999n, 99_999_999_999n],
+    [999_999_999n, 99_999_999_500n], // an exact half, at that size
+    [999_999_999n, -99_999_999_500n],
+  ];
+
+  it("accepts every line whose total is quantity × price, half away from zero — discounts included", async () => {
+    for (const [index, [qty, price]] of CASES.entries()) {
+      const total = rounded(qty, price);
+      await expect(sealWith(index + 1, total, [{ qty, price, total }])).resolves.toBeTruthy();
+    }
+  });
+
+  it("REFUSES a line total that truncates, rounds to even, or rounds a discount toward zero", async () => {
+    const wrong: Line[] = [
+      { qty: 1500n, price: 333n, total: 499n }, // truncated
+      { qty: 2500n, price: 1n, total: 2n }, // banker's rounding
+      { qty: 1500n, price: -333n, total: -499n }, // a discount rounded toward zero
+      { qty: 1000n, price: 100n, total: -100n }, // the wrong sign
+      { qty: 1000n, price: 100n, total: 101n }, // one cent over
+    ];
+    for (const [index, line] of wrong.entries()) {
+      await expect(sealWith(index + 1, line.total, [line])).rejects.toThrow(/quote_issue_line_total_check/);
+    }
+  });
+
+  it("seals header and lines as one transaction, and a discount line counts against the subtotal", async () => {
+    // The check is deferred: the header goes in before any line, so a statement-time check refuses
+    // every seal. Two lines, one of them a 15.00 discount, sum to the 85.00 subtotal.
+    const issue = await sealWith(1, 8_500n, [
+      { qty: 1000n, price: 10_000n, total: 10_000n },
+      { qty: 1000n, price: -1_500n, total: -1_500n },
+    ]);
+    expect(await sql(`SELECT subtotal_minor FROM quote_issue WHERE id = $1`, [issue])).toEqual([
+      { subtotal_minor: 8_500 },
+    ]);
+  });
+
+  it("REFUSES a subtotal its lines do not sum to — over, under, or with no lines at all", async () => {
+    const line = { qty: 1000n, price: 10_000n, total: 10_000n };
+    await expect(sealWith(1, 10_001n, [line])).rejects.toThrow(/subtotal_minor 10001, but its lines sum to 10000/);
+    await expect(sealWith(1, 9_999n, [line])).rejects.toThrow(/subtotal_minor 9999, but its lines sum to 10000/);
+    await expect(sealWith(1, 100n, [])).rejects.toThrow(/subtotal_minor 100, but its lines sum to 0/);
+    // An issue of no lines and no subtotal is consistent, and allowed.
+    await expect(sealWith(1, 0n, [])).resolves.toBeTruthy();
+  });
+
+  it("REFUSES a line added to an issue already sealed, since it changes the sum", async () => {
+    const issue = await sealWith(1, 10_000n, [{ qty: 1000n, price: 10_000n, total: 10_000n }]);
+    await expect(sql(LINE, [id(), TENANT, issue, 2, "1000", "500", "500"])).rejects.toThrow(
+      /subtotal_minor 10000, but its lines sum to 10500/,
+    );
+    // A zero line changes nothing, and the rule is about the sum, so it stands.
+    await expect(sql(LINE, [id(), TENANT, issue, 3, "0", "500", "0"])).resolves.toBeTruthy();
+  });
+
+  it("W13 · REFUSES an issue the transaction hid from its own check by clearing the tenant before COMMIT", async () => {
+    // Executed as a bypass before the fix: the check skipped what it could not see, and an issue of
+    // subtotal 100.00 with no lines committed.
+    const issue = id();
+    await db.exec("BEGIN");
+    await sql(HEADER, [issue, TENANT, QUOTE, 1, CLIENT, "10000", USER]);
+    await sql(`SELECT set_config('app.tenant_id', '', false)`);
+    await expect(db.exec("COMMIT")).rejects.toThrow(/cannot be seen by this transaction at COMMIT/);
+    await db.exec("ROLLBACK").catch(() => undefined);
+    // The failed transaction took its set_config with it; the tenant is back, and nothing was sealed.
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1`, [issue])).toEqual([]);
+  });
+
+  it("X1 · lets a role that bypasses row security delete a sealed issue and its lines in one transaction", async () => {
+    // The W13 fix made the COMMIT check refuse any issue it could not see, which also refused a staff
+    // erasure: for a superuser "not found" means "deleted". The application role still gets W13's refusal.
+    const issue = await sealWith(1, 10_000n, [{ qty: 1000n, price: 10_000n, total: 10_000n }]);
+    await asSuperuser(db, async () => {
+      await db.exec("BEGIN");
+      await sql(`DELETE FROM quote_issue_line WHERE issue_id = $1`, [issue]);
+      await sql(`DELETE FROM quote_issue WHERE id = $1`, [issue]);
+      await expect(db.exec("COMMIT")).resolves.toBeDefined();
+    });
+    expect(await sql(`SELECT 1 FROM quote_issue WHERE id = $1`, [issue])).toEqual([]);
+  });
+
+  it("REFUSES, even to the table owner, a line changed or removed so the sum no longer matches", async () => {
+    // The application role has no UPDATE or DELETE policy on lines; the owner, which bypasses row
+    // security, still meets the trigger.
+    const issue = await sealWith(1, 10_000n, [
+      { qty: 1000n, price: 6_000n, total: 6_000n },
+      { qty: 1000n, price: 4_000n, total: 4_000n },
+    ]);
+    await asSuperuser(db, async () => {
+      await expect(
+        sql(`UPDATE quote_issue_line SET unit_price_minor = 5000, line_total_minor = 5000
+             WHERE issue_id = $1 AND position = 1`, [issue]),
+      ).rejects.toThrow(/but its lines sum to 9000/);
+      await expect(
+        sql(`DELETE FROM quote_issue_line WHERE issue_id = $1 AND position = 2`, [issue]),
+      ).rejects.toThrow(/but its lines sum to 6000/);
+      await expect(
+        sql(`UPDATE quote_issue SET subtotal_minor = 9000, total_minor = 9000 WHERE id = $1`, [issue]),
+      ).rejects.toThrow(/subtotal_minor 9000, but its lines sum to 10000/);
+    });
+  });
+});
+
+// ===========================================================================
+// Findings J6, J7 and J8, fixed by migration 20260927180000_acceptance_grade (design
+// `docs/design/acceptance-grade.md`, the owner's decisions D1-D7 of 2026-10-01). Each refusal names the
+// constraint or the trigger's message, so it cannot pass on a different refusal.
+describe("J6 J7 J8 · the acceptance grade, its evidence, and the bar frozen at seal", () => {
+  type Evidence = { kind: string; source?: string; externalId?: string; recordedBy?: string };
+
+  async function evidence(acceptanceId: string, e: Evidence) {
+    return sql(
+      `INSERT INTO acceptance_evidence
+         (id, tenant_id, acceptance_id, kind, source, external_id, recorded_by_user_id, occurred_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())`,
+      [id(), TENANT, acceptanceId, e.kind, e.source ?? null, e.externalId ?? null, e.recordedBy ?? null],
+    );
+  }
+  const grade = async (issue: string) =>
+    (await sql<{ g: number | null }>(`SELECT acceptance_grade($1) AS g`, [issue]))[0]?.g;
+  const meetsBar = async (issue: string) =>
+    (await sql<{ m: boolean | null }>(`SELECT acceptance_meets_bar($1) AS m`, [issue]))[0]?.m;
+  const barOf = async (issue: string) =>
+    (await sql<{ b: number }>(`SELECT acceptance_bar_grade AS b FROM quote_issue WHERE id = $1`, [issue]))[0]?.b;
+  const deposit = (externalId: string): Evidence => ({ kind: "deposit_paid", source: "wipay", externalId });
+  const noted: Evidence = { kind: "tenant_recorded", recordedBy: USER };
+
+  async function withdraw(acceptanceId: string) {
+    await sql(
+      `INSERT INTO acceptance_withdrawal (id, tenant_id, acceptance_id, reason, withdrawn_by_user_id)
+       VALUES ($1, $2, $3, 'Wrong client named', $4)`,
+      [id(), TENANT, acceptanceId, USER],
+    );
+  }
+
+  // --- J6: the combining rule ------------------------------------------------
+  it("D1 · grades a link tap 2, rises with stronger evidence, and a weaker later row never lowers it", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    expect(await grade(issue)).toBe(2);
+    await evidence(acceptance, { kind: "code_verified" });
+    expect(await grade(issue)).toBe(3);
+    await evidence(acceptance, noted);
+    expect(await grade(issue)).toBe(3);
+    await evidence(acceptance, deposit("TX-1"));
+    expect(await grade(issue)).toBe(6);
+    await evidence(acceptance, noted);
+    expect(await grade(issue)).toBe(6);
+  });
+
+  it("D1 · grades a tenant-uploaded signed copy 1, the same as the tenant's own note (J5)", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    // An acceptance the tenant records: its first evidence is the tenant's record, in one transaction.
+    const acceptance = id();
+    await db.exec("BEGIN");
+    await sql(`${WITH_RENDER} INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome,
+                 signer_name, consented_to_sign, occurred_at)
+               SELECT $1, $2, $3, r.id, $4, 'A Client', true, now() FROM r`,
+      [acceptance, TENANT, issue, "accepted"]);
+    await evidence(acceptance, { kind: "signed_copy_uploaded", recordedBy: USER });
+    await db.exec("COMMIT");
+    expect(await grade(issue)).toBe(1);
+  });
+
+  // --- J6: what evidence may attach to -----------------------------------------
+  it("D2 · has no grade before an acceptance or for a decline, and REFUSES evidence on a decline", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    expect(await grade(issue)).toBeNull();
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    expect(await grade(issue)).toBeNull();
+    // The case J6 found: a deposit against a decline is not graded — it cannot be recorded at all.
+    await expect(evidence(decline, deposit("TX-2"))).rejects.toThrow(/is a decline, which carries no evidence/);
+    expect(await grade(issue)).toBeNull();
+  });
+
+  it("D3 · a withdrawn acceptance has no grade, keeps its evidence as history, and takes no more", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await evidence(acceptance, deposit("TX-3"));
+    expect(await grade(issue)).toBe(6);
+    await withdraw(acceptance);
+    expect(await grade(issue)).toBeNull();
+    expect(await meetsBar(issue)).toBeNull();
+    const kept = await sql(`SELECT kind FROM acceptance_evidence WHERE acceptance_id = $1 ORDER BY kind`, [acceptance]);
+    expect(kept.map((r) => r.kind)).toEqual(["deposit_paid", "link_tap"]);
+    await expect(evidence(acceptance, deposit("TX-4"))).rejects.toThrow(/has been withdrawn; it takes no further evidence/);
+  });
+
+  it("REFUSES an accepted acceptance with no evidence, at COMMIT — and allows it written separately in one transaction", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    const insertAcceptance = (acceptanceId: string) =>
+      sql(`${WITH_RENDER} INSERT INTO acceptance (id, tenant_id, issue_id, document_render_id, outcome,
+             signer_name, consented_to_sign, occurred_at)
+           SELECT $1, $2, $3, r.id, 'accepted', 'A Client', true, now() FROM r`, [acceptanceId, TENANT, issue]);
+    await expect(insertAcceptance(id())).rejects.toThrow(/has no evidence/);
+
+    // The check is deferred, so the evidence may follow in a later statement of the same transaction.
+    const acceptance = id();
+    await db.exec("BEGIN");
+    await insertAcceptance(acceptance);
+    await evidence(acceptance, { kind: "link_tap" });
+    await db.exec("COMMIT");
+    expect(await grade(issue)).toBe(2);
+  });
+
+  it("CANNOT update or delete evidence, so the grade cannot be moved after the fact", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    // No UPDATE or DELETE policy: row security hides every row from both, so nothing changes.
+    expect(await sql(`UPDATE acceptance_evidence SET kind = 'deposit_paid', source = 'wipay',
+                        external_id = 'FORGED' WHERE acceptance_id = $1 RETURNING id`, [acceptance])).toEqual([]);
+    expect(await sql(`DELETE FROM acceptance_evidence WHERE acceptance_id = $1 RETURNING id`, [acceptance])).toEqual([]);
+    expect(await grade(issue)).toBe(2);
+  });
+
+  it("REFUSES a kind outside the ladder, and the retired grade 5 by any name", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const kind of ["signed_document", "grade_5", "client_hand"]) {
+      await expect(evidence(acceptance, { kind })).rejects.toThrow(/acceptance_evidence_kind_check/);
+    }
+  });
+
+  it("REFUSES third-party kinds without the party's id, and a person's kinds without the person", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(evidence(acceptance, { kind: "deposit_paid" })).rejects.toThrow(/acceptance_evidence_witnessed_check/);
+    await expect(evidence(acceptance, { kind: "inbound_reply" })).rejects.toThrow(/acceptance_evidence_witnessed_check/);
+    await expect(evidence(acceptance, { kind: "tenant_recorded" })).rejects.toThrow(/acceptance_evidence_recorded_by_check/);
+    await expect(evidence(acceptance, { kind: "signed_copy_uploaded" })).rejects.toThrow(/acceptance_evidence_recorded_by_check/);
+    await expect(evidence(acceptance, { kind: "link_tap", source: "wipay" })).rejects.toThrow(/acceptance_evidence_source_pair_check/);
+  });
+
+  // --- J7: one row per provider event ------------------------------------------
+  it("J7 · REFUSES a replayed provider event, so a retried webhook cannot record a second piece of evidence", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await evidence(acceptance, deposit("TX-5"));
+    await expect(evidence(acceptance, deposit("TX-5"))).rejects.toThrow(/acceptance_evidence_tenant_source_external_id_key/);
+    await expect(
+      evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
+    ).resolves.toBeTruthy();
+    await expect(
+      evidence(acceptance, { kind: "inbound_reply", source: "email", externalId: "<m1@mail.example>" }),
+    ).rejects.toThrow(/acceptance_evidence_tenant_source_external_id_key/);
+    // The same id from a DIFFERENT source is a different event.
+    await expect(evidence(acceptance, { kind: "deposit_paid", source: "bank", externalId: "TX-5" })).resolves.toBeTruthy();
+    expect(await sql(`SELECT 1 FROM acceptance_evidence WHERE acceptance_id = $1`, [acceptance])).toHaveLength(4);
+  });
+
+  it("J7 · keys a provider event PER TENANT (D4 as reversed for W7), and on nothing narrower", async () => {
+    // Read from the catalogue. Every test above runs in one tenant, so a key scoped more narrowly — per
+    // acceptance, say — or more widely would pass them all; this pins the exact shape the owner chose.
+    const indexes = await sql<{ name: string; def: string }>(
+      `SELECT c.relname AS name, pg_get_indexdef(i.indexrelid) AS def FROM pg_index i
+         JOIN pg_class c ON c.oid = i.indexrelid
+         JOIN pg_class t ON t.oid = i.indrelid
+        WHERE t.relname = 'acceptance_evidence' AND i.indisunique AND NOT i.indisprimary`,
+    );
+    expect(indexes).toEqual([
+      {
+        name: "acceptance_evidence_tenant_source_external_id_key",
+        def:
+          "CREATE UNIQUE INDEX acceptance_evidence_tenant_source_external_id_key ON public.acceptance_evidence " +
+          "USING btree (tenant_id, source, external_id) WHERE (external_id IS NOT NULL)",
+      },
+    ]);
+  });
+
+  // --- The re-review's fixes ----------------------------------------------------
+  it("W1 · REFUSES evidence whose writer hides the acceptance from the rules by clearing the tenant", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    // Before the fix this committed: RETURNING runs before the AFTER trigger, which then saw nothing.
+    await expect(
+      sql(
+        `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+         VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'BYPASS-1', now())
+         RETURNING set_config('app.tenant_id', '', false)`,
+        [id(), TENANT, decline],
+      ),
+    ).rejects.toThrow(/cannot be seen by this statement/);
+    expect(await sql(`SELECT 1 FROM acceptance_evidence WHERE acceptance_id = $1`, [decline])).toEqual([]);
+  });
+
+  it("W4 · a superseded issue has no grade and takes no evidence or response; an unnumbered one takes no response", async () => {
+    const rev1 = await seal(1, 100_000n);
+    const acceptance = await accept(rev1);
+    expect(await grade(rev1)).toBe(2);
+    await seal(2, 100_000n);
+    expect(await grade(rev1)).toBeNull();
+    await expect(evidence(acceptance, deposit("TX-W4"))).rejects.toThrow(/is superseded; it takes no evidence/);
+    await expect(
+      sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev1, "declined"]),
+    ).rejects.toThrow(/is superseded; a client can respond only to a numbered, current issue/);
+
+    const rev3 = await seal(3, 100_000n);
+    await expect(
+      sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [id(), TENANT, rev3, "accepted"]),
+    ).rejects.toThrow(/is sealed_awaiting_number; a client can respond only to a numbered, current issue/);
+    await numberIfNeeded(rev3);
+    await expect(accept(rev3)).resolves.toBeTruthy();
+  });
+
+  it("W5 · REFUSES a provider id on any kind a provider does not witness", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await expect(
+      evidence(acceptance, { kind: "tenant_recorded", recordedBy: USER, source: "wipay", externalId: "TX-9" }),
+    ).rejects.toThrow(/acceptance_evidence_only_witnessed_carry_id_check/);
+    await expect(evidence(acceptance, { kind: "link_tap", source: "email", externalId: "<m@x>" })).rejects.toThrow(
+      /acceptance_evidence_only_witnessed_carry_id_check/,
+    );
+    // So the real event still has its slot.
+    await expect(evidence(acceptance, deposit("TX-9"))).resolves.toBeTruthy();
+  });
+
+  it("W6 · REFUSES a source off the list and an id that is empty or padded", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const source of ["WiPay", "wipay ", ""]) {
+      await expect(evidence(acceptance, { kind: "deposit_paid", source, externalId: "TX-1" })).rejects.toThrow(
+        /acceptance_evidence_source_check/,
+      );
+    }
+    // X6: any whitespace, not only spaces — a tab-only id once counted as witnessed and graded 6.
+    for (const externalId of ["", " TX-1", "TX-1 ", "TX-1\t", "TX-1\n", "\tTX-1", "\t", "\r\n"]) {
+      await expect(evidence(acceptance, { kind: "deposit_paid", source: "wipay", externalId })).rejects.toThrow(
+        /acceptance_evidence_external_id_shape_check/,
+      );
+    }
+  });
+
+  // --- J8: the bar, frozen at seal ---------------------------------------------
+  it("J8 · resolves the bar at seal — quote, else the tenant default, else 3 — and never moves it after", async () => {
+    const rev1 = await seal(1, 100_000n);
+    expect(await barOf(rev1)).toBe(3);
+
+    await sql(`INSERT INTO document_settings (tenant_id, default_acceptance_bar_grade) VALUES ($1, 6)`, [TENANT]);
+    const rev2 = await seal(2, 100_000n);
+    expect(await barOf(rev2)).toBe(6);
+
+    await sql(`UPDATE quote SET acceptance_bar_grade = 2 WHERE id = $1`, [QUOTE]);
+    const rev3 = await seal(3, 100_000n);
+    expect(await barOf(rev3)).toBe(2);
+
+    // The manoeuvre J8 describes: lower the bar after sending. The sealed issues do not move.
+    await sql(`UPDATE quote SET acceptance_bar_grade = 6 WHERE id = $1`, [QUOTE]);
+    await sql(`UPDATE document_settings SET default_acceptance_bar_grade = 2 WHERE tenant_id = $1`, [TENANT]);
+    expect([await barOf(rev1), await barOf(rev2), await barOf(rev3)]).toEqual([3, 6, 2]);
+  });
+
+  it("J8 · REFUSES a seal that states a bar other than the one the quote resolves to", async () => {
+    const sealStating = (revision: number, bar: number) =>
+      sql(
+        withOneLine(`INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at, acceptance_bar_grade)
+         VALUES ($1, $2, $3, $4, $5, 'Delroy', 'Fence', 'itemised', 'JMD', 'Terms', 0, 1000, 0, 1000,
+                 now(), $6, now(), $7)`),
+        [id(), TENANT, QUOTE, revision, CLIENT, USER, bar],
+      );
+    await expect(sealStating(1, 2)).rejects.toThrow(/states acceptance bar 2, but the quote and the tenant's settings resolve to 3/);
+    await expect(sealStating(1, 3)).resolves.toBeTruthy();
+  });
+
+  it("D6 · meeting the bar is recorded, and does not gate invoicing", async () => {
+    await sql(`UPDATE quote SET acceptance_bar_grade = 6 WHERE id = $1`, [QUOTE]);
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    expect(await meetsBar(issue)).toBe(false);
+    // The ceiling unlocks on the acceptance, as built: a deposit is itself an invoice, so a bar of 6
+    // that gated invoicing could never be met.
+    await invoice(issue, 40_000n);
+    await evidence(acceptance, deposit("TX-6"));
+    expect(await meetsBar(issue)).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Findings Y1, Y2, Y3, Y6 of the third re-review, and Y7, fixed by migration
+// 20260927210000_pin_search_path. Layer one (every function's search path pinned) is proved WITHOUT layer
+// two: each shadowing attack runs as a role that may create temp tables — the superuser, or the
+// application role granted TEMPORARY back for the test — so a pass means the pin held, not that the temp
+// table could not be made.
+describe("Y · a temporary table cannot stand in for a real one", () => {
+  // Qualified: in a session that holds a temp `invoice`, the bare name would reach the temp table.
+  const INVOICE = `INSERT INTO public.invoice (id, tenant_id, issue_id, kind, amount_minor, currency, issued_at)
+                   VALUES ($1, $2, $3, 'progress', $4, 'JMD', now())`;
+
+  /** Runs `work` in one transaction as the superuser, whose temp tables are dropped at its end. */
+  async function asSuperuserInTransaction(work: () => Promise<unknown>) {
+    await asSuperuser(db, async () => {
+      await db.exec("BEGIN");
+      try {
+        await work();
+        await db.exec("COMMIT");
+      } catch (error) {
+        await db.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+  }
+
+  it("Y7 · REFUSES an invoice past the ceiling even with an empty temp `invoice` shadowing the real one", async () => {
+    const issue = await seal(1, 1_000n);
+    await accept(issue);
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE invoice (id uuid, issue_id uuid, amount_minor bigint) ON COMMIT DROP`);
+        await sql(INVOICE, [id(), TENANT, issue, "9000000"]);
+      }),
+    ).rejects.toThrow(/exceeds the ceiling 1000/);
+    expect(await sql(`SELECT 1 FROM public.invoice WHERE issue_id = $1`, [issue])).toEqual([]);
+  });
+
+  it("Y7 · the ceiling's own function, called directly, sums the real invoices and not a temp table", async () => {
+    // Through the trigger, the trigger's own pin covers the function it calls; this calls it bare, so the
+    // pin on issue_balance_apply() itself is what is proved (planting it away left the test above green).
+    const issue = await seal(1, 100_000n);
+    await accept(issue);
+    await invoice(issue, 40_000n);
+    await asSuperuserInTransaction(async () => {
+      await sql(`CREATE TEMP TABLE invoice (id uuid, issue_id uuid, amount_minor bigint) ON COMMIT DROP`);
+      await sql(`SELECT issue_balance_apply($1)`, [issue]);
+    });
+    expect(await sql(`SELECT invoiced_total_minor FROM issue_balance WHERE issue_id = $1`, [issue])).toEqual([
+      { invoiced_total_minor: 40_000 },
+    ]);
+  });
+
+  it("Y2 · REFUSES at COMMIT an issue whose lines do not add up, with a temp `quote_issue` shadowing it", async () => {
+    const issue = id();
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE quote_issue (id uuid, subtotal_minor bigint) ON COMMIT DROP`);
+        await sql(`INSERT INTO pg_temp.quote_issue VALUES ($1, 0)`, [issue]);
+        await sql(
+          `INSERT INTO public.quote_issue
+             (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+              currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+              sealed_at, sealed_by_user_id, catalog_synced_at)
+           VALUES ($1, $2, $3, 1, $4, 'X', 'F', 'itemised', 'JMD', 'T', 0, 555555, 0, 555555, now(), $5, now())`,
+          [issue, TENANT, QUOTE, CLIENT, USER],
+        );
+      }),
+    ).rejects.toThrow(/subtotal_minor 555555, but its lines sum to 0/);
+  });
+
+  it("Y2 · REFUSES evidence on a decline with a temp `acceptance` saying it was accepted", async () => {
+    const issue = await seal(1, 100_000n);
+    await numberIfNeeded(issue);
+    const decline = id();
+    await sql(`${WITH_RENDER} ${ACCEPT_FROM_RENDER}`, [decline, TENANT, issue, "declined"]);
+    await expect(
+      asSuperuserInTransaction(async () => {
+        await sql(`CREATE TEMP TABLE acceptance (id uuid, issue_id uuid, outcome text) ON COMMIT DROP`);
+        await sql(`INSERT INTO pg_temp.acceptance VALUES ($1, $2, 'accepted')`, [decline, issue]);
+        await sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'Y2-1', now())`,
+          [id(), TENANT, decline],
+        );
+      }),
+    ).rejects.toThrow(/is a decline, which carries no evidence/);
+  });
+
+  it("Y1 · REFUSES the application role J11's staff skip through a temp `pg_roles` view", async () => {
+    // Layer two taken away for this test only, so the attack is the reviewer's and the pin must hold alone.
+    const [{ name }] = (await sql<{ name: string }>(`SELECT current_database() AS name`)) as [{ name: string }];
+    await asSuperuser(db, () => sql(`GRANT TEMPORARY ON DATABASE "${name}" TO ${APP_ROLE}`));
+    await sql(`CREATE TEMP VIEW pg_roles AS
+                 SELECT current_user::name AS rolname, true AS rolsuper, true AS rolbypassrls`);
+    await expect(
+      sql(
+        `INSERT INTO quote_issue
+           (id, tenant_id, quote_id, revision, client_id, client_name, title, client_detail_level,
+            currency, terms_text, tax_rate_basis_points, subtotal_minor, tax_minor, total_minor,
+            sealed_at, sealed_by_user_id, catalog_synced_at)
+         VALUES ($1, $2, $3, 1, $4, 'X', 'F', 'itemised', 'JMD', 'T', 0, 999999, 0, 999999, now(), $5, now())
+         RETURNING set_config('search_path', 'pg_temp, pg_catalog, public', false) IS NOT NULL
+               AND set_config('app.tenant_id', '', false) IS NOT NULL`,
+        [id(), TENANT, QUOTE, CLIENT, USER],
+      ),
+    ).rejects.toThrow(/cannot be seen by this transaction at COMMIT/);
+  });
+
+  it("Y3 · REFUSES a provider id with Unicode space or a non-ASCII character at either end, and keeps ordinary ids", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    for (const externalId of [" ", "TX-1 ", "　TX-1", "TX-1​", "﻿TX-1", "TX-1\u0085"]) {
+      await expect(
+        sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', $4, now())`,
+          [id(), TENANT, acceptance, externalId],
+        ),
+        JSON.stringify(externalId),
+      ).rejects.toThrow(/acceptance_evidence_external_id_shape_check/);
+    }
+    for (const externalId of ["TX-1", "<a.b@mail.example>", "REF 100 A"]) {
+      await expect(
+        sql(
+          `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+           VALUES ($1, $2, $3, 'deposit_paid', 'wipay', $4, now())`,
+          [id(), TENANT, acceptance, externalId],
+        ),
+      ).resolves.toBeTruthy();
+    }
+  });
+
+  it("Y6 · REFUSES evidence on an issue whose number a staff role removed", async () => {
+    const issue = await seal(1, 100_000n);
+    const acceptance = await accept(issue);
+    await asSuperuser(db, () => sql(`DELETE FROM issue_number WHERE issue_id = $1`, [issue]));
+    await expect(
+      sql(
+        `INSERT INTO acceptance_evidence (id, tenant_id, acceptance_id, kind, source, external_id, occurred_at)
+         VALUES ($1, $2, $3, 'deposit_paid', 'wipay', 'Y6-1', now())`,
+        [id(), TENANT, acceptance],
+      ),
+    ).rejects.toThrow(/is sealed_awaiting_number; it takes no evidence/);
+  });
+});
+
+describe("B20 · a number series never resets in release 1", () => {
+  // The schema used to accept 'yearly' and 'monthly' and then refuse the first reset, because one series
+  // per kind and (series, number) uniqueness leave no room for a second 1 (PRD review 5, B20; ADR 0027
+  // D11). Only 'never' is accepted now; the year goes in the prefix.
+  // "quarterly" and "" are not values anybody proposed: they are here so the test asserts the rule's shape
+  // ("only 'never'") rather than the two words it replaced — a CHECK of NOT IN ('yearly','monthly') passed
+  // the first version of this test (finding C8).
+  it.each(["yearly", "monthly", "quarterly", ""])("refuses a series whose reset rule is %j", async (rule) => {
+    await expect(
+      sql(
+        `INSERT INTO number_series (id, tenant_id, document_kind, prefix, reset_rule, updated_at)
+         VALUES ($1, $2, 'invoice', 'INV-', $3, now())`,
+        [id(), TENANT, rule],
+      ),
+    ).rejects.toThrow(/number_series_reset_rule_check/);
+  });
+
+  it("accepts a series that never resets, with the year in its prefix", async () => {
+    await sql(
+      `INSERT INTO number_series (id, tenant_id, document_kind, prefix, reset_rule, updated_at)
+       VALUES ($1, $2, 'invoice', 'INV-2027-', 'never', now())`,
+      [id(), TENANT],
+    );
   });
 });

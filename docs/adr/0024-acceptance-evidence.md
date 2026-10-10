@@ -120,9 +120,21 @@ to the elements such regimes generally require rather than to whatever is easies
 | **Attribution** — the signature is tied to a person, not to whoever holds a link | A one-time code sent to the channel **the tenant has on file for that client**, entered to sign. Possession of the link stops being sufficient | `share_link` exists; the code and the verification record are new |
 | **Intent** — an explicit act of signing, clearly labelled | A signing step that says it is a signature, separate from reading the quote. Not a generic "continue" | New, and it is a UI requirement as much as a data one |
 | **Consent to sign electronically** | Captured and recorded at the moment of signing | New, one field |
-| **Integrity** — exactly what was signed, provably | The `document_render` hash is bound into the `acceptance` row (R1.16a already requires one hash, referenced rather than copied) | Exists |
+| **Integrity** — exactly what was signed, provably | The `acceptance` row references the `document_render` of its own issue, whose hash is the document (R1.16a requires one hash, referenced rather than copied) | Exists — required and keyed to the same issue since 2026-09-30 (R9; corrected 2026-10-01, R10) |
 | **Audit trail** | Timestamp, IP, user agent, which channel the code went to, and the verification event | Mostly exists on `acceptance` |
 | **Reproducibility** — the signer can be given back exactly what they signed | The immutable issue plus the hashed render | Exists (domain model §6.1) |
+
+> **Amended 2026-10-01 (findings H9 and H10, found unrecorded here by the legacy-disposition audit).**
+> The Attribution row above is overtaken by `../design/acceptance-evidence.md` (approved 2026-09-26),
+> and this ADR said nothing about it until now:
+> - **H9:** a channel is required **at the point of use**, not on the client row. A share link may be
+>   minted only for a client with at least one channel, and it may be typed at send time — "the channel
+>   the tenant has on file" is no longer the rule (design §4.1; `PRD.md` R1.20e).
+> - **H10:** a code sent to a channel the TENANT supplied proves control of that channel and nothing
+>   against the tenant. It is graded honestly as grade 3, one rung of a ladder that measures who
+>   witnessed the acceptance; only a third party the tenant does not control raises it (design §2,
+>   §4.2; `THREAT-MODEL.md` §4c). How the grade is derived is `../design/acceptance-grade.md`.
+> The row is left as written, as the opening amendment does with §5 (Rule 1.9).
 
 **The channel is the real constraint, and it decides the cost.** The code must reach the client on
 something the tenant recorded, and:

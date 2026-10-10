@@ -42,13 +42,14 @@ country. What each tier *includes* is the design.
 | Job recipes (price a job once, reuse it) | **create one** | unlimited | unlimited |
 | Invoices and payment recording | — | ✓ | ✓ |
 | Payment reminders and overdue digest | — | ✓ | ✓ |
-| Card payment links (WiPay) | — | ✓ | ✓ |
+| Card payment links (WiPay) — **release 2** (ADR 0034) | — | ✓ | ✓ |
+| Bank-transfer details on invoices (ADR 0034) | ✓ | ✓ | ✓ |
 | Project costing and job profit | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Retention tracking | — | ✓ *(release 2)* | ✓ *(release 2)* |
 | Accountant exports (CSV) | — | ✓ *(release 2)* | ✓ *(release 2)* |
-| Offline **sealing** — price and capture a job with no signal | ✓ | ✓ | ✓ |
+| Offline **sealing** — price and capture a job with no signal (with the mobile app, which follows the web launch — ADR 0028) | ✓ | ✓ | ✓ |
 | Offline **issuing** — a number at the gate (release 2) | — | ✓ | ✓ |
-| Users on the account | 1 | 1 | up to 10, then per seat |
+| Users on the account | 1 | exactly 3, no roles (ADR 0029 E3) | up to 10, then per seat |
 | Roles and approvals (who may send or discount) | — | — | ✓ |
 | Multi-crew assignment and crew cost rates | — | — | ✓ |
 | Consolidated reporting across projects | — | — | ✓ |
@@ -56,7 +57,7 @@ country. What each tier *includes* is the design.
 | Custom document branding (logo, colours, terms) | logo | logo + colours | full, plus per-client terms |
 | WhatsApp Business sending (templated, receipts) | — | — | ✓ |
 | API access and integrations | — | — | ✓ |
-| Support | email | email | priority |
+| Support | email (a chatbot is the owner's goal, designed later — ADR 0029 E1) | email | priority |
 
 **A tick with *(release 2)* means the tier will include it and release 1 does not** (finding H15). The
 site marks the same three the same way, and `new-app/web/test/site-guards.test.ts` fails if the site ever
@@ -111,7 +112,9 @@ and it is the reason a manual payment takes longer.
 **Downgrading and lapsing** keep the tenant's data intact and remove the entitlements. What the
 tenant may still do on Free - read their old invoices, export their data - is a product decision
 owed with feature 1, and it should be generous: a contractor locked out of their own quote
-history will not come back, and will tell people why.
+history will not come back, and will tell people why. **Decided 2026-10-02 (ADR 0027 D4; PRD
+R1.37c):** everything already created stays readable, money already invoiced can still be collected,
+reminders stop, nothing new that is Pro can be created, and export always works.
 
 What sign-up needs before it can face the public, none of which exists yet: rate limiting, email
 verification before anything costs us money, and a duplicate registration that does not confirm
@@ -141,7 +144,7 @@ and a PDF record of the acceptance", and both halves have since been overtaken:
   step.
 
 The need this item names is real and unchanged; the mechanism it prescribed is not what gets built. What
-does get built is the six-grade ladder in `docs/design/acceptance-evidence.md` (approved 2026-09-26), whose
+does get built is the graded ladder in `docs/design/acceptance-evidence.md` (grades 1, 2, 3, 4 and 6 (grade 5 retired by J5, its number tombstoned)) (approved 2026-09-26), whose
 default bar is a code to the client's channel and whose strongest release-1 grade is a **paid deposit** —
 suggested automatically above a value each tenant sets.
 

@@ -103,6 +103,26 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # Real PostgreSQL, for `db/test/concurrency.pg.test.ts` only. Every other database suite runs on
+    # PGlite, which is one connection and so cannot race two sessions; the lock claims in the
+    # migrations went unraced for three reviews until the J4 line's third re-review raced them by hand
+    # and found one that did not hold (finding N4). Throwaway: trust auth, no volume, nothing kept.
+    #
+    # What it does NOT prove (Rule 21.4): anything about the production database's version or
+    # settings beyond "PostgreSQL 16, default isolation"; and only the interleavings the test schedules.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     defaults:
       run:
         working-directory: new-app
@@ -126,9 +146,14 @@ jobs:
 
       # The database and tenancy tests replay the real migrations against PGlite,
       # which needs no service container: it is Postgres compiled to WebAssembly,
-      # in process.
+      # in process. The one exception is the concurrency suite, which races real
+      # sessions against the service above. PRYVIS_REQUIRE_PG makes that suite FAIL,
+      # not skip, if the database is missing — a skipped proof must not read as a pass.
       - name: Test
         if: ${{ !cancelled() }}
+        env:
+          PRYVIS_PG_URL: postgres://postgres@127.0.0.1:5432/postgres
+          PRYVIS_REQUIRE_PG: "1"
         run: npm test
 
       # Proves the checked-in wire contract still matches the API's @wire types.
@@ -165,7 +190,13 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # Full history, not checkout's default single commit: tools/check_build_plan.py proves a
+      # ticked step's evidence by finding its cited commit, and in a one-commit clone no cited
+      # commit exists. That failed this job on every run from A1's tick (2026-10-02) to
+      # 2026-10-09 while local gates passed, because nobody read CI (M44).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Two checks in one, and the second is the one that stops drift: every citation
       # resolves, AND no rule has changed, been renumbered or been removed without its
@@ -186,25 +217,42 @@ jobs:
         if: ${{ !cancelled() }}
         run: python3 tools/check_dispositions.py
 
-      # A cited file, path or symbol must exist (Rule 21.8). Added after the same defect twice —
-      # `honest-claims.test.ts` (M14) and then a symbol inside M14's own fix (H16) — and when it was
-      # finally written it found four more phantom citations in the site's own source that three
-      # independent reviews had missed. Proved by planting; see the commit that introduced it.
+      # A cited bare filename or "`symbol` in file" must exist (Rule 21.8). Added after the same
+      # defect twice — `honest-claims.test.ts` (M14) and then a symbol inside M14's own fix (H16) —
+      # and when it was finally written it found four more phantom citations in the site's own source
+      # that three independent reviews had missed. Its path check was retired on 2026-09-30 (R11):
+      # paths are the next step's job, so one class has one guard.
       - name: Citations name things that exist
         if: ${{ !cancelled() }}
         run: python3 tools/check_citations.py
 
-      # The same class, resolved against PARSED DDL and a complete file index with no silent skip
-      # (findings J1 and J9). The step above stayed because it checks things this one does not —
-      # bare filenames and `symbol in file` claims — and this one exists because four rounds of
-      # patching that one could not reach the class: it skipped 71 paths in silence, and it checked
-      # identifiers by text presence, which a comment can satisfy. Proved by three plants: the J9
-      # foreign key removed, a phantom path cited, and a migration comment naming a column that does
-      # not exist. Its first version failed the first plant, which is why the rule is now "a foreign
-      # key is required" rather than "a key or a table of that name".
+      # Cited paths and database objects IN THE FORMS ITS DOCSTRING LISTS, resolved against the CATALOGUE
+      # the migrations build (new-app/db/schema-objects.json, kept honest by db/test/schema-objects.test.ts
+      # in npm test) and a complete file index (findings J1 and J9). Forms outside that list pass silently
+      # and are listed there as its limits (T9); what it does not scan, it prints. It parsed the SQL until
+      # 2026-10-01; two reviews found that parse wrong (R3, S4) and Rule 21.9 replaced it rather than
+      # patching it a third time. "Every row reference has a key" moved to db/test/reference-keys.test.ts,
+      # which reads the catalogue. The step above stayed because it checks bare filenames and
+      # "`symbol` in file" claims, which this one does not.
       - name: Paths and database objects resolve against what exists
         if: ${{ !cancelled() }}
         run: python3 tools/check_schema_citations.py
+
+      # The owner's built-in checklist (2026-10-02): a step of docs/BUILD-PLAN.md is ticked only with its
+      # evidence — the date, a commit that exists, the review and closing-check briefs as files, and the owner's
+      # approval. Proved by planting a bare tick and a tick citing a commit and a brief that do not exist.
+      - name: Build-plan ticks carry their evidence
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_build_plan.py
+
+      # A step that is ticked is never still "to be decided" elsewhere: "chosen in A5", "priced in
+      # A5", "A5 confirms" must be rewritten or carry a dated pointer to the deciding design (M45;
+      # docs/design/deferral-checker.md). Proved by planting a stale deferral in both forms (fails),
+      # one to an open step (passes), and each excuse on and off its own line. It knows a short list
+      # of wordings and states so; it cannot see a deletion another document relied on.
+      - name: No deferral names a decided step
+        if: ${{ !cancelled() }}
+        run: python3 tools/check_deferrals.py
 
   # ---------------------------------------------------------------------------
   # scan: the class of problem the gate could not see at all

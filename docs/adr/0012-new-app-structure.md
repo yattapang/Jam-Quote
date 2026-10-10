@@ -163,8 +163,9 @@ mobile client would have no place in that scheme.
   being frozen, and it ends when `original-app/` is deleted.
 - Renaming `client` to `customer` and `…Cents` to `…MinorUnits` means the port of core is not a
   copy — it is a reviewed adaptation, which costs time and is the point of Rule 1.3.
-- `infra/docker-compose.yml` exists so row-level security runs in development. RLS that is only
-  enabled in production is a rule nobody tests.
+- `infra/docker-compose.yml` is planned so row-level security runs in development — not built yet (until
+  2026-10-01 this said it "exists"; finding T4). RLS that is only enabled in production is a rule nobody
+  tests; today the tests run it in PGlite and real PostgreSQL instead.
 
 ## What this ADR does not decide
 

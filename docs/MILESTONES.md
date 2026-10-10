@@ -1,5 +1,11 @@
 # JamQuote — Build Sequence (vertical slices)
 
+> **Superseded for the rebuild (2026-10-02, PRD review 5 finding B12).** This document describes the earlier
+> application in `original-app/`. For `new-app/`, the plan of record is `docs/PRD.md`, with
+> `docs/BRIEF-STATUS.md` for where the work stands; where they disagree with this file, they win. Kept as
+> history, not as instructions.
+
+
 > Decision (2026-07-24): build **step by step as vertical slices**. Each milestone is one
 > capability working end-to-end across `core → api → web → mobile → sync`, proven green
 > before the next begins. This plan is **rebased on an audit of the real deployed repo**

@@ -242,8 +242,13 @@ describe("nothing untrue", () => {
     // eleven lines individually produces a list nobody reads.
     //
     // WHAT THIS DOES NOT PROVE: that a line marked "coming in release 2" will in fact arrive in
-    // release 2, and not that a delivered line is delivered WELL. It proves the page does not claim
-    // something the plan says is absent — no more.
+    // release 2, and not that a delivered line is delivered WELL. And narrower than "the page claims
+    // nothing the plan says is absent" (finding H19):
+    // - a tier marked "coming in release N" as a whole is checked ONCE, at the tier; none of its lines is
+    //   checked, now or when one is added (Business has eleven);
+    // - `delivered` below is a hand-maintained restatement of the plan. It bounds the page against THIS
+    //   FILE, not against the PRD or TIERS.md; nothing compares the two. One machine-readable list both
+    //   read is owed with the pricing-page work (the remedy H15 also pointed to).
     const RELEASE = 1;
 
     // What release 1 delivers, in the site's own words. Adding a line to the site without adding it
@@ -255,14 +260,20 @@ describe("nothing untrue", () => {
       "Share by WhatsApp or email, client accepts online",
       "Client list",
       "One reusable job recipe",
-      "Works with no signal — price and capture a job offline",
       "1 user",
       "Unlimited quotes",
       "Unlimited reusable job recipes",
       "Invoices and payment recording",
       "Staged deposit and progress invoicing",
       "Payment reminders and an overdue list",
-      "Card payment links",
+      "Export your data as CSV, any time",
+      "Up to 3 users",
+    ]);
+    // What the MOBILE app delivers, after the web launch (ADR 0028). A line may carry "(coming with the mobile
+    // app)" only if it is listed here: until finding C7 any line wearing that marker passed, whatever release
+    // it really belonged to — a release-3 feature marked "coming with the mobile app" sailed through.
+    const deliveredWithMobile = new Set([
+      "Works with no signal — price and capture a job offline (coming with the mobile app)",
     ]);
 
     // Two markers, because they read differently to a person. A LINE carries a parenthesised
@@ -271,6 +282,9 @@ describe("nothing untrue", () => {
     // lines — it was right that they were unmarked and wrong about where to look, which is a better
     // failure than the reverse.
     const markedLine = /\(coming in release (\d)\)/;
+    // Release 1 ships the web app first and the mobile app after it (ADR 0028), so a line the mobile app
+    // delivers is marked "(coming with the mobile app)" — a later delivery than the web launch.
+    const markedMobile = /\(coming with the mobile app\)/;
     const markedTier = /coming in release (\d)/i;
     const unmarked: string[] = [];
 
@@ -285,6 +299,10 @@ describe("nothing untrue", () => {
         continue;
       }
       for (const line of tier.includes) {
+        if (markedMobile.test(line)) {
+          if (!deliveredWithMobile.has(line)) unmarked.push(`${tier.name}: ${line} (not a mobile-app feature)`);
+          continue;
+        }
         const match = markedLine.exec(line);
         if (match) {
           // A "coming" marker must name a LATER release. "Coming in release 1" while we are
@@ -304,6 +322,71 @@ describe("nothing untrue", () => {
       "these tier lines are neither in the delivered set for this release nor marked with the " +
         "release they land in, so the page claims something the PRD says is absent (Rule 20)",
     ).toEqual([]);
+  });
+
+  it("says nothing on any page that the current release does not deliver", () => {
+    // WHY THIS EXISTS (PRD R1.40b, review 5 finding B4). The tier guard above read only the pricing
+    // page's tier lists, and the same claims sat unmarked one page over: the features page sold "hold and
+    // release retention" and "Did the job make money?", the home page "whether the job actually made
+    // money", the pricing intro "job costing" — all release 2 — and the terms promised an export release 1
+    // did not build. So this walks EVERY string in the site's copy and its legal text, except the tier
+    // lists (checked above, with their own markers), and refuses a phrase naming an undelivered feature
+    // unless the same SENTENCE marks it "coming in release N" for a later release.
+    //
+    // TIGHTENED 2026-10-02 (finding C7: four over-claims planted at once all passed). Now: the tier lists'
+    // `who` and `theLine` are walked too — only their `includes` lines are left to the test above; offline
+    // and no-signal claims are looked for, and pass only when their sentence says "coming with the mobile
+    // app" or names a later release (ADR 0028); and a marker exempts only the sentence it is in, so "…hold
+    // and release retention today. Coming in release 2: change orders." no longer passes on the strength of
+    // the second sentence.
+    //
+    // WHAT THIS DOES NOT PROVE: that the copy is otherwise true — only these phrases are looked for, and a
+    // claim worded another way passes. The list below is the plan's §8 exclusions in the site's words;
+    // a new exclusion must be added here by hand, as `delivered` must above.
+    const RELEASE = 1;
+    const undelivered: [RegExp, string][] = [
+      [/hold and release retention|retention tracking|retention and job/i, "retention tracking (R2)"],
+      [/job profit|made money|make money|made anything/i, "job result (R2)"],
+      [/job costing|project costing/i, "job costing (R2)"],
+      [/change orders?/i, "signed change orders (R2)"],
+      [/supplier price comparison/i, "supplier price comparison (R3)"],
+      [/accountant export/i, "accountant exports"],
+      // ADR 0034: card payment links for contractors' clients moved to release 2 (most clients pay cash or by transfer).
+      [/card payment link/i, "card payment links (R2, ADR 0034)"],
+      [/no signal|offline|without (a )?signal/i, "offline capture (the mobile app, ADR 0028)"],
+    ];
+    const marked = /coming in release (\d)/i;
+    const markedMobile = /coming with the mobile app/i;
+
+    const strings: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (/^pricing\.tiers\[\d+\]\.includes$/.test(path)) return;
+      if (typeof value === "string") strings.push(value);
+      else if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${path}[${i}]`));
+      else if (value && typeof value === "object") {
+        for (const [key, v] of Object.entries(value)) walk(v, path ? `${path}.${key}` : key);
+      }
+    };
+    walk(site, "");
+    walk(privacyContent, "privacy");
+    walk(termsContent, "terms");
+    // An empty walk would pass while checking nothing.
+    expect(strings.length).toBeGreaterThan(50);
+
+    const claims: string[] = [];
+    for (const text of strings) {
+      // A sentence ends at . ! or ? followed by a space; a marker counts only inside its own sentence.
+      for (const sentence of text.split(/(?<=[.!?])\s+/)) {
+        for (const [phrase, what] of undelivered) {
+          if (!phrase.test(sentence)) continue;
+          const mark = marked.exec(sentence);
+          if (mark && Number(mark[1]) > RELEASE) continue;
+          if (what.startsWith("offline") && markedMobile.test(sentence)) continue;
+          claims.push(`${what}: "${sentence.slice(0, 90)}"`);
+        }
+      }
+    }
+    expect(claims, "these strings sell something the current release does not deliver (Rule 20)").toEqual([]);
   });
 
   it("shows a price only where a price has been decided", () => {

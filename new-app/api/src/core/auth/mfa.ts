@@ -28,6 +28,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { record, type AuditAction } from "../audit/audit.js";
 import { RATE_LIMITS, type RateLimiter } from "../rate-limit/rate-limiter.js";
 import { KeyRegistry, needsResealing, open, seal } from "./secret-box.js";
+import { sessionTokenHash } from "./session-token.js";
 import { newTotpSecret, totpProvisioningUri, verifyTotp } from "./totp.js";
 import type { TransactionalClient } from "../tenancy/tenant-context.js";
 
@@ -159,9 +160,9 @@ export class MfaService {
   /** Is there a confirmed factor? An unconfirmed one protects nobody. */
   async hasConfirmedFactor(tx: MfaQueryable, userId: string): Promise<boolean> {
     const rows = await tx.$queryRawUnsafe<{ confirmed: boolean }>(
-      `SELECT EXISTS (
-         SELECT 1 FROM mfa_totp WHERE user_id = $1 AND confirmed_at IS NOT NULL
-       ) AS confirmed`,
+      // Every credential read and write below goes through a door function: the application has no
+      // privilege on mfa_totp, mfa_recovery_code or app_session (privilege model, D1).
+      `SELECT mfa_has_confirmed_factor($1::uuid) AS confirmed`,
       userId,
     );
     return rows[0]?.confirmed === true;
@@ -190,19 +191,7 @@ export class MfaService {
     const sealed = seal(this.keys, secret);
 
     await tx.$executeRawUnsafe(
-      `INSERT INTO mfa_totp
-         (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id, updated_at)
-       VALUES ($1, $2, $3, $4, $5, now())
-       ON CONFLICT (user_id) DO UPDATE
-         SET secret_ciphertext = EXCLUDED.secret_ciphertext,
-             secret_iv = EXCLUDED.secret_iv,
-             secret_tag = EXCLUDED.secret_tag,
-             secret_key_id = EXCLUDED.secret_key_id,
-             failed_attempts = 0,
-             locked_until = NULL,
-             last_used_step = NULL,
-             updated_at = now()
-         WHERE mfa_totp.confirmed_at IS NULL`,
+      `SELECT mfa_begin_enrolment($1::uuid, $2, $3, $4, $5)`,
       options.userId,
       sealed.ciphertext,
       sealed.iv,
@@ -245,10 +234,7 @@ export class MfaService {
     if (!checked.valid) throw new MfaError(MFA_FAILED_MESSAGE);
 
     await tx.$executeRawUnsafe(
-      `UPDATE mfa_totp
-          SET confirmed_at = now(), last_used_step = $2, failed_attempts = 0,
-              locked_until = NULL, updated_at = now()
-        WHERE user_id = $1`,
+      `SELECT mfa_confirm($1::uuid, $2::bigint)`,
       options.userId,
       String(checked.step),
     );
@@ -256,7 +242,7 @@ export class MfaService {
     const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);
     for (const code of codes) {
       await tx.$executeRawUnsafe(
-        `INSERT INTO mfa_recovery_code (id, user_id, code_hash) VALUES ($1, $2, $3)`,
+        `SELECT mfa_add_recovery_code($1::uuid, $2::uuid, $3)`,
         this.newId(),
         options.userId,
         hashRecoveryCode(code),
@@ -312,9 +298,7 @@ export class MfaService {
       }
 
       await tx.$executeRawUnsafe(
-        `UPDATE mfa_totp
-            SET last_used_step = $2, failed_attempts = 0, locked_until = NULL, updated_at = now()
-          WHERE user_id = $1`,
+        `SELECT mfa_record_success($1::uuid, $2::bigint)`,
         options.userId,
         String(checked.step),
       );
@@ -329,10 +313,7 @@ export class MfaService {
       })) {
         const resealed = seal(this.keys, secret);
         await tx.$executeRawUnsafe(
-          `UPDATE mfa_totp
-              SET secret_ciphertext = $2, secret_iv = $3, secret_tag = $4, secret_key_id = $5,
-                  updated_at = now()
-            WHERE user_id = $1`,
+          `SELECT mfa_reseal($1::uuid, $2, $3, $4, $5)`,
           options.userId,
           resealed.ciphertext,
           resealed.iv,
@@ -376,10 +357,8 @@ export class MfaService {
     withinMinutes = MFA_REAUTH_MINUTES,
   ): Promise<boolean> {
     const rows = await tx.$queryRawUnsafe<{ recent: boolean }>(
-      `SELECT (mfa_verified_at IS NOT NULL
-               AND mfa_verified_at > ($2::timestamptz - ($3::text)::interval)) AS recent
-         FROM app_session WHERE id = $1`,
-      sessionId,
+      `SELECT session_recently_verified($1, $2::timestamptz, ($3::text)::interval) AS recent`,
+      sessionTokenHash(sessionId),
       this.now().toISOString(),
       `${withinMinutes} minutes`,
     );
@@ -390,7 +369,7 @@ export class MfaService {
     const rows = await tx.$queryRawUnsafe<FactorRow>(
       `SELECT secret_ciphertext, secret_iv, secret_tag, secret_key_id, confirmed_at,
               last_used_step, failed_attempts, locked_until
-         FROM mfa_totp WHERE user_id = $1`,
+         FROM mfa_factor($1::uuid)`,
       userId,
     );
     return rows[0];
@@ -398,8 +377,8 @@ export class MfaService {
 
   private async markSessionVerified(tx: MfaQueryable, sessionId: string): Promise<void> {
     await tx.$executeRawUnsafe(
-      `UPDATE app_session SET mfa_pending = false, mfa_verified_at = $2 WHERE id = $1`,
-      sessionId,
+      `SELECT session_mark_verified($1, $2::timestamptz)`,
+      sessionTokenHash(sessionId),
       this.now().toISOString(),
     );
   }
@@ -411,14 +390,12 @@ export class MfaService {
     const hash = hashRecoveryCode(options.code);
     // Single-use, marked rather than deleted, and claimed in one statement so two concurrent
     // attempts cannot both spend the same code.
-    const affected = await tx.$executeRawUnsafe(
-      `UPDATE mfa_recovery_code
-          SET used_at = now()
-        WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL`,
+    const rows = await tx.$queryRawUnsafe<{ spent: boolean }>(
+      `SELECT mfa_consume_recovery_code($1::uuid, $2) AS spent`,
       options.userId,
       hash,
     );
-    return affected === 1;
+    return rows[0]?.spent === true;
   }
 
   private async registerFailure(
@@ -427,15 +404,8 @@ export class MfaService {
     failure: MfaFailure,
   ): Promise<void> {
     const rows = await tx.$queryRawUnsafe<{ failed_attempts: number }>(
-      `UPDATE mfa_totp
-          SET failed_attempts = failed_attempts + 1,
-              locked_until = CASE
-                WHEN failed_attempts + 1 >= $2 THEN ($3::timestamptz + ($4::text)::interval)
-                ELSE locked_until
-              END,
-              updated_at = now()
-        WHERE user_id = $1
-        RETURNING failed_attempts`,
+      `SELECT mfa_register_failure($1::uuid, $2::integer, $3::timestamptz, ($4::text)::interval)
+         AS failed_attempts`,
       options.userId,
       MFA_MAX_FAILURES,
       this.now().toISOString(),

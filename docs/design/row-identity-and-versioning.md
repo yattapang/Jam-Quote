@@ -1,6 +1,6 @@
 # Design — client-generated ids, row versions, and tombstones
 
-**Status: Proposed.** Awaiting the owner's approval (Rule 1.1). No migration is written until then.
+**Status: Approved by the owner and built 2026-09-24** (ADR 0019). *Header corrected 2026-10-02 — it said "Proposed" after both had happened (planning baseline audit).*
 
 **Brief:** §18 step 1, Foundations — "schema (including client-generated IDs and versioning for
 future sync)". One of the three items that keep step 1 incomplete.

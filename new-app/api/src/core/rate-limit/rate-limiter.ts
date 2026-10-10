@@ -176,21 +176,21 @@ export class PostgresRateLimiter implements RateLimiter {
     // value, once in the WHERE that decides whether there was enough — because
     // Postgres has no way to name it in an ON CONFLICT UPDATE. Duplicated
     // deliberately, and the two copies must stay identical; the concurrency test is
-    // what notices if they drift.
-    const refilled = `LEAST(
-        $2::double precision,
-        rate_limit_bucket.tokens
-          + GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - rate_limit_bucket.updated_at)))
-            * $3::double precision
-      )`;
-
+    // what notices if they drift. Written out in full rather than interpolated from a
+    // constant, so the statement is a fixed string (`core/architecture/sql-is-static.test.ts`).
     const rows = await this.db.$queryRawUnsafe<ConsumeRow>(
       `INSERT INTO rate_limit_bucket (key, tokens, updated_at)
        VALUES ($1, $2::double precision - $5::double precision, $4::timestamptz)
        ON CONFLICT (key) DO UPDATE
-         SET tokens = ${refilled} - $5::double precision,
+         SET tokens = LEAST($2::double precision,
+                     rate_limit_bucket.tokens
+                       + GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - rate_limit_bucket.updated_at)))
+                         * $3::double precision) - $5::double precision,
              updated_at = $4::timestamptz
-         WHERE ${refilled} >= $5::double precision
+         WHERE LEAST($2::double precision,
+                     rate_limit_bucket.tokens
+                       + GREATEST(0, EXTRACT(EPOCH FROM ($4::timestamptz - rate_limit_bucket.updated_at)))
+                         * $3::double precision) >= $5::double precision
        RETURNING tokens`,
       key,
       rule.capacity,

@@ -38,7 +38,7 @@ status of each control**, because a threat model listing only intended controls 
 | T5 | **Our own staff** | Admin capabilities, impersonation | Curiosity, fraud, or a compromised laptop (A6 — everything) |
 | T6 | **An attacker who obtains a database dump** | Every row, no application, no environment | Credentials to reuse elsewhere (A5) |
 | T7 | **A compromised or hostile dependency** | Code execution inside our process | Anything |
-| T8 | **A provider or insider at Neon, Render, Vercel or Resend** | Storage or transit access | A1, A9 |
+| T8 | **A provider or insider at a hosting, database, backup, email or web provider** (today Neon, Render, Vercel and Resend; the rebuild's set is in `docs/design/environments-and-operations.md` OP2-OP3, A5, and A6's `docs/design/outbound-messaging.md` — email through Amazon SES in Canada) | Storage or transit access | A1, A9 |
 | T9 | **Someone defrauding the payment path** | A forged receipt, a colluding approver | Free subscriptions (A7) |
 
 ## 3. Trust boundaries
@@ -50,7 +50,7 @@ status of each control**, because a threat model listing only intended controls 
    entitlements are separate questions.
 4. **Tenant → platform staff.** Crossed only by impersonation: explicit, capability-gated,
    audited, time-bounded.
-5. **Application → third parties** (Resend, WiPay, Neon, Vercel, Render). Data leaves us here.
+5. **Application → third parties** (Resend, WiPay, Neon, Vercel, Render — the old application's; the rebuild's are in `docs/SERVICE-REGISTER.md` §0, email through Amazon SES since A6). Data leaves us here.
 6. **Us → Claude API.** No tenant or client personal data, and no secrets, ever (Rule 15).
 
 ## 4. Threats, controls, and what is actually true today
@@ -103,8 +103,9 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 | A share token exposes more than its one document | Token scopes to one document; unknown, draft and withdrawn answered identically | **OWED** — the route kind is declared and named, no such route exists yet |
 | A share link becomes a login | `@ShareTokenRoute` never mints a session | **BUILT** (as a property of the guard: no caller is resolved) |
 | Registration confirms whether an email is registered | Duplicate answers as new; the existing owner is emailed | **OWED** — registration not built; ADR 0015 fixes the design |
-| Registration creates unlimited tenants, or sends mail on demand | Rate limits, email verification before anything costly | **OWED** |
-| A hostile upload (malware, zip bomb, SVG with script) | Type, size, dimension checks; scanning; private tenant-scoped storage | **OWED** — no uploads yet |
+| Registration creates unlimited tenants, or sends mail on demand | Rate limits, email verification before anything costly | **OWED** — *designed 2026-10-09* for the mail it sends: account mail in its own AWS account, with per-address limits, a daily ceiling and a breaker (`docs/design/outbound-messaging.md` MS8); the sign-up controls are A8's |
+| *(Added 2026-10-09, A6)* Pryvis used to send unwanted mail — a tenant's bad addresses, a forwarded share link, phishing in a business name | — | **OWED** — *designed* in `docs/design/outbound-messaging.md`: a code only to the contractor's chosen address (MS1); names checked by shape (MS4); caps, low-volume limits and an account circuit breaker (MS8) |
+| A hostile upload (malware, zip bomb, SVG with script) | Type, size, dimension checks; scanning; private tenant-scoped storage | **OWED** — no uploads yet. *Designed 2026-10-09* (`docs/design/third-party-register.md` RG3): eight fail-closed steps, a scan the store enforces, decoding in a files worker that holds no production secret, images re-encoded, PDF receipts rasterised for staff (amended after the read, RR1-RR3; owner, 2026-10-09) |
 
 ### 4.4 Platform staff (T5 → A6, everything)
 
@@ -139,6 +140,7 @@ Status is deliberately harsh: **BUILT** means it exists with a test that fails w
 | Backups exist but have never been restored | Tested restores | **OWED** — `SERVICE-REGISTER.md` §6 calls the backup "a belief" |
 | Volumetric attack exhausts the free instance | App-level limits; a CDN or WAF above | **PARTIAL** — app limits built; nothing upstream |
 | A provider reads tenant data | Contractual, not technical | **ACCEPTED** — recorded in the register; field-level encryption is not proportionate at this stage |
+| **A tenant forges a WiPay payment through its own account**, or a database compromise yields tenants' WiPay credentials (added 2026-10-02, finding C1) | Each tenant connects its own WiPay merchant account (ADR 0027 D3), so the key that signs WiPay's callback is the tenant's: a tenant can compute a valid callback for its own invoice | **OWED, decided (ADR 0029 E2):** a payment counts as third-party evidence, or marks an invoice paid through WiPay, only after our server confirms the transaction with WiPay server to server; if WiPay offers no such query, it is grade 1. Tenant WiPay credentials are encrypted at rest with a key never in the database (PRD R1.29) |
 | Tenant data sent to the Claude API | Redacted or synthetic only (Rule 15) | **PROCESS** — a discipline, not yet a technical control |
 
 ## 4a. The contractor's phone is now a place tenant data lives (added 2026-09-25, G14)
@@ -150,11 +152,11 @@ phone, held until it can sync. That is a new trust boundary and it was undefende
 | Threat | What is actually true today | Control |
 |---|---|---|
 | **A lost or stolen phone** holds the catalog, the client book and sealed issues | The outbox is specified as encrypted at rest (PRD R1.18) and nothing verifies that claim yet | Local encryption keyed to the device's own keystore, a session that expires, and the app locking behind the device's own authentication. **An unlocked phone is an authenticated user and no app-level control changes that** |
-| **Remote sign-out cannot reach an offline device** — and that device may hold the only copy of a sealed document | Stated as a control in brief §13; it is a *server* control and the offline device is precisely the case it cannot reach | Honest statement instead of a false control: sign-out revokes the **session**, so the device can no longer sync or fetch, and the local store is wiped **when it next connects**. Until then the data is on the phone. The mitigation that actually works is expiry — a local store with a maximum age — and **it must never delete a sealed document that has not reached the server** (domain model §8) |
+| **Remote sign-out cannot reach an offline device** — and that device may hold the only copy of a sealed document | Stated as a control in brief §13; it is a *server* control and the offline device is precisely the case it cannot reach | Honest statement instead of a false control: sign-out revokes the **session**, so the device can no longer sync or fetch, and the local store is wiped **when it next connects**. Until then the data is on the phone. The mitigation that actually works is expiry — a local store with a maximum age — and **it must never delete a sealed document that has not reached the server** (domain model §8) *Amended 2026-10-02 (ADR 0027 D12, PRD R1.18d, R1.18f; findings B23, C3):* only a sign-out marking the device **lost** wipes it on reconnection; an ordinary revocation (expiry, password change) re-authenticates and **pushes the outbox first**, and no automatic process — a maximum age included — may destroy an unsynced seal. Maximum age applies to cached reads only. |
 | **A sealed document is the only copy** | True by construction while it waits | Visible pending count, a warning after a few days (R1.18b), and the draft survives so the job can be re-priced. **An outbox is not a backup and the product must not imply it is** |
-| **The pre-rendered share page** (R1.21a) is served without the API answering | Unexamined until now | The link is a **credential**: high-entropy, hashed at rest, scoped to one issue, expiring, revocable. Pre-rendering must not make a document readable by a URL that is guessable, cached by an intermediary, or still live after revocation — so revocation has to invalidate the cached copy, which is a requirement on whatever serves it, not a detail |
+| **The share page** (R1.21a) — a link is a credential | Amended 2026-10-02 (finding B13, C3): nothing is pre-rendered; at launch the always-on API serves the page and checks expiry and revocation on every view | The link is a **credential**: high-entropy, hashed at rest, scoped to one issue, expiring 30 days after the quote (R1.19), revocable. Because the API serves every view, revocation takes effect at once, and no rendered document is stored at the edge, so the website host holds no client documents |
 | **An uploaded "signed" copy is forgeable** by either side (R1.20c) | New in release 1 | We record who uploaded it and when, and **we do not certify it**. A tenant can forge one as easily as a client can, and saying so plainly is the control — a product that vouched for it would be making a claim it cannot support |
-| **The verification code channel** (R1.20b) is the attribution for an e-signature | New in release 1 | A code is single-use, short-lived, rate-limited per issue and per recipient, and the channel it went to is recorded on the acceptance. Guessing a six-digit code with no rate limit is the whole attack |
+| **The verification code channel** (R1.20b) is the attribution for an e-signature | New in release 1 | A code is single-use, lasts 30 minutes and allows five wrong attempts (ADR 0026, finding H17), rate-limited per issue and per recipient, and the channel it went to is recorded on the acceptance. Guessing a six-digit code with no rate limit is the whole attack |
 
 **What this section does not cover:** anything about the device's own operating system, a rooted or
 malware-bearing phone, or a tenant's staff photographing a client list. Those are real and are outside what
@@ -166,8 +168,8 @@ responsibility, and the terms should say so rather than implying we can protect 
 | Threat | What is actually true today | Control |
 |---|---|---|
 | **An email bomb aimed at a known tenant.** A duplicate registration deliberately does not reveal the address is taken and **mails the existing owner instead** (Rule 14) — so anyone who knows a tenant's address can make us send them a hundred messages | Nothing is built yet, and the PRD's own list of registration bounds had silently dropped the per-address limit while presenting itself as exhaustive | A rate limit **per address** as well as per IP (PRD R1.30d). The non-enumerating response is right and it is exactly what creates this, which is why the two must ship together |
-| **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message |
-| **Squatting on a competitor's address** to lock them out | The unique index is on `app_user.email`, and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
+| **Volume registration to burn our sending quota or reputation** | — | Verification before anything costs us money: an unverified claim reserves nothing and sends one message. *(2026-10-09: the one message is itself a bounce source; A6 puts account mail in its own AWS account with a daily ceiling and a breaker — `docs/design/outbound-messaging.md` MS8)* |
+| **Squatting on a competitor's address** to lock them out | The global unique index is on `app_credential.email` — the one on `app_user.email` is per tenant (corrected 2026-10-02, finding B28) — and a claim is not a user (ADR 0025 decision 5) | Claims expire in 72 hours; the address is taken only on verification, so squatting requires controlling the mailbox |
 | **CGNAT makes an IP bound useless or harmful** | Jamaican mobile networks put tens of thousands of subscribers behind one address | The IP limit is on *attempts* and deliberately loose; the real defences are verification and the free tier's own cost ceiling. **No device fingerprinting** — it was proposed and removed as a tracking technology nobody had weighed |
 
 **What this section does not cover:** a determined attacker with many real mailboxes. They can create many
@@ -187,7 +189,7 @@ address, and the honest responses are the two the acceptance design uses
 | Response | Why it helps |
 |---|---|
 | **A third party the tenant does not control enters the chain** | Money (a bank or WiPay), an inbound reply held by Google or Meta, or a signature provider doing identity checks. None can be fabricated by the tenant |
-| **The evidence is labelled** | A six-grade ladder with the grade **derived** from append-only evidence, so nothing in the product claims more than happened. A tenant-uploaded screenshot is grade 1 |
+| **The evidence is labelled** | A graded ladder (grades 1, 2, 3, 4 and 6 (grade 5 retired by J5, its number tombstoned)) with the grade **derived** from append-only evidence, so nothing in the product claims more than happened. A tenant-uploaded screenshot is grade 1 |
 
 **What this means for release 1:** the strongest grade available without new infrastructure is a **deposit**,
 because the bank is the witness. Grade 4 — the client's own reply — needs inbound handling we have not
@@ -196,6 +198,104 @@ bought (`SERVICE-REGISTER.md` §3b).
 **What we must never do:** present a grade-3 acceptance as proof against the tenant. It proves someone
 holding the tenant-supplied channel confirmed a code, which is a different sentence, and the UI must say
 the second one.
+
+## 4d. A quote's money lock can be taken at the SQL level by any session (added 2026-09-27, Q1)
+
+The per-quote advisory lock (`quote_money_lock()`, migrations `20260927110000` and `20260927120000`)
+refuses to lock a quote the caller cannot see under row security. That protects the function, not the
+lock: the key is a published recipe (64 bits of an md5 of the quote id), and PostgreSQL lets any session
+call `pg_advisory_lock` and friends directly. A session that knew another tenant's quote id could hold
+that quote's lock — session-level, until it disconnects — blocking its seals, and could watch its writes
+queue in `pg_locks`. No money is ever wrong: the lock only delays.
+
+**Accepted as LOW by the owner on 2026-09-27.** Tenants never hold a SQL session; only our own server
+does, so this needs a SQL-injection-class defect in our code, which would be worse in other ways first.
+**The fix, deferred and named:** revoke `EXECUTE` on the `pg_advisory_*` functions from the application
+role and take the lock inside a `SECURITY DEFINER` function that re-checks visibility — after confirming
+the managed PostgreSQL provider permits revoking from `pg_catalog`.
+
+## 4e. The balance-write flag was not a secret (added 2026-10-01, R5; CLOSED 2026-10-02)
+
+`issue_balance` — the row that holds each accepted issue's ceiling and invoiced total — was written only
+under a row-security policy that required the transaction-local setting `pryvis.balance_write`.
+`issue_balance_open()` and `issue_balance_apply()` set it; nothing stopped the application's own SQL setting
+it too, and then a direct `UPDATE` could raise `accepted_total_minor` and invoice past the real ceiling
+(finding R5, executed). The policies stopped the application *forgetting* the balance, not a hostile caller.
+
+**Built 2026-10-01** (`docs/design/privilege-model.md` §5; migration
+`new-app/db/migrations/20260927220000_privilege_model`): the application role holds SELECT only on
+`issue_balance`; the two balance functions are `SECURITY DEFINER`, owned by `pryvis_balance`, the only role
+with INSERT and UPDATE; the write policies require `current_user = 'pryvis_balance'` with the tenant match,
+and the flag is gone. Evidence: `new-app/db/test/documents-core.test.ts` block 2 (R5's exact attack, flag
+set, now "permission denied"; and no live function reads the flag), the policy predicate in
+`new-app/db/test/policy-parity.test.ts`, and the 22 races on real PostgreSQL unchanged. Each proved with a
+planted defect. **Closed 2026-10-02** after an adversarial review (AA1-AA7, fixed) and a mechanical closing
+check (Rule 24.6; `docs/PRD-REVIEW-4.md`, end of file).
+
+## 4f. The credential tables had no row-level security (added 2026-10-01, J14; CLOSED 2026-10-02, with an accepted limit)
+
+`app_credential` (password hashes), `mfa_totp`, `mfa_recovery_code` (second-factor material) and
+`registration_claim` (single-use registration tokens) have no row-level security, because they are read
+before a tenant is known. So any session holding the application role could read every tenant's credential
+material (finding J14, executed). The design pass found `app_session` was the same exposure and worse: its
+`id` was the bearer credential, so a dump of it was a list of live logins.
+
+**Built 2026-10-01** (`docs/design/privilege-model.md` D1, D2, D5): the application role holds no
+privilege on any of the five tables. It reaches them only through fifteen `SECURITY DEFINER` door
+functions owned by `pryvis_auth`, each reading or writing one row by its key, executable by the
+application and not by PUBLIC. `app_session` stores only the SHA-256 of the secret the client holds, so a
+dumped row does not resolve. `platform_capability` is read-only to the application. Evidence:
+`new-app/db/test/privilege-model.test.ts` — no reach into the tables, by query and in the catalogue; a
+guard that any table outside row security reachable by the application is named with a reason (only
+`rate_limit_bucket` and `platform_capability`); a guard on every `SECURITY DEFINER` function and its owner;
+one row per key; no resolution by the secret or the row id — each proved with a planted defect.
+
+**What it does not do — a limit the owner accepted on 2026-10-02.** A door that WRITES can still be called
+by an injection with a user id it knows, because sign-in must call it. The review executed the consequence
+(AA, "inherent to the doors"): such an injection can plant and spend a recovery code for that user, or mint
+a session and mark it verified — so **it can impersonate any user, second factor included**. The database
+cannot prevent that: the TOTP key is never in it, so "this session passed its factor" is a write it must
+take on trust. Hardening the doors was weighed and rejected, because one open path (marking a session
+verified) would remain. The control is upstream instead: no SQL the API sends is built at run time —
+`new-app/api/src/core/architecture/sql-is-static.test.ts` fails on any statement that is not a fixed
+string. What the doors remove is the bulk read.
+**Closed 2026-10-02** after the adversarial review and the closing check (Rule 24.6); no longer a launch
+blocker. The accepted limit above stands.
+
+## 4g. Temporary tables and the search path (added 2026-10-01, findings Y1, Y2, Y7; fixed, with a provisioning rule owed)
+
+**What happened.** No database function pinned its search path, and PostgreSQL looks in a session's own
+temporary tables before the real ones. Any role allowed to create a temporary table could therefore make a
+check read a fake table. Executed as the application role on PostgreSQL 16: an empty temp `invoice` let a
+9,000,000 invoice past a ceiling of 1,000 (Y7).
+
+**What holds it now** (`new-app/db/migrations/20260927210000_pin_search_path/migration.sql`): every function
+runs with `search_path = pg_catalog, public, pg_temp`, held by `new-app/db/test/function-search-path.test.ts`;
+and TEMPORARY on the database is revoked from PUBLIC, executed on a real database by
+`new-app/db/test/concurrency.pg.test.ts` ("Y7 layer two").
+
+**The deployment check (built 2026-10-01, design D4).** The production application role is created
+outside the migrations, so **it must not be granted TEMPORARY**. `least_privilege_violations()` (migration
+`20260927220000_privilege_model`, rebuilt by `20260928000000_least_privilege_complete` after the review's
+AA1-AA5) names it, with: superuser, BYPASSRLS, CREATEROLE, CREATEDB, REPLICATION; CREATE on or ownership of
+the database; membership in any form (SET-only included) of an owning role or a predefined `pg_*` role;
+ownership of, CREATE on, or use of any schema but `public`; ownership of any relation, function or type;
+any table or column privilege on the credential tables; any write, TRUNCATE or TRIGGER on `issue_balance`
+or `platform_capability`; any relation it can reach outside row security (views that are not
+`security_invoker`, materialized and foreign tables included) beyond the two named in design D5; TRUNCATE
+or TRIGGER on anything; and EXECUTE on a definer function not owned by `pryvis_auth` or `pryvis_balance`.
+`new-app/api/src/core/auth/least-privilege.ts` calls it schema-qualified and refuses to start on any of them. The
+TEMPORARY line is planted on real PostgreSQL in `new-app/db/test/concurrency.pg.test.ts` ("§4g"), the rest
+in `new-app/db/test/privilege-model.test.ts`. **Still owed:** nothing calls the start-up check yet, because
+there is no application bootstrap; wiring it in is owed with that module. The pin on every function is the
+first layer and does not depend on this; the revoke is defence in depth for a function a later migration
+forgets to pin.
+
+**Two limits the fourth re-review executed.** If the role that runs the migrations is neither a superuser
+nor the database's owner, the revoke does nothing and PostgreSQL only WARNS ("no privileges could be
+revoked"); the migration still succeeds (Z4). The deployment check above is what catches that, once it is
+wired into start-up. And the pin covers plain functions in `public` only: a procedure, or a
+function in another schema, would need its own (Z3).
 
 ## 5. The five things I would fix first, in order
 
@@ -216,8 +316,10 @@ the second one.
 - **Denial of service at network scale.** Application limits cannot address it, and nothing sits
   upstream.
 - **Regulatory analysis.** Jamaica's Data Protection Act and Trinidad & Tobago's equivalent bear on
-  §4.6 and A9. This model notes that data leaves the country; it is not legal advice, and a
-  compliance review is owed before the second country.
+  §4.6 and A9. This model notes that data leaves the country; it is not legal advice. **Jamaica is the
+  first country, so the review is owed before launch, not before the second country** (corrected
+  2026-10-02, finding B8): public information now, labelled unverified, and the attorney before full launch
+  (PRD §9 item 6, R1.44-R1.45; ADR 0027 D14).
 - **`original-app/`.** Frozen. Its risks are in the audit, and the only mitigation is replacing it.
 - **Quantitative likelihood.** Every "status" here is evidence-based; the ordering in §5 is
   judgement, and the owner may reasonably order it differently.

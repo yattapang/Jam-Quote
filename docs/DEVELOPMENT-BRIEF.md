@@ -135,7 +135,7 @@ Read the existing files in `original-app/` and produce a **written audit only**.
 
 The feature inventory is also read for **portfolio** questions, separately from the scope question above: which adjacent features or related businesses the existing data makes possible, and which bundled features would be worth more as a separate solution. Answers are recorded in `docs/PRODUCT-OPPORTUNITIES.md` and reviewed again at the end of each delivery step in §18, because the answers change as the data grows. Recommendations are the owner's to decide.
 
-**The finding that carries a deadline.** Every tenant enters supplier prices, so the product accumulates a live price index for Jamaican construction materials — the most defensible asset in the business, and one no competitor can copy without the same history. Using it, even in aggregate, requires the tenant's consent **in the terms they accept at sign-up**, plus a statistical guarantee that no tenant can infer a named competitor's buying price. That consent cannot be retro-fitted, so **the terms of service must settle it before the first tenant signs up** — a dependency of registration, not of the website.
+**The finding that carries a deadline.** Every tenant enters supplier prices, so the product accumulates a live price index for Jamaican construction materials — the most defensible asset in the business, and one no competitor can copy without the same history. Using it, even in aggregate, requires the tenant's consent **in the terms they accept at sign-up**, plus a statistical guarantee that no tenant can infer a named competitor's buying price. That consent cannot be retro-fitted, so **the terms of service must settle it before the first tenant signs up** — a dependency of registration, not of the website. *(Note 2026-10-06, Rule 23.5: the price index is built from **anonymous, aggregated** observations, so it is not personal data under Jamaica's Data Protection Act; any remaining consent is separate and optional, never a condition of sign-up, because consent required as a condition of service is not freely given (s. 9(2)(b)) — ADR 0035.)*
 
 **Confirmed for removal:** the admin-curated regulatory feed, which shares no data and no workflow with quoting and carries a content cost with no revenue. If it lives, it lives as a media product with an editor, not inside a quoting tool.
 
@@ -212,7 +212,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 
 **Recommendation**
 - Store this as a **per-tenant document settings record**: logo (uploaded, stored per tenant, section 11), header/company details, colour scheme (a small fixed set of fields, e.g. primary and accent colour, not free-form CSS), and numbering configuration.
-- **Numbering scheme:** let each tenant define a prefix, a starting number, and a reset rule (never, yearly, monthly), and generate the next number **atomically per tenant** so two quotes issued at the same moment never collide or skip. The assigned number is fixed as part of the immutable snapshot above and never changes on revision.
+- **Numbering scheme:** let each tenant define a prefix, a starting number, and a reset rule (never, yearly, monthly), and generate the next number **atomically per tenant** so two quotes issued at the same moment never collide or skip. The assigned number is fixed as part of the immutable snapshot above and never changes on revision. *(Note 2026-10-02, Rule 23.5: in release 1 a series never resets — the year goes in the prefix — ADR 0027 D11, Rule 6; and a revision keeps its quote's number with a suffix, ADR 0031.)*
 - The document template is a **shared layout** that reads these settings; tenants configure data and pick from a small set of presets, not arbitrary custom layouts — this keeps PDFs consistent, testable, and fast to generate, while still feeling tenant-branded. A bigger step (uploading a fully custom template) can be a later, higher-tier feature, and is not required for launch.
 - These settings belong in the domain model and target schema from Phase 1, and the offline sync design (section 13) needs to account for the logo and settings being available for offline PDF generation.
 - Since this affects what the document actually looks like, cross-check it against the feature inventory and live website in Phase 0: if the original application already supports branding, numbering, or colour customization, that behaviour is part of what gets audited and carried forward or improved, not just newly invented.
@@ -262,10 +262,10 @@ Tier design depends on the **product scope decision** (section 2): a single prod
 - **Email:** use a transactional email provider. Support per-tenant sender name and reply-to, domain authentication (SPF, DKIM, DMARC), and bounce and complaint handling.
 - **WhatsApp:** use the official WhatsApp Business Platform, directly or through an approved provider. Business-initiated messages generally require pre-approved templates and recipient consent. Claude must check current rules, pricing, and availability by country at build time, not assume them. A simpler fallback is a share link that opens the user's own WhatsApp with the message and document link prefilled, which may suit lower tiers.
 - The document sent is always the **issued snapshot** (section 10), delivered as a PDF or a secure, expiring, tenant-scoped link.
-- Record delivery status (queued, sent, delivered, failed, viewed where available) against the quote or invoice. Include retries and idempotency, so nothing is sent twice.
+- Record delivery status (queued, sent, delivered, failed, viewed where available) against the quote or invoice. Include retries and idempotency, so a request is never sent twice; a provider's lost reply can still, rarely, cause a duplicate, and the design says when. *(Edited 2026-10-10 with the owner's approval, Rule 1.9: this said "so nothing is sent twice", which no email provider without an idempotency key can promise — `docs/design/outbound-messaging.md` MS2.)*
 - Respect consent and opt-out, and per-country messaging rules.
 - Model message costs in the tier entitlements (section 9).
-- Messages requested while offline are queued and sent when connectivity returns (section 13).
+- Messages requested while offline are queued and sent when connectivity returns (section 13). *(Note 2026-10-02, Rule 23.5: only a send the user tapped is queued; a document never sends itself when it becomes ready at sync — ADR 0027 D10, Rule 11.)*
 
 ## 13. Mobile offline operation
 
@@ -281,7 +281,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
   - How official quote numbers are assigned without duplicates (for example number blocks per device, or numbering assigned at sync).
   - How prices are frozen when issuing offline, based on the last-synced catalog with its timestamp.
   - How tier entitlements are checked offline (for example a grace period).
-- Encrypt local data, support remote sign-out, and limit how long offline data is retained.
+- Encrypt local data, support remote sign-out, and limit how long offline data is retained. *(Note 2026-10-02, Rule 23.5: the limit applies to cached reads only — an unsynced document is never destroyed by any automatic process, and an ordinary sign-out pushes it first — ADR 0027 D12, Rule 12.)*
 - Show sync status clearly in the UI. Handle clock differences between device and server.
 - Test under poor and interrupted network conditions.
 - Web is online-only unless the owner decides otherwise.
@@ -341,7 +341,7 @@ Tier design depends on the **product scope decision** (section 2): a single prod
   - A project context file in the repository (module map, conventions, commands) for Claude to read.
   - Runbooks for common operations.
   - Structured logs and error tracking that are readable by both people and Claude.
-- **Automation pattern:** Claude proposes changes as **pull requests**. CI and a human approve. Nothing goes straight to production.
+- **Automation pattern:** Claude proposes changes as **pull requests**. CI and a human approve. Nothing goes straight to production. *(Note 2026-10-02, Rule 23.5: the owner added a start gate — Claude begins a maintenance task only after an administrator approves it through an interface built for it — and a recorded deploy approval; Rule 15.)*
   - Least-privilege tokens.
   - No write access to production data.
   - Feature flags, staged rollouts, and rollback.

@@ -1,0 +1,142 @@
+-- No key can rewrite a sealed or append-only row, an acceptance is bound to the render of its own issue,
+-- no document names another tenant's client or user, and the application cannot delete a tenant or its
+-- audit trail (findings R1/Q4, R2, R4, R9 and R16 of the re-review of the seven; J3 and J9 re-opened).
+--
+-- Owner's decisions, 2026-09-27: every acceptance records the rendered document, keyed to the same issue
+-- (R9); the application can never delete a tenant or its audit rows (R4).
+--
+-- ## R1 (Q4) AND R2 · ON UPDATE CASCADE REWROTE HISTORY, ONCE ACROSS TENANTS
+--
+-- 49 foreign keys were ON UPDATE CASCADE. The re-review executed three of them rewriting rows that are
+-- meant to be immutable: `UPDATE quote SET id = …` rewrote a sealed `quote_issue.quote_id`;
+-- `number_series.id` rewrote a sealed `issue_number.series_id`; `app_user.id` rewrote the append-only
+-- `document_render.rendered_by_user_id`. And R2: a session scoped to tenant A rewrote an audit row BELONGING
+-- TO TENANT B, because `audit_entry.actor_user_id` is single-column on purpose (a staff actor may belong to
+-- another tenant) and referential actions bypass row security.
+--
+-- Primary keys here are client-generated UUIDs that never change (ADR 0019), so a cascade has nothing to
+-- carry and only damage to do. Every one becomes ON UPDATE RESTRICT: changing a referenced id is refused.
+-- Converted by a loop over the catalogue rather than 49 hand-written statements, so none is missed, and
+-- the migration asserts afterwards that no ON UPDATE CASCADE key remains.
+--
+-- ## R4 · A TENANT COULD DELETE ITS OWN AUDIT TRAIL
+--
+-- `tenant`'s policy is FOR ALL, so the application could delete its own tenant row, and
+-- the key from `audit_entry`.`tenant_id` to `tenant` was ON DELETE CASCADE, so every audit row went with it — through a
+-- referential action, which row security does not see. Now the audit key is ON DELETE RESTRICT, and a
+-- trigger refuses any DELETE on `tenant` from a role that is neither superuser nor BYPASSRLS — that is,
+-- from the application. Tenant erasure becomes a staff-run process, keeping audit entries for the retention
+-- ADR 0020 sets; that process is not built, and until it is, no tenant can be deleted by the application.
+--
+-- ## R9 · AN ACCEPTANCE COULD BE BOUND TO ANOTHER ISSUE'S DOCUMENT, OR TO NONE
+--
+-- The key was `(document_render_id, tenant_id)`: right tenant, any issue. The re-review accepted a 100,000
+-- Fence issue while pointing at the 9,000,000 Roof issue's PDF, and accepted another with no render at all;
+-- an acceptance cannot be updated, so both were permanent. Now `document_render_id` is NOT NULL and the key
+-- is `(document_render_id, issue_id, tenant_id)` against a new unique `(id, issue_id, tenant_id)` on
+-- `document_render`: an acceptance records the document the client saw, and it is that issue's document.
+--
+-- ## R16 · A DOCUMENT COULD NAME ANOTHER TENANT'S CLIENT OR USER
+--
+-- Seven NOT NULL references had no foreign key at all — a checker defect hid them (R3, fixed separately) —
+-- so tenant A could seal an issue naming tenant B's client and B's user as the sealer. Each gets a
+-- composite key, which Rule 4.1 and the structural guard in `db/test/tenant-isolation.test.ts` require.
+-- Stated consequence: a platform staff member acting on a tenant's document must be recorded through a
+-- user of that tenant, as impersonation (ADR 0021) is designed to; revisit if staff ever act directly.
+--
+-- ## WHAT THIS DOES NOT DO (Rule 21.4)
+--
+-- - It does not build tenant erasure; it makes deletion impossible from the application until it exists.
+-- - It does not stop a superuser or BYPASSRLS role — the platform — from anything.
+-- - It does not re-check rows written before it: there are none in any deployed database.
+
+-- ---------------------------------------------------------------------------
+-- 1. Every ON UPDATE CASCADE becomes ON UPDATE RESTRICT (R1, Q4, R2).
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+  k RECORD;
+  v_left INTEGER;
+BEGIN
+  FOR k IN
+    SELECT c.conrelid::regclass AS tbl, c.conname, pg_get_constraintdef(c.oid) AS def
+      FROM pg_constraint c
+      JOIN pg_namespace n ON n.oid = c.connamespace
+     WHERE c.contype = 'f' AND c.confupdtype = 'c' AND n.nspname = 'public'
+  LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I, ADD CONSTRAINT %I %s',
+                   k.tbl, k.conname, k.conname, replace(k.def, 'ON UPDATE CASCADE', 'ON UPDATE RESTRICT'));
+  END LOOP;
+
+  SELECT count(*) INTO v_left
+    FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+   WHERE c.contype = 'f' AND c.confupdtype = 'c' AND n.nspname = 'public';
+  IF v_left <> 0 THEN
+    RAISE EXCEPTION '% foreign key(s) still ON UPDATE CASCADE after conversion', v_left;
+  END IF;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 2. The audit trail outlives any application delete (R4).
+-- ---------------------------------------------------------------------------
+ALTER TABLE "audit_entry" DROP CONSTRAINT "audit_entry_tenant_id_fkey";
+ALTER TABLE "audit_entry" ADD CONSTRAINT "audit_entry_tenant_id_fkey"
+    FOREIGN KEY ("tenant_id") REFERENCES "tenant" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT;
+
+CREATE FUNCTION tenant_delete_guard() RETURNS TRIGGER
+LANGUAGE plpgsql AS $$
+BEGIN
+  -- The platform (superuser or BYPASSRLS) may; the application may not. Keyed on the role's attributes,
+  -- not its name, so a renamed application role is still refused.
+  IF NOT EXISTS (
+       SELECT 1 FROM pg_roles r WHERE r.rolname = current_user AND (r.rolsuper OR r.rolbypassrls)
+     ) THEN
+    RAISE EXCEPTION 'a tenant cannot be deleted by the application; tenant erasure is a staff process '
+                    'that keeps the audit trail (finding R4)'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+
+CREATE TRIGGER tenant_no_application_delete
+  BEFORE DELETE ON "tenant"
+  FOR EACH ROW EXECUTE FUNCTION tenant_delete_guard();
+
+-- ---------------------------------------------------------------------------
+-- 3. An acceptance is bound to its own issue's render, and always has one (R9).
+-- ---------------------------------------------------------------------------
+ALTER TABLE "document_render"
+  ADD CONSTRAINT "document_render_id_issue_tenant_key" UNIQUE ("id", "issue_id", "tenant_id");
+
+ALTER TABLE "acceptance" DROP CONSTRAINT "acceptance_document_render_id_fkey";
+ALTER TABLE "acceptance" ADD CONSTRAINT "acceptance_document_render_id_fkey"
+    FOREIGN KEY ("document_render_id", "issue_id", "tenant_id")
+    REFERENCES "document_render" ("id", "issue_id", "tenant_id") ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "acceptance" ALTER COLUMN "document_render_id" SET NOT NULL;
+
+-- ---------------------------------------------------------------------------
+-- 4. The seven unenforced references get composite keys (R16, R3).
+-- ---------------------------------------------------------------------------
+ALTER TABLE "quote_issue" ADD CONSTRAINT "quote_issue_client_id_fkey"
+    FOREIGN KEY ("client_id", "tenant_id") REFERENCES "client" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "quote_issue" ADD CONSTRAINT "quote_issue_sealed_by_user_id_fkey"
+    FOREIGN KEY ("sealed_by_user_id", "tenant_id") REFERENCES "app_user" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "rejected_seal" ADD CONSTRAINT "rejected_seal_client_id_fkey"
+    FOREIGN KEY ("client_id", "tenant_id") REFERENCES "client" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "rejected_seal" ADD CONSTRAINT "rejected_seal_sealed_by_user_id_fkey"
+    FOREIGN KEY ("sealed_by_user_id", "tenant_id") REFERENCES "app_user" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "variation" ADD CONSTRAINT "variation_recorded_by_user_id_fkey"
+    FOREIGN KEY ("recorded_by_user_id", "tenant_id") REFERENCES "app_user" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "invoice_void" ADD CONSTRAINT "invoice_void_voided_by_user_id_fkey"
+    FOREIGN KEY ("voided_by_user_id", "tenant_id") REFERENCES "app_user" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;
+ALTER TABLE "acceptance_withdrawal" ADD CONSTRAINT "acceptance_withdrawal_withdrawn_by_user_id_fkey"
+    FOREIGN KEY ("withdrawn_by_user_id", "tenant_id") REFERENCES "app_user" ("id", "tenant_id")
+    ON DELETE RESTRICT ON UPDATE RESTRICT;

@@ -10,7 +10,8 @@ from the product, 16.5 the declared delegation decision, 16.6 what the agents go
 service register, 19 the brief as plan of record, 20 the public site, **21 a control states its
 coverage**, **22 a scripted edit is verified mechanically** (2026-09-24) ·
 **23 changing a rule changes everything that cites it**, **24 every mistake is answered with a
-mechanism** (2026-09-25).
+mechanism** (2026-09-25) · 6 numbering, 11 sends, 12 offline retention, 15 the three approval gates amended, **25 customer
+service and feedback** added (2026-10-02).
 
 **How this file is changed.** Rule 23. In short: explicit numbers, append never insert, tombstone a
 retirement, and `tools/check_rules.py` fails the build when a rule's text or number changes until the
@@ -267,8 +268,10 @@ the product.
 - **Issued documents are immutable snapshots:** prices, tax rates, currency, wording and the
   assigned number freeze at issue.
 - **Revisions are versions,** not edits to an issued document.
-- **Numbering** is per-tenant, configurable (prefix, start, reset rule) and assigned
-  atomically, so two documents issued at the same moment neither collide nor skip.
+- **Numbering** is per-tenant, configurable (prefix, start) and assigned atomically, so two
+  documents issued at the same moment neither collide nor skip. *Amended 2026-10-02 (ADR 0027 D11,
+  ADR 0031): in release 1 a series never resets — the year goes in the prefix — and a revision keeps
+  its quote's number with a revision suffix.*
 - **Audit log** for significant actions; **soft deletes** where history matters.
 - **Versioned migrations only.** An applied migration is never edited; a correction is a new
   migration. No manual schema changes.
@@ -328,14 +331,19 @@ does not prove.
 One outbound messaging service with pluggable channels; the rest of the application never
 calls a channel directly. The document sent is always the issued snapshot. Delivery status is
 recorded; sends are idempotent and retried; consent, opt-out and per-country rules are
-respected; message costs are modelled in entitlements; messages requested offline are queued.
+respected; message costs are modelled in entitlements. **Nothing is sent on the user's behalf
+without their act:** a send the user taps while offline is queued and goes when the device syncs, but
+a document becoming ready — numbered at sync — never sends itself. *Amended 2026-10-02 (ADR 0027 D10):
+this said "messages requested offline are queued", which read as sending a quote whenever the phone
+next found signal.*
 
 ## 12. Offline (mobile)
 
 A local database and a sync engine with an outbox; client-generated UUIDs so retries cannot
 duplicate; **explicit conflict rules per entity**; encrypted local storage, remote sign-out
-and a retention limit; sync status visible in the UI; tested under poor and interrupted
-networks. What works offline, and whether a document may be issued offline, are ADR decisions.
+and a retention limit **for cached reads — never for an unsynced document**, which no automatic
+process may destroy, and which an ordinary sign-out pushes before clearing; sync status visible in the
+UI; tested under poor and interrupted networks. *Amended 2026-10-02 (ADR 0027 D12; PRD R1.18d, R1.18f).* What works offline, and whether a document may be issued offline, are ADR decisions.
 
 ## 13. Payments and activation controls (owner requirement)
 
@@ -400,6 +408,12 @@ document is how a rule changes without going through Rule 23. Two corrections:
 - Budgets, usage alerts and caps. A lighter model for routine work, a stronger one for design
   and review.
 - A named human stays accountable. That process is what separates this from vibe coding.
+- **Nothing runs without an administrator's approval — at three gates** (owner requirement, 2026-10-02).
+  **Start:** Claude begins a maintenance task only after a named administrator approves that task, through
+  an interface built for it (a triaged, redacted task list where approval is a recorded act — never a
+  schedule that runs on its own). **Merge:** every change is a pull request the administrator approves, after
+  CI. **Deploy:** production changes only on the administrator's approval. Each approval is recorded with who
+  and when.
 
 ## 16. How work is delegated to agents (owner requirement)
 
@@ -550,6 +564,50 @@ So the default in 16.5 is narrower than it was written:
 
 Recorded as a finding about the tooling rather than about a model, so the next person does not
 re-derive it by losing an afternoon.
+
+### 16.7 A brief is a checked file
+
+*Adopted by the owner 2026-10-01, from the governance proposals of 2026-09-27; the prevention M36 and M37
+named and called "not mechanical".*
+
+A brief that tells an agent what to check, and what it should find, is a **file committed under
+`docs/briefs/`**, not text pasted into a launch. Each expected output is a fenced `check` block: the command,
+then the exact output it must give. Before launch, after the brief's own commit, the builder runs
+`python3 tools/run_brief.py <brief>`; it refuses a dirty tree, prints the HEAD, executes every check, and fails
+if any expectation does not hold or if a check leaves the tree changed. The launch entry in `BRIEF-STATUS.md`
+records the brief's path, the HEAD and the count ("9 of 9 expectations hold"). The checker runs the same
+command and reports its output; anything the brief asks it to READ rather than run stays prose.
+
+A brief whose expectations were not executed on the HEAD it names is not a checked brief, and is not
+launched. What the runner does not prove — that the expectations are the right ones — is in its header.
+
+### 16.8 Every delegation is logged, with its tier and any escalation cause
+
+*Adopted 2026-10-01, as 16.7.*
+
+`docs/DELEGATION-LOG.md` holds one row per agent launch: the date, the task, the agent and tier, the reason
+for that tier (the 16.5 line), the outcome, and — when the run had to be redone or the tier changed — **the
+escalation cause, from a fixed list**: *brief incomplete* (the expectations or scope were wrong), *tier too
+low* (the model could not do what the brief asked), *scope too broad*, or *tooling or session* (the agent died,
+or the environment failed it). A review that FINDS defects has not escalated: finding them is its job.
+
+The log is written when the outcome is known, in the same commit that records the outcome. Its point is the
+pattern across rows: a cause that recurs is a finding about how work is delegated, not about a model.
+
+### 16.9 Cheapest reliable execution is the tier rule
+
+*Adopted 2026-10-01, as 16.7.*
+
+**Choose the cheapest tier that can do the task reliably AS BRIEFED.** A task whose every step and expected
+output is written down — a closing check, a plant run, a build to an approved design — is Sonnet's, or
+Haiku's for pure inventory; a task whose value is judgement — adversarial review, design, threat modelling —
+is Opus's. 16.2's table is the default; 16.5's three exceptions (the credential path, row-security policy
+text, money arithmetic) stay Opus whatever the brief says.
+
+**When a cheaper tier falls short, the brief is suspected first.** M36 was a correct model following a wrong
+brief. The cause is logged (16.8); the brief is fixed and the same tier re-run before the tier is raised. Raising
+it is right only when the brief was complete and the model still could not follow it — and that is logged as
+*tier too low*, so the pattern is visible.
 
 ## 17. Where we are weak, stated plainly
 
@@ -719,8 +777,13 @@ a row, a file, a deployed version — **the claim quotes that state, not the exi
 > so in one line.
 
 **21.8 A cited file, path or symbol must exist (added 2026-09-26).** Naming something that is not
-there reads as evidence and is not. `tools/check_citations.py` checks every backticked path, filename
-and "`symbol` in file" reference in tracked Markdown and source, and it gates in CI.
+there reads as evidence and is not. `tools/check_schema_citations.py` checks backticked paths and named
+database objects in the forms its docstring lists, and lists the forms it does not check;
+`tools/check_citations.py` checks backticked bare filenames and "`symbol` in file" references. Both scan
+tracked Markdown and source, both state what they do not scan, and both gate in CI. Neither is complete,
+and neither may be described as checking "every" citation: a regular expression over free text cannot
+recognise every way a claim is written (finding T9). (Until 2026-09-30 this rule credited
+`check_citations.py` with every path; it skipped two kinds, J1 and R11, and its path check was retired.)
 
 > Why, and it is the clearest case in this rulebook: `PRD.md` credited a guard called
 > `honest-claims.test.ts` as the reason an over-claim on the public site was safe. **No such file
@@ -729,11 +792,15 @@ and "`symbol` in file" reference in tracked Markdown and source, and it gates in
 > care. When the checker was finally written it found **four more** phantom citations in the site's
 > own source that three independent reviews had missed.
 
-**Exemptions are by a document's purpose, not by a turn of phrase.** A review register and the
-mistake ledger must be able to name a phantom in order to report it, so those documents are listed in
-the tool with a reason each. The first attempt exempted English idioms ("does not exist", "is
-actually") and became whack-a-mole — which is itself the lesson: an exemption belongs to why a
-document exists, not to how a sentence happens to be worded.
+**Exemptions are by a document's purpose, or by name — never by a turn of phrase.** A review
+register and the mistake ledger must be able to name a phantom in order to report it, so those
+documents are listed in the tool with a reason each. A single deliberate citation of something absent
+(a deleted file cited as history, a rejected design named to say why) is exempted by file and name,
+with its reason, printed on every run; an exemption that excuses nothing fails the run. The first
+attempt exempted English idioms ("does not exist", "is actually") and became whack-a-mole; the idiom
+window survived anyway, and in 2026-09 it was excusing 35 of 222 path citations — including a real
+misnamed column — because "rather than" is house style here (R11). An exemption belongs to why a
+document exists or to one named citation, not to how a sentence happens to be worded.
 
 **21.9 A guard patched twice for the same class is replaced, not patched a third time (added
 2026-09-26).** When the same kind of defect gets through a control twice, the control's *shape* is the
@@ -746,9 +813,15 @@ size of the set it examined, including what it skipped.
 > whose first segment was not a real top-level directory — **71 paths**, hiding five phantoms, one of
 > them a guard credited at eight sites that had never been written (J1) — and it resolved identifiers
 > by text presence, which a comment can satisfy, so a table no migration creates looked real (J9).
-> `tools/check_schema_citations.py` replaced it for that class and prints "0 citations skipped" beside
-> its result, because a guard that cannot state the set it examined will eventually examine a smaller
-> one (M20).
+> `tools/check_schema_citations.py` replaced it for that class and prints what it exempted, by name,
+> beside its result, because a guard that cannot state the set it examined will eventually examine a
+> smaller one (M20). Its first version printed "0 citations skipped" while skipping every line near a
+> "denial" phrase (R11) — the banner must count what the tool actually passes over, not what its
+> author meant it to. And the rule then applied to its own replacement: that tool's SQL parser missed
+> NOT NULL columns (R3), and its fix missed ordinary DDL forms and never forgot a dropped index (S3,
+> S4). So on 2026-10-01 the parser was replaced by the database's own catalogue — a list generated from
+> it after every migration, and a test that fails if the list is stale — rather than patched a third
+> time. "Parsed structure" in this rule means the real thing's own account of itself where one exists.
 
 **A new guard is planted against before it is reported, and its own first version is suspect.**
 21.9's own tool failed its first plant: the rule "a foreign key **or** a table of that name" passed
@@ -760,6 +833,21 @@ when it passes — only when the defect it is named for makes it fail.
 diff. It cannot catch a control that fires correctly on the wrong thing — a scanner whose rules miss
 our particular secret format fires, satisfies 21.2, and still misses. Rule 9's independent review is
 the only answer to that, and 21 does not replace it.
+
+**21.10 A sentence that says who may write a table cites the test that executes it, or does not exist
+(added 2026-10-01).** "Only X writes this", "there is no other door", "nothing else ever writes it",
+"it cannot go stale": each is a claim about every code path, now and later, and prose cannot hold it. If
+the claim matters, a test inserts through each path and reads the result, and the sentence names that
+test; the mechanism and its limits are stated once, in the ADR that decided them, and other documents
+point there rather than restating them.
+
+> Why: `issue_balance`'s writer set was written in prose three times and was wrong three times — H2, the
+> fix for H2, and the fix for J12 — the third time two paragraphs after a sentence announcing that the
+> list had been removed. Both of its absolute claims were false by execution: the balance-write flag is
+> not a secret (R5), and the balance row is opened by an explicit call, not a trigger (R7). The executed
+> home already existed (the J12 block); the prose kept coming back beside it (R13, M39). A phrase-based
+> guard was considered and rejected by the owner: it would be one more deny-list of wordings, right after
+> one such list was found hiding a real defect (R11), and it would miss the next wording.
 
 ---
 
@@ -882,3 +970,22 @@ edit was *correct*. Only the re-review does that, which is why both halves exist
 mechanism good. And it depends on defects being *found* — which is Rule 9's independent review and
 Rule 21.2's plants, not this.
 
+## 25. Customer service and feedback (owner requirement; added 2026-10-02)
+
+The owner's requirement 7 (brief §2, §15) had no rule until the planning baseline audit found the gap
+(`docs/PLANNING-AUDIT.md`, D-2).
+
+**25.1 Support is built into the product, and every channel is chosen with its options and costs on
+record** (brief §15) before it is built — an ADR, not a default.
+
+**25.2 Any support bot** is tenant-scoped and never shows another tenant's data; always offers a human;
+never approves a payment or changes an account's status on its own; and keeps no unredacted logs.
+**No tenant or client personal data reaches a model through it** (Rule 15): a bot that answers from our own
+help content by search meets this by construction; one that sends what a person types to a model needs Rule
+15 amended by the owner first (ADR 0029 E1, ADR 0030 decision 3).
+
+**25.3 Feedback feeds maintenance.** Every piece of feedback is tagged (bug, feature, question, billing) and
+linked to the app version and tier; a "report a problem" path attaches non-sensitive context only with the
+user's consent; feedback is triaged on a fixed cadence into **redacted** issues, so Claude-assisted
+maintenance never receives personal data; error tracking is linked to reports; response time, resolution
+time and the commonest issues are measured.

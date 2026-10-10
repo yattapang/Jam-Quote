@@ -52,6 +52,9 @@ const EXEMPT: Record<string, string> = {
     "Append-only: what a client signed. Withdrawal is its own row precisely so this one never " +
     "changes (ADR 0025 decision 4).",
   acceptance_withdrawal: "Append-only: the row IS the audit record of the withdrawal.",
+  acceptance_evidence:
+    "Append-only: the grade is derived from these rows (finding J6), so a row that could be edited or " +
+    "tombstoned would let the grade move after the fact.",
   document_render:
     "Append-only: a render is a set of bytes that existed, and `version` would imply an UPDATE the " +
     "policies refuse while `deleted_at` would imply a DELETE they also refuse. A superseded render " +
@@ -71,6 +74,11 @@ const EXEMPT: Record<string, string> = {
   // ---------------------------------------------------------------------------
   // Two more, each for its own reason.
   // ---------------------------------------------------------------------------
+  document_settings:
+    "No tombstone: one row per tenant, keyed on the tenant, and an absent row MEANS the defaults, so a " +
+    "deleted row and a never-written one are the same thing and a resurrected one is harmless. It " +
+    "does carry `version`, for two devices editing settings at once; this exemption covers only the " +
+    "missing `deleted_at` (finding J8's table).",
   number_series:
     "A counter, not a document. Its one mutable field (`next_number`) is allocated under a row " +
     "lock, so optimistic versioning is not its concurrency control and would suggest a second one " +
@@ -78,8 +86,9 @@ const EXEMPT: Record<string, string> = {
     "issued.",
   issue_balance:
     "A derived cache behind a lock (ADR 0025 decision 2), rebuildable from the rows it summarises. " +
-    "The application cannot write it at all, so a version column would be a concurrency control " +
-    "for writes that cannot happen; the lock inside `issue_balance_apply()` is the real one. Never " +
+    "Its writes go only through the balance functions, which take the lock and are the only " +
+    "writers the grants allow (R5, privilege model), so a version column would guard the wrong writer; " +
+    "the lock inside `issue_balance_apply()` is the real control. Never " +
     "deleted, because a FOR UPDATE on a missing row takes no lock — which was finding G2.",
 
   app_session:
@@ -353,5 +362,18 @@ describe("what the convention actually buys", () => {
         ["01927f5a-0000-7000-8000-0000000000c2", TENANT],
       ),
     ).rejects.toThrow(/duplicate key|unique/i);
+  });
+});
+
+// Finding W11: two exemptions above say they cover only the missing `deleted_at`, and that each table
+// keeps `version`. The exemption list is whole-table, so that sentence was held by nothing — dropping
+// `version` left this file green. This holds it.
+describe("the exemptions that claim to keep `version` do keep it", () => {
+  const KEEPS_VERSION = ["rejected_seal", "document_settings"];
+
+  it("finds a version column on each", async () => {
+    const all = await tables();
+    const missing = KEEPS_VERSION.filter((table) => !all.get(table)?.has("version"));
+    expect(missing).toEqual([]);
   });
 });

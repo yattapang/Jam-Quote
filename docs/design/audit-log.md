@@ -1,6 +1,6 @@
 # Design — the audit log
 
-**Status: Proposed.** Awaiting the owner's approval (Rule 1.1). Nothing is built until then.
+**Status: Approved by the owner 2026-09-24, and built** (ADR 0020). *Header corrected 2026-10-02 — it said "Proposed" after both had happened (planning baseline audit).*
 
 **Brief:** §18 step 1, Foundations — named there and missing. The second of the three gaps.
 **Rules:** 4 (tenant isolation), 5 ("every money, permission or tenancy change is audited: who,

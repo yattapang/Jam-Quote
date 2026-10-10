@@ -1,0 +1,24 @@
+-- `issue_balance`'s write policies, keyed on the ROLE that owns the balance functions rather than on a
+-- setting (finding R5; `docs/design/privilege-model.md` §5).
+--
+-- These replace the two write policies `002-documents-isolation.sql` created, which required the
+-- transaction-local setting `pryvis.balance_write` — a setting the application role could set itself, so
+-- the policy stopped the application FORGETTING the balance and not a hostile caller (R5, executed). 002
+-- is embedded in a committed migration (Rule 6), so its text still shows the old policies; this file,
+-- embedded in `20260927220000_privilege_model`, is what the database holds.
+--
+-- current_user inside a SECURITY DEFINER function is the function's OWNER, and outside one it is the
+-- caller; the application cannot make itself pryvis_balance. The tenant match stays, so even the balance
+-- functions write only the tenant in scope. The application role also has no INSERT or UPDATE grant on
+-- the table at all — the policy is the second lock, not the only one.
+DROP POLICY IF EXISTS issue_balance_create ON "issue_balance";
+CREATE POLICY issue_balance_create ON "issue_balance" FOR INSERT
+  WITH CHECK ("tenant_id" = nullif(current_setting('app.tenant_id', true), '')::uuid
+              AND current_user = 'pryvis_balance');
+
+DROP POLICY IF EXISTS issue_balance_amend ON "issue_balance";
+CREATE POLICY issue_balance_amend ON "issue_balance" FOR UPDATE
+  USING ("tenant_id" = nullif(current_setting('app.tenant_id', true), '')::uuid
+         AND current_user = 'pryvis_balance')
+  WITH CHECK ("tenant_id" = nullif(current_setting('app.tenant_id', true), '')::uuid
+              AND current_user = 'pryvis_balance');

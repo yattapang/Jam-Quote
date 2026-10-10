@@ -76,7 +76,7 @@
     },
     "6": {
       "title": "Data integrity",
-      "hash": "c625f0b2ff348ce4"
+      "hash": "654581b030be9a1c"
     },
     "7": {
       "title": "One rule, one place",
@@ -96,11 +96,11 @@
     },
     "11": {
       "title": "Communications",
-      "hash": "b355b8ccde00df2e"
+      "hash": "08bc71aa4f453b37"
     },
     "12": {
       "title": "Offline (mobile)",
-      "hash": "acb22f9573fcf168"
+      "hash": "04c8e2cb60dc86d7"
     },
     "13": {
       "title": "Payments and activation controls (owner requirement)",
@@ -112,7 +112,7 @@
     },
     "15": {
       "title": "Claude-assisted maintenance",
-      "hash": "86a2ed1d683a7131"
+      "hash": "e572fb648c135e9d"
     },
     "16": {
       "title": "How work is delegated to agents (owner requirement)",
@@ -141,6 +141,18 @@
     "16.6": {
       "title": "What the agents actually got wrong, and what that changes (2026-09-24)",
       "hash": "8dedf26f7a18d5ed"
+    },
+    "16.7": {
+      "title": "A brief is a checked file",
+      "hash": "61347667b7ee076d"
+    },
+    "16.8": {
+      "title": "Every delegation is logged, with its tier and any escalation cause",
+      "hash": "e715a765c59a2250"
+    },
+    "16.9": {
+      "title": "Cheapest reliable execution is the tier rule",
+      "hash": "d4b60b948bf39e02"
     },
     "17": {
       "title": "Where we are weak, stated plainly",
@@ -192,11 +204,15 @@
     },
     "21.8": {
       "title": "A cited file, path or symbol must exist (added 2026-09-26)",
-      "hash": "14d6953d1edb4d9a"
+      "hash": "18e5c69e7661ac25"
     },
     "21.9": {
       "title": "A guard patched twice for the same class is replaced, not patched a third time (added\n2026-09-26)",
-      "hash": "bf5f1da4cdd68acf"
+      "hash": "cfe4c953f8f412a5"
+    },
+    "21.10": {
+      "title": "A sentence that says who may write a table cites the test that executes it, or does not exist\n(added 2026-10-01)",
+      "hash": "e5770b22addb0011"
     },
     "22": {
       "title": "A scripted edit is verified mechanically, not by eye (added 2026-09-24)",
@@ -265,6 +281,22 @@
     "24.6": {
       "title": "A finding is not \"closed\" until the claim cites every document the finding named \u2014 and a fix is\nnot proved until someone else has checked it (added 2026-09-25)",
       "hash": "6f3d0ffe6752582b"
+    },
+    "25": {
+      "title": "Customer service and feedback (owner requirement; added 2026-10-02)",
+      "hash": "3f8e20f064fb18d0"
+    },
+    "25.1": {
+      "title": "Support is built into the product, and every channel is chosen with its options and costs on\nrecord",
+      "hash": "ed7f850418877649"
+    },
+    "25.2": {
+      "title": "Any support bot",
+      "hash": "8b0aec6e475e0c8d"
+    },
+    "25.3": {
+      "title": "Feedback feeds maintenance",
+      "hash": "1c9aaee42dbd1815"
     }
   }
 }

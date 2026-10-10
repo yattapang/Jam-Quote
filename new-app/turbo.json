@@ -6,7 +6,7 @@
     "dev": { "cache": false, "persistent": true },
     "lint": {},
     "typecheck": {},
-    "test": {},
+    "test": { "env": ["PRYVIS_PG_URL", "PRYVIS_REQUIRE_PG"] },
     "test:integration": {}
   }
 }

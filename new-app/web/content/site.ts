@@ -99,7 +99,7 @@ export const site = {
       "Your prices, not a generic template. Change a supplier price once and your next quote is right, while quotes you have already sent stay as the client saw them.",
       "Send by WhatsApp or email. Your client opens a branded page and accepts or declines, so you have it in writing.",
       "Turn an accepted quote into an invoice, record payments, and see who is late.",
-      "See whether the job actually made money once the receipts are in.",
+      "Coming in release 2: see whether the job actually made money once the receipts are in.",
     ],
 
     // The honest framing of the first run, said plainly rather than hidden. This sentence is
@@ -114,7 +114,7 @@ export const site = {
   features: {
     title: "What Pryvis does — Pryvis",
     description:
-      "Reusable job recipes, quotes built from your own prices, GCT per line, client approval on a phone, invoicing, payments, retention and job profit.",
+      "Reusable job recipes, quotes built from your own prices, GCT per line, client approval on a phone, invoicing and payments.",
     heading: "What it does",
     intro:
       "Everything here exists because a contractor asked for it, or because a paper book was doing the job badly.",
@@ -139,22 +139,24 @@ export const site = {
       // "I am covered", and the owner's position is that a typed name alone is not legal in a dispute.
       // What release 1 builds is a code-verified signature, so the copy can describe the mechanism
       // without claiming what it proves — that is the attorney's answer, not ours.
-      body: "Send a link by WhatsApp or email. Your client sees a branded quote, confirms with a code sent to them, and accepts or declines. No app to install and no account to create.",
+      body: "Send a link by WhatsApp or email. Your client sees a branded quote, confirms with a code sent to their email where they have one, and accepts or declines. No app to install and no account to create.",
       },
       {
         title: "Invoices and what you are owed",
-        body: "Turn an accepted quote into an invoice without retyping it. Record payments as they arrive, hold and release retention, and see at a glance who is late.",
+        body: "Turn an accepted quote into an invoice without retyping it — a deposit, progress claims, then the balance. Record payments as they arrive and see at a glance who is late.",
       },
       {
-        title: "Did the job make money?",
-        body: "Put purchases and labour against the job as they happen and compare them with what you quoted. The answer is usually interesting and occasionally uncomfortable.",
+        // Release 2 (PRD §8; review 5 finding B4): marked in both strings, because the guard reads each
+        // string on its own.
+        title: "Coming in release 2: did the job make money?",
+        body: "Coming in release 2: put purchases and labour against the job as they happen and compare them with what you quoted. The answer is usually interesting and occasionally uncomfortable.",
       },
       {
         title: "Built for the phone you already have",
         body: "Quoting happens on a site, standing up, in sunlight, on mobile data. That is what this is designed for, not a desk.",
       },
     ] satisfies readonly Feature[],
-    next: "Coming next, in this order and one at a time: staged deposit and progress invoicing, a signed record of the client's acceptance, change orders as their own documents, and supplier price comparison.",
+    next: "Coming in release 2: a number at the gate with no signal, change orders as their own signed documents, retention tracking, and seeing whether a job made money; supplier price comparison follows in release 3, with the Business tier.",
   },
 
   pricing: {
@@ -162,7 +164,7 @@ export const site = {
     description: "Start free. Quoting is free; you pay when Pryvis starts helping you get paid.",
     heading: "Start free",
     intro:
-      "Quoting is free, for as long as you want it. You pay when Pryvis starts helping you get paid — invoicing, payment recording and job costing. Final prices in Jamaican dollars are being set now.",
+      "Quoting is free, for as long as you want it. You pay when Pryvis starts helping you get paid — invoicing and payment recording, with card payment links coming in release 2. Final prices in Jamaican dollars are being set now.",
     tiers: [
       {
         name: "Free",
@@ -176,7 +178,8 @@ export const site = {
           "Share by WhatsApp or email, client accepts online",
           "Client list",
           "One reusable job recipe",
-          "Works with no signal — price and capture a job offline",
+          "Works with no signal — price and capture a job offline (coming with the mobile app)",
+          "Export your data as CSV, any time",
           "1 user",
         ],
       },
@@ -198,8 +201,10 @@ export const site = {
           "Invoices and payment recording",
           "Staged deposit and progress invoicing",
           "Payment reminders and an overdue list",
-          "Card payment links",
-          "Works with no signal — price and capture a job offline",
+          "Card payment links (coming in release 2)",
+          "Works with no signal — price and capture a job offline (coming with the mobile app)",
+          "Export your data as CSV, any time",
+          "Up to 3 users",
           "A number at the gate, fully offline (coming in release 2)",
           "Change orders as their own signed documents (coming in release 2)",
           "Retention tracking (coming in release 2)",
@@ -239,8 +244,8 @@ export const site = {
     heading: "Built for the way contracting actually works here",
     body: [
       "Pryvis started from two specific problems. A contractor standing at a gate, asked what a job will cost, who has to either guess or promise to call back — and often loses the work either way. And the evening afterwards, spent pricing with a paper book, a calculator and last month's receipts.",
-      "So it is built around the parts that actually cost contractors money: pricing a job once and reusing it, quoting from real supplier prices rather than memory, getting the client's acceptance in writing, and knowing whether the job made anything once the receipts are in.",
-      "It is Jamaican first: GCT treated line by line, prices in Jamaican dollars, quotes sent the way clients here actually read them. Trinidad and Tobago is next, and the tax and currency rules are configuration rather than a rewrite.",
+      "So it is built around the parts that actually cost contractors money: pricing a job once and reusing it, quoting from real supplier prices rather than memory, getting the client's acceptance recorded, and getting paid against it. Knowing whether the job made anything once the receipts are in is coming in release 2.",
+      "It is Jamaican first: GCT treated line by line, prices in Jamaican dollars, quotes sent the way clients here actually read them. Trinidad and Tobago is next, and the tax and currency rules are designed as configuration rather than a rewrite.",
       "It is early, and there is no pretence otherwise on this site: no invented customer numbers, no testimonials we have not been given. If you are a contractor willing to tell us what is wrong with it, we would rather hear from you now than after launch.",
     ],
   },

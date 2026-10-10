@@ -24,7 +24,7 @@ assertion — and closing a blocker earns a **third review**, not a tick.
 | **G14** | major | **Closed.** `THREAT-MODEL.md` §4a covers the phone as a trust boundary, the share page's revocation problem, the forgeable signed copy and the code channel; **`domain-model.md` §8 no longer claims a remote sign-out wipes the outbox** — it cannot reach an offline device, which the checker caught as a false control still standing; `PRD.md` R1.18f carries it into the requirements |
 | **G15** | minor | **Closed.** `PRD.md` §6: N3 is precise about `issue_balance` being updated and deliberately not a document; N1/N4/N5/N9/N10 each name an instrument, and where none exists (sunlight legibility) the row says a person does it |
 | **G16** | minor | **Closed.** `PRD.md` R1.22e renumbered to R1.21a, in the workflow it belongs to |
-| **G17** | major | **Closed.** `PRD.md` R1.20-R1.20d carry ADR 0024, including the e-signature correction; `TIERS.md` and `site.ts` amended for ADR 0023 and F5/F6 |
+| **G17** | major | **Closed.** `PRD.md` R1.20-R1.20d carry ADR 0024, including the e-signature correction; `TIERS.md` and `site.ts` amended for ADR 0023 and F5/F6. **Audited 2026-10-01 (legacy gap):** `docs/adr/0024-acceptance-evidence.md` is committed and indexed, and the PRD cites it; the F15 row of `PRD-REVIEW.md` stays Open deliberately — the owner's answer changed the design, but whether it suffices in law is still the attorney's (ADR 0024 §6, `docs/design/acceptance-evidence.md` §8) |
 
 **Also closed from the first review, by this pass:** F1 (G3), F2 (G10), F3 (G1, G7), F4 (G2, G12, G13),
 F12 (G9, G11), F17 (G7) — the six that had been reopened. **F5 and F6 are now closed too**, by the owner's

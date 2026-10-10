@@ -38,13 +38,15 @@ live in code, and the documents point at them.
 thing that does not exist — an invariant reading stronger than it is, which is worse than a weak one
 honestly labelled.
 
-**Where it now lives:** one expression, in the migration, as the function every writer calls. Neither
+**Where it now lives:** one expression, in the migration, as one function, `issue_ceiling_minor()`, that
+every ceiling check reads (*"every writer calls" corrected 2026-10-01, finding T10 — a caller that sets the
+write flag calls nothing, R5*). Neither
 document restates the arithmetic; both link to it. When release 2 makes variations signable, **one
 expression changes** and the documents do not need to.
 
 ---
 
-## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph
+## Decision 2 — The writer set is enforced by grants, not by a list in a paragraph (as decided; built 2026-10-01 — see the second amendment)
 
 **The contradiction:** §6.2a declared the `issue_balance` writer set "closed and named" and omitted the
 acceptance transaction that creates the row — the exact fix the previous finding asked for (H2, G2).
@@ -61,6 +63,40 @@ acceptance transaction that creates the row — the exact fix the previous findi
 
 This is the project's existing pattern: the audit log is append-only *by the absence of a policy*, not
 by a comment asking politely.
+
+**Amended 2026-09-27 (finding Q7 of the fifth J4 re-review).** The mechanism built is not the one above.
+There is no `SECURITY DEFINER` function, and the application role does hold table grants — the test
+harness grants write on every table. What enforces that a write carries the flag is **row security** (not
+a writer set: the flag is not a secret, R5 below; *"enforces the writer set" corrected 2026-10-01, finding
+V15*):
+`new-app/db/policies/002-documents-isolation.sql` gives `issue_balance` write policies that require a
+transaction-local flag that `issue_balance_open()` and `issue_balance_apply()` set (*"only" removed
+2026-10-01, finding S7: the next sentences say why it is not only them*). Since J2,
+`issue_balance_apply()` is reached through triggers on every table that moves a total; `issue_balance_open()`
+is NOT — the acceptance path must call it, and an acceptance inserted without that call has no balance row
+(so it can be invoiced against nothing: the recompute raises). *Corrected the same day, finding R7.* And
+the flag is not a secret: a caller that sets it itself can write `issue_balance` directly — the policies
+stop the application forgetting, not a hostile caller (finding R5). What stands is that a write
+without the flag is refused by the schema, not by a paragraph — the writer set itself is not enforced (R5;
+*"the writer set is enforced" corrected 2026-10-01, finding U12*) — and its mechanism is policies plus triggers, and all three bullets
+above are kept as the decision of its day, none built as written: there is no `SECURITY DEFINER` function,
+the writer list is not closed (R5), and no parser-based guard exists (*the last two added 2026-10-01,
+finding T10*). J2's disposition credited this
+amendment before it existed; that is what Q7 found.
+
+**Amended 2026-10-01 (R5, the privilege model — `docs/design/privilege-model.md` §5).** The grants half of
+the original decision is now built, by migration `new-app/db/migrations/20260927220000_privilege_model`:
+the application role (`pryvis_app`, created by the migrations, no longer by the test harness) holds SELECT
+only on `issue_balance`; `issue_balance_open()` and `issue_balance_apply()` are `SECURITY DEFINER`, owned by
+`pryvis_balance`, the one role with INSERT and UPDATE on the table; and the write policies require
+`current_user = 'pryvis_balance'` with the tenant match, a condition the application cannot set. The flag
+is gone, so the first amendment's mechanism is history. The writers are therefore the two functions'
+callers — the triggers that move a total, and the acceptance path that opens the row — and there is no
+other way in: R5's attack (set the flag, UPDATE the row) is refused with "permission denied", in
+`new-app/db/test/documents-core.test.ts` block 2. **Still not built:** the parser-based guard of the third
+bullet. It is not needed for the grant to hold — the database refuses the write whatever module sends it —
+and is withdrawn rather than owed. Two functions, not one, as the first amendment says. The statement
+stands until the closing check (Rule 24.6).
 
 ---
 
@@ -113,20 +149,31 @@ because the row *is* the record.
 - **The `issue_balance` row is not deleted.** Deleting it would reintroduce Decision 2's empty-lock
   hole.
 - ~~`accepted_total_minor` returns to zero while the issue is not accepted.~~ **CORRECTED 2026-09-26: this
-  contradicted Decision 2**, which says `accepted_total_minor` is written once, "never again". Both cannot
+  contradicted Decision 2**, which then said `accepted_total_minor` is written once, "never again" (*it no
+  longer does; tense corrected 2026-10-01, finding T10*). Both cannot
   hold, and the contradiction sat inside one ADR — the same failure the ADR was written to stop, one
-  level up. Resolved in favour of Decision 2, because an immutable column is what makes the copy safe
-  at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change.
+  level up. Resolved in favour of Decision 2, because an immutable source is what makes the copy safe
+  at all (Rule 7): it is safe *precisely because* the issue it derives from cannot change. (*"an immutable
+  column" corrected 2026-10-01, finding V16: the column itself can be rewritten by a caller who sets the
+  flag, R5; it is the ISSUE that cannot change.*)
 
   **Nothing is mutated on withdrawal. `issue_ceiling_minor()` is state-aware instead** — it returns
   zero unless an un-withdrawn acceptance exists (migration `20260926110000_withdrawal_preconditions`).
   So a withdrawal drops the ceiling immediately, the balance row survives and is simply inert, and the
   rule changed in **one expression** with no document needing an edit. That is the payoff this ADR was
   arguing for, collected.
-- **Withdrawal is refused while any variation exists**, not only while an invoice exists — and this is
+- *(Superseded 2026-09-27 — see the amendment below; kept as the decision of its day.)*
+  **Withdrawal is refused while any variation exists**, not only while an invoice exists — and this is
   now enforced by a trigger rather than stated, because a precondition a caller can forget is not a
   precondition (finding H4). A recorded variation is agreed extra work, and withdrawing would leave it
   immutable, pointing at a superseded issue, unbillable and unmovable.
+
+  **Amended 2026-09-27 (findings K4 and L1, owner's decisions).** Variations no longer block withdrawal,
+  and neither does an invoice that is voided or fully credited: since a withdrawn or superseded issue can
+  take no new variation, its variations are history rather than a live copy, and refusing left a wrong
+  document with no correction at all. Withdrawal is now refused only while an invoice still has money
+  billed on it (`acceptance_withdrawal_guard()`, `docs/design/scope-reduction.md` §3a-3b). The paragraph
+  below is kept as the reasoning of its day.
 
   **The product consequence, stated rather than discovered:** once extra work has been agreed on top of
   an acceptance, the cheap typo remedy is gone and the path is a credit note and a fresh quote. A wrong
@@ -148,7 +195,7 @@ enforcement. Both cannot be true, and no entity held a pending claim (H8).
 - **The user row is inserted at verification**, not at registration. So `app_user.email` keeps its global
   unique index untouched, and **"first to verify wins" becomes a database guarantee** rather than
   application logic: the loser's insert violates the index and is answered with the same
-  non-enumerating message as any duplicate.
+  non-enumerating message as any duplicate. *Corrected 2026-10-02 (PRD review 5, finding B28): the index on `app_user.email` is per tenant (`app_user_tenant_id_email_key`); the global one is on `app_credential.email` (`app_credential_email_key`, ADR 0015 decision 2). The guarantee holds only if registration inserts the user and its credential in one transaction with the same address, and the guard that the two emails stay equal is a precondition of building sign-up (PRD R1.30c).*
 - Claims expire in 72 hours and expired ones are deleted, so the table cannot become a shadow user list.
 
 **Why this is better than the alternatives:** it changes no existing index, it needs no "pending" state

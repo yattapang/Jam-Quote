@@ -52,10 +52,9 @@ export async function migrationSql(name: string): Promise<string> {
 }
 
 /**
- * Applies every migration in order, then creates the application role.
- *
- * The role is granted ordinary table privileges and nothing else: no BYPASSRLS, no ownership, no
- * superuser. That is the point — it is the least-privileged identity the policies are written for.
+ * Applies every migration in order. The migrations create the application role, `pryvis_app`, with
+ * ordinary table privileges and nothing else — no BYPASSRLS, no ownership, no superuser, and no reach into
+ * the credential tables — which is the least-privileged identity the policies are written for.
  */
 export async function applyMigrations(db: PGlite): Promise<void> {
   const names = await migrationNames();
@@ -66,12 +65,9 @@ export async function applyMigrations(db: PGlite): Promise<void> {
   for (const name of names) {
     await db.exec(await migrationSql(name));
   }
-
-  await db.exec(`
-    CREATE ROLE ${APP_ROLE} NOLOGIN;
-    GRANT USAGE ON SCHEMA public TO ${APP_ROLE};
-    GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE};
-  `);
+  // The application role and every grant it holds come from the migrations
+  // (`20260927220000_privilege_model`), not from here. Until 2026-10-01 this function invented the grants
+  // itself, which is how finding R5 hid: the tests ran against a privilege model production never had.
 }
 
 /**

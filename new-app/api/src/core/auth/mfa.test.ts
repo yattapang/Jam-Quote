@@ -88,21 +88,38 @@ function codeNow(secret: string, stepOffset = 0): string {
 }
 
 async function grantCapability(userId: string) {
-  await db.query(
+  await ownerQuery(
+
     `INSERT INTO platform_capability (id, user_id, capability)
      VALUES ($1, $2, 'impersonate_tenant')`,
     [nextId(), userId],
   );
 }
 
+/**
+ * Runs one query as the database owner, then returns to the application role. Since the privilege model
+ * (2026-10-01) the application role has no privilege on the credential tables or on writing
+ * platform_capability, so seeding them or inspecting what was stored is the owner's — which is the point:
+ * the code under test reaches them only through the door functions.
+ */
+async function ownerQuery<T = Record<string, unknown>>(query: string, params: unknown[] = []) {
+  await db.exec("RESET ROLE");
+  try {
+    return await db.query<T>(query, params);
+  } finally {
+    await db.exec(`SET ROLE ${APP_ROLE};`);
+  }
+}
+
 async function factorRow(userId = USER) {
-  const { rows } = await db.query<{
+  const { rows } = await ownerQuery<{
     confirmed_at: Date | null;
     failed_attempts: number;
     locked_until: Date | null;
     last_used_step: string | null;
     secret_key_id: string;
   }>(
+
     `SELECT confirmed_at, failed_attempts, locked_until, last_used_step, secret_key_id
        FROM mfa_totp WHERE user_id = $1`,
     [userId],
@@ -111,8 +128,9 @@ async function factorRow(userId = USER) {
 }
 
 async function sessionRow(sessionId = SESSION) {
-  const { rows } = await db.query<{ mfa_pending: boolean; mfa_verified_at: Date | null }>(
-    `SELECT mfa_pending, mfa_verified_at FROM app_session WHERE id = $1`,
+  const { rows } = await ownerQuery<{ mfa_pending: boolean; mfa_verified_at: Date | null }>(
+
+    `SELECT mfa_pending, mfa_verified_at FROM app_session WHERE token_hash = encode(sha256(convert_to($1::text, 'UTF8')), 'hex')`,
     [sessionId],
   );
   return rows[0]!;
@@ -194,8 +212,8 @@ beforeEach(async () => {
     );
   }
   await db.query(
-    `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, mfa_pending)
-     VALUES ($1, $2, $3, 0, now() + interval '1 day', true)`,
+    `INSERT INTO app_session (id, token_hash, user_id, tenant_id, version, expires_at, mfa_pending)
+     VALUES ($1::text::uuid, encode(sha256(convert_to($1::text, 'UTF8')), 'hex'), $2, $3, 0, now() + interval '1 day', true)`,
     [SESSION, USER, TENANT],
   );
 
@@ -223,7 +241,8 @@ describe("who needs a factor", () => {
     // Asked of the database on every sign-in rather than cached on the user: a capability granted
     // an hour ago must require a factor now, and a revoked one must stop requiring it.
     await grantCapability(USER);
-    await db.query(`UPDATE platform_capability SET revoked_at = now() WHERE user_id = $1`, [USER]);
+    await ownerQuery(
+`UPDATE platform_capability SET revoked_at = now() WHERE user_id = $1`, [USER]);
     expect(await mfa.requiresFactor(adapt(db), USER)).toBe(false);
   });
 
@@ -241,7 +260,8 @@ describe("enrolment", () => {
       accountEmail: EMAIL,
     });
 
-    const { rows } = await db.query<{ secret_ciphertext: Uint8Array }>(
+    const { rows } = await ownerQuery<{ secret_ciphertext: Uint8Array }>(
+
       `SELECT secret_ciphertext FROM mfa_totp WHERE user_id = $1`,
       [USER],
     );
@@ -273,7 +293,8 @@ describe("enrolment", () => {
     expect(codes).toHaveLength(RECOVERY_CODE_COUNT);
     expect(new Set(codes).size).toBe(RECOVERY_CODE_COUNT);
 
-    const { rows } = await db.query<{ code_hash: string }>(
+    const { rows } = await ownerQuery<{ code_hash: string }>(
+
       `SELECT code_hash FROM mfa_recovery_code WHERE user_id = $1`,
       [USER],
     );
@@ -442,9 +463,10 @@ describe("the lock, which follows the person", () => {
     await failUntilLocked();
 
     const fresh = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
-    await db.query(
-      `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, mfa_pending)
-       VALUES ($1, $2, $3, 0, now() + interval '1 day', true)`,
+    await ownerQuery(
+
+      `INSERT INTO app_session (id, token_hash, user_id, tenant_id, version, expires_at, mfa_pending)
+       VALUES ($1::text::uuid, encode(sha256(convert_to($1::text, 'UTF8')), 'hex'), $2, $3, 0, now() + interval '1 day', true)`,
       [fresh, USER, TENANT],
     );
 
@@ -515,7 +537,8 @@ describe("recovery codes", () => {
     clock = new Date(clock.getTime() + 60_000);
     expect((await verify(codes[0]!)).ok).toBe(false);
 
-    const { rows } = await db.query<{ remaining: bigint }>(
+    const { rows } = await ownerQuery<{ remaining: bigint }>(
+
       `SELECT count(*) AS remaining FROM mfa_recovery_code WHERE user_id = $1 AND used_at IS NULL`,
       [USER],
     );
@@ -535,7 +558,8 @@ describe("recovery codes", () => {
   it("does not accept another person's recovery code", async () => {
     const { codes } = await enrol();
     // The colleague has their own confirmed factor and no recovery codes of their own.
-    await db.query(
+    await ownerQuery(
+
       `INSERT INTO mfa_totp (user_id, secret_ciphertext, secret_iv, secret_tag, secret_key_id,
                              confirmed_at, updated_at)
        SELECT $1, secret_ciphertext, secret_iv, secret_tag, secret_key_id, now(), now()

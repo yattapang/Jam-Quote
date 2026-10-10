@@ -1,6 +1,6 @@
 # Design: the domain model
 
-**Status: APPROVED by the owner 2026-09-25 · independent review OUTSTANDING (Rule 1.10).** Approval
+**Status: APPROVED by the owner 2026-09-25 · reviewed alongside the PRD in reviews 1-5 (`docs/PRD-REVIEW.md` … `docs/PRD-REVIEW-5.md`), whose disposition tables say what remains open (*header corrected 2026-10-02, finding B27*).** Approval
 answers "is this what I want"; it does not answer "will this do what it says". Both are required
 before code is built from a plan, and the second gate was added to the rules the same day this was
 approved — so schema work waits on the review, which runs alongside the PRD's
@@ -101,11 +101,11 @@ These are settled by work already landed, and are stated here so no entity re-li
 | Entity | Purpose | Key invariants |
 |---|---|---|
 | `tenant` | The contracting business. | Country and trading currency set at creation and not casually changed. Suspension is a field, not a deletion. |
-| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally**, which is what enforces the owner's rule that a second business needs a second address (11a). A user row is inserted at **verification**, never at registration — see `registration_claim` below. |
+| `user` | A person who signs in. | Belongs to exactly one tenant. **Email unique globally** — through `app_credential.email`, whose index is global; `app_user`'s own is per tenant, so the two must be inserted together with the same address (corrected 2026-10-02, finding B28) — which is what enforces the owner's rule that a second business needs a second address (11a). A user row is inserted at **verification**, never at registration — see `registration_claim` below. |
 | `registration_claim` | A pending registration: an address, a hashed token, an expiry. **Not a user** (ADR 0025 decision 5). | Deliberately **not unique on the address**, so two people may attempt the same one; and not tenant-scoped, because it exists before any tenant does. This is what makes the row above possible: the claim holds nothing, verification inserts the user, and the unique index decides — so **"first to verify wins" is a database guarantee rather than application logic** (finding H8). Claims expire in 72 hours and are deleted, so the table cannot become a shadow user list. |
 | `membership_role` | What a user may do inside the tenant. | At least one active owner at all times; the last owner cannot be demoted or deactivated. |
 | `platform_capability` | What one of **our** staff may do. | Every grant has a granter (least privilege is only real with an author). Holding one requires a confirmed second factor (ADR 0021). |
-| `document_settings` | Logo, header details, two colours, default terms. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. |
+| `document_settings` | Logo, header details, two colours, default terms. **Built so far (J8):** the default acceptance bar and the deposit-suggestion threshold only; the rest is owed. | One per tenant. A small fixed set of fields, never free-form CSS or an uploaded template. An absent row means the defaults (bar 3, no deposit suggestion). |
 | `number_series` | Prefix, next number, reset rule (never / yearly / monthly). | One per tenant **per document kind**. Allocation is atomic and gapless per series. |
 
 **Isolation is three layers and the second one had a hole (finding J3, 2026-09-26).** Row-level security
@@ -188,7 +188,9 @@ to anybody outside the tenant.
 
 `quote_issue` is an **immutable snapshot**, written once when Delroy taps *Issue*. It carries every
 line with its frozen description, quantity, unit price, tax treatment, markup and discount, the tax
-rates it used, the currency, the terms wording, the document settings as they were, `sealed_at`, and
+rates it used, the currency, the terms wording, the document settings as they were, **the acceptance bar
+the client is asked to meet** (`acceptance_bar_grade`, resolved at seal from the quote or the tenant's
+default and never changed after — finding J8), `sealed_at`, and
 `catalog_synced_at` — when the prices it froze were last refreshed from the server. **No column on it is ever updated.**
 
 ### 6.1a Sealing, numbering and delivering are three acts, not one (amended 2026-09-25)
@@ -205,6 +207,9 @@ official number offline, and separating them dissolves the contradiction.
 | **Seal** | Freeze the lines, prices, tax rates, currency, terms, settings, totals and `catalog_synced_at` | **No** — happens on the device, offline |
 | **Number** | Allocate from the tenant's series: unique, gapless, answerable to an accountant | **Yes**, or a device lease (deferred) |
 | **Deliver** | Render the PDF, mint the share link, send it | Yes |
+
+*(Pointer 2026-10-02, finding TD14: `docs/design/tax-and-documents.md` T9 replaces `issue_number` with a per-quote number row and a
+per-issue numbering row, keeping this section's argument — no UPDATE on `quote_issue`.)*
 
 **`issue_number` is its own insert-only table** — one row per issue, carrying the series, the number
 and `allocated_at`. This is the load-bearing choice. A nullable `number` column on `quote_issue`,
@@ -247,15 +252,15 @@ including which of three versions they accepted.
 | `quote_section` | A named, ordered group of lines, so a quote reads the way a contractor talks about the job. | Belongs to one quote. Named by review (F14): the requirement existed with no entity to live in. |
 | `quote_line` | A line on the working quote, in a section, ordered. | Belongs to one quote and one section. Recipe-expanded lines remember the recipe, so a recipe change can offer to refresh a draft — never an issue. |
 | `variation` | A change to accepted work: added, removed or altered scope, with its own price. Immutable once recorded; a mistake is corrected by another variation. Carries `client_reference`, a device-supplied idempotency key unique per issue, because it may be recorded offline and replayed — and a duplicate of an append-only row that feeds the ceiling raises it permanently (H11). | First-class, not a new quote — the client has already accepted the original. **Release 1 records it; release 2 makes it signable** (PRD W6a). Until then it carries `recorded_by_user_id` and is what the ceiling in §6.2a measures against, so "who agreed to the extra $40,000" has an answer of *known strength* rather than a signature it does not have. |
-| `acceptance` | The client accepting or declining an issue. | Records the signer's name, timestamp, IP, user agent, the destination actually used and the consent-to-sign (ADR 0024), and **references the `document_render` row whose hash is the document signed** — it does not carry a hash of its own (F17). Immutable. One acceptance per issue. |
-| `acceptance_evidence` | The pieces of evidence behind one acceptance: a code confirmed, a signed document, a deposit paid, later an inbound reply. Append-only. | **The grade is derived from these rows, never stored** (`../design/acceptance-evidence.md`, approved 2026-09-26) — so it rises when evidence arrives and cannot drift, and a tenant-uploaded screenshot **or signed document** is graded 1 rather than higher because it is
+| `acceptance` | The client accepting or declining an issue. | Records the signer's name, timestamp, IP, user agent, the destination actually used and the consent-to-sign (ADR 0024), and **references the `document_render` row whose hash is the document signed** — it does not carry a hash of its own (F17). Immutable. **Many responses per issue, at most one accepted** — declines are unlimited and may be followed by an acceptance; a decline cannot follow an acceptance (J13). |
+| `acceptance_evidence` | The pieces of evidence behind one **accepted** acceptance: the act itself (a link tap, a verified code, the tenant's record), a signed copy on file, a deposit paid, later an inbound reply. Append-only. A decline carries none, and a withdrawn acceptance takes no more. | **The grade is derived from these rows, never stored** — by ONE function, `acceptance_grade()` in `new-app/db/migrations/20260927180000_acceptance_grade/migration.sql`: the highest grade among the rows' kinds, and no grade once withdrawn or superseded (J6, W4; `../design/acceptance-grade.md`). A provider's event is recorded once per tenant (J7, W7). So it rises when evidence arrives and cannot drift, and a tenant-uploaded screenshot **or signed document** is graded 1 rather than higher because it is
 evidence the tenant can fabricate — the grade measures who witnessed the acceptance, never how convincing
 the artefact looks (finding J5). Grade 5 is retired and its number is not reused. |
-| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The sum of issued invoices may never exceed the ceiling, which is defined once in SQL as `issue_ceiling_minor()` and is the single most important arithmetic invariant in the product. |
+| `invoice` | A demand for payment against an accepted issue. | **Deposit, progress and final invoices against one issue** — the top-ranked missing feature. The invoiced figure may never exceed the ceiling. Both are defined once, in SQL — `issue_balance_apply()` and `issue_ceiling_minor()` — and this is the single most important arithmetic invariant in the product. |
 | `invoice_line` | Either a share of the issue (percentage or amount) or a named extra. | Frozen at issue, like the quote. |
-| `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | Never exceeds the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments, retention and credits. |
+| `client_payment` | Money the tenant's client paid them: amount, date, method, reference, optional receipt file. | May exceed the invoice balance. Recording one is derived, not stored: invoice status is **computed** from its payments and credits (retention is not an input in release 1, PRD R1.25; *corrected 2026-10-02, finding B24*). A payment above the balance is recorded as an over-payment, not refused (PRD R1.26, finding B9). |
 | `retention` | A percentage held back and released later. | Releasing it **re-derives** the invoice's status. (The existing application does not, which is a recorded open defect.) |
-| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. |
+| `credit_note` | A reduction after issue. | The only way to reduce an issued invoice, because the invoice itself cannot be edited. Lowers the invoiced figure the ceiling is compared with, so it is also how scope is reduced below what is billed (J4, `docs/design/scope-reduction.md`). Its bounds are enforced in `issue_balance_enforce()`, not restated here. |
 
 **Two more fields the requirements need, named by review (F14).** `quote.client_detail_level`
 (summary or itemised) decides what the client is shown and is **frozen into the issue**, because
@@ -269,8 +274,12 @@ negative amount due. The trade-off is a slightly more expensive read, paid for w
 
 ### 6.2a The money invariant has an owner (amended 2026-09-25)
 
-**The invariant:** the sum of issued invoices against an accepted issue may never exceed the accepted
-total, plus **recorded** variations.
+*(Tax basis, 2026-10-02 — ADR 0027 D7, finding C2: once the GCT design lands, the ceiling and every term compared with it are net of tax; until that migration, the built ceiling is tax-inclusive. The design is `docs/design/tax-and-documents.md` T4, which also holds the ceiling per tax code — finding TD14.)*
+
+**The invariant:** the invoiced figure against an accepted issue may never exceed the accepted total, plus
+**recorded** variations. What counts as invoiced — which invoices, and what credit notes and voids do to
+them — is defined once, in `issue_balance_apply()`, and deliberately not restated here (ADR 0025); J4
+changed it on 2026-09-26 and this sentence did not need to.
 
 **"Recorded", not "accepted", and the definition is not here.** Release 1 builds no variation
 acceptance, so "accepted variations" would name something that does not exist — an invariant reading
@@ -287,7 +296,8 @@ are each individually under the total and together over it. That failure is sile
 over-billing of a real client, and is found by their accountant rather than by us.
 
 **The mechanism: an `issue_balance` row, locked for the duration of the transaction that issues an
-invoice.** One row per accepted issue.
+invoice.** At most one row per issue, opened by `issue_balance_open()` — which does not itself check that
+the issue was accepted; without an acceptance the ceiling is 0 either way (finding V18).
 
 **Amended 2026-09-25 (G2, G12), and the correction matters more than the original.** The first version
 said "take `SELECT … FOR UPDATE` on the issue's `issue_balance` row" and never said what creates that row.
@@ -295,63 +305,72 @@ said "take `SELECT … FOR UPDATE` on the issue's `issue_balance` row" and never
 concurrent invoices, which is the case this exists to stop, would have sailed through. A mechanism with a
 missing precondition is not a mechanism.
 
-**When the row is created: in the same transaction as the acceptance, unconditionally.** An issue becomes
-accepted and acquires its balance row together, or neither happens. That removes the empty case rather
-than defending against it, and it is the only ordering that cannot be forgotten later.
+**When the row is created: by `issue_balance_open()`, which the acceptance path must call in the same
+transaction.** It is not reached by a trigger, so an acceptance inserted without that call has no balance
+row, and nothing can be invoiced against it until one is opened (finding R7). The N2 test in
+`db/test/documents-core.test.ts` reaches that state on purpose. This section said, until 2026-10-01, that
+the row was created "unconditionally" and "cannot be forgotten"; neither was true (R13).
 
 | Column | Kind |
 |---|---|
 | `issue_id` | identity |
-| `accepted_total_minor` | **derived, written once** from the accepted issue's own frozen lines |
+| `accepted_total_minor` | **derived copy** of the accepted issue's header `total_minor` (net `subtotal_minor` once the tax design is built: `docs/design/tax-and-documents.md` T4) |
 | `variations_total_minor` | **derived cache**, re-summed from `variation` rows |
-| `invoiced_total_minor` | **derived cache**, re-summed from issued invoices |
+| `invoiced_total_minor` | **derived cache**, re-summed by `issue_balance_apply()` |
 
 **This table no longer says who writes each column, and the omission is the fix (findings H2 and J12).**
 It said so twice before. The first version named the writers and omitted two the same amendment had
 invented, including the row's own creator (H2). H2's fix deleted the *paragraph* and left the *table
 column* standing two lines above it — and that column was wrong on both of the rows that mattered: it
-credited a credit note as a writer of `invoiced_total_minor`, which it is not and was never meant to be,
-and it claimed every variation takes the lock, which at the time nothing made true (J12, and see J2).
+credited a credit note as a writer of `invoiced_total_minor`, which it was not at the time — J4 later made
+it one, deliberately, and the test below records the change — and it claimed every variation takes the
+lock, which at the time nothing made true (J12, and see J2).
 
 Three attempts, and the third failure was the same shape as the first two. So the fact now has **one
 home** per question, per Rule 7 and ADR 0025, and neither home is prose:
 
 - **Which insert moves which column** is `db/test/documents-core.test.ts`, in the J12 block. It inserts
-  each kind of row and reads all three columns, so a credit note moving nothing is an assertion rather
+  each kind of row and reads all three columns, so what a credit note moves is an assertion rather
   than a claim, and a defect that moved the *wrong* column would fail too.
 - **What makes the call happen at all** is
   `new-app/db/migrations/20260926130000_ceiling_enforced_by_trigger/migration.sql`, whose every
   identifier is checked against the real schema by `tools/check_schema_citations.py`.
 
 That migration's prose says the four trigger tables are the rows that "can move the ceiling or the
-invoiced total". Read strictly that is loose about `credit_note`: a credit note fires the trigger and the
-recompute leaves both totals where they were, deliberately. The trigger set is wider than the set of rows
-that change a number, and it is right to be — a table wired in without being named there raises rather
-than skipping the ceiling. This section does not repeat any of it, because repeating it is what produced
-H2, H2's own fix, and J12.
+invoiced total". Until J4 that was loose about `credit_note`, which fired the trigger and moved nothing;
+since `new-app/db/migrations/20260926200000_scope_reduction/migration.sql` a credit note lowers the
+invoiced total, so the sentence is now exact. A table wired in without being named there still raises
+rather than skipping the ceiling. This section does not repeat which row moves what, because repeating it
+is what produced H2, H2's own fix, J12 — and would have made this paragraph wrong the day J4 landed.
 
-What is worth stating here, because it is the *shape* rather than the list: **no caller chooses to
-maintain this row.** `issue_balance` has no INSERT or UPDATE policy the application can satisfy, so the
-only door is `issue_balance_apply()` and `issue_balance_open()`; and since J2 those are not reached by a
-caller remembering to call them but by triggers on every table that can move a total. The writer set is
-therefore a property of the schema, and `db/test/documents-core.test.ts` executes which insert moves
-which column — including the one that moves nothing.
-
-What enforces it now: `issue_balance` has **no INSERT or UPDATE policy the application can satisfy**, so
-the only way in is `issue_balance_apply()` and `issue_balance_open()`, which set the transaction-local
-flag the write policies require. **The writer set is therefore the set of callers of those two functions,
-and it cannot go stale**, because there is no other door. `db/test/policy-parity.test.ts` asserts the flag
-predicate is present, so the mechanism is checked rather than described.
+**Who can write this row, and the two limits of that, are stated in one place: ADR 0025, decision 2**
+(`docs/adr/0025-five-invariants-move-from-prose-to-code.md`, as amended 2026-09-27). This section does not
+restate them. It did, twice, and both times it was false by execution (R13): it said the application had
+no write policy it could satisfy and "no other door", when the balance-write flag is not a secret (R5);
+and it said both balance functions are reached by triggers, when `issue_balance_open()` is not (R7).
+The first was closed properly on 2026-10-01 — no write grant to the application role at all (R5, the
+privilege model) — and is stated in the ADR, not here.
 
 Issuing an invoice is one transaction: lock the row · re-sum from the rows rather than trusting the
 cached figure · **refuse** if the new total would exceed `accepted_total + variations_total` · insert the
 invoice and update the balance. Re-summing inside the lock is what makes the cached columns a genuine
 cache rather than a second source of truth — the decision is never taken on the cached number alone.
 
-`accepted_total_minor` is a **copy**, and Rule 7 says one rule lives in one place, so its producer is named:
-the acceptance transaction computes it from the issue's frozen lines, and nothing else ever writes it.
-The issue is immutable, so the value it derives from cannot change — which is what makes the copy safe
-here and would not make it safe anywhere else.
+**Where that total comes from (finding J11).** `issue_balance_open()` copies the issue's HEADER
+`total_minor`; it does not read the lines. Until 2026-10-01 nothing tied the header to the frozen lines
+the client saw. Since `new-app/db/migrations/20260927170000_issue_lines_add_up/migration.sql`, the
+database holds every step but one: each line's `line_total_minor` is quantity × unit price rounded half
+away from zero at the cent (negative lines — discounts — round symmetrically); the issue's `subtotal_minor`
+is the sum of its lines, checked at COMMIT; and `total_minor` is `subtotal_minor + tax_minor`. *(Pointer 2026-10-02, finding TD14: the owed tax check is taken up by
+`docs/design/tax-and-documents.md` T5, "the quote's tax is an estimate".)* **Tax is the
+step not held:** `tax_minor` against the rate and each line's treatment is owed as its own item with the
+GCT rules. The tests are the J11 block of `db/test/documents-core.test.ts`.
+
+`accepted_total_minor` is a **copy** of the accepted issue's frozen total. The issue is immutable, so the
+value it copies cannot change — which is what makes the copy safe here and would not make it safe
+anywhere else. That no variation, invoice, void or credit note moves it is asserted in the J12 block of
+`db/test/documents-core.test.ts`, which reads all three columns after each insert; it is not stated here
+as a list of writers.
 
 **The reconciliation job has a cadence and an action**, because a job with neither is a comment: nightly,
 per tenant, it rebuilds all three derived columns from the underlying rows and compares. On a mismatch it
@@ -359,8 +378,10 @@ per tenant, it rebuilds all three derived columns from the underlying rows and c
 looked. It does not silently self-heal — self-healing would erase the evidence of the defect that caused
 the drift.
 
-Retention and credit notes feed the invoice *status* derivation, never this ceiling: money held back or
-credited does not raise how much may be billed.
+Retention and credit notes never *raise* this ceiling: money held back or credited does not increase how
+much may be billed. A credit note does **lower the invoiced figure** compared with it (J4, amended
+2026-09-26), which is what makes a scope reduction below what is already billed representable — see
+`docs/design/scope-reduction.md`, and `db/test/documents-core.test.ts` for which insert moves which column.
 
 **This is money arithmetic, so it is judgement-class work under Rule 16.5** and its tests are planted
 defects: two concurrent invoices, a queued offline replay, and a variation arriving between the read
@@ -376,28 +397,38 @@ paragraphs to disagree about.
 
 | State | Is true when |
 |---|---|
-| `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered |
+| `sealed_awaiting_number` | no `issue_number` row — sealed on a device, not yet numbered (the per-issue numbering row once the tax design is built: `docs/design/tax-and-documents.md` T9) |
 | `issued` | an `issue_number` row exists |
+| `withdrawn` | the issue's one accepted row has a withdrawal — final for this issue; the remedy is the next revision (J13) |
 | `accepted` | an `acceptance` row exists with outcome `accepted` and no withdrawal |
-| `declined` | a declining `acceptance` row exists |
+| `declined` | a declining row exists and no accepted one — a client may still accept afterwards (J13) |
 | `superseded` | a later revision of the same quote exists |
 
-Read the function for the precedence between them; it is eleven lines and it is authoritative.
+Read the function for the precedence between them (its latest definition is in
+`new-app/db/migrations/20260927160000_acceptance_responses/migration.sql`); it is authoritative.
 
 **Transitions that must be impossible, and are therefore tested** (`db/test/documents-core.test.ts`):
-editing or deleting an issue · editing an acceptance · accepting twice · invoicing past the ceiling ·
-sealing a second issue for the same (quote, revision) (G4) · writing `issue_balance` outside its function
-· withdrawing an acceptance twice · deleting a balance row.
+editing or deleting an issue · editing an acceptance · accepting twice, or after a withdrawal · a decline
+after an acceptance · withdrawing a decline · invoicing past the ceiling ·
+sealing a second issue for the same (quote, revision) (G4) · withdrawing an acceptance twice · deleting a
+balance row. (This list named "writing `issue_balance` outside its function" until 2026-10-01; it is not
+impossible — the write flag was not a secret, R5 — finding S7. Since 2026-10-01 it is refused by the
+grants, `docs/THREAT-MODEL.md` §4e; it stays off this list because the database owner can still do it.)
 
 **Withdrawal, which is possible and bounded (G8, corrected by H4).** An acceptance may be withdrawn —
 recorded, audited, with a reason — which returns the issue to superseded-able and drops its ceiling to
-zero. It is **refused while any invoice OR any recorded variation exists**, enforced by a trigger rather
-than by a caller: the first version named only invoices, and the same release had given an accepted issue
-two more financial dependants. Once either exists the remedy is a credit note and a fresh quote.
+zero. It is **refused while any invoice still has money billed on it**, enforced by a trigger rather than
+by a caller (`acceptance_withdrawal_guard()`). For a wrong document with money demanded, the remedy is to
+void or fully credit each invoice, withdraw, and issue the next revision (K4 and L1, owner's decisions
+2026-09-27; before them, a credited issue's ceiling reopened with no way to close it). Variations used to
+block withdrawal too (H4), because they would have become a live second copy of agreed work on a dead
+issue; since a withdrawn or superseded issue takes no new variation, they are inert history instead.
 
-So "superseding an accepted issue" is not a forbidden transition, it is an ordering: withdraw first —
-which is possible only while no money hangs off it — and the issue is no longer accepted, so superseding
-it orphans nothing.
+So "superseding an accepted issue" is not a forbidden transition, it is an ordering. An accepted issue with
+nothing financial against it may be superseded directly, and its ceiling falls to 0. Once money has moved,
+withdraw first — possible once nothing is still billed — and the issue is no longer accepted, so
+superseding it orphans nothing. Only the latest revision can hold a live ceiling, so it is the only one a
+new revision is judged against (`quote_issue_one_live_ceiling()`, L2).
 
 ---
 
@@ -409,7 +440,7 @@ it orphans nothing.
 |---|---|---|
 | `outbound_message` | One queued send: channel (email / WhatsApp / link), recipient, template, status, attempts, provider id. | **Every send goes through this table.** A reminder, a digest and a quote email are one entity with three templates, so "was it sent" has one answer and retries have one place to live. Idempotent per (document, template, recipient). |
 | `share_link` | A capability URL for a client with no account. | High-entropy token, hashed at rest, scoped to one issue, expiring, revocable. It is a credential and is treated as one. |
-| `document_render` | A produced PDF: storage key, hash, the settings used. | Immutable, and the hash is what `acceptance` and `quote_issue` point at. |
+| `document_render` | A produced PDF: storage key, hash, the settings used. | Immutable. The render points at its issue, not the reverse, and an `acceptance` points at the render of its OWN issue (R9; the J9 migration said this document was amended to say so, and it was not until 2026-10-01 — finding R10). |
 
 ### Work — deliberately shallow
 
@@ -456,15 +487,21 @@ records its own bypass gets reconciled.
 Brief §13 asks for conflict rules per entity. One table, because a general rule would be wrong
 somewhere expensive.
 
+*Amended 2026-10-02 (ADR 0027 D1, ADR 0028; finding C3).* **Release 1's offline is seal-only, and it arrives
+with the mobile app, after an online web launch.** In release 1 the directory is read-only offline, a draft
+is edited on one device at a time (a stale push is refused, never merged), and variations are recorded
+online. The "create", "full edit / merge by line" and offline-variation cells below describe **release 2**,
+where the rest of the sync engine lands.
+
 | Entity | Offline | On conflict |
 |---|---|---|
 | Directory (materials, rates, clients, recipes) | read, and create new | **Server wins** on fields; local creations always push. |
 | `quote` draft + lines | full edit | **Merge by line**, with a review step when both sides changed one line. Never silently discard a line. |
 | `quote_issue` | **seal** (no number yet) | Append-only, so the ROW never conflicts — but two devices can seal the same quote, which is not a row conflict and is handled below (G4) |
-| `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series |
+| `issue_number` | **no** — the server allocates at sync (release 2: from a device lease) | Cannot conflict: one row per issue, unique per series. Replaced by the per-quote number and per-issue numbering rows (`docs/design/tax-and-documents.md` T9) |
 | `variation` | create | Append-only; the ceiling is re-summed under the lock at sync (§6.2a), never computed on the device. A replay is refused by `client_reference`, not merged |
 | `issue_balance` | **no** — server-side only, and never synced | It is a derived cache behind a lock. A device that could write it could defeat the lock |
-| `acceptance` | **no** — the client signs online (ADR 0024) | First write wins; a second is refused, not merged |
+| `acceptance` | **no** — the client signs online (ADR 0024) | Never merged. Declines are all kept; the first ACCEPTANCE wins and a second is refused; a decline after an acceptance is refused (J13, finding S8) |
 | `invoice`, `client_payment` | read only in v1 | — |
 | `project`, `purchase`, `labour_entry` | create and edit | Last-write-wins per row, with the audit trail carrying the loser. |
 | Entitlements | cached with a **grace period** | Server wins on sync; the grace period is what stops a signal outage from stopping work. |
@@ -484,6 +521,10 @@ cannot touch. What it does: revokes the session, so the device can no longer syn
 store is wiped **when it next connects**. Until then the tenant's catalog, client book and sealed documents
 are on that phone. The mitigation that actually works is expiry, and the honest statement is in
 `THREAT-MODEL.md` §4a rather than a claim here that we can wipe a phone we cannot reach.
+*Amended 2026-10-02 (ADR 0027 D12, PRD R1.18d and R1.18f; findings B23, C3):* only a sign-out that marks the
+device **lost** wipes it on reconnection. An ordinary revocation — an expired session, a password change —
+asks the user to sign in again and **pushes the outbox first**; and no automatic process, expiry included,
+may destroy an unsynced seal. The "expiry" above applies to cached reads only.
 
 **Two devices sealing one quote is the hazard the row-level answer hides (G4).** Delroy's phone and his
 foreman's tablet both hold the draft; both go offline; both seal. Neither push conflicts — each is an
@@ -534,10 +575,13 @@ snapshot that has never reached the server — a retention limit that can destro
 financial document is not a retention limit, it is data loss on a timer.
 
 **What a seal must be re-checked against at sync**, because sealing offline means none of it was checkable
-at the time: the tenant is not suspended · the user is still active and still a member · the client has not
-been deleted · the entitlement still permits it (ADR 0023 meters at *numbering*, so the month is the month
-it syncs) · and no colleague has already sealed that revision. Each refusal is explained to the user in
-terms of what happened, not as a sync error.
+at the time: the tenant is not suspended · the user is still active and still a member (release 1 has no roles —
+every member may seal; a role check joins when roles arrive in release 3, PRD R1.18e, finding C3) · the client has not been deleted · the entitlement still permits it (ADR 0023 meters
+at *numbering*, so the month is the month it syncs) · and no colleague has already sealed that revision.
+Each refusal is explained to the user in terms of what happened, not as a sync error. A seal refused because
+its client was deleted becomes a `rejected_seal` with that reason; the tenant restores the client and
+resolves it (finding H20). **Not re-checked, on purpose:** the catalogue prices the seal froze — the
+snapshot is self-contained, and a catalogue change must not void work already priced.
 
 **The residual risk, named rather than dressed up:** a device that seals and never syncs holds the only
 copy. Mitigations are a visible pending count, a warning after a few days, and the fact that the draft

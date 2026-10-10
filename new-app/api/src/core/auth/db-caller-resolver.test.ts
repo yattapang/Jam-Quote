@@ -60,9 +60,14 @@ async function giveSession(
   version: number,
   options: { expired?: boolean; revoked?: boolean; mfaPending?: boolean } = {},
 ) {
+  // app_session is reachable only through its door functions (privilege model, D1), so the fixture
+  // writes as the owner and then puts back whichever role the test was running as.
+  const { rows } = await db.query<{ role: string }>("SELECT current_user AS role");
+  await db.exec("RESET ROLE");
   await db.query(
-    `INSERT INTO app_session (id, user_id, tenant_id, version, expires_at, revoked_at, mfa_pending)
-     VALUES ($1, $2, $3, $4,
+    // The fixture's id doubles as the client's secret; the row stores its hash, as sign-in does (D2).
+    `INSERT INTO app_session (id, token_hash, user_id, tenant_id, version, expires_at, revoked_at, mfa_pending)
+     VALUES ($1::text::uuid, encode(sha256(convert_to($1::text, 'UTF8')), 'hex'), $2, $3, $4,
              now() + ($5::text)::interval,
              CASE WHEN $6::boolean THEN now() ELSE NULL END,
              $7::boolean)`,
@@ -76,6 +81,7 @@ async function giveSession(
       options.mfaPending ?? false,
     ],
   );
+  if (rows[0]?.role === APP_ROLE) await db.exec(`SET ROLE ${APP_ROLE};`);
 }
 
 /** Grants a platform capability, which is what makes a second factor mandatory (Rule 5.1). */
