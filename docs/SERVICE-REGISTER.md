@@ -45,7 +45,7 @@ and `docs/design/third-party-register.md` §10.
 | **Sentry** (Developer plan) | Error tracking, from the API only | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | Error events at rest in the EU (Frankfurt); account data in the US | Chosen, not yet in use (B3) | RG4 | Another error tracker; the redacted shape is ours |
 | **UptimeRobot** (Solo) — the owner's choice after the read (RR6), replacing Better Stack | Uptime checks and heartbeats | No — URLs and check names | — | Chosen, not yet in use (B3) | RG5 | Another monitor; the checks are plain HTTP |
 | **Microsoft 365** (Business Basic), held by the Canadian company | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Mailbox content at rest in Canada (a tenant provisioned in Canada) | Chosen, not yet in use (OA12) | RG6; SF2 | Any mail provider: change the domain's MX record, export the mailbox |
-| **The transactional email provider** | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses and documents sent | Chosen in A6 | Not chosen | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
+| **Amazon SES** (AWS), in its own production email account | Every email the product sends: codes, quotes, invoices, reminders, account mail, support replies | **Yes** — recipient addresses, and each message while it is delivered; **the body is not kept after sending** (to confirm at C1); bounced addresses on its suppression list | Canada (Central) | Chosen, not yet in use (C1); production use needs AWS's approval (OA29) | A6 (`docs/design/outbound-messaging.md` MS3) | Resend, the fallback; the one messaging service (Rule 11) makes a swap one adapter |
 | **The Canadian company** (ADR 0033) | Holds the mailbox's Microsoft account (RG6); sells subscriptions through Stripe | **Yes** — support mail, including what clients write; tenants' billing details | Canada | Chosen (RG6); its role goes to the attorney (OA10) | RG6; ADR 0033 | The mailbox moves to the Jamaican company's own Microsoft tenant: a migration |
 | **Stripe**, through the Canadian company | Tenants' subscriptions by card | **Yes** — the tenant's billing details; card numbers never touch us | Canada and the United States | Test mode only (OA21) | ADR 0033; A10 | WiPay, the fallback (ADR 0033; OA8) |
 | **GitHub** (Team, the business's organisation) | Code, CI, Claude's pull requests | No — code and synthetic data only | United States | In use on a personal account until OA25 | OP8 | Any git host; CI rewritten |
@@ -61,8 +61,8 @@ the Act's s. 16(2)(g)). Only services that hold personal data appear:
 
 The list, with where the data rests and where it may be processed, is kept **once**, in
 `docs/design/third-party-register.md` RG8 (amended after its read: the Canadian company and Vercel added, and locations
-qualified as "at rest"). In short: DigitalOcean, AWS, the Canadian company, Microsoft, Vercel, the transactional email
-provider (A6), Stripe and Sentry.
+qualified as "at rest"). In short: DigitalOcean, AWS (which also sends our email, through SES — A6), the Canadian
+company, Microsoft, Vercel, Stripe and Sentry.
 
 All the providers are United States companies: data held in Canada can still be reached by US legal process (OP2's
 caveat). **The privacy notice must say so** (E6). The draft notice on the site today (`new-app/web/content/legal.ts`)

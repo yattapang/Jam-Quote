@@ -308,7 +308,7 @@ A ticket has copies outside its row, and **each copy has its own rule** *(SR7)*:
 | The ticket, its messages and its diagnostics | Our database | 24 months after closing | A daily job, through a named door (AP10 of `docs/design/api-layer.md`) |
 | An unconfirmed email ticket (support inbox) | Our database | 90 days if never confirmed; then as a ticket | The same job |
 | Audit entries about a ticket | Our database | 7 years (ADR 0020) | They hold only the ticket's reference and category, so there is nothing personal to delete |
-| Our replies, as sent | The transactional email provider (A6) | The shortest retention the provider allows | The provider's own setting, chosen in A6. Its register row lists support replies among what it holds |
+| Our replies, as sent | The transactional email provider (A6) | The shortest retention the provider allows | The provider's own setting, chosen in A6. Its register row lists support replies among what it holds. *(Pointer 2026-10-09: A6 chose Amazon SES, which does not keep the body after sending — `docs/design/outbound-messaging.md` MS10)* |
 | Mail received, sent, and in trash | The mailbox | 90 days; a message made into a ticket is deleted at once | An automatic rule in the mailbox provider (the deciding requirement in SF2) |
 | Error-tracking events linked to a ticket | The error-tracking service (A5) | The provider's retention, at most 90 days | The provider's setting; the events hold no personal data (SF5) |
 | Backups | The database host (A4) | The backup period set in A4 | Deleted data remains in a backup until that backup expires; restore drills run in an isolated environment that is destroyed after the drill. The privacy notice says so |

@@ -473,7 +473,8 @@ reading back for a drill costs AWS's transfer price on a few gigabytes.
 |---|---|---|
 | Production backup | The locked backup bucket | The owner, with MFA. The backup job holds an add-only key; the morning backup-age check a list-only key (RG5; OP4) |
 | Production upload scanning | The quarantine bucket (unversioned) and GuardDuty (RG3) | The owner, with MFA. The API holds a `PutObject`-only key; the files worker a key that reads tags, reads contents only when clean, and deletes. Both of AWS's bucket-policy statements, and the organisation policy reserving the scan tag to GuardDuty *(RR3)* |
-| Staging | Staging's backup bucket and quarantine bucket | The owner, with MFA |
+| Staging | Staging's backup bucket and quarantine bucket; SES, **kept in the sandbox** (A6) | The owner, with MFA |
+| *(Added by A6, 2026-10-09)* Production email | SES in Canada (Central): its configuration sets, SES tenants and SNS event topics (`docs/design/outbound-messaging.md` MS3) | The owner, with MFA. The production API's job worker holds a key that can only send through those configuration sets |
 
 The organisation's own management account holds nothing but billing and the organisation policy that reserves the `GuardDutyMalwareScanStatus` tag to GuardDuty (RR3). Separate accounts mean a leaked scanning key
 opens nothing in the backup store, and a staging key opens nothing in production (RG1 test 6).
@@ -499,7 +500,7 @@ rows (Render, Neon, Vercel Hobby, the keep-warm workflow) move to a short sectio
 | **Sentry** (Developer plan) | Error tracking | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | Error events at rest in the EU (Frankfurt); account data and settings in the US | RG4 | Another error tracker; the redacted shape is ours |
 | **UptimeRobot** (Solo; the owner's decision after RR6) | Uptime checks and heartbeats | No — URLs and check names | — | RG5 | Another monitor; the checks are plain HTTP |
 | **Microsoft 365** (Business Basic) | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Mailbox content at rest in Canada, for a tenant provisioned in Canada by the Canadian company (RG6) | RG6 | Any mail provider: change the domain's MX record, export the mailbox |
-| **The transactional email provider** | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses and documents sent | Chosen in A6 | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
+| **The transactional email provider** — *Amazon SES in Canada (Central), chosen in A6 (`docs/design/outbound-messaging.md` MS3), 2026-10-09* | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses, and each message while it is delivered | Canada (Central) | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
 | **The Canadian company** (Solvnow, ADR 0033) | Holds the mailbox's Microsoft account (RG6), and sells subscriptions through Stripe | **Yes** — support mail, including what clients write; tenants' billing details | Canada | RG6; ADR 0033 | The mailbox moves to the Jamaican company's own Microsoft tenant: a migration |
 | **Stripe**, through the Canadian company | Tenants' subscriptions by card | **Yes** — the tenant's billing details; card numbers never touch us | Canada and the United States | ADR 0033; A10 | WiPay, the fallback (ADR 0033; OA8) |
 | **GitHub** (Team, the business's organisation) | Code, CI, Claude's pull requests | No — code and synthetic data only | United States | OP8 | Any git host; CI rewritten |
@@ -522,7 +523,7 @@ s. 16(2)(g)). Only services that hold personal data appear:
 | **The Canadian company** (Solvnow) | Holds our email inbox's account, and sells subscriptions | Canada | Canada |
 | Microsoft, for the Canadian company | Our email inbox | Canada | Under its terms, including outside Canada |
 | Vercel | Delivers the website and web app; **data passes through, nothing is stored** | — | Its global network |
-| The transactional email provider | Sending email | *(A6)* | *(A6)* |
+| Amazon Web Services (SES) — *chosen in A6* | Sending email | Canada (messages in transit; bounced addresses) | Under its terms |
 | Stripe | Subscription payments | Canada and the United States | Under its terms |
 | Sentry | Error reports, built to contain no personal data | European Union (error events) | The United States for account data |
 

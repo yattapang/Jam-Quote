@@ -1,7 +1,8 @@
 # Design: outbound messaging — one service, the email provider, delivery status, opt-out and caps
 
-**Status: PROPOSED — awaiting the owner.** Build plan step A6 (`docs/BUILD-PLAN.md`). Nothing here is built until C1;
-the provider's account and the domain's records are owner actions (§12).
+**Status: APPROVED by the owner, 2026-10-09 — every recommendation, MS1-MS10** ("approved"). Build plan step A6
+(`docs/BUILD-PLAN.md`). Nothing here is built until C1; the provider's account and the domain's records are owner
+actions (§12).
 
 Date: 2026-10-09 · **Answers** `docs/PLANNING-AUDIT.md` §7 item 6 (one service, channels, delivery status and bounces,
 opt-out, message caps; always the issued snapshot, as a PDF or an expiring link; per-tenant sender name and reply-to;
@@ -383,7 +384,7 @@ the body.
 
 ## 12. What gets built, tests, what this does not do, costs, owner actions, sources
 
-**The decisions put to the owner:**
+**The decisions, as approved by the owner on 2026-10-09:**
 
 | # | Decision | Recommended |
 |---|---|---|

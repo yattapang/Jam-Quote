@@ -1140,6 +1140,11 @@ are judgement-class (Rule 16.2).* Ten decisions, MS1-MS10:
 mistake a design like this could repeat — A5's RR2, RR4, RR6-RR10, A4's OR11, M13-M17, M23, M39, M43, M44 — to the
 line that answers it, for the read to attack. New owner action OA29 (SES production access, long lead); OA6, OA10 and
 OA11 made precise on approval. Next: the owner's approval.
+**Approved by the owner, 2026-10-09:** MS1-MS10 ("approved"). CI was read first (M44): on `8f4f97e` the push run
+succeeded. On approval, in one change (M13's lesson), every document that waited on A6: the register's §0 row and short
+list name Amazon SES; A5's RG7 gains the production email account and RG8 its row; OP2's list, OP4's keys and OP10's
+row; SF7's pointer; the data-protection reading's §5 row; OA6, OA10 and OA11 made precise, and **OA29 added** to batch
+2. Next: the independent read, brief `docs/briefs/2026-10-09-messaging-design-read.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

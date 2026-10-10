@@ -203,7 +203,7 @@ the Data Protection Act was read. The ADR carries a dated note pointing here onc
 **Services that still sit outside Canada**, listed for the registration and the privacy notice (s. 16(2)(g)):
 - Stripe, through the Canadian company (Canada and the United States);
 - Vercel (in transit only, as above);
-- the transactional email provider (A6);
+- the transactional email provider (A6) — *chosen 2026-10-09: Amazon SES in Canada (Central), so in fact inside Canada (`docs/design/outbound-messaging.md` MS3)*;
 - error tracking (A5: an EU or Canadian data region where offered);
 - GitHub, which holds code and synthetic data only — never personal data.
 
@@ -279,6 +279,9 @@ the owner prefers.
 | *(A5)* The files worker's database login, able to call one door function only (RG3) | The files worker | The API, staff, Claude |
 | *(A5)* The backup bucket's list-only key, for the morning backup-age check (RG5) | The production API's job worker | Staff, Claude |
 | *(A5)* Sentry's read-only API token, once the Team plan is bought for the console's error link (RG4) | The production API | Staff, Claude |
+| *(A6)* The SES sending key, limited to sending through the production email account's configuration sets (MS3, MS10) | The production API's job worker | Staff, Claude, the files worker |
+| *(A6)* The reminder opt-out token's signing key (MS7) | The production API | Everyone else |
+| *(A6)* Staging's own SES key, in the sandbox | Staging's API | Production |
 | The staging smoke tenant's login | Staging's smoke-check job | Production; it opens nothing there |
 
 - **No key is shared between environments.** Staging has its own of everything, and **production's checks never trust
@@ -632,6 +635,7 @@ outage.
 | Uptime monitor and heartbeat (A5) | Free plan | Number of checks, alert channels | More checks needed, or phone alerts wanted | The paid plan | Priced in A5 |
 | Object storage for files (A5) | Free allowance | Stored gigabytes | 80% | Pay per gigabyte | Priced in A5 |
 | CI minutes (GitHub Actions) | The plan's monthly allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
+| *(A6)* Email sending (SES) | Pay per use: US$0.10 per 1,000 | AWS's sending quota; the account's bounce and complaint rates | 80% of the quota; the account alarm (MS8) | A quota raise on request; the fallback provider if refused | About US$3 a month at 30,000 emails |
 | Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |
 | Round-the-clock response | Working hours only (OP7) | One person | A paying contractor needs a stated response time, or **50 paying contractors** | A paid on-call arrangement, or a second responder | Decided then |
 
