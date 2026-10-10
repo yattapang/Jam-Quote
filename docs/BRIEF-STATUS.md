@@ -1403,3 +1403,13 @@ Items 1 and 2 were done on 2026-09-24. `COMPLIANCE-REVIEW.md` adds one that outr
 9. **A `TradePack` in core** with the guard that fails on a trade branch (ADR 0017), before the
    catalog work makes construction assumptions hard to remove.
 10. Answer the seven open questions, each as an ADR or a PRD entry.
+
+**Merged 2026-10-10, at the owner's instruction ("merge yattapang/Jam-Quote#3"):** pull request #3 merged into `main` as
+merge commit `a94ee0b`, after CI passed on its head `b844a6c`. A merge commit, not a squash or rebase, because the build
+plan's evidence lines cite branch commits by SHA; all six cited commits were checked reachable from `main`, and CI on
+`main`'s merge commit passed every job. Work continues on `claude/admiring-fermat-41btub` towards the next pull request.
+
+**Design drafted 2026-10-10: document settings and the PDF** (`docs/design/document-settings-and-pdf.md`, build plan A7).
+*Delegation (Rule 16.5), declared before starting: Opus, main session — what a client receives as the record of a
+commitment, and the hash that makes it evidence, are judgement-class.* Next: the owner's approval.
+
