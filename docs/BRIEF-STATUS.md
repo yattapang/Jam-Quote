@@ -1476,3 +1476,9 @@ expected. Next: a scoped re-check, brief `docs/briefs/2026-10-10-mechanical-clai
 inline or backticked `<!--`, invisible characters in the phrase). **Answered by replacing the shape** (Rule 21.9): every
 line of a design is read, whatever Markdown makes of it (M47's second addendum); 28 runs in a worktree, all as
 expected. Next: a second re-check, brief `docs/briefs/2026-10-10-mechanical-claims-recheck-2.md`.
+
+**Returned 2026-10-10: the second re-check of Rule 24.7's tool — not closable** on three untrue docstring claims (a
+split inside a quote, inline HTML inside the phrase, "invisible" meaning only Cf). Fixed, with 41 runs in a worktree;
+and the tool's threat model is now written down — an author's honest over-claim, not deliberate disguise, which a
+reviewed diff shows — with the disguises that still pass listed (M47's third addendum). Next: a final, **bounded**
+check of the docstring's claims, brief `docs/briefs/2026-10-10-mechanical-claims-recheck-3.md`.

@@ -17,19 +17,31 @@ one class, so the shape was replaced: **this tool reads no Markdown structure at
 design that says the verdict — in a table, in prose, in a fence, in a comment, in a quote — must cite the brief. A
 design that wants to *describe* the verdict without claiming it words the description otherwise, or cites the brief.
 
+## What it guards against
+
+**An author's honest over-claim, in whatever formatting the author happens to use** — the mistake M45 and M47 record.
+It is not a defence against someone with commit access deliberately disguising the phrase: every such disguise is a
+visible edit in a reviewed diff, and the closing check reads the design. The second re-check
+(`docs/briefs/2026-10-10-mechanical-claims-recheck-2.md`) tried 87 inputs; the disguises it found that still pass are
+listed below, so the limit is stated rather than chased (Rule 21.4).
+
 ## What it does
 
-1. Reads every tracked `docs/design/*.md`, line by line, and normalises each line for matching: HTML entities decoded
-   (`&nbsp;`), Unicode NFKC (non-breaking and fullwidth forms), every invisible format character removed (Unicode
-   category Cf: zero-width spaces and joiners, soft hyphens) — read twice, once dropped and once as a space, so both
-   "Mech<ZWSP>anical now" and "Mechanical<ZWSP>now" are seen — emphasis and code marks (`*`, `_`, backtick) dropped,
-   and whitespace collapsed.
+1. Reads every tracked `docs/design/*.md`, line by line, and normalises each line for matching: inline HTML tags and
+   comments removed (`Mechanical<span></span> now`), HTML entities decoded (`&nbsp;`, `&#77;`), Unicode NFKC
+   (non-breaking and fullwidth forms), invisible characters removed — every format character (Unicode category Cf:
+   zero-width spaces and joiners, soft hyphens, tag characters) and the blank-rendering characters in `BLANKS` (the
+   combining grapheme joiner, variation selectors, Hangul fillers, the braille blank) — read twice, once dropped and
+   once as a space, so both "Mech<ZWSP>anical now" and "Mechanical<ZWSP>now" are seen; emphasis and code marks (`*`,
+   `_`, backtick) dropped; whitespace collapsed.
 2. A line whose normalised text says "mechanical now" (any case; "not mechanical now" is not the verdict) must cite, in
    backticks, at least one `docs/briefs/<name>.md` that is a tracked file, and at least one cited brief must hold a
    ```check block whose text names this design's own path — a check that `tools/run_brief.py` ran, on the commit the
    brief names, against this design.
-3. The phrase split across two lines ("Mechanical" at the end of one, "now" at the start of the next) fails too, asking
-   for it to be rejoined: Markdown renders the break as a space.
+3. The phrase split across two consecutive lines ("Mechanical" ending one, "now" starting the next) fails too, asking
+   for it to be rejoined: Markdown renders the break as a space. Before that test, each line's leading blockquote
+   markers, list markers and table pipes, and a trailing hard-break backslash, are set aside, so a split inside a
+   quote or a list is seen.
 4. Prints its coverage every run (Rule 21.1), and fails, naming file, line and what is missing.
 
 ## What it does NOT prove (Rule 21.4)
@@ -40,8 +52,15 @@ design that wants to *describe* the verdict without claiming it words the descri
 - That the check still passes today. A brief's checks run on the commit it names; a later edit can break them unseen.
 - Other wordings of the verdict ("mechanically enforced", "a guard exists"). The verdict is a fixed phrase on purpose
   (A6's §13); a new wording is a reason to extend this tool, not to evade it.
-- The phrase split across more than two lines, or by characters that are not invisible (a hyphen, a letter look-alike
-  that NFKC does not fold, such as Cyrillic "о" for "o").
+- The phrase split across more than two lines (with a blank-looking line between: an HTML comment, `&nbsp;`, a line of
+  zero-width characters), or split into two table cells or by `<br>` — Markdown then shows the two words apart.
+- Look-alike letters NFKC does not fold (Cyrillic "о" for "o"), and combining accents on a letter.
+- Invisible characters outside Cf and `BLANKS`. The list is the ones the second re-check found; Unicode has no
+  "renders as nothing" property this tool can ask.
+- A word ending in "not" before the phrase ("cannot mechanical now") is read as "not mechanical now" only when "not"
+  is a whole word; "no<ZWSP>t mechanical now" fails, a harmless false alarm.
+- That a cited brief's check block names the design *as the design*: a mention in a `#` comment line of the block, or
+  a longer path that contains the design's (`….md.bak`), satisfies it.
 - Only `docs/design/`. ADRs, the PRD and the rules are not scanned.
 - It is deliberately stricter than Markdown: a verdict inside a code block or a comment, which a reader never sees,
   still fails. Word it otherwise.
@@ -58,8 +77,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-VERDICT = re.compile(r"(?<!not )\bmechanical now\b", re.IGNORECASE)
-SPLIT = re.compile(r"(?<!not )\bmechanical$", re.IGNORECASE)
+VERDICT = re.compile(r"(?<!\bnot )\bmechanical now\b", re.IGNORECASE)
+SPLIT = re.compile(r"(?<!\bnot )\bmechanical$", re.IGNORECASE)
+# Characters that render as nothing but are not format characters (category Cf), found by the second re-check.
+BLANKS = set("\u034f\u115f\u1160\u3164\uffa0\u2800") | {chr(c) for c in range(0xFE00, 0xFE10)} | {
+    chr(c) for c in range(0xE0100, 0xE01F0)}
+HTML_BITS = re.compile(r"<!--.*?-->|</?[A-Za-z][^<>]*>")
+# Set aside before the split test: leading blockquote, list and table marks; a trailing hard-break backslash.
+LEAD = re.compile(r"^(?:[>|*+\-]|\d+[.)])(?:\s|$)|^>+")
 STARTS_NOW = re.compile(r"^now\b", re.IGNORECASE)
 BRIEF_CITE = re.compile(r"`(docs/briefs/[^`\s]+\.md)`")
 CHECK_BLOCK = re.compile(r"^```check[^\n]*\n(.*?)^```", re.DOTALL | re.MULTILINE)
@@ -74,18 +99,31 @@ def check_blocks(brief: str) -> list[str]:
     return CHECK_BLOCK.findall((ROOT / brief).read_text(encoding="utf-8"))
 
 
-def normalised(line: str, invisible: str = "") -> str:
+def normalised(line: str, invisible: str = "", strip_html: bool = True) -> str:
     """The line as read for the verdict: entities decoded, NFKC, invisible characters replaced by `invisible`, emphasis
     marks dropped, whitespace collapsed."""
-    text = unicodedata.normalize("NFKC", html.unescape(line))
-    text = "".join(invisible if unicodedata.category(c) == "Cf" else c for c in text)
+    text = unicodedata.normalize("NFKC", html.unescape(HTML_BITS.sub("", line) if strip_html else line))
+    text = "".join(invisible if unicodedata.category(c) == "Cf" or c in BLANKS else c for c in text)
     text = re.sub(r"[*_`]", "", text)
     return re.sub(r"\s+", " ", text).strip()
 
 
+def prose(line: str) -> str:
+    """The line as text for the split test: normalised, then its leading quote, list and table marks and a trailing
+    hard-break backslash set aside."""
+    text = normalised(line)
+    while True:
+        stripped = LEAD.sub("", text).strip()
+        if stripped == text:
+            break
+        text = stripped
+    return text.rstrip("\\").rstrip()
+
+
 def says_verdict(line: str) -> bool:
-    """Read twice: invisible characters dropped ("Mech<ZWSP>anical") and read as a space ("Mechanical<ZWSP>now")."""
-    return any(VERDICT.search(normalised(line, sep)) for sep in ("", " "))
+    """Read four ways: invisible characters dropped ("Mech<ZWSP>anical") and read as a space ("Mechanical<ZWSP>now"),
+    each with inline HTML removed ("Mechanical<span></span> now") and kept (so a verdict inside a comment still counts)."""
+    return any(VERDICT.search(normalised(line, sep, strip)) for sep in ("", " ") for strip in (True, False))
 
 
 def main() -> int:
@@ -98,7 +136,7 @@ def main() -> int:
     failures: list[str] = []
     for design in designs:
         lines = (ROOT / design).read_text(encoding="utf-8").splitlines()
-        plain = [normalised(line) for line in lines]
+        plain = [prose(line) for line in lines]
         for i, line in enumerate(lines):
             n = i + 1
             if i + 1 < len(plain) and SPLIT.search(plain[i]) and STARTS_NOW.match(plain[i + 1]):

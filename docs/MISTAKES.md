@@ -1032,3 +1032,14 @@ split over two lines fails. Stricter than Markdown on purpose (a verdict in a co
 mechanism line, the CI comment and two legend lines (A6, A7) were reworded to match. **28 runs in a disposable worktree**
 — every case from both checks, E1-E4, a split phrase, prose and HTML-cell verdicts — all as expected; the first run of
 the replacement still missed "Mechanical<ZWSP>now", found by its plant and fixed before commit. A second re-check follows.
+
+**And its limits stated, not chased (2026-10-10).** The second re-check (`docs/briefs/2026-10-10-mechanical-claims-recheck-2.md`,
+87 inputs) found the replacement held for every earlier escape, but three docstring claims were untrue: a split inside
+a blockquote was missed (M1), inline HTML inside the phrase got past it (M2), and "invisible" meant only category Cf
+(M3). Fixed: the split test sets aside quote, list and table marks and a hard-break backslash; inline HTML is removed in
+one of four readings (and kept in another, so a verdict inside a comment still counts); a named set of blank-rendering
+characters joins Cf. 41 runs in a worktree, all as expected (one plant was itself mis-written and corrected). **The
+judgement this entry records:** the tool guards against an author's honest over-claim in any formatting — the mistake
+M45 and M47 are about — not against deliberate disguise by someone with commit access, which shows in the reviewed
+diff. Its docstring now says so, and lists the disguises that still pass (three-line splits, look-alike letters,
+unlisted blank characters, a brief naming the design only in a comment), instead of a third round chasing them.
