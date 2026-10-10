@@ -1222,7 +1222,13 @@ step but is not in the exact form, and on an unclosed fence; the backward form i
 the remaining wordings. Proved by six plants on backed-up copies, each restored and compared. Two slips of mine while
 fixing, both caught before any commit: a scripted edit put a literal backspace byte into `check_build_plan.py`'s new
 pattern (found by reading the bytes, Rule 22.2; repaired), and the first plant harness died mid-plant and left the build
-plan mutated (restored from its backup and compared at once; the harness now restores in `finally`).
+plan mutated (restored from its backup and compared at once; the harness now restores in `finally`). CI on `918e230`
+fully green, the deferral checker's first CI run among it ("ticked steps: A1, A2, A3, A4, A5, A6").
+
+**Launched 2026-10-10: re-check of the fail-open fixes to the two build-plan tools (M46).** *Delegation (Rule 16.5),
+declared before launch: general-purpose at **Sonnet** — named plants against two small tools (Rule 16.9).* Brief
+`docs/briefs/2026-10-10-build-plan-tools-recheck.md`, run by `tools/run_brief.py` at HEAD `9203e0e`: 4 of 4 expectations
+hold; its control-byte check was proved able to fire on a planted backspace first.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
