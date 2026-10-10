@@ -1250,6 +1250,11 @@ run for the first time in a **disposable `git worktree`** — because the sessio
 `- [ x] A5` in the real build plan, which was found and restored from its backup at the restart before anything else.
 M46 and the design updated.
 
+**Launched 2026-10-10, at the owner's word ("run the re-check"): re-check of the step index.** *Delegation (Rule
+16.5), declared before launch: general-purpose at **Sonnet** — named plants and break attempts against two small tools,
+every plant in a disposable worktree (Rule 16.9).* Brief `docs/briefs/2026-10-10-step-index-recheck.md`, run by
+`tools/run_brief.py` at HEAD `87f099d`: 5 of 5 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
