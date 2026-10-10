@@ -1118,7 +1118,28 @@ design A6, outbound messaging.
 **Pull request opened 2026-10-09, at the owner's instruction:** https://github.com/yattapang/Jam-Quote/pull/3 —
 the branch's 169 commits not on `main` (A1-A5, review 4's fixes, the privilege model, 19 migrations). Its CI showed
 **`docs` failing**, and so had every completed run of this branch since A1's tick on 2026-10-02: the job's one-commit
-checkout cannot see the commits that `check_build_plan.py` looks for (M44). Fixed with a full-history checkout.
+checkout cannot see the commits that `check_build_plan.py` looks for (M44). Fixed with a full-history checkout; on
+`11e5011` the PR's `docs`, `verify` and `scan` checks pass.
+
+**Design drafted 2026-10-09: outbound messaging** (`docs/design/outbound-messaging.md`, build plan A6). *Delegation
+(Rule 16.5), declared before starting: Opus, main session — where personal data goes, and abuse controls on sending,
+are judgement-class (Rule 16.2).* Ten decisions, MS1-MS10:
+- **MS1**, the eleven kinds of message and what is not sent; **MS2**, one `messaging` module with an outbox written in
+  the caller's transaction, a send job, statuses in plain words, at-least-once with its stated duplicate;
+- **MS3**, **Amazon SES in Canada (Central)**, in a fourth AWS account: no new company, no message body kept, per-tenant
+  reputation isolation, and a sandbox that keeps staging from ever emailing a real person — Resend as the fallback;
+- **MS4**, two streams on two domains (`pryvis.com` for account mail, `send.pryvis.com` for clients), the contractor as
+  Reply-To, never the tenant's own domain in From; **MS5**, **a link to the share page, not an attachment**, no amount,
+  no links in the personal message, no tracking;
+- **MS6**, events by signed SNS; **MS7**, **reminders off until the tenant switches them on**, a one-tenant one-client
+  opt-out, Jamaica's rules as rule-pack data; **MS8**, caps **Free 20 / Pro 200 a day**, per-tenant pauses below AWS's
+  thresholds, account-wide alarms by a separate path; **MS9**, WhatsApp "opened in WhatsApp", never "sent"; **MS10**,
+  every copy and every key.
+
+**At the owner's instruction** ("remember the rule about preventing repetition of mistakes"), §13 maps each recorded
+mistake a design like this could repeat — A5's RR2, RR4, RR6-RR10, A4's OR11, M13-M17, M23, M39, M43, M44 — to the
+line that answers it, for the read to attack. New owner action OA29 (SES production access, long lead); OA6, OA10 and
+OA11 made precise on approval. Next: the owner's approval.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
