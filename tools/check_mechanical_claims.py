@@ -8,14 +8,29 @@ untested things executed (docs/MISTAKES.md M45), and A7's called the deferral ch
 deferrals it matches none of (M47, finding DR13). The verdict was the author's word, in prose — M23's shape. Rule 24.7
 makes the claim cite its evidence, and this tool fails when it does not.
 
+## Its shape, and why (Rule 21.9)
+
+The first two versions looked for the verdict only in Markdown table rows, outside code fences and HTML comments — so
+they had to read Markdown, and each reading had holes: an indented or blockquoted row, a fence mark inside a comment, a
+backticked "<!--", a zero-width character inside the phrase (A7's closing check and its re-check, M47). Two misses of
+one class, so the shape was replaced: **this tool reads no Markdown structure at all.** Every line of every tracked
+design that says the verdict — in a table, in prose, in a fence, in a comment, in a quote — must cite the brief. A
+design that wants to *describe* the verdict without claiming it words the description otherwise, or cites the brief.
+
 ## What it does
 
-1. Scans every tracked `docs/design/*.md`, outside code fences, for table rows (lines starting with "|") that carry
-   the verdict "Mechanical now" (any case; "not mechanical now" is not the verdict).
-2. Each such row must cite, in backticks, at least one `docs/briefs/<name>.md` that is a tracked file, and at least one
-   cited brief must hold a ```check block whose text names this design's own path (`docs/design/<file>.md`) — a check
-   that `tools/run_brief.py` ran, on the commit the brief names, against this design.
-3. Fails, naming the file, line and what is missing. Prints its coverage every run (Rule 21.1).
+1. Reads every tracked `docs/design/*.md`, line by line, and normalises each line for matching: HTML entities decoded
+   (`&nbsp;`), Unicode NFKC (non-breaking and fullwidth forms), every invisible format character removed (Unicode
+   category Cf: zero-width spaces and joiners, soft hyphens) — read twice, once dropped and once as a space, so both
+   "Mech<ZWSP>anical now" and "Mechanical<ZWSP>now" are seen — emphasis and code marks (`*`, `_`, backtick) dropped,
+   and whitespace collapsed.
+2. A line whose normalised text says "mechanical now" (any case; "not mechanical now" is not the verdict) must cite, in
+   backticks, at least one `docs/briefs/<name>.md` that is a tracked file, and at least one cited brief must hold a
+   ```check block whose text names this design's own path — a check that `tools/run_brief.py` ran, on the commit the
+   brief names, against this design.
+3. The phrase split across two lines ("Mechanical" at the end of one, "now" at the start of the next) fails too, asking
+   for it to be rejoined: Markdown renders the break as a space.
+4. Prints its coverage every run (Rule 21.1), and fails, naming file, line and what is missing.
 
 ## What it does NOT prove (Rule 21.4)
 
@@ -23,30 +38,30 @@ makes the claim cite its evidence, and this tool fails when it does not.
   it; whether the check fits the claim is the closing check's reading. This makes the claim cite evidence; it does not
   judge the evidence.
 - That the check still passes today. A brief's checks run on the commit it names; a later edit can break them unseen.
-- Verdicts outside a table row, or worded otherwise ("mechanically enforced", "a guard exists"), are not seen. The
-  verdict is a fixed phrase on purpose (A6's §13); a new wording is a reason to extend this tool, not to evade it.
-  What it does see, since A7's closing check found three ways past it (2026-10-10): a table row indented up to three
-  spaces or inside a blockquote; the phrase with emphasis marks inside it ("**Mechanical** now"), any run of spaces,
-  or a non-breaking space (Unicode-normalised); and HTML comments are removed before anything else is read, so a fence
-  mark inside a comment cannot hide a visible row. A row hidden *inside* a comment is not rendered, and is not read.
+- Other wordings of the verdict ("mechanically enforced", "a guard exists"). The verdict is a fixed phrase on purpose
+  (A6's §13); a new wording is a reason to extend this tool, not to evade it.
+- The phrase split across more than two lines, or by characters that are not invisible (a hyphen, a letter look-alike
+  that NFKC does not fold, such as Cyrillic "о" for "o").
 - Only `docs/design/`. ADRs, the PRD and the rules are not scanned.
+- It is deliberately stricter than Markdown: a verdict inside a code block or a comment, which a reader never sees,
+  still fails. Word it otherwise.
 """
 
 from __future__ import annotations
 
+import html
 import re
 import subprocess
-import unicodedata
 import sys
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 VERDICT = re.compile(r"(?<!not )\bmechanical now\b", re.IGNORECASE)
-# Blockquote markers and up to three spaces of indent, which Markdown still renders as a table row or a fence.
-PREFIX = re.compile(r"^(?: {0,3}>)* {0,3}")
+SPLIT = re.compile(r"(?<!not )\bmechanical$", re.IGNORECASE)
+STARTS_NOW = re.compile(r"^now\b", re.IGNORECASE)
 BRIEF_CITE = re.compile(r"`(docs/briefs/[^`\s]+\.md)`")
-FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 CHECK_BLOCK = re.compile(r"^```check[^\n]*\n(.*?)^```", re.DOTALL | re.MULTILINE)
 
 
@@ -59,38 +74,18 @@ def check_blocks(brief: str) -> list[str]:
     return CHECK_BLOCK.findall((ROOT / brief).read_text(encoding="utf-8"))
 
 
-def visible_lines(text: str) -> list[str]:
-    """The text with HTML comments removed, line numbers kept (a comment's lines become empty)."""
-    out: list[str] = []
-    in_comment = False
-    for line in text.splitlines():
-        kept = ""
-        rest = line
-        while rest:
-            if in_comment:
-                end = rest.find("-->")
-                if end < 0:
-                    rest = ""
-                else:
-                    rest = rest[end + 3:]
-                    in_comment = False
-            else:
-                start = rest.find("<!--")
-                if start < 0:
-                    kept += rest
-                    rest = ""
-                else:
-                    kept += rest[:start]
-                    rest = rest[start + 4:]
-                    in_comment = True
-        out.append(kept)
-    return out
+def normalised(line: str, invisible: str = "") -> str:
+    """The line as read for the verdict: entities decoded, NFKC, invisible characters replaced by `invisible`, emphasis
+    marks dropped, whitespace collapsed."""
+    text = unicodedata.normalize("NFKC", html.unescape(line))
+    text = "".join(invisible if unicodedata.category(c) == "Cf" else c for c in text)
+    text = re.sub(r"[*_`]", "", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
-def verdict_text(line: str) -> str:
-    """The row as read for the verdict: Unicode-normalised, emphasis marks dropped, spaces collapsed."""
-    plain = unicodedata.normalize("NFKC", line).replace("*", "").replace("_", "")
-    return re.sub(r"\s+", " ", plain)
+def says_verdict(line: str) -> bool:
+    """Read twice: invisible characters dropped ("Mech<ZWSP>anical") and read as a space ("Mechanical<ZWSP>now")."""
+    return any(VERDICT.search(normalised(line, sep)) for sep in ("", " "))
 
 
 def main() -> int:
@@ -99,26 +94,22 @@ def main() -> int:
     if not designs:
         print("FAILED: no tracked design files found; refusing to report a clean run over nothing.")
         return 1
-    rows = 0
+    claims = 0
     failures: list[str] = []
     for design in designs:
-        fence = None
-        for n, raw in enumerate(visible_lines((ROOT / design).read_text(encoding="utf-8")), 1):
-            line = PREFIX.sub("", raw)
-            m = FENCE.match(line)
-            if m:
-                mark = m.group(1)[0]
-                if fence is None:
-                    fence = mark
-                elif mark == fence:
-                    fence = None
+        lines = (ROOT / design).read_text(encoding="utf-8").splitlines()
+        plain = [normalised(line) for line in lines]
+        for i, line in enumerate(lines):
+            n = i + 1
+            if i + 1 < len(plain) and SPLIT.search(plain[i]) and STARTS_NOW.match(plain[i + 1]):
+                failures.append(f"{design}:{n}: the verdict is split across lines {n}-{n + 1}; join it on one line")
                 continue
-            if fence or not line.startswith("|") or not VERDICT.search(verdict_text(line)):
+            if not says_verdict(line):
                 continue
-            rows += 1
-            cited = BRIEF_CITE.findall(line)
+            claims += 1
+            cited = BRIEF_CITE.findall(html.unescape(line))
             if not cited:
-                failures.append(f"{design}:{n}: claims 'Mechanical now' but cites no brief under docs/briefs/")
+                failures.append(f"{design}:{n}: says 'Mechanical now' but cites no brief under docs/briefs/")
                 continue
             missing = [b for b in cited if b not in briefs]
             if missing:
@@ -129,15 +120,13 @@ def main() -> int:
                     f"{design}:{n}: no check block in {', '.join(cited)} names {design}, so nothing shows the check "
                     "running against this design"
                 )
-        if fence:
-            failures.append(f"{design}: a code fence is never closed, so the rows after it were not checked")
-    print(f"scanned {len(designs)} tracked design files; {rows} table rows claim 'Mechanical now'")
+    print(f"scanned {len(designs)} tracked design files, every line; {claims} lines say 'Mechanical now'")
     for f in failures:
         print("  " + f)
     if failures:
         print(f"FAILED: {len(failures)} 'Mechanical now' claims without a brief's check behind them (Rule 24.7).")
         return 1
-    print("Every 'Mechanical now' row cites a brief whose check ran against its design (Rule 24.7; its docstring "
+    print("Every 'Mechanical now' line cites a brief whose check ran against its design (Rule 24.7; its docstring "
           "lists what that does not prove).")
     return 0
 

@@ -980,8 +980,9 @@ writer-set prose of M23. So a "Mechanical now" row cites, in backticks, a `docs/
 the design — a check `tools/run_brief.py` ran on the commit the brief names. Anything else is "Not mechanical", or a
 test owed to a step.
 
-- **The mechanism:** `tools/check_mechanical_claims.py`, in the gate and CI's `docs` job, fails when a design's table
-  row says "Mechanical now" without such a brief.
+- **The mechanism:** `tools/check_mechanical_claims.py`, in the gate and CI's `docs` job, fails when any line of a
+  design says "Mechanical now" without such a brief — wherever the line sits, since a verdict that is only looked for
+  in table rows was got past four ways in two checks (M47).
 
 **What Rule 24.7 does not fix.** It makes a claim cite its evidence; it cannot tell whether the cited check tests what
 the row claims, or still passes after a later edit. The closing check reads that.

@@ -1020,3 +1020,15 @@ fences are read through blockquote markers and indent, and the phrase is matched
 emphasis marks dropped and spaces collapsed — the docstring says so. **Proved by sixteen runs in a disposable worktree**:
 each of the closing check's six plants, each of its three escapes, and the variants of each, fail or pass as they should.
 A re-check follows (Rule 24.6).
+
+**And replaced, not patched a third time (2026-10-10).** The re-check (`docs/briefs/2026-10-10-mechanical-claims-recheck.md`)
+found it **not closable**: four more ways past — a blockquote followed by four spaces, a backticked or unclosed inline
+`<!--` that hid the rows after it, and invisible characters (zero-width space, soft hyphen, `&nbsp;`) inside the
+phrase — and this addendum's "the docstring says so" was true only of the three fixes, not of these. Two misses of one
+class, so by Rule 21.9 **the shape was replaced**: the tool no longer reads Markdown structure at all. Every line of
+every design that says the verdict — table, prose, fence, comment or quote — must cite the brief; the text is read after
+entities are decoded, NFKC, invisible characters dropped and also read as spaces, and emphasis marks removed; a phrase
+split over two lines fails. Stricter than Markdown on purpose (a verdict in a comment fails too). Rule 24.7's
+mechanism line, the CI comment and two legend lines (A6, A7) were reworded to match. **28 runs in a disposable worktree**
+— every case from both checks, E1-E4, a split phrase, prose and HTML-cell verdicts — all as expected; the first run of
+the replacement still missed "Mechanical<ZWSP>now", found by its plant and fixed before commit. A second re-check follows.

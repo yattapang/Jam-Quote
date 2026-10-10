@@ -672,11 +672,11 @@ table mapping each recorded mistake to a line of the design. **The read found th
 meant to prevent**: it promised answers, and most were not mechanical — the keys were still missing (RR4's class), a
 vendor fact still had no vendor page (RR6's), and the approval commit itself left a twin contradicting its sibling
 (M13's). That is recorded as **M45** in `docs/MISTAKES.md`. The table below says, for each row, what the read found
-and what is mechanical now.
-*(Pointer 2026-10-10: each "Mechanical now" row now cites the brief whose check ran against this design, as Rule 24.7 requires — `tools/check_mechanical_claims.py`.)*
+and which answers are mechanical today.
+*(Pointer 2026-10-10: each row with the first verdict below now cites the brief whose check ran against this design, as Rule 24.7 requires — `tools/check_mechanical_claims.py`.)*
 
 **Every row now carries one of three verdicts, and only these** *(the closing check's D3: the first amendment still
-called C1 tests "executed")*: **Mechanical now** — a named check that runs today; **C1 test** — a test specified in §12,
+called C1 tests "executed")*: **Mechanical now** — a named check that runs today (`docs/briefs/2026-10-09-messaging-design-closing-check.md`); **C1 test** — a test specified in §12,
 which does not exist until C1 builds it; **Not mechanical** — caught only by a person, who is named.
 
 | Mistake | What the read found | Now | Verdict |

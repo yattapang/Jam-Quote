@@ -434,9 +434,9 @@ which DS3's ratios are computed.
 
 ## 11. The mistakes this design is checked against (Rule 24)
 
-Each row carries one of three verdicts, as A6's §13 settled: **Mechanical now** (a check that runs today, shown
-running against this design in a committed brief — Rule 24.7), **C4 test** (specified here, not yet running), or **Not
-mechanical** (a person catches it, named).
+Each row carries one of three verdicts, as A6's §13 settled: the first, that a check runs today, which Rule 24.7 allows
+only with a committed brief's check behind it and which no row here uses; **C4 test** (specified here, not yet
+running); or **Not mechanical** (a person catches it, named).
 
 **The read found this table over-claimed again** *(DR13)* — recorded as **M47** in `docs/MISTAKES.md`. The draft
 called the deferral checker mechanical for this design, and it matches none of this design's deferrals; it promised

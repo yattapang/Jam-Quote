@@ -1471,3 +1471,8 @@ numbered). **A7 ticked** in `docs/BUILD-PLAN.md`. Next in phase A: A8, sign-up a
 **Answered 2026-10-10: the three escapes from Rule 24.7's tool.** HTML comments removed first; rows and fences read
 through blockquotes and indent; the phrase normalised (M47's addendum). Sixteen runs in a disposable worktree, all as
 expected. Next: a scoped re-check, brief `docs/briefs/2026-10-10-mechanical-claims-recheck.md`.
+
+**Returned 2026-10-10: the re-check of Rule 24.7's tool — not closable** (E1-E4: a blockquote with four spaces, an
+inline or backticked `<!--`, invisible characters in the phrase). **Answered by replacing the shape** (Rule 21.9): every
+line of a design is read, whatever Markdown makes of it (M47's second addendum); 28 runs in a worktree, all as
+expected. Next: a second re-check, brief `docs/briefs/2026-10-10-mechanical-claims-recheck-2.md`.
