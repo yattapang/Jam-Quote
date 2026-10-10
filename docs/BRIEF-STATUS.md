@@ -1467,3 +1467,7 @@ a fence mark inside an HTML comment hiding a visible row. Answered separately, b
 **A7 signed off by the owner, 2026-10-10** ("Approved, and approve the brief edit"): the amended design, and the brief
 edit, now made in `docs/DEVELOPMENT-BRIEF.md` §10 (offline *draft preview*; the issued PDF made by the server once
 numbered). **A7 ticked** in `docs/BUILD-PLAN.md`. Next in phase A: A8, sign-up and verification.
+
+**Answered 2026-10-10: the three escapes from Rule 24.7's tool.** HTML comments removed first; rows and fences read
+through blockquotes and indent; the phrase normalised (M47's addendum). Sixteen runs in a disposable worktree, all as
+expected. Next: a scoped re-check, brief `docs/briefs/2026-10-10-mechanical-claims-recheck.md`.

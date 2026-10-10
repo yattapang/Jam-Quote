@@ -1010,3 +1010,13 @@ your quotes and invoices — even on Free".
   entry says so rather than pretending otherwise.
 - **Whether a cited brief's check tests what the row claims** — Rule 24.7 makes the claim cite evidence; the closing
   check judges it.
+
+**And the tool's own gaps (2026-10-10).** A7's closing check (`docs/briefs/2026-10-10-document-design-closing-check.md`)
+found `tools/check_mechanical_claims.py` closable but got three things past it that its docstring did not state: a
+table row indented or inside a blockquote; variants of the phrase ("**Mechanical** now", a double or non-breaking
+space); and a fence mark inside an HTML comment, which hid a visible row. The first version was again a list of what it
+recognises (M46's lesson, a fourth time in one day). Now HTML comments are removed before anything is read, rows and
+fences are read through blockquote markers and indent, and the phrase is matched after Unicode normalisation with
+emphasis marks dropped and spaces collapsed — the docstring says so. **Proved by sixteen runs in a disposable worktree**:
+each of the closing check's six plants, each of its three escapes, and the variants of each, fail or pass as they should.
+A re-check follows (Rule 24.6).

@@ -25,6 +25,10 @@ makes the claim cite its evidence, and this tool fails when it does not.
 - That the check still passes today. A brief's checks run on the commit it names; a later edit can break them unseen.
 - Verdicts outside a table row, or worded otherwise ("mechanically enforced", "a guard exists"), are not seen. The
   verdict is a fixed phrase on purpose (A6's §13); a new wording is a reason to extend this tool, not to evade it.
+  What it does see, since A7's closing check found three ways past it (2026-10-10): a table row indented up to three
+  spaces or inside a blockquote; the phrase with emphasis marks inside it ("**Mechanical** now"), any run of spaces,
+  or a non-breaking space (Unicode-normalised); and HTML comments are removed before anything else is read, so a fence
+  mark inside a comment cannot hide a visible row. A row hidden *inside* a comment is not rendered, and is not read.
 - Only `docs/design/`. ADRs, the PRD and the rules are not scanned.
 """
 
@@ -32,12 +36,15 @@ from __future__ import annotations
 
 import re
 import subprocess
+import unicodedata
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
 VERDICT = re.compile(r"(?<!not )\bmechanical now\b", re.IGNORECASE)
+# Blockquote markers and up to three spaces of indent, which Markdown still renders as a table row or a fence.
+PREFIX = re.compile(r"^(?: {0,3}>)* {0,3}")
 BRIEF_CITE = re.compile(r"`(docs/briefs/[^`\s]+\.md)`")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 CHECK_BLOCK = re.compile(r"^```check[^\n]*\n(.*?)^```", re.DOTALL | re.MULTILINE)
@@ -52,6 +59,40 @@ def check_blocks(brief: str) -> list[str]:
     return CHECK_BLOCK.findall((ROOT / brief).read_text(encoding="utf-8"))
 
 
+def visible_lines(text: str) -> list[str]:
+    """The text with HTML comments removed, line numbers kept (a comment's lines become empty)."""
+    out: list[str] = []
+    in_comment = False
+    for line in text.splitlines():
+        kept = ""
+        rest = line
+        while rest:
+            if in_comment:
+                end = rest.find("-->")
+                if end < 0:
+                    rest = ""
+                else:
+                    rest = rest[end + 3:]
+                    in_comment = False
+            else:
+                start = rest.find("<!--")
+                if start < 0:
+                    kept += rest
+                    rest = ""
+                else:
+                    kept += rest[:start]
+                    rest = rest[start + 4:]
+                    in_comment = True
+        out.append(kept)
+    return out
+
+
+def verdict_text(line: str) -> str:
+    """The row as read for the verdict: Unicode-normalised, emphasis marks dropped, spaces collapsed."""
+    plain = unicodedata.normalize("NFKC", line).replace("*", "").replace("_", "")
+    return re.sub(r"\s+", " ", plain)
+
+
 def main() -> int:
     designs = [p for p in tracked("docs/design/") if p.endswith(".md")]
     briefs = set(tracked("docs/briefs/"))
@@ -62,7 +103,8 @@ def main() -> int:
     failures: list[str] = []
     for design in designs:
         fence = None
-        for n, line in enumerate((ROOT / design).read_text(encoding="utf-8").splitlines(), 1):
+        for n, raw in enumerate(visible_lines((ROOT / design).read_text(encoding="utf-8")), 1):
+            line = PREFIX.sub("", raw)
             m = FENCE.match(line)
             if m:
                 mark = m.group(1)[0]
@@ -71,7 +113,7 @@ def main() -> int:
                 elif mark == fence:
                     fence = None
                 continue
-            if fence or not line.startswith("|") or not VERDICT.search(line):
+            if fence or not line.startswith("|") or not VERDICT.search(verdict_text(line)):
                 continue
             rows += 1
             cited = BRIEF_CITE.findall(line)
