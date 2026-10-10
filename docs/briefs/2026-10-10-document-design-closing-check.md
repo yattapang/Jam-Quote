@@ -58,7 +58,8 @@ the design's §12 and `docs/BRIEF-STATUS.md`).
    `docs/design/api-layer.md` in the worktree, run the tool, and restore the file from a backup copy before the next
    (prove the restore with `diff -q`):
    - `| X | y | **Mechanical now** — trust me |` → fails, naming the line;
-   - the same citing `` `docs/briefs/2026-01-01-nope.md` `` → fails (not a tracked brief);
+   - the same citing, in backticks, a path under docs/briefs/ that does not exist (2026-01-01-nope.md) → fails (not a
+     tracked brief);
    - the same citing `` `docs/briefs/2026-10-09-messaging-design-closing-check.md` `` → fails (its checks name another
      design);
    - the same inside a closed ```` ``` ```` fence → passes; `| X | y | **Not mechanical now** |` → passes;

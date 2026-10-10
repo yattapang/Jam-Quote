@@ -1450,3 +1450,9 @@ logo and settings being available for offline PDF generation" becomes "… for a
 is rendered by the server once the issue is numbered, since issuing needs a connection in release 1 (ADR 0022; design
 A7, DS8)". Next: the closing check, brief `docs/briefs/2026-10-10-document-design-closing-check.md`; then the owner's
 sign-off of the amended design and of the brief edit; then A7 is ticked.
+
+**Launched 2026-10-10: the closing check of A7 and of Rule 24.7's tool.** *Delegation (Rule 16.5), declared before
+launch: general-purpose at **Sonnet** (Rule 16.9) — every item names its text, and the plants are listed.* The brief's
+first run, at `c7a5d45`, held 7 of 8: the brief itself cited a deliberately missing path in backticks, which
+`check_schema_citations.py` refused — the gate had not been re-run after the brief was written. Reworded; run again at
+the commit below.
