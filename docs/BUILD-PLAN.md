@@ -53,7 +53,8 @@ The designs of `docs/PLANNING-AUDIT.md` §7, each approved by the owner.
   Done: 2026-10-06 · commit `99c6755` · review `docs/briefs/2026-10-06-operations-design-read.md` · closing `docs/briefs/2026-10-06-operations-design-closing-check.md` · owner: approved 2026-10-06
 - [x] A5 · The third-party register completed — storage, malware scanning, error tracking, uptime, inbox, `docs/design/third-party-register.md`
   Done: 2026-10-09 · commit `0e9c2c5` · review `docs/briefs/2026-10-09-register-design-read.md` · closing `docs/briefs/2026-10-09-register-design-closing-check.md` · owner: approved 2026-10-09
-- [ ] A6 · Outbound messaging
+- [x] A6 · Outbound messaging, `docs/design/outbound-messaging.md`
+  Done: 2026-10-10 · commit `2eaaf0f` · review `docs/briefs/2026-10-09-messaging-design-read.md` · closing `docs/briefs/2026-10-09-messaging-design-closing-check.md` · owner: approved 2026-10-10
 - [ ] A7 · Document settings and the PDF — logo, header, colours, the shared layout
 - [ ] A8 · Sign-up and verification
 - [ ] A9 · The share page and the accept flow

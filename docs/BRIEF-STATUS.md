@@ -1193,6 +1193,9 @@ its own sum gives US$80-99; each "Mechanical now" row's check confirmed to exist
 outside D6's scope — the register's AWS row still said "three accounts under one organisation" — corrected the same
 day to "three of the organisation's five". **A6 now awaits only the owner's sign-off**, with two decisions put to the
 owner: M45's proposed checker for stale deferrals, and the brief edit of MS2 ("nothing is sent twice").
+**Signed off by the owner, 2026-10-10: "A6 is done", "build the checker", "approve the brief edit".** A6 is ticked with
+its evidence line (6 of 64 steps). The brief's §12 is edited as MS2 proposed, with a dated note (Rule 1.9). M45's
+checker is built next, with its own short design.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

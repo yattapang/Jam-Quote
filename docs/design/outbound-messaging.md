@@ -1,6 +1,7 @@
 # Design: outbound messaging — one service, the email provider, delivery status, opt-out and caps
 
-**Status: APPROVED by the owner, 2026-10-09 — every recommendation, MS1-MS10** ("approved"). Build plan step A6
+**Status: APPROVED by the owner, 2026-10-09 — every recommendation, MS1-MS10** ("approved"). **The owner signed off the
+step, amendments included, on 2026-10-10** ("A6 is done"); A6 is ticked in the build plan. Build plan step A6
 (`docs/BUILD-PLAN.md`). **Amended the same day to answer its independent read (MR1-MR24, §14)**; three amendments
 changed what the owner had approved, and the owner decided each on 2026-10-09 (§14). Nothing here is built until C1;
 the provider's accounts and the domain's records are owner actions (§12).
@@ -164,9 +165,9 @@ sent twice, when
   recorded that (AP10: every job is at-least-once).
 
 A client may, rarely, receive the same quote twice. Losing a message silently would be worse, and Rule 11 says so.
-**The brief says otherwise** — §12: "so nothing is sent twice" — so an edit is proposed to the owner (Rule 1.9): "Include
-retries and idempotency, so a request is never sent twice; a provider's lost reply can still, rarely, cause a
-duplicate, and the design says when."
+**The brief said otherwise** — §12: "so nothing is sent twice" — so an edit was proposed to the owner (Rule 1.9), and
+**approved and applied on 2026-10-10**: "Include retries and idempotency, so a request is never sent twice; a provider's
+lost reply can still, rarely, cause a duplicate, and the design says when."
 
 **Statuses, and what each means** — the contractor sees these words (MS6):
 
