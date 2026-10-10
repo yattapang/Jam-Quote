@@ -1026,6 +1026,40 @@ to a new session, which should:
 Where things stand: A1-A4 done (4 of 64 steps); ADRs up to 0035; owner actions OA1-OA28 in
 `docs/OWNER-ACTIONS.md`, no batch sent yet; the owner's standing instructions are in the root `CLAUDE.md` and this file.
 
+**New session, 2026-10-09 — the handoff's steps, as found.**
+1. **OA26 done.** `gh api user` gives `yourpryvis`; the repository's permissions give `"admin":false`, `"push":true`.
+   Recorded in `docs/OWNER-ACTIONS.md`.
+2. Working on `claude/admiring-fermat-41btub`; nothing is pushed to `main` until OA25's ruleset exists.
+3. **The local PostgreSQL step could not run.** This session runs on the owner's Windows machine, which has no
+   PostgreSQL, Docker or WSL distribution, and `tools/pg-local.sh` is written for a Linux container (`su postgres`,
+   `/usr/lib/postgresql/16`). Nothing was installed without the owner's say. So **the race suite prints SKIPPED in this
+   session's gate runs**; every other suite and the five checkers run. The changes in this session are documents
+   only, which the race suite does not exercise; it must run before any change that touches the database.
+   Also found: the local `node_modules` lacked `pg` (declared in the lockfile), so typecheck failed before any change;
+   `npm ci` restored it, changing no tracked file.
+4. Next: design A5.
+
+**Design drafted 2026-10-09: the third-party register completed** (`docs/design/third-party-register.md`, build plan
+A5), written section by section and pushed. *Delegation (Rule 16.5), declared before starting: Opus, main session —
+choosing where personal data goes, and upload security, are judgement-class (Rule 16.2).* Nine decisions, RG1-RG9:
+- **RG1**, nine tests every service must meet: Canada first, then the EU (ADR 0035); written processing terms;
+  commercial use allowed on the plan; separate per environment; nothing in the browser;
+- **RG2**, files in **DigitalOcean Spaces, Toronto** (no new company), archived in the nightly backup at the second
+  company;
+- **RG3**, eight upload steps that fail closed; the scanner **AWS GuardDuty on a quarantine bucket in Canada**, so the
+  store itself refuses to release an unscanned file (about US$0, against about US$100 a month for ClamAV across two
+  environments, the fallback); images re-encoded; **PDF receipts not disarmed in release 1**, the residual stated;
+  duplicate receipts flagged across tenants;
+- **RG4**, **Sentry, EU region**, free, API only, behind our redactor; **RG5**, **Better Stack** free, four checks and
+  three heartbeats, phone alerts bought at the first paying contractor at the latest;
+- **RG6**, the mailbox on **Microsoft 365 Business Basic** for its 90-day deletion tags — with **the owner's choice of
+  which company holds it** (the Canadian one keeps the mail in Canada);
+- **RG7**, the backup store confirmed (AWS S3 in Canada, three AWS accounts); **RG8**, the register's rows and the
+  sub-processor list; **RG9**, about US$12-14 a month added to production.
+
+Several capabilities could not be confirmed from public pages and are checked before the build relies on them. No new
+owner action; OA6 and OA12 are made precise on approval. Next: the owner's approval.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
