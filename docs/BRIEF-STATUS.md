@@ -1103,6 +1103,11 @@ the files worker (RR2), and UptimeRobot's Solo plan for uptime (RR6). OA1, OA6, 
 the PDF residual, and "UptimeRobot Solo" (RR6), replacing Better Stack. Next: the closing check (Sonnet), once the
 gate is green.
 
+**Launched 2026-10-09: closing check of the third-party register design's answers to RR1-RR17.** *Delegation (Rule
+16.5), declared before launch: general-purpose at **Sonnet** — mechanical: every item names its text, and the costs are
+summed (Rule 16.9).* Brief `docs/briefs/2026-10-09-register-design-closing-check.md`, run by `tools/run_brief.py` at
+HEAD `b583c59`: 5 of 5 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
