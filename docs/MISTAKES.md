@@ -820,3 +820,23 @@ unchecked, which is exactly the overclaim the tool exists to stop.
 not parse with them fails the run instead of being counted; review 5 is under the heading and status-wording
 checks too. The lesson, again: **adding a file to a guard's list is not the same as the guard reading it —
 plant a defect in the new file before trusting the count.**
+
+### M43 · The brief runner ran WSL's launcher instead of bash on Windows, and two setup steps assumed a Linux container
+`Repeat of:` none — a portability assumption, not a coverage claim.
+
+The first session on the owner's Windows machine (2026-10-09) found three things that worked only in the Linux
+containers earlier sessions had used. `tools/run_brief.py` called a bare `bash`; Windows looks a bare name up in
+System32 before `PATH`, and System32's `bash.exe` is WSL's launcher, which with no distribution installed printed
+its install notice for every check: "0 of 4 expectations hold" for a brief whose checks were correct. The handoff's
+`sh tools/pg-local.sh` needs PostgreSQL 16's Linux binaries and a `postgres` user, which this machine does not have.
+And the local `node_modules` lacked `pg`, though the lockfile declares it, so typecheck failed before any change.
+
+**Cost:** about an hour, and no false result: each failed loudly. The race suite did not run in this session; the
+session's changes are documents and one tool line, which it does not exercise.
+
+**Prevented by:** the runner now resolves `bash` through `PATH` (`shutil.which`), proved on this machine — the brief
+that gave 0 of 4 gives 4 of 4, and a planted wrong expectation fails. `npm ci` restored the install. **Not
+prevented:** `tools/pg-local.sh` is still Linux-only, and nothing yet starts real PostgreSQL on Windows; the race suite
+therefore stays owed for any database change made from this machine until the owner chooses a way (a local
+PostgreSQL 16, or a container). The lesson: **a tool that shells out names the shell it means, and a setup step
+says which machine it is for.**

@@ -46,6 +46,7 @@ the HEAD and the count. That is the whole control: one file, executed twice, on 
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -53,6 +54,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHECK = re.compile(r"^```check[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
 TIMEOUT_SECONDS = 1800
+# Resolved through PATH, not left to the operating system. On Windows a bare "bash" is looked up in System32
+# before PATH, and System32's bash.exe is WSL's launcher: with no distribution installed it printed WSL's
+# install notice for every check, and 0 of 4 expectations held (2026-10-09). PATH finds Git Bash there, and
+# the same bash as before on Linux and macOS.
+BASH = shutil.which("bash") or "bash"
 
 
 def git(*args: str) -> str:
@@ -97,7 +103,7 @@ def main() -> int:
     passed = 0
     for index, (command, expected) in enumerate(expectations, start=1):
         try:
-            result = subprocess.run(["bash", "-c", command], cwd=ROOT, capture_output=True, text=True,
+            result = subprocess.run([BASH, "-c", command], cwd=ROOT, capture_output=True, text=True,
                                     timeout=TIMEOUT_SECONDS)
             actual = normalise(result.stdout)
         except subprocess.TimeoutExpired:
