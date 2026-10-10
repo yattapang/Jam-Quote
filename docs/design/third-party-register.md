@@ -1,8 +1,9 @@
 # Design: the third-party register completed — file storage, malware scanning, error tracking, uptime, the mailbox
 
-**Status: PROPOSED — awaiting the owner.** Build plan step A5 (`docs/BUILD-PLAN.md`). Written section by section and
-saved as it goes, as A4 was. Nothing here is built, or bought, until the owner approves it; the accounts are owner
-action OA6, sent with batch 1.
+**Status: APPROVED by the owner, 2026-10-09 — every recommendation, RG1-RG9** ("Approved"), with the owner's two
+choices: **the Canadian company holds the mailbox** (RG6), and **the PDF residual is accepted** for release 1 (RG3).
+Build plan step A5 (`docs/BUILD-PLAN.md`). Written section by section and saved as it went, as A4 was. Nothing here is
+built or bought before its build step; the accounts are owner actions OA6 (batch 1) and OA12 (batch 2).
 
 Date: 2026-10-09 · **Answers** `docs/PLANNING-AUDIT.md` §7 item 5 ("the register completed": storage, scanning, error
 tracking, uptime, inbox, each with why this one and its privacy-notice line; the tenants' WiPay credentials; upload
@@ -216,8 +217,8 @@ uploads for the minutes they wait in quarantine, and its register row says so.
 our own server, which is a risk of its own; rasterising every receipt is a larger build than release 1 needs. Instead:
 the scan; a download, never an inline view from our origin (RG2); and the staff console's instruction to open receipts
 in the browser's own viewer. **The residual is stated:** a PDF that exploits an unknown flaw in a PDF viewer, and that
-the scanner does not know, reaches a staff member's browser. Rasterising receipts is the next step if that is judged
-too much.
+the scanner does not know, reaches a staff member's browser. **Accepted by the owner for release 1, 2026-10-09.**
+Rasterising receipts is the next step if it is judged too much later.
 
 **Duplicates (R1.36)** — a reused receipt is a fraud signal, not an inconvenience:
 - the SHA-256 of the **original** upload (before re-encoding, so the same photo always gives the same hash) and the
@@ -315,11 +316,12 @@ mailbox holds what clients and contractors write.
 | **C. (rec) Microsoft 365 Business Basic** | About **US$6 per user a month** (annual) | Exchange's own **retention tags**: a default tag on the whole mailbox that **deletes items after 90 days**. Microsoft's newer retention policies need a dearer plan, but these older Exchange tags are a different feature. **To confirm on the plan before relying on it** | **Canada**, for a tenant whose account is set up with a Canadian address — Microsoft commits to keeping Exchange data in Canada for such tenants | US$6 a month more than A; a Microsoft account to secure |
 | D. Google Workspace, Business Starter | About US$7 per user a month (annual), US$8.40 monthly | **Only with Vault**, which Starter lacks (an add-on, or the Business Plus plan) | Data regions are not offered on Starter | Fails the deciding requirement at this price |
 
-**Recommendation: C**, set up under the **Canadian company** so that its mail rests in Canada — **a decision for the
-owner**, because it ties the mailbox to the structure still being settled with the accountant and attorney (OA9,
-OA10). If it is set up under the Jamaican company instead, the mail rests in Microsoft's North American region, which
-the register then says. **Fallback: A**, if Zoho confirms its cleanup on the free plan and in its Canadian data centre,
-with the period at 2 months.
+**Recommendation: C**, set up under the **Canadian company** so that its mail rests in Canada. **Decided by the owner,
+2026-10-09: the Canadian company holds the mailbox.** It ties the mailbox to the structure still being settled with the
+accountant and attorney (OA9, OA10); if their advice moves it to the Jamaican company, the mail would rest in
+Microsoft's North American region, and the register and the sub-processor list change with it. **Fallback: A**, if
+Microsoft's retention tags fail their check on Business Basic and Zoho confirms its cleanup on the free plan and in its
+Canadian data centre, with the period at 2 months.
 
 **How it is set up** (owner action OA12, batch 2):
 - one licensed mailbox, `info@`; `support@` and `privacy@` as aliases; multi-factor sign-in on (OP11);
@@ -378,7 +380,7 @@ rows (Render, Neon, Vercel Hobby, the keep-warm workflow) move to a short sectio
 | **AWS** — S3 and GuardDuty | The backup store (ciphertext only); the upload quarantine and its scan (plain uploads, at most one day) | Backups: encrypted, unreadable to AWS. Quarantine: **yes, briefly** | Canada (Central) | OP6; RG3; RG7 | Backups: any store with a write-once lock. Scanning: ClamAV in our own hosting (RG3 option A) |
 | **Sentry** (Developer plan) | Error tracking | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | EU (Frankfurt) | RG4 | Another error tracker; the redacted shape is ours |
 | **Better Stack** (free plan) | Uptime checks and heartbeats | No — URLs and check names | — | RG5 | Another monitor; the checks are plain HTTP |
-| **Microsoft 365** (Business Basic) | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Canada, if set up under the Canadian company (RG6) | RG6 | Any mail provider: change the domain's MX record, export the mailbox |
+| **Microsoft 365** (Business Basic) | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Canada — held by the Canadian company (RG6) | RG6 | Any mail provider: change the domain's MX record, export the mailbox |
 | **The transactional email provider** | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses and documents sent | Chosen in A6 | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
 | **Stripe**, through the Canadian company | Tenants' subscriptions by card | **Yes** — the tenant's billing details; card numbers never touch us | Canada and the United States | ADR 0033; A10 | WiPay, the fallback (ADR 0033; OA8) |
 | **GitHub** (Team, the business's organisation) | Code, CI, Claude's pull requests | No — code and synthetic data only | United States | OP8 | Any git host; CI rewritten |
@@ -398,7 +400,7 @@ s. 16(2)(g)). Only services that hold personal data appear:
 |---|---|---|
 | DigitalOcean | Hosting, database and file storage | Canada |
 | Amazon Web Services | Encrypted backups; checking uploaded files for malware | Canada |
-| Microsoft | Our email inbox | Canada *(or North America — RG6's decision)* |
+| Microsoft | Our email inbox | Canada (held by the Canadian company, RG6) |
 | The transactional email provider | Sending email | *(A6)* |
 | Stripe | Subscription payments | Canada and the United States |
 | Sentry | Error reports, built to contain no personal data | European Union |
@@ -441,16 +443,16 @@ So production moves from OP3's **about US$45-60** to **about US$57-75 a month**,
 
 ## 11. What gets built, tests, what this does not do, owner actions, and sources
 
-**The decisions put to the owner** — each recommendation, and the one choice that is the owner's alone:
+**The decisions, as approved by the owner on 2026-10-09:**
 
 | # | Decision | Recommended |
 |---|---|---|
 | RG1 | The nine tests every service must meet | As written |
 | RG2 | File storage | DigitalOcean Spaces in Toronto, with the files archived in the nightly backup |
-| RG3 | Upload security and the scanner | The eight steps; AWS GuardDuty on a quarantine bucket in Canada, ClamAV as the fallback; **PDF receipts not disarmed in release 1, with the residual accepted** |
+| RG3 | Upload security and the scanner | The eight steps; AWS GuardDuty on a quarantine bucket in Canada, ClamAV as the fallback; **PDF receipts not disarmed in release 1 — residual accepted by the owner, 2026-10-09** |
 | RG4 | Error tracking | Sentry, EU region, free plan, API only |
 | RG5 | Uptime and heartbeats | Better Stack free; phone alerts bought at the first paying contractor at the latest |
-| RG6 | The mailbox | Microsoft 365 Business Basic — **and which company holds it: the Canadian one (mail in Canada) or the Jamaican one** |
+| RG6 | The mailbox | Microsoft 365 Business Basic, **held by the Canadian company** (owner, 2026-10-09) |
 | RG7 | The backup store | AWS S3 in Canada, three AWS accounts as listed |
 | RG8 | The register rewritten, and the sub-processor list | As written |
 | RG9 | The costs and triggers | As written |
@@ -520,7 +522,7 @@ So production moves from OP3's **about US$45-60** to **about US$57-75 a month**,
 - **OA6** (batch 1) names the accounts: DigitalOcean Spaces is part of OA1's DigitalOcean account; **an AWS organisation
   with three accounts** (RG7); **Sentry** (EU region, chosen when the organisation is created); **Better Stack**. Each in
   the business's name, with MFA (OA24).
-- **OA12** (batch 2) names the mailbox: **Microsoft 365 Business Basic**, held by the company the owner chooses in RG6,
+- **OA12** (batch 2) names the mailbox: **Microsoft 365 Business Basic**, held by the Canadian company (RG6),
   with the 90-day deletion tag, and `support@` and `privacy@` as aliases.
 
 **Sources** (checked 2026-10-09; third-party summaries are confirmed on each vendor's page before buying):

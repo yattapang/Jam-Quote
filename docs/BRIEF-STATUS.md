@@ -1059,6 +1059,12 @@ choosing where personal data goes, and upload security, are judgement-class (Rul
 
 Several capabilities could not be confirmed from public pages and are checked before the build relies on them. No new
 owner action; OA6 and OA12 are made precise on approval. Next: the owner's approval.
+**Approved by the owner, 2026-10-09:** RG1-RG9 ("Approved"), with two choices — **the Canadian company holds the
+mailbox**, and **the PDF residual is accepted** for release 1. On approval: `docs/SERVICE-REGISTER.md` rewritten for the
+rebuilt application (a new §0 with every service and the sub-processor list; the old application's rows kept until
+K1; §3a resolved; §5 and §6 updated); pointers in OP4 and OP10, the data-protection reading's §5 and the threat model's
+hostile-upload row; OA6 and OA12 made precise. Next: the independent read, brief
+`docs/briefs/2026-10-09-register-design-read.md`.
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a

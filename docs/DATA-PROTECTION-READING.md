@@ -212,7 +212,7 @@ A5):
 | Render (the API) | Everything in transit, logs without personal data | United States |
 | Vercel (the website) | Requests in transit | United States and edge locations |
 | The email provider (A6) | Messages sent | United States, typically |
-| Storage, error tracking, uptime (A5) | Files; events without personal data | To be chosen |
+| Storage, error tracking, uptime (A5) | Files; events without personal data | To be chosen — *(pointer 2026-10-09: chosen in `docs/design/third-party-register.md` RG2-RG6: files in Toronto, scanning and backups in Canada, errors in the EU, the mailbox in Canada)* |
 | Stripe, under the Canadian company (ADR 0033) | Billing and card data | Canada and the United States |
 
 **How each kind of data can lawfully leave:**

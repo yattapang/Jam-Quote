@@ -27,9 +27,50 @@ is a defect, not a paperwork oversight.
 
 ---
 
-## 1. Infrastructure and hosting
+**Rewritten 2026-10-09 for the rebuilt application** (design A5, `docs/design/third-party-register.md` RG8, approved
+by the owner). §0 is what the rebuilt application will run on; §1 and §2 keep the old application's rows until K1
+retires `original-app/`. A row marked *chosen, not yet in use* changes to *in use* in the build step that turns it on.
 
-*(Pointer 2026-10-06: the rebuild's hosting, region, backup store and plans are decided in `docs/design/environments-and-operations.md` OP2-OP3, OP6 and OP10 — among them Vercel on Pro, not Hobby; this register's rows are replaced in A5.)*
+## 0. The rebuilt application — every service, and the sub-processor list
+
+Why each was chosen, and what was rejected, is in the design named in the "Decided in" column; this table does not
+restate it. Costs and the trigger for leaving each free plan are in `docs/design/environments-and-operations.md` OP10
+and `docs/design/third-party-register.md` §10.
+
+| Service | What it does | Holds personal data | Where | Status | Decided in | If it went away |
+|---|---|---|---|---|---|---|
+| **DigitalOcean** — App Platform, managed PostgreSQL, Spaces | The API and its job worker; the database; the files (logos, rendered PDFs, receipts) | **Yes — everything** | Toronto, Canada | Chosen, not yet in use (B1, B5); subject to OP2's Toronto check | OP2-OP3; RG2 | Standard containers, PostgreSQL and the S3 API: restore the backups at another provider (OP6's yearly rebuild drill proves it) |
+| **Vercel** (Pro) | The site and the web app, as static files | In transit only; nothing stored (OP2) | Global edge | The site is in use, on Hobby until OA27 | OP2-OP3 | Any static host |
+| **AWS** — S3 and GuardDuty, three accounts under one organisation | The backup store (ciphertext only); the upload quarantine and its malware scan | Backups: encrypted, unreadable to AWS. Quarantine: **yes, plain uploads for at most one day** | Canada (Central) | Chosen, not yet in use (B3, B5) | OP6; RG3; RG7 | Backups: any store with a write-once lock. Scanning: ClamAV in our own hosting (RG3 option A) |
+| **Sentry** (Developer plan) | Error tracking, from the API only | **No, by design** (AP9; RG4) — a scrubbing mistake is the residual | EU (Frankfurt) | Chosen, not yet in use (B3) | RG4 | Another error tracker; the redacted shape is ours |
+| **Better Stack** (free plan) | Uptime checks and heartbeats | No — URLs and check names | — | Chosen, not yet in use (B3) | RG5 | Another monitor; the checks are plain HTTP |
+| **Microsoft 365** (Business Basic), held by the Canadian company | The mailbox: `info@`, `support@`, `privacy@` | **Yes — whatever people write to us** | Canada | Chosen, not yet in use (OA12) | RG6; SF2 | Any mail provider: change the domain's MX record, export the mailbox |
+| **The transactional email provider** | Codes, quotes, invoices and replies sent by the product | **Yes** — addresses and documents sent | Chosen in A6 | Not chosen | A6 | Behind the one messaging service (Rule 11), so a swap is one adapter |
+| **Stripe**, through the Canadian company | Tenants' subscriptions by card | **Yes** — the tenant's billing details; card numbers never touch us | Canada and the United States | Test mode only (OA21) | ADR 0033; A10 | WiPay, the fallback (ADR 0033; OA8) |
+| **GitHub** (Team, the business's organisation) | Code, CI, Claude's pull requests | No — code and synthetic data only | United States | In use on a personal account until OA25 | OP8 | Any git host; CI rewritten |
+| **GoDaddy** | The domain's registrar | The registrant's contact details | — | In use | — | Transfer to another registrar |
+| **Anthropic** (Claude) | Claude-assisted maintenance | **Never** — redacted or synthetic only (Rule 15) | United States | In use | Rule 15 | Human development continues |
+| **WiPay** — release 2 | Our merchant account if Stripe does not work out (OA8, held); each tenant's own account for card links (R1.29, H7) | Payer details, held by WiPay | Jamaica and the Caribbean | Not in use | ADR 0033; ADR 0034 | Bank transfer, recorded by hand |
+
+**Tenants' WiPay credentials (release 2).** When H7 builds card links, each tenant's WiPay keys are stored encrypted in
+the database, sealed with a key held in configuration and never in the database (§5; the threat model's WiPay row).
+
+**The sub-processor list** — what a contractor is given and what the privacy notice says (ADR 0035 decisions 1 and 2;
+the Act's s. 16(2)(g)). Only services that hold personal data appear:
+
+| Sub-processor | What it does for Pryvis | Where the data is |
+|---|---|---|
+| DigitalOcean | Hosting, database and file storage | Canada |
+| Amazon Web Services | Encrypted backups; checking uploaded files for malware | Canada |
+| Microsoft | Our email inbox | Canada |
+| The transactional email provider | Sending email | Chosen in A6 |
+| Stripe | Subscription payments | Canada and the United States |
+| Sentry | Error reports, built to contain no personal data | European Union |
+
+All of them are United States companies: data held in Canada can still be reached by US legal process (OP2's
+caveat), and the privacy notice says so.
+
+## 1. The old application — infrastructure and hosting (until K1)
 
 | Service | What it does | Why this one | Tier and cost | Holds personal data | If it went away |
 |---|---|---|---|---|---|
@@ -55,6 +96,9 @@ above is the entire infrastructure cost of having a front door.
 
 ## 2. Third-party services in the product
 
+*(2026-10-09: the rebuilt application's rows are in §0. The rows below describe the old application, and the services
+§0 does not repeat — WhatsApp, Expo, the app stores, fonts and the npm registry — which still apply.)*
+
 | Service | What it does | Why this one | Cost model | Holds personal data | If it went away |
 |---|---|---|---|---|---|
 | **Resend** | Transactional email: password reset, quote and invoice delivery, overdue reminders, subscription notices | Simple API, good deliverability, generous free tier | Free tier, then per-message | **Yes — tenant and customer email addresses, and document contents** | Behind the one messaging service after the rebuild (ADR 0012), so a swap is one adapter. Today each caller sends its own mail, so a swap touches several files — a real finding from the Phase 0 audit |
@@ -79,7 +123,11 @@ above is the entire infrastructure cost of having a front door.
 | **gitleaks** (the pinned binary, v8.24.3, in CI only) | Scans **every commit** for committed credentials on each push and pull request | The official action was tried first and **understated its coverage**: it runs `--log-opts=-1`, the most recent commit only, while reporting a clean scan. The binary with `gitleaks git .` scans the history, is pinned so the scope cannot change underneath us, and runs `--redact` so a finding is not echoed into a public build log. Holds no data of ours. If it disappeared: any equivalent scanner, or the same binary from a mirror |
 | **`npm audit`** (built in, no new dependency) | Known vulnerabilities in what both workspace roots install | Chosen over a third-party scanner precisely because it adds nothing to install and nothing to the register. It only knows what the npm advisory database knows, which is the argument for the SBOM below rather than against the check |
 
-## 3a. Two services release 1 requires and we have not chosen (added 2026-09-25, F11)
+## 3a. Two services release 1 requires and we had not chosen (added 2026-09-25, F11)
+
+**Resolved 2026-10-09 by design A5:** malware scanning is AWS GuardDuty on a quarantine bucket in Canada (RG3), and
+object storage is DigitalOcean Spaces in Toronto (RG2); both are rows in §0. The table below is kept as the record of
+the gap.
 
 Rule 18: *"A service running in production and missing from the register is a defect, not a paperwork
 oversight."* The review of the PRD found two required by numbered requirements and absent from every row
@@ -168,6 +216,12 @@ launch, and it is written here so it is a decision rather than a surprise.
 
 Named here so nobody hunts, and empty of values on purpose.
 
+**The rebuilt application** (2026-10-09): every secret is listed, with who holds it and who never does, in
+`docs/design/environments-and-operations.md` OP4, which A5 extends with the Spaces key (the API only), the quarantine
+keys (the API's put-only key; the scan job's tag-gated read key), the Sentry key per environment, and the backup job's
+keys. Each lives in its own environment's host settings, or the backup job's, except the owner's offline disaster key
+(OP11). The table below is the **old application's**, until K1.
+
 | Secret | Set in | Notes |
 |---|---|---|
 | `DATABASE_URL` | Render dashboard (`sync: false` in `render.yaml`) | The pooled Neon URL |
@@ -190,7 +244,19 @@ development uses `.env` files, which are git-ignored, from the checked-in `.env.
 
 ## 6. What this register says about our exposure
 
-Stated plainly, per Rule 17:
+**For the rebuilt application** (2026-10-09, design A5), stated plainly:
+
+1. **Every provider holding personal data is a United States company**, even where the data rests in Canada; US legal
+   process can reach it (OP2). Error reports rest in the EU, and hold no personal data only as long as our redactor and
+   Sentry's scrubbing both work (RG4).
+2. **AWS sees uploads in plain form** for the minutes they wait to be scanned (RG3). A choice made for a store-enforced
+   "never read unscanned", recorded rather than hidden.
+3. **PDF receipts are not disarmed in release 1** — a residual the owner accepted on 2026-10-09 (RG3).
+4. **No restore has been run yet.** The first drill is rehearsed on staging at B3 and run in production at F3 (OP6).
+5. **Several provider capabilities are unconfirmed** from public pages and are checked before the build relies on them
+   (`docs/design/third-party-register.md` §11).
+
+**For the old application**, as written before the rebuild, stated plainly per Rule 17:
 
 1. **WiPay has no local substitute.** If it withdrew, Jamaican card payments would stop until
    another gateway was integrated. Every other dependency here has a same-week replacement.

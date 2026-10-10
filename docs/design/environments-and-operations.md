@@ -271,6 +271,8 @@ the owner prefers.
 | The console's **approval-signing** key and the **GitHub App's** private key (OP8) | The production API only | Staging, GitHub, Claude |
 | The **deploy** tokens for the API host and Vercel (OP5, OP8) | The production API only, used by the Deploy page | GitHub, staging, Claude |
 | Stripe's keys (ADR 0033), the email key (A6), the storage keys (A5), the error-tracking key | The API service | — |
+| *(2026-10-09, A5)* The files bucket's per-bucket key (RG2) | The API service only | Staff, other jobs, Claude |
+| *(2026-10-09, A5)* The upload quarantine's put-only key, and the scan job's key that reads contents only when tagged clean (RG3) | The API service; the scan job | Staff, Claude; the backup account |
 | The staging smoke tenant's login | Staging's smoke-check job | Production; it opens nothing there |
 
 - **No key is shared between environments.** Staging has its own of everything, and **production's checks never trust
@@ -626,6 +628,8 @@ outage.
 | CI minutes (GitHub Actions) | The plan's monthly allowance for a private repository | Minutes a month | 80% for two months | Paid minutes | A few dollars a month |
 | Claude-assisted maintenance | **Not free:** a monthly cap (OA3) | The cap | 80% of the cap, by alert | The owner raises the cap, or the work waits | The owner's choice |
 | Round-the-clock response | Working hours only (OP7) | One person | A paying contractor needs a stated response time, or **50 paying contractors** | A paid on-call arrangement, or a second responder | Decided then |
+
+*(Pointer 2026-10-09: the rows above marked "Priced in A5" or "A5 confirms" are priced in `docs/design/third-party-register.md` §10, approved by the owner.)*
 
 **Recorded each quarter** (OP12): each row's current use, in the operations log.
 
