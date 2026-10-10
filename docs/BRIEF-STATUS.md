@@ -1188,6 +1188,11 @@ before the sign-off (Rule 24.6): brief `docs/briefs/2026-10-10-messaging-design-
 general-purpose at **Sonnet** — mechanical: six named defects, each with its text and an executed expectation (Rule
 16.9).* Brief `docs/briefs/2026-10-10-messaging-design-recheck.md`, run by `tools/run_brief.py` at HEAD `ec7c115`: 5 of 5
 expectations hold.
+**Reported 2026-10-10: closable.** 5 of 5 expectations hold at `ad5fe3a`; D1-D6 each fixed, with its quoted sentence;
+its own sum gives US$80-99; each "Mechanical now" row's check confirmed to exist; tree clean. It noted one more twin
+outside D6's scope — the register's AWS row still said "three accounts under one organisation" — corrected the same
+day to "three of the organisation's five". **A6 now awaits only the owner's sign-off**, with two decisions put to the
+owner: M45's proposed checker for stale deferrals, and the brief edit of MS2 ("nothing is sent twice").
 
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
