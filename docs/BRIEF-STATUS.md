@@ -1146,6 +1146,12 @@ list name Amazon SES; A5's RG7 gains the production email account and RG8 its ro
 row; SF7's pointer; the data-protection reading's §5 row; OA6, OA10 and OA11 made precise, and **OA29 added** to batch
 2. Next: the independent read, brief `docs/briefs/2026-10-09-messaging-design-read.md`.
 
+**Launched 2026-10-09: independent read of the outbound messaging design.** *Delegation (Rule 16.5), declared before
+launch: commit-reviewer at **Opus** — where personal data goes, and abuse controls on a sending path a share-page
+visitor can trigger, are judgement-class; the owner relies on our judgement.* Brief
+`docs/briefs/2026-10-09-messaging-design-read.md`, run by `tools/run_brief.py` at HEAD `3eb37e8`: 4 of 4 expectations
+hold. Findings MR1 onward, agree/disagree on MS1-MS10, and an attack on §13's mistake mapping, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
