@@ -1066,6 +1066,13 @@ K1; §3a resolved; §5 and §6 updated); pointers in OP4 and OP10, the data-prot
 hostile-upload row; OA6 and OA12 made precise. Next: the independent read, brief
 `docs/briefs/2026-10-09-register-design-read.md`.
 
+**Launched 2026-10-09: independent read of the third-party register design.** *Delegation (Rule 16.5), declared before
+launch: commit-reviewer at **Opus** — where personal data goes and upload security are judgement-class, and the owner
+relies on our judgement.* Brief `docs/briefs/2026-10-09-register-design-read.md`, run by `tools/run_brief.py` at HEAD
+`fa3ae9a`: 4 of 4 expectations hold (the runner first gave 0 of 4 on this Windows machine, because a bare `bash` found
+WSL's launcher; fixed and proved with a planted wrong expectation, M43). Findings RR1 onward, and agree/disagree on
+RG1-RG9, in its reply.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
