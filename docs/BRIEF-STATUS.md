@@ -1209,6 +1209,11 @@ resolved: 8 by quotation, 13 by dated pointer, 3 by cites the deciding design" (
 examples). M45 updated. Next: its independent check,
 `docs/briefs/2026-10-10-deferral-checker-check.md`.
 
+**Launched 2026-10-10: independent check of the deferral checker.** *Delegation (Rule 16.5), declared before launch:
+general-purpose at **Sonnet** — a small guard checked against a written design, with named plants and break attempts
+(Rule 16.9).* Brief `docs/briefs/2026-10-10-deferral-checker-check.md`, run by `tools/run_brief.py` at HEAD `5deabdd`: 6 of
+6 expectations hold.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and
