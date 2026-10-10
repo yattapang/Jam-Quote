@@ -1115,6 +1115,11 @@ owner's sign-off.**
 **Signed off by the owner, 2026-10-09: "A5 is done".** A5 is ticked with its evidence line (5 of 64 steps). Next:
 design A6, outbound messaging.
 
+**Pull request opened 2026-10-09, at the owner's instruction:** https://github.com/yattapang/Jam-Quote/pull/3 —
+the branch's 169 commits not on `main` (A1-A5, review 4's fixes, the privilege model, 19 migrations). Its CI showed
+**`docs` failing**, and so had every completed run of this branch since A1's tick on 2026-10-02: the job's one-commit
+checkout cannot see the commits that `check_build_plan.py` looks for (M44). Fixed with a full-history checkout.
+
 **J13 designed, 2026-09-27** — `docs/design/acceptance-responses.md`, the owner's choice of **C plus A**:
 declines become reversible, at most one accepted row per issue, a decline after acceptance refused, and a
 withdrawn issue reads `withdrawn` and is never re-accepted. Written while the review agent was live and

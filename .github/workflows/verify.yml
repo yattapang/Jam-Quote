@@ -190,7 +190,13 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      # Full history, not checkout's default single commit: tools/check_build_plan.py proves a
+      # ticked step's evidence by finding its cited commit, and in a one-commit clone no cited
+      # commit exists. That failed this job on every run from A1's tick (2026-10-02) to
+      # 2026-10-09 while local gates passed, because nobody read CI (M44).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # Two checks in one, and the second is the one that stops drift: every citation
       # resolves, AND no rule has changed, been renumbered or been removed without its

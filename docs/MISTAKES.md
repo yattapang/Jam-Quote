@@ -841,3 +841,24 @@ prevented at first:** `tools/pg-local.sh` was Linux-only. **Closed the same day 
 Windows (no service, no administrator, trust on 127.0.0.1 only); its first-use, restart and already-up paths were each
 run, and the race suite passed 22 of 22 on this machine. The lesson: **a tool that shells out names the shell it means, and a setup step
 says which machine it is for.**
+
+### M44 · CI's docs job failed on every run for a week, and every session reported the gate green from local runs
+`Repeat of:` M12, M19 — a control reported on from somewhere other than where it ran.
+
+`tools/check_build_plan.py` proves a ticked step's evidence by finding its cited commit. CI's `docs` job checks out
+one commit (actions/checkout's default depth), so no cited commit exists there: from A1's tick on 2026-10-02 the job
+failed on **every** completed run of this branch — A1 to A5, about a dozen runs — with "cites commit …, which is not
+in this repository". Each session ran the five checkers locally, saw them clean, and reported the gate green. Nobody
+read CI until the pull request for A1-A5 opened on 2026-10-09 and showed `docs` failing. Reproduced: a one-commit
+clone of the branch gives "FAILED: 5 ticked steps without their evidence"; a full clone gives "Every ticked step
+carries its evidence".
+
+**Cost:** no wrong result reached a document — the evidence lines were true, and only CI could not see them. But a red
+CI that nobody reads is no control: had a real failure joined it in that job, it would have been hidden behind the
+known one for a week.
+
+**Prevented by:** the `docs` job now checks out the full history (`fetch-depth: 0`), proved by the shallow and full
+clones above and by this pull request's own CI. **Partly prevented:** "read CI after pushing" is vigilance, which Rule
+24.5 does not count. The mechanism arrives with OA25: a ruleset that requires CI to pass before anything merges, so a
+red job blocks rather than waits to be noticed. Until then, the app's pull-request monitor shows the checks to this
+session. The lesson: **the gate is where it runs — a local pass is evidence about the local machine, not about CI.**
